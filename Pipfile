@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 pydantic = "*"
+requests = "*"
+dotenv = "*"
 
 [dev-packages]
 pytest = "*"

@@ -39,7 +39,9 @@ repository = "https://github.com/robcalon/pyetm"
 [project.optional-dependencies]
 async = ["aiohttp>=3.8"]
 dev = [
-    "pytest"
+    "pytest>=7.0",
+    "pylint>=3.0",
+    "requests-mock>=1.11"
 ]
 
 [tool.setuptools.package-data]
