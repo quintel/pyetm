@@ -1,6 +1,6 @@
 from pyetm.clients.base_client                      import BaseClient
-from pyetm.services.scenario_runners.fetch_inputs   import FetchInputsRunner
-from pyetm.models.scenario                          import Scenario
+from pyetm.services.scenario_runners                import FetchInputsRunner
+from pyetm.models                                   import Scenario
 
 BASE_URL    = "https://example.com/api"
 TOKEN       = "fake-token"
