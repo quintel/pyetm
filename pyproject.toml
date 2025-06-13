@@ -4,18 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyetm"
-version = "1.4.4"
+version = "2.0-beta"
 
 description = "Python-ETM Connector"
-authors = [{name = "Rob Calon", email = "pyetm@pm.me"}]
+authors = [] # TODO: add us!
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = {file = "LICENSE"}
 dependencies = [
-    'requests>=2.26',
-    'pandas[parquet]>=2.2',
-    'openpyxl>=3.0',
-    'xlsxwriter>=3.0',
+    # 'requests>=2.26',
+    # 'pandas[parquet]>=2.2',
+    # 'openpyxl>=3.0',
+    # 'xlsxwriter>=3.0',
 ]
 keywords = ["ETM", "Energy Transition Model"]
 classifiers = [
@@ -23,14 +23,14 @@ classifiers = [
     'Intended Audience :: Developers',
     'Intended Audience :: Education',
     'Intended Audience :: Science/Research',
-    'License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)',
+    # 'License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)',
     'Natural Language :: English',
     'Operating System :: OS Independent',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.10',
-    'Programming Language :: Python :: 3.11',
-    'Programming Language :: Python :: 3.12',
+    # 'Programming Language :: Python :: 3',
+    # 'Programming Language :: Python :: 3.10',
+    # 'Programming Language :: Python :: 3.11',
+    # 'Programming Language :: Python :: 3.12',
 ]
 
 [project.urls]
@@ -39,10 +39,7 @@ repository = "https://github.com/robcalon/pyetm"
 [project.optional-dependencies]
 async = ["aiohttp>=3.8"]
 dev = [
-    "pre-commit",
-    "pre-commit-hooks",
-    "pytest",
-    "ruff",
+    "pytest"
 ]
 
 [tool.setuptools.package-data]

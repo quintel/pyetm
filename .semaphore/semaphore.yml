@@ -1,0 +1,26 @@
+version: v1.0
+name: Test application
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu2004
+blocks:
+  - name: Test
+    task:
+      env_vars:
+        - name: PIPENV_VENV_IN_PROJECT
+          value: 'true'
+      prologue:
+        commands:
+          - sem-version python 3.12
+          - pip install --upgrade pip
+          - pip install pipenv
+          - 'export PATH=$HOME/.local/bin:$PATH'
+          - checkout
+          - 'cache restore pipenv-$SEMAPHORE_GIT_BRANCH-$(checksum Pipfile.lock),pipenv-$SEMAPHORE_GIT_BRANCH,pipenv-master'
+          - pipenv install --dev --ignore-pipfile
+          - cache store pipenv-$SEMAPHORE_GIT_BRANCH-$(checksum Pipfile.lock) .venv
+      jobs:
+        - name: Test
+          commands:
+            - pipenv run test
