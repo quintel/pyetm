@@ -1,2 +1,2 @@
-# pyETM
-the new pyETM
+# pyetm
+the new pyetm

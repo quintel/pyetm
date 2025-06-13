@@ -5,8 +5,8 @@ before each test
 
 import os, sys, importlib, pytest
 
-os.environ['ETM_API_TOKEN'] = 'real-token'
-os.environ['BASE_URL']       = 'https://example.com/api'
+os.environ['ETM_API_TOKEN']     = 'real-token'
+os.environ['BASE_URL']          = 'https://example.com/api'
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC  = os.path.join(ROOT, "src")

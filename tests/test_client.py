@@ -1,6 +1,8 @@
 import pytest
 
-from pyETM.clients.session import RequestsSession, AuthenticationError, GenericError
+from pyetm.clients.session import RequestsSession, AuthenticationError, GenericError
+from pyetm.clients.base_client import BaseClient
+from pyetm.config.settings     import settings
 
 BASE_URL = "https://example.com/api"
 
@@ -19,3 +21,8 @@ def test_requests_session_500_raises_etm_error(requests_mock):
     with pytest.raises(GenericError) as exc:
         sess.post("/bar", json={})
     assert "HTTP 500" in str(exc.value)
+
+def test_base_client_is_singleton():
+    c1 = BaseClient()
+    c2 = BaseClient()
+    assert c1 is c2
