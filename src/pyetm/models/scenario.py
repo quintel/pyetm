@@ -9,11 +9,6 @@ class Scenario(BaseModel):
     # TODO: investigate filling this out properly with more validation etc
     """
     id: int = Field(..., description="Unique scenario identifier")
-    user_values: Optional[str] = Field(
-        None,
-        description="User-changed input values"
-    )
-
 
     #TODO: These ones are just placeholders effectively for now
     created_at: Optional[datetime] = Field(
@@ -60,3 +55,24 @@ class Scenario(BaseModel):
         None,
         description="Active coupling groups"
     )
+
+    def user_values(self):
+        '''
+        Returns the values set by the user
+        '''
+        return { input.key: input.user for input in self.inputs if input.user }
+
+    @property
+    def inputs(self):
+        return self._inputs
+
+    @inputs.setter
+    def inputs(self, value):
+        self._inputs = value
+
+    @inputs.getter
+    def inputs(self):
+        try:
+            return self._inputs
+        except AttributeError:
+            return {}
