@@ -9,6 +9,7 @@ requests = "*"
 dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
+pytest = "*"
 
 [dev-packages]
 pytest = "*"
