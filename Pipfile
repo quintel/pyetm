@@ -7,11 +7,14 @@ name = "pypi"
 pydantic = "*"
 requests = "*"
 dotenv = "*"
+pydantic = "*"
 
 [dev-packages]
 pytest = "*"
 pylint = "*"
 requests-mock = "*"
+ipykernel = "*"
+notebook = "*"
 
 [requires]
 python_version = "3.12"
