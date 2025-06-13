@@ -2,7 +2,7 @@
 from typing import Any, Dict, Optional
 from ..service_result import ServiceResult
 from ...clients.base_client import BaseClient
-from ...scenario.scenario import Scenario
+from ...models.scenario import Scenario
 
 class FetchInputsRunner:
     """

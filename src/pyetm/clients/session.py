@@ -1,21 +1,21 @@
 import requests
 from typing import Optional, Dict
-from ..config.config import config
+from ..config.settings import settings
 from ..services.service_result import AuthenticationError, GenericError
 
 class RequestsSession(requests.Session):
     """
     A requests.Session that:
-      - Prefixes every path with config.base_url
-      - Adds Authorization header from config.etm_api_token
+      - Prefixes every path with settings.base_url
+      - Adds Authorization header from settings.etm_api_token
       - Converts HTTP errors into GenericError subclasses
       #TODO: Expand/correct this docstring
     """
 
     def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None):
         super().__init__()
-        self.base_url = base_url or config.base_url
-        self.token = token or config.etm_api_token
+        self.base_url = base_url or settings.base_url
+        self.token = token or settings.etm_api_token
 
         # global headers
         self.headers.update({
