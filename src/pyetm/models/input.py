@@ -20,11 +20,11 @@ class Input(BaseModel):
     step: Optional[float] = None
 
     @classmethod
-    def from_json(cls, data):
-        '''Initialise an Input from a JSON-like object'''
-        key = next(iter(data))
-        data[key].update({'key': key})
-        return cls(**data[key])
+    def from_json(cls, data: tuple[str, dict]):
+        '''Initialise an Input from a JSON-like tuple object coming from .items()'''
+        key, data = data
+        data.update({'key': key})
+        return cls(**data)
 
 
     # Nice to have:
