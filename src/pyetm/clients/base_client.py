@@ -1,7 +1,6 @@
-from ..utils.singleton import SingletonMeta
+from pyetm.utils.singleton import SingletonMeta
 from .session import RequestsSession
-from ..config.settings import settings
-from ..services.service_result import GenericError
+from pyetm.config.settings import settings
 
 class BaseClient(metaclass=SingletonMeta):
     """

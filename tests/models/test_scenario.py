@@ -1,7 +1,6 @@
 import pytest
 from datetime import datetime
-
-from pyetm.models.scenario import Scenario
+from pyetm.models import Scenario
 from pydantic import ValidationError
 
 @pytest.fixture

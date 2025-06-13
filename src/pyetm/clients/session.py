@@ -1,7 +1,7 @@
 import requests
 from typing import Optional, Dict
-from ..config.settings import settings
-from ..services.service_result import AuthenticationError, GenericError
+from pyetm.config.settings import settings
+from pyetm.services.service_result import AuthenticationError, GenericError
 
 class RequestsSession(requests.Session):
     """

@@ -1,8 +1,8 @@
 
 from typing import Any, Dict, Optional
 from ..service_result import ServiceResult, GenericError
-from ...clients.base_client import BaseClient
-from ...models.scenario import Scenario
+from pyetm.clients.base_client import BaseClient
+from pyetm.models import Scenario
 
 class FetchInputsRunner:
     """
