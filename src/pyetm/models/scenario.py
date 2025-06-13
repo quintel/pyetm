@@ -75,4 +75,5 @@ class Scenario(BaseModel):
         try:
             return self._inputs
         except AttributeError:
-            return {}
+            # TODO: fetch inputs here!
+            return []
