@@ -9,6 +9,13 @@ class Scenario(BaseModel):
     # TODO: investigate filling this out properly with more validation etc
     """
     id: int = Field(..., description="Unique scenario identifier")
+    user_values: Optional[str] = Field(
+        None,
+        description="User-changed input values"
+    )
+
+
+    #TODO: These ones are just placeholders effectively for now
     created_at: Optional[datetime] = Field(
         None,
         description="Timestamp when the scenario was created"
@@ -40,11 +47,6 @@ class Scenario(BaseModel):
     source: Optional[str] = Field(
         None,
         description="Where was the scenario made"
-    )
-
-    user_values: Optional[str] = Field(
-        None,
-        description="User-changed input values"
     )
     balanced_values: Optional[str] = Field(
         None,
