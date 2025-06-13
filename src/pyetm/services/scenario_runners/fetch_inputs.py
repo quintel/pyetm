@@ -1,6 +1,6 @@
 
 from typing import Any, Dict, Optional
-from ..service_result import ServiceResult
+from ..service_result import ServiceResult, GenericError
 from ...clients.base_client import BaseClient
 from ...models.scenario import Scenario
 
@@ -45,7 +45,17 @@ class FetchInputsRunner:
                 errors=[f"{resp.status_code}: {resp.text}"],
                 status_code=resp.status_code
             )
-
+        except GenericError as ge:
+            msg = str(ge)
+            try:
+                code = int(msg.split()[1].rstrip(':'))
+            except Exception:
+                code = None
+            return ServiceResult(
+                success=False,
+                errors=[msg],
+                status_code=code
+            )
         except Exception as e:
             #TODO: catch more exceptions
             return ServiceResult(success=False, errors=[str(e)])
