@@ -2,8 +2,11 @@ import os
 import yaml
 import pytest
 from pathlib import Path
-from pydantic import ValidationError
-from pyetm.config.settings import AppConfig
+import pyetm.config.settings as settings_module
+from pydantic import HttpUrl
+
+AppConfig = settings_module.AppConfig
+get_settings = settings_module.get_settings
 
 # Fixture: clear any ENV vars
 @pytest.fixture(autouse=True)
@@ -28,10 +31,10 @@ def test_from_yaml_loads_file_values(tmp_path):
     config = AppConfig.from_yaml(cfg_file)
 
     assert config.etm_api_token == "file-token"
-    assert config.base_url == "https://custom.local/api"
+    assert config.base_url == HttpUrl("https://custom.local/api")
     assert config.log_level == "DEBUG"
 
-# 2) File only has token; ENV overrides log_level; base_url uses default
+# File only has token; ENV overrides log_level; base_url uses default
 def test_from_yaml_env_overrides_and_defaults(tmp_path, monkeypatch):
     cfg_file = tmp_path / "config.yml"
     write_yaml(cfg_file, {"etm_api_token": "file-token"})
@@ -44,9 +47,9 @@ def test_from_yaml_env_overrides_and_defaults(tmp_path, monkeypatch):
     assert config.etm_api_token == "file-token"
     assert config.log_level == "WARNING"
     # default from the class
-    assert config.base_url == "https://engine.energytransitionmodel.com/api/v3"
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
 
-# 3) No file; ENV provides token; others default
+# No file; ENV provides token; others default
 def test_from_yaml_no_file_uses_env_and_defaults(tmp_path, monkeypatch):
     cfg_file = tmp_path / "does_not_exist.yml"
     monkeypatch.setenv("ETM_API_TOKEN", "env-token")
@@ -54,10 +57,10 @@ def test_from_yaml_no_file_uses_env_and_defaults(tmp_path, monkeypatch):
     config = AppConfig.from_yaml(cfg_file)
 
     assert config.etm_api_token == "env-token"
-    assert config.base_url == "https://engine.energytransitionmodel.com/api/v3"
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
     assert config.log_level == "INFO"
 
-# 4) Invalid YAML is swallowed; ENV+defaults apply
+# Invalid YAML is swallowed; ENV+defaults apply
 def test_from_yaml_invalid_yaml_is_swallowed(tmp_path, monkeypatch):
     cfg_file = tmp_path / "config.yml"
     cfg_file.write_text(":\t not valid yaml :::")
@@ -67,15 +70,20 @@ def test_from_yaml_invalid_yaml_is_swallowed(tmp_path, monkeypatch):
     config = AppConfig.from_yaml(cfg_file)
 
     assert config.etm_api_token == "env-token"
-    assert config.base_url == "https://engine.energytransitionmodel.com/api/v3"
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
     assert config.log_level == "INFO"
 
-# 5) Empty file + no ENV → missing required token → ValidationError
-def test_from_yaml_missing_token_raises_validation_error(tmp_path):
+# Empty file + no ENV → get_settings() raises RuntimeError with helpful message
+def test_get_settings_missing_token_raises_runtime_error(tmp_path, monkeypatch):
     cfg_file = tmp_path / "config.yml"
-    write_yaml(cfg_file, {})  # no fields
+    write_yaml(cfg_file, {})
 
-    with pytest.raises(ValidationError) as excinfo:
-        AppConfig.from_yaml(cfg_file)
+    monkeypatch.setattr(settings_module, "CONFIG_FILE", cfg_file)
 
-    assert "etm_api_token" in str(excinfo.value)
+    with pytest.raises(RuntimeError) as excinfo:
+        get_settings()
+
+    msg = str(excinfo.value)
+    assert "Configuration error: one or more required settings are missing or invalid" in msg
+    assert "• etm_api_token: Field required" in msg
+    assert str(cfg_file) in msg

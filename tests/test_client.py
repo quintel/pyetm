@@ -2,7 +2,6 @@ import pytest
 
 from pyetm.clients.session import RequestsSession, AuthenticationError, GenericError
 from pyetm.clients.base_client import BaseClient
-from pyetm.config.settings     import settings
 
 BASE_URL = "https://example.com/api"
 
