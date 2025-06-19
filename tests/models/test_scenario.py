@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime
 from pyetm.models import Scenario
+from pyetm.models.scenario import ScenarioError
 from pydantic import ValidationError
 
 @pytest.fixture
@@ -61,3 +62,26 @@ def test_scenario_parse_failure(json_fixture, request):
     raw = request.getfixturevalue(json_fixture)
     with pytest.raises(ValidationError):
         Scenario.model_validate(raw)
+
+
+def test_inputs(requests_mock, input_collection_json):
+    url = f"https://example.com/api/scenarios/999/inputs"
+    requests_mock.get(url, status_code=200, json=input_collection_json)
+
+    scenario = Scenario(id=999)
+
+    assert scenario.inputs
+    assert len(scenario.inputs.keys()) == 4
+    assert next(iter(scenario.inputs)).key == "investment_costs_co2_ccs"
+
+    assert scenario.user_values() == {"investment_costs_co2_ccs": 10.0}
+
+
+def test_inputs_failing(requests_mock):
+    url = f"https://example.com/api/scenarios/999/inputs"
+    requests_mock.get(url, status_code=500)
+
+    scenario = Scenario(id=999)
+
+    with pytest.raises(ScenarioError):
+        assert scenario.inputs

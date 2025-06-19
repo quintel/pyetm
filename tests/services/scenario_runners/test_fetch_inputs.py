@@ -2,6 +2,9 @@ from pyetm.clients.base_client                      import BaseClient
 from pyetm.services.scenario_runners                import FetchInputsRunner
 from pyetm.models                                   import Scenario
 
+# TODO: refactor this, now it can be taken over by other tests without
+# us knowing. Maybe move to conftest? We can explicitly set the url there
+# and wrap the requests mock to always use that url --> BaseClient().url = 'xxx'
 BASE_URL    = "https://example.com/api"
 TOKEN       = "fake-token"
 SCENARIO_ID = 999

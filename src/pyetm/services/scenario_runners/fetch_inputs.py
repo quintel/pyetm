@@ -2,7 +2,6 @@
 from typing import Any, Dict, Optional
 from ..service_result import ServiceResult, GenericError
 from pyetm.clients.base_client import BaseClient
-from pyetm.models import Scenario
 
 class FetchInputsRunner:
     """
@@ -15,7 +14,7 @@ class FetchInputsRunner:
     @staticmethod
     def run(
         client: BaseClient,
-        scenario: "Scenario",
+        scenario,
         defaults: Optional[str] = None,
     ) -> ServiceResult[Dict[str, Any]]:
         """
