@@ -10,7 +10,7 @@ dist/
 *.env
 *.ruff_cache
 .coverage
-# TODO: include example.config.yml in example folder
+
 config.yml
 # For mac users
 .DS_Store
