@@ -1,6 +1,6 @@
 from pyetm.utils.singleton import SingletonMeta
 from .session import RequestsSession
-from pyetm.config.settings import settings
+from pyetm.config.settings import get_settings
 
 class BaseClient(metaclass=SingletonMeta):
     """
@@ -8,6 +8,6 @@ class BaseClient(metaclass=SingletonMeta):
     """
     def __init__(self, token: str = None, base_url: str = None):
         self.session = RequestsSession(
-            base_url=base_url or settings.base_url,
-            token=token or settings.etm_api_token
+            base_url=base_url or get_settings().base_url,
+            token=token or get_settings().etm_api_token
         )
