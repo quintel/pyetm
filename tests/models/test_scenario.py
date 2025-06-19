@@ -1,6 +1,8 @@
 import pytest
 from datetime import datetime
-from pyetm.models import Scenario
+from pyetm.models import Scenario, InputCollection
+from pyetm.services.scenario_runners import FetchInputsRunner
+from pyetm.services.service_result import ServiceResult
 from pyetm.models.scenario import ScenarioError
 from pydantic import ValidationError
 
@@ -85,3 +87,37 @@ def test_inputs_failing(requests_mock):
 
     with pytest.raises(ScenarioError):
         assert scenario.inputs
+
+def test_inputs_setter_bypasses_runner(monkeypatch, input_collection_json):
+    """
+    If you explicitly set `scenario.inputs`, the runner should never be called.
+    """
+    dummy = InputCollection.from_json(input_collection_json)
+
+    monkeypatch.setattr(FetchInputsRunner, "run", lambda *args, **kwargs: pytest.fail("Runner was called!"))
+
+    scenario = Scenario(id=999)
+    scenario.inputs = dummy  # use the setter
+
+    assert scenario._inputs is dummy
+    # Getter returns what was set
+    assert scenario.inputs is dummy
+
+def test_inputs_getter_caches_result(monkeypatch, input_collection_json):
+    """
+    First access calls FetchInputsRunner.run once; subsequent accesses return the cached InputCollection.
+    """
+    calls = []
+    def fake_run(client, scenario_obj):
+        calls.append(True)
+        return ServiceResult(success=True, data=input_collection_json, status_code=200)
+
+    monkeypatch.setattr(FetchInputsRunner, "run", fake_run)
+
+    scenario = Scenario(id=999)
+    first = scenario.inputs
+    second = scenario.inputs
+
+    assert isinstance(first, InputCollection)
+    assert first is second
+    assert len(calls) == 1
