@@ -1,5 +1,5 @@
 from pathlib import Path
-import yaml
+import yaml, os
 from typing import Optional, ClassVar, List
 from pydantic import Field, ValidationError, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,15 +26,19 @@ class AppConfig(BaseSettings):
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
-        """
-        Load overrides from a YAML file (if present), then overlay environment variables.
-        """
-        data = {}
+        raw = {}
         if path.is_file():
             try:
-                data = yaml.safe_load(path.read_text()) or {}
+                raw = yaml.safe_load(path.read_text()) or {}
             except yaml.YAMLError:
-                data = {}
+                raw = {}
+
+        data = {k.lower(): v for k, v in raw.items()}
+
+        for field in ("etm_api_token", "base_url", "log_level"):
+            if val := os.getenv(field.upper()):
+                data[field] = val
+
         return cls(**data)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
