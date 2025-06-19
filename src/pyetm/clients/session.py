@@ -26,7 +26,7 @@ class RequestsSession(requests.Session):
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         # Ensure we only pass a path to `url`; prefix with base_url
-        full_url = url if url.startswith("http") else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        full_url = str(url) if url.startswith("http") else f"{str(self.base_url).rstrip("/")}/{url.lstrip('/')}"
         resp = super().request(method, full_url, **kwargs)
         self._handle_errors(resp)
         return resp

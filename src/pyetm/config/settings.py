@@ -1,7 +1,7 @@
 from pathlib import Path
 import yaml
 from typing import Optional, ClassVar, List
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class AppConfig(BaseSettings):
@@ -9,7 +9,7 @@ class AppConfig(BaseSettings):
     Application configuration loaded from YAML.
     """
     etm_api_token: str = Field(..., description="Your ETM token is missing—please set $ETM_API_TOKEN or config.yml:etm_api_token")
-    base_url: str = Field(
+    base_url: HttpUrl = Field(
         "https://engine.energytransitionmodel.com/api/v3",
         description="Base URL for the ETM API",
     )
