@@ -1,20 +1,27 @@
-# Contains settings that will be used throughout the tool
-# To update this with your personal settings, please duplicate this file
-# and name it 'config.yml'. This way your personal tokens will be safe!
+# To update this file with your personal settings, please duplicate this file
+# and name it 'config.yml'. This way your personal tokens will be safe.
+# Store the config.yml file in the root of the directory (pyetm/config.yml).
 
-# Paste your personal ETM token in this field. Never push this to GitHub! If this file is named
-# 'config.yml' it will not be pushed to Github. If it is named example.config.yml, it will be.
-etm_api_token: your-token-here
-# This token will be overridden by $ETM_API_TOKEN if you export that as an env variable.
+# Paste your personal ETM in this field. Never push this to GitHub!
+# will be overridden by $ETM_API_TOKEN if you set that in env.
+# The same token will work for beta and pro environments, but if you are interacting with beta or local,
+# you will need the correct token for that environment.
+# For more information, see: https://docs.energytransitionmodel.com/api/authentication#tokens-are-environment-specific
+#
+etm_api_token: your.token.here
 
-# The API base URL:
+# Override the API base URL - here you can set which environment of the ETM you want to interact with.
+# Options include the default (pro), https://2025-01.engine.energytransitionmodel.com/api/v3 (a stable version) or
+# https://beta.engine.energytransitionmodel.com/api/v3	(the staging environment).
+# For more information, see: https://docs.energytransitionmodel.com/api/intro#environments
+#
 BASE_URL: https://engine.energytransitionmodel.com/api/v3
 
 # Where your local model is run
 local_engine_url: http://localhost:3000/api/v3
 local_model_url: http://localhost:3001
 
-#TODO: Set up so the below is actually used and works
+#TODO: Setup so the below is actually used
 # URLs of your proxy server addresses (replace the examples below by your own settings)
 # Never push authenticated servers (including user name and password) to Github!
 proxy_servers:
