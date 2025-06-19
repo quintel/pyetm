@@ -9,6 +9,7 @@ requests = "*"
 dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
+pytest = "*"
 
 [dev-packages]
 pytest = "*"
@@ -16,10 +17,12 @@ pylint = "*"
 requests-mock = "*"
 ipykernel = "*"
 notebook = "*"
+pytest-cov = "*"
 
 [requires]
 python_version = "3.12"
 
 [scripts]
 test = "python -m pytest"
+test_with_coverage = "python -m pytest --cov=pyetm tests/"
 linter = "python -m pylint app"
