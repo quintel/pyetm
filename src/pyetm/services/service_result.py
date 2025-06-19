@@ -7,7 +7,6 @@ T = TypeVar('T')
 class ServiceResult(Generic[T]):
     """
     Generic wrapper for service operations.
-    #TODO: Flesh out docstrings
     """
     success: bool
     data: Optional[T] = None

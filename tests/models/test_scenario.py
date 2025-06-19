@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 @pytest.fixture
 def minimal_scenario_json():
-    return {"id": 42} #TODO: Expand as the scenario model grows
+    return {"id": 42}
 
 @pytest.fixture
 def full_scenario_json():
