@@ -24,5 +24,5 @@ python_version = "3.12"
 
 [scripts]
 test = "python -m pytest"
-test_with_coverage = "python -m pytest --cov=pyetm tests/"
+test_with_coverage = "python -m pytest --cov=pyetm tests/ --cov-report=term-missing"
 linter = "python -m pylint app"
