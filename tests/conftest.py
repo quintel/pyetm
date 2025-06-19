@@ -2,8 +2,8 @@
 Runs during test collection. You can also supply fixtures here that should be loaded
 before each test
 '''
-
-import os, sys, importlib, pytest
+from pydantic import HttpUrl
+import os, sys, pytest
 
 # Ensure src/ is on sys.path before any imports of your app code
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -18,7 +18,7 @@ os.environ["ETM_API_TOKEN"]  = "real-token"
 # Fixture to give back that same base URL for building expected mock URLs
 @pytest.fixture
 def api_url():
-    return os.getenv("BASE_URL")
+    return HttpUrl(os.getenv("BASE_URL"))
 
 # Mount the requests-mock adapter onto BaseClient.session so that
 # requests_mock.get(...) actually intercepts client.session.get(...)
