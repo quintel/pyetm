@@ -23,6 +23,7 @@ def float_input_json():
                 "min":-100.0,
                 "max":300.0,
                 "default":0.0,
+                "user": 10.0,
                 "unit":"%",
                 "disabled": False
             }
