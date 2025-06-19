@@ -3,6 +3,7 @@ import yaml
 import pytest
 from pathlib import Path
 import pyetm.config.settings as settings_module
+from pydantic import HttpUrl
 
 AppConfig = settings_module.AppConfig
 get_settings = settings_module.get_settings
@@ -30,7 +31,7 @@ def test_from_yaml_loads_file_values(tmp_path):
     config = AppConfig.from_yaml(cfg_file)
 
     assert config.etm_api_token == "file-token"
-    assert config.base_url == "https://custom.local/api"
+    assert config.base_url == HttpUrl("https://custom.local/api")
     assert config.log_level == "DEBUG"
 
 # File only has token; ENV overrides log_level; base_url uses default
@@ -46,7 +47,7 @@ def test_from_yaml_env_overrides_and_defaults(tmp_path, monkeypatch):
     assert config.etm_api_token == "file-token"
     assert config.log_level == "WARNING"
     # default from the class
-    assert config.base_url == "https://engine.energytransitionmodel.com/api/v3"
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
 
 # No file; ENV provides token; others default
 def test_from_yaml_no_file_uses_env_and_defaults(tmp_path, monkeypatch):
@@ -56,7 +57,7 @@ def test_from_yaml_no_file_uses_env_and_defaults(tmp_path, monkeypatch):
     config = AppConfig.from_yaml(cfg_file)
 
     assert config.etm_api_token == "env-token"
-    assert config.base_url == "https://engine.energytransitionmodel.com/api/v3"
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
     assert config.log_level == "INFO"
 
 # Invalid YAML is swallowed; ENV+defaults apply
@@ -69,13 +70,13 @@ def test_from_yaml_invalid_yaml_is_swallowed(tmp_path, monkeypatch):
     config = AppConfig.from_yaml(cfg_file)
 
     assert config.etm_api_token == "env-token"
-    assert config.base_url == "https://engine.energytransitionmodel.com/api/v3"
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
     assert config.log_level == "INFO"
 
 # Empty file + no ENV → get_settings() raises RuntimeError with helpful message
 def test_get_settings_missing_token_raises_runtime_error(tmp_path, monkeypatch):
     cfg_file = tmp_path / "config.yml"
-    write_yaml(cfg_file, {})  # no fields
+    write_yaml(cfg_file, {})
 
     monkeypatch.setattr(settings_module, "CONFIG_FILE", cfg_file)
 
