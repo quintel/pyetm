@@ -1,10 +1,13 @@
+import pytest
 from pyetm.clients.base_client                      import BaseClient
 from pyetm.services.scenario_runners                import FetchInputsRunner
 from pyetm.models                                   import Scenario
+from pyetm.services.service_result import GenericError
 
 BASE_URL    = "https://example.com/api"
 TOKEN       = "fake-token"
 SCENARIO_ID = 999
+scenario = Scenario(id=SCENARIO_ID)
 
 def test_fetch_inputs_success_without_defaults(requests_mock):
     """
@@ -14,7 +17,6 @@ def test_fetch_inputs_success_without_defaults(requests_mock):
     url      = f"{BASE_URL}/scenarios/{SCENARIO_ID}/inputs"
     payload  = {"one": {"min": 1.0, "max": 2.0, "default": 1.0, "unit": "%"}}
 
-    # stub the exact URL (no query string)
     requests_mock.get(url, status_code=200, json=payload)
 
     client = BaseClient()
@@ -32,7 +34,6 @@ def test_fetch_inputs_success_with_defaults(requests_mock):
     url      = f"{BASE_URL}/scenarios/{SCENARIO_ID}/inputs?defaults=original"
     payload  = {"two": {"min": 0.0, "max": 1.0, "default": 0.0, "unit": "%"}}
 
-    # complete_qs=True ensures the query string is part of the match
     requests_mock.get(url, status_code=200, json=payload, complete_qs=True)
 
     client = BaseClient()
@@ -75,3 +76,52 @@ def test_fetch_inputs_network_exception(monkeypatch):
     assert result.success is False
     assert result.status_code is None
     assert "network down" in result.errors[0]
+
+def test_generic_error_with_parseable_code(monkeypatch):
+    client = BaseClient()
+    # Simulate raising a GenericError with “Error 404: Not Found”
+    def bad_get(*args, **kwargs):
+        raise GenericError("Error 404: Not Found")
+    monkeypatch.setattr(client.session, "get", bad_get)
+
+    result = FetchInputsRunner.run(client, scenario)
+    assert result.success is False
+    # The “404” should be parsed out as the status_code
+    assert result.status_code == 404
+    assert "404" in result.errors[0]
+
+def test_generic_error_with_unparseable_code(monkeypatch):
+    client = BaseClient()
+    # Simulate raising a GenericError with non‐numeric
+    def bad_get(*args, **kwargs):
+        raise GenericError("Non numeric error")
+    monkeypatch.setattr(client.session, "get", bad_get)
+
+    result = FetchInputsRunner.run(client, scenario)
+    assert result.success is False
+    # Parsing fails, so status_code stays None
+    assert result.status_code is None
+    assert "Non numeric error" in result.errors[0]
+
+def test_fetch_inputs_http_error_via_monkeypatch(monkeypatch):
+    """
+    Simulate an HTTP error response (resp.ok == False) and verify
+    we exercise the `errors=[f"{status_code}: {text}"]` path.
+    """
+    client = BaseClient()
+    class FakeResponse:
+        ok = False
+        status_code = 418
+        text = "Text with a difficult apostrophe's"
+        def json(self):
+            # should never be called in this branch
+            pytest.fail("json() must not be called on a failed response")
+
+    # stub out session.get to return our fake error
+    monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: FakeResponse())
+
+    result = FetchInputsRunner.run(client, scenario)
+
+    assert result.success is False
+    assert result.status_code == 418
+    assert result.errors == ["418: Text with a difficult apostrophe's"]

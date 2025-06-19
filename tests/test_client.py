@@ -8,7 +8,7 @@ BASE_URL = "https://example.com/api"
 
 def test_requests_session_401_raises_auth(requests_mock):
     """ if the API returns 401 we must get AuthenticationError """
-    # mock GET https://example.com/api/whatever => 401
+    # mock GET https://example.com/api/something => 401
     requests_mock.get(f"{BASE_URL}/foo", status_code=401, text="nope")
     sess = RequestsSession()
     with pytest.raises(AuthenticationError):

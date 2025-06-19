@@ -9,7 +9,7 @@ from pyetm.services.service_result import (
 )
 
 def test_service_result_minimal_success():
-    """A minimal success result has success=True and no data/errors/status."""
+    """Minimal success result has success=True and no data/errors/status."""
     result = ServiceResult(success=True)
     assert result.success is True
     assert result.data is None

@@ -45,8 +45,8 @@ class FetchInputsRunner:
                 errors=[f"{resp.status_code}: {resp.text}"],
                 status_code=resp.status_code
             )
-        except GenericError as ge:
-            msg = str(ge)
+        except GenericError as error:
+            msg = str(error)
             try:
                 code = int(msg.split()[1].rstrip(':'))
             except Exception:

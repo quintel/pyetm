@@ -1,0 +1,30 @@
+# Contains settings that will be used throughout the tool
+# To update this with your personal settings, please duplicate this file
+# and name it 'config.yml'. This way your personal tokens will be safe!
+
+# Paste your personal ETM token in this field. Never push this to GitHub! If this file is named
+# 'config.yml' it will not be pushed to Github. If it is named example.config.yml, it will be.
+etm_api_token: your-token-here
+# This token will be overridden by $ETM_API_TOKEN if you export that as an env variable.
+
+# The API base URL:
+BASE_URL: https://engine.energytransitionmodel.com/api/v3
+
+# Where your local model is run
+local_engine_url: http://localhost:3000/api/v3
+local_model_url: http://localhost:3001
+
+#TODO: Set up so the below is actually used and works
+# URLs of your proxy server addresses (replace the examples below by your own settings)
+# Never push authenticated servers (including user name and password) to Github!
+proxy_servers:
+  # http: http://user:pass@proxy.sample.com:8080
+  # https: http://user:pass@secureproxy.sample.com:8080
+
+# The separator your CSV files are using. The default is ',', but many European computers
+# export CSV with a ';' as separator from Excel instead.
+csv_separator: ','
+
+# The decimal separator your CSV files are using. The default is '.', but depending on the
+# national conventions, comma could be used as a decimal seperator instead.
+decimal_seperator: '.'
