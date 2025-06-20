@@ -9,8 +9,7 @@ dist/
 *.log
 *.env
 *.ruff_cache
-.coverage
-
 config.yml
 # For mac users
 .DS_Store
+.coverage
