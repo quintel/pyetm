@@ -1,10 +1,14 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
-from pyetm.services.scenario_runners import FetchInputsRunner
-from pyetm.models import InputCollection
+from pyetm.services.scenario_runners import (
+    FetchInputsRunner,
+    FetchScenarioRunner,
+)
+from pyetm.models import InputCollection, BalancedInputCollection
 from pyetm.clients import BaseClient
+
 
 class Scenario(BaseModel):
     """
@@ -12,73 +16,28 @@ class Scenario(BaseModel):
     but with only `id` required so it can be used for API runners.
     # TODO: investigate filling this out properly with more validation etc
     """
+
     id: int = Field(..., description="Unique scenario identifier")
 
-    #TODO: These ones are just placeholders effectively for now
-    created_at: Optional[datetime] = Field(
-        None,
-        description="Timestamp when the scenario was created"
-    )
-    updated_at: Optional[datetime] = Field(
-        None,
-        description="Timestamp when the scenario was last updated"
-    )
-    end_year: Optional[int] = Field(
-        2040,
-        description="Year in which the scenario ends"
-    )
-    keep_compatible: Optional[bool] = Field(
-        False,
-        description="These scenarios will be migrated with the changes in the model over time"
-    )
-    private: Optional[bool] = Field(
-        False,
-        description="Publicity of scenario"
-    )
-    preset_scenario_id: Optional[int] = Field(
-        None,
-        description="ID of the preset scenario"
-    )
-    area_code: Optional[str] = Field(
-        None,
-        description="Geographical area code of the scenario"
-    )
-    source: Optional[str] = Field(
-        None,
-        description="Where was the scenario made"
-    )
-    balanced_values: Optional[str] = Field(
-        None,
-        description="Balanced values computed by the API"
-    )
-    metadata: Optional[str] = Field(
-        None,
-        description="Scenario metadata"
-    )
-    active_couplings: Optional[str] = Field(
-        None,
-        description="Active coupling groups"
-    )
-
     def user_values(self):
-        '''
+        """
         Returns the values set by the user
-        '''
-        return { input.key: input.user for input in self.inputs if input.user }
+        """
+        return {input.key: input.user for input in self.inputs if input.user}
 
     @property
     def inputs(self):
-        '''
+        """
         Property to hold the Scenario's InputCollection
-        '''
+        """
         return self._inputs
 
     @inputs.setter
     def inputs(self, value):
-        '''
+        """
         TODO: should be removed or reworked, users should not be able to set
         the inputs themselves
-        '''
+        """
         self._inputs = value
 
     @inputs.getter
@@ -93,15 +52,39 @@ class Scenario(BaseModel):
                 self._inputs = InputCollection.from_json(result.data)
                 return self._inputs
             else:
-                raise ScenarioError(f'Could not retrieve inputs: {result.errors}')
-
-
+                raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
 
     # --- VALIDATION ---
 
     # We should have an error object always there to collect that we can insert stuff into!?
     # And a 'valid' method?
     # Should it be a model?
+
+    def balanced_values(self) -> Dict[str, Any]:
+        """Plain dict of key→balanced_value."""
+        return {b.key: b.value for b in self.balanced_inputs.inputs}
+
+    @property
+    def balanced_inputs(self) -> BalancedInputCollection:
+        """
+        Lazy-loads balanced inputs by reusing the /scenarios/:id show endpoint.
+        """
+        try:
+            return self._balanced_inputs
+        except AttributeError:
+            # Fetch the full scenario JSON
+            res = FetchScenarioRunner.run(BaseClient(), self)
+            if res.success:
+                # Extract and map the balanced_values hash:
+                data = res.data.get("balanced_values", {})
+                self._balanced_inputs = BalancedInputCollection.from_json(data)
+                return self._balanced_inputs
+            else:
+                raise ScenarioError(f"Could not retrieve balanced values: {res.errors}")
+
+    @balanced_inputs.setter
+    def balanced_inputs(self, val: BalancedInputCollection):
+        self._balanced_inputs = val
 
 
 class ScenarioError(BaseException):
