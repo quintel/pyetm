@@ -13,7 +13,7 @@ if SRC not in sys.path:
 
 # Set the ENV vars at import time so BaseClient picks up the test URL and token
 os.environ["BASE_URL"]       = "https://example.com/api"
-os.environ["ETM_API_TOKEN"]  = "real-token"
+os.environ["ETM_API_TOKEN"]  = "etm_real.looking.token"
 
 # Fixture to give back that same base URL for building expected mock URLs
 @pytest.fixture
