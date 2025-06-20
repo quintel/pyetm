@@ -1,7 +1,6 @@
 import pytest
-from datetime import datetime
-from pyetm.models import Scenario, InputCollection
-from pyetm.services.scenario_runners import FetchInputsRunner
+from pyetm.models import Scenario, InputCollection, BalancedInputCollection
+from pyetm.services.scenario_runners import FetchInputsRunner, FetchScenarioRunner
 from pyetm.services.service_result import ServiceResult
 from pyetm.models.scenario import ScenarioError
 from pydantic import ValidationError
@@ -127,3 +126,98 @@ def test_inputs_getter_caches_result(monkeypatch, input_collection_json):
     assert isinstance(first, InputCollection)
     assert first is second
     assert len(calls) == 1
+
+
+@pytest.fixture
+def balanced_values_json():
+    return {
+        "investment_costs": 10.0,
+        "carbon_price": 5.5,
+        "use_renewables": False,
+    }
+
+
+def test_balanced_inputs_success(monkeypatch, balanced_values_json):
+    """
+    On a 200, .balanced_inputs returns a BalancedInputCollection
+    and balanced_values() returns the raw dict.
+    """
+    calls = []
+
+    def fake_run(client, scenario):
+        calls.append(True)
+        return ServiceResult(
+            success=True,
+            data={"balanced_values": balanced_values_json},
+            status_code=200,
+        )
+
+    monkeypatch.setattr(FetchScenarioRunner, "run", fake_run)
+
+    scenario = Scenario(id=999)
+    bic = scenario.balanced_inputs
+    assert isinstance(bic, BalancedInputCollection)
+    got = {bi.key: bi.value for bi in bic.inputs}
+    assert got == balanced_values_json
+
+    assert scenario.balanced_values() == balanced_values_json
+    assert len(calls) == 1
+
+
+def test_balanced_inputs_caches(monkeypatch, balanced_values_json):
+    """
+    Subsequent accesses to .balanced_inputs do not call the runner again.
+    """
+    calls = []
+
+    def fake_run(client, scenario):
+        calls.append(True)
+        return ServiceResult(
+            success=True,
+            data={"balanced_values": balanced_values_json},
+            status_code=200,
+        )
+
+    monkeypatch.setattr(FetchScenarioRunner, "run", fake_run)
+
+    scenario = Scenario(id=999)
+    first = scenario.balanced_inputs
+    second = scenario.balanced_inputs
+
+    assert first is second
+    assert len(calls) == 1
+
+
+def test_balanced_inputs_setter_bypasses_runner(monkeypatch, balanced_values_json):
+    """
+    If you manually assign .balanced_inputs, the runner should never be called.
+    """
+    dummy = BalancedInputCollection.from_json(balanced_values_json)
+    monkeypatch.setattr(
+        FetchScenarioRunner,
+        "run",
+        lambda *args, **kwargs: pytest.fail("Runner was called!"),
+    )
+
+    scenario = Scenario(id=999)
+    scenario.balanced_inputs = dummy
+
+    assert scenario._balanced_inputs is dummy
+    assert scenario.balanced_inputs is dummy
+
+
+def test_balanced_inputs_failure(monkeypatch):
+    """
+    If the runner returns success=False, .balanced_inputs should raise ScenarioError.
+    """
+
+    def fake_run(client, scenario):
+        return ServiceResult(success=False, errors=["error_message"], status_code=500)
+
+    monkeypatch.setattr(FetchScenarioRunner, "run", fake_run)
+
+    scenario = Scenario(id=999)
+    with pytest.raises(ScenarioError) as excinfo:
+        _ = scenario.balanced_inputs
+
+    assert "error_message" in str(excinfo.value)
