@@ -13,6 +13,10 @@ available via pip like any other python package - install it and use it in your 
 pip install pyetm
 ```
 
+## Just running the Jupyter Notebooks - or a beginner friendly guide to PyETM
+If you are not planning on developing the tool, but would like to open and run our Jupyter notebooks
+in VS Code, follow the beginner friendly guide at [Running notebooks](running_notebooks.md).
+
 ## Getting started
 Make sure you have [Python 3](https://www.python.org/downloads/) installed. Then, install all required
 libraries by opening a terminal/command-prompt window in the `pyetm` folder (or navigate to this folder
@@ -55,7 +59,7 @@ pyetm uses a `config.yml` file in the project root to store your personal settin
    - **etm_api_token**: Your personal ETM API token (overridden by the `$ETM_API_TOKEN` environment variable if set).
    - **base_url**: The API base URL for the target environment (overridden by the `$BASE_URL` environment
     variable if set) e.g., default pro, a stable engine at `https://2025-01.engine.energytransitionmodel.com/api/v3`,
-    or beta at `https://beta.engine.energytransitionmodel.com/api/v3`).
+    or beta at `https://beta.engine.energytransitionmodel.com/api/v3`.
    - **local_engine_url** and **local_model_url**: URLs for a local ETM instance, if running locally.
    - **proxy_servers**: (Optional) HTTP/HTTPS proxy URLs, if required by your network.
    - **csv_separator** and **decimal_separator**: Defaults are `,` and `.`; adjust if your CSV exports
