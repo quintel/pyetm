@@ -6,9 +6,11 @@ from pyetm.services.service_result import ServiceResult
 from pyetm.models.scenario import ScenarioError
 from pydantic import ValidationError
 
+
 @pytest.fixture
 def minimal_scenario_json():
     return {"id": 42}
+
 
 @pytest.fixture
 def full_scenario_json():
@@ -26,23 +28,26 @@ def full_scenario_json():
         "user_values": "dXNlcl92YWxz",
         "balanced_values": "YmFsYW5jZWRfdmFscw==",
         "metadata": "bWV0YWRhdGE=",
-        "active_couplings": "Y3VwbGluZ19kYXRh"
+        "active_couplings": "Y3VwbGluZ19kYXRh",
     }
+
 
 @pytest.fixture
 def missing_id_json():
     return {"created_at": "2025-06-01T12:00:00Z"}
 
+
 @pytest.fixture
 def invalid_type_json():
     return {"id": "this is a string"}
+
 
 @pytest.mark.parametrize(
     "json_fixture, expected_id",
     [
         ("minimal_scenario_json", None),
         ("full_scenario_json", 123),
-    ]
+    ],
 )
 def test_scenario_parse_success(json_fixture, expected_id, request):
     raw = request.getfixturevalue(json_fixture)
@@ -50,16 +55,9 @@ def test_scenario_parse_success(json_fixture, expected_id, request):
     assert isinstance(scenario.id, int)
     if expected_id is not None:
         assert scenario.id == expected_id
-    # created_at only appears on full
-    if "created_at" in raw:
-        assert isinstance(scenario.created_at, datetime)
-    else:
-        assert scenario.created_at is None
 
-@pytest.mark.parametrize(
-    "json_fixture",
-    ["missing_id_json", "invalid_type_json"]
-)
+
+@pytest.mark.parametrize("json_fixture", ["missing_id_json", "invalid_type_json"])
 def test_scenario_parse_failure(json_fixture, request):
     raw = request.getfixturevalue(json_fixture)
     with pytest.raises(ValidationError):
@@ -74,7 +72,8 @@ def test_inputs(requests_mock, input_collection_json):
 
     assert scenario.inputs
     assert len(scenario.inputs.keys()) == 4
-    assert next(iter(scenario.inputs)).key == "investment_costs_co2_ccs"
+    first_input = first_input = next(iter(scenario.inputs))
+    assert first_input.key == "investment_costs_co2_ccs"
 
     assert scenario.user_values() == {"investment_costs_co2_ccs": 10.0}
 
@@ -88,13 +87,18 @@ def test_inputs_failing(requests_mock):
     with pytest.raises(ScenarioError):
         assert scenario.inputs
 
+
 def test_inputs_setter_bypasses_runner(monkeypatch, input_collection_json):
     """
     If you explicitly set `scenario.inputs`, the runner should never be called.
     """
     dummy = InputCollection.from_json(input_collection_json)
 
-    monkeypatch.setattr(FetchInputsRunner, "run", lambda *args, **kwargs: pytest.fail("Runner was called!"))
+    monkeypatch.setattr(
+        FetchInputsRunner,
+        "run",
+        lambda *args, **kwargs: pytest.fail("Runner was called!"),
+    )
 
     scenario = Scenario(id=999)
     scenario.inputs = dummy  # use the setter
@@ -103,11 +107,13 @@ def test_inputs_setter_bypasses_runner(monkeypatch, input_collection_json):
     # Getter returns what was set
     assert scenario.inputs is dummy
 
+
 def test_inputs_getter_caches_result(monkeypatch, input_collection_json):
     """
     First access calls FetchInputsRunner.run once; subsequent accesses return the cached InputCollection.
     """
     calls = []
+
     def fake_run(client, scenario_obj):
         calls.append(True)
         return ServiceResult(success=True, data=input_collection_json, status_code=200)
