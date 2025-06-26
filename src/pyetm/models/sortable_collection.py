@@ -34,9 +34,7 @@ class SortableCollection(BaseModel):
 
     def as_dict(self) -> Dict[str, Any]:
         """
-        Turn back into the same dict shape the index endpoint returned,
-        nesting heat_network subtypes under 'heat_network' and flat lists
-        for the rest.
+        Return a dict mimicking the index endpoint.
         """
         result: Dict[str, Any] = {}
         for s in self.sortables:

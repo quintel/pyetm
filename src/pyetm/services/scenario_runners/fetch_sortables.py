@@ -5,7 +5,7 @@ from pyetm.clients.base_client import BaseClient
 
 class FetchSortablesRunner:
     """
-    Runner for reading *all* sortables on a scenario.
+    Runner for reading all sortables on a scenario.
 
     GET /api/v3/scenarios/{scenario_id}/user_sortables
     Returns a dict of sortable_type → order (and for heat_network a nested dict of subtype → order).
