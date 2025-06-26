@@ -1,13 +1,17 @@
+import pandas as pd
+
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Any, Dict, Optional
+
+
+from pyetm.models import InputCollection, CustomCurves
 from pyetm.clients import BaseClient
-from pyetm.models.input_collection import InputCollection
 from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
-
+from pyetm.services.custom_curves import fetch_all_curve_data
 
 class ScenarioError(BaseException):
     """Base scenario error"""
@@ -102,6 +106,38 @@ class Scenario(BaseModel):
         """
         self._sortables = value
 
+    @property
+    def custom_curves(self):
+        """
+        Property to hold the Scenario's InputCollection
+        """
+        return self._custom_curves
+
+    @custom_curves.setter
+    def custom_curves(self, _value):
+        """
+        TODO: should be removed or reworked, users should not be able to set
+        the custom_curves themselves
+        """
+        return
+
+    @custom_curves.getter
+    def custom_curves(self):
+        try:
+            return self._custom_curves
+        except AttributeError:
+            result = fetch_all_curve_data(BaseClient(), self)
+
+            if result.success:
+                # Make sure to add validation and error collection to the collection as well
+                self._custom_curves = CustomCurves.from_json(result.data)
+                return self._custom_curves
+            else:
+                raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
+
+
+    def curve_series(self, curve_name: str) -> pd.Series:
+        self.custom_curves.get_contents(self, curve_name)
     # --- VALIDATION ---
 
     # We should have an error object always there to collect that we can insert stuff into!?
