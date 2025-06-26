@@ -10,6 +10,7 @@ dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
 pytest = "*"
+pyetm = {file = ".", editable = true}
 
 [dev-packages]
 pytest = "*"
@@ -18,6 +19,7 @@ requests-mock = "*"
 ipykernel = "*"
 notebook = "*"
 pytest-cov = "*"
+pydeps = "*"
 
 [requires]
 python_version = "3.12"
@@ -25,4 +27,5 @@ python_version = "3.12"
 [scripts]
 test = "python -m pytest"
 test_with_coverage = "python -m pytest --cov=pyetm tests/ --cov-report=term-missing"
-linter = "python -m pylint app"
+linter = "python -m pylint pyetm"
+deptree = "pydeps src/pyetm --show-cycles --max-bacon=2 -o import_graph.svg -T svg"
