@@ -104,3 +104,38 @@ def disabled_input_json():
 @pytest.fixture
 def input_collection_json(float_input_json, enum_input_json, bool_input_json, disabled_input_json):
     return float_input_json | enum_input_json | bool_input_json | disabled_input_json
+
+
+@pytest.fixture
+def custom_curves_json():
+    return [{
+        "key": "interconnector_2_export_availability",
+        "type": "availability",
+        "display_group": "interconnectors",
+        "attached": True,
+        "overrides": ["electricity_interconnector_2_export_availability"],
+        "name": "interconnector_2_export_availability_curve",
+        "size": 78843,
+        "date": "2025-05-01T10:31:59.860Z",
+        "stats": {"length":8760,"min_at":3,"max_at":0}
+    },{
+        "key": "buildings_appliances",
+        "type": "profile",
+        "display_group": "buildings",
+        "attached": True,
+        "overrides": [],
+        "name": "buildings_appliances_curve",
+        "size": 78843,
+        "date": "2025-05-01T10:31:59.185Z",
+        "stats": {"length":8760,"min_at":4557,"max_at":2194}
+    }, {
+        "key": "weather/solar_pv_profile_1",
+        "type": "capacity_profile",
+        "display_group": "electricity_production",
+        "attached": True,
+        "overrides": ["flh_of_solar_pv_solar_radiation","flh_of_solar_pv_solar_radiation_user_curve"],
+        "name": "weather/solar_pv_profile_1_curve",
+        "size": 78843,
+        "date": "2025-05-01T10:32:02.014Z",
+        "stats":{"length":8760,"min_at":0,"max_at":3323,"full_load_hours":1000.0}
+    }]
