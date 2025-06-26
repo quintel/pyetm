@@ -1,3 +1,4 @@
+from .custom_curves import CustomCurves
 from .input import Input
 from .input_collection import InputCollection
 from .scenario import Scenario

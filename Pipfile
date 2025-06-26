@@ -5,11 +5,11 @@ name = "pypi"
 
 [packages]
 pydantic = "*"
+pandas = "*"
 requests = "*"
 dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
-pytest = "*"
 pyetm = {file = ".", editable = true}
 
 [dev-packages]
