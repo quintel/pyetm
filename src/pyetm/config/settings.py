@@ -4,6 +4,8 @@ from typing import Optional, ClassVar, List, Annotated
 from pydantic import Field, ValidationError, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+CONFIG_FILE = PROJECT_ROOT / "config.yml"
 
 class AppConfig(BaseSettings):
     """
@@ -29,6 +31,8 @@ class AppConfig(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=None, extra="ignore", case_sensitive=False
     )
+
+    temp_folder: Optional[Path] = PROJECT_ROOT / 'tmp'
 
     @field_validator("etm_api_token")
     @classmethod
@@ -64,6 +68,11 @@ class AppConfig(BaseSettings):
 
         return v
 
+    def path_to_tmp(self, subfolder: str):
+        folder = self.temp_folder / subfolder
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
         raw = {}
@@ -80,10 +89,6 @@ class AppConfig(BaseSettings):
                 data[field] = val
 
         return cls(**data)
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-CONFIG_FILE = PROJECT_ROOT / "config.yml"
 
 
 def get_settings() -> AppConfig:

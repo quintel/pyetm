@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 
 from pyetm.clients import BaseClient
+from pyetm.services.custom_curves import download_curve
+from pyetm.config.settings import get_settings
 
 class CustomCurve(BaseModel):
     '''
@@ -22,15 +24,26 @@ class CustomCurve(BaseModel):
 
     def retrieve(self, client, scenario):
         ''' Process curve from client, save to file, set file_path'''
-        # return pd.read_csv(io.StringIO(response.content.decode('utf-8')))
-        # Allocate temp folder!!
+        result = download_curve(client, scenario, self.key)
+
+        if result.success:
+            curve = pd.read_csv(result.data, index_col=False, dtype=float)
+            self.file_path = get_settings().path_to_tmp(str(scenario.id)) / f'{self.key}.csv'
+            curve.to_csv(self.file_path)
+            return curve
+        else:
+            # TODO: log the error on the object, so we can collect a bunch of
+            # them to give back to the user!
+            return result.errors
 
     def contents(self) -> pd.Series:
         ''' Open file from path and return contents'''
         if not self.available():
             return
 
-        return pd.read_csv(self.file_path, index_col=False, dtype=float).squeeze('columns').dropna(how='all')
+        return pd.read_csv(
+            self.file_path, index_col=False, dtype=float
+        ).squeeze('columns').dropna(how='all')
 
     def remove(self):
         '''TODO: destroy file and remove path'''
@@ -56,9 +69,9 @@ class CustomCurves(BaseModel):
             return
 
         if not curve.available():
-            curve.retrieve(BaseClient(), scenario)
-
-        return curve.contents()
+            return curve.retrieve(BaseClient(), scenario)
+        else:
+            return curve.contents()
 
     def _find(self, curve_name: str) -> CustomCurve | None:
         return next((c for c in self.curves if c.key == curve_name), None)
