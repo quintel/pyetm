@@ -79,6 +79,35 @@ class Scenario(BaseModel):
             else:
                 raise ScenarioError(f"Could not retrieve sortables: {result.errors}")
 
+    @property
+    def metadata(self):
+        """
+        Property to hold the Scenario's metadata
+        """
+        return self._metadata
+
+    @metadata.setter
+    def metadata(self, value):
+        """
+        Allow explicit setting if needed (e.g. in tests)
+        """
+        self._metadata = value
+
+    @metadata.getter
+    def metadata(self):
+        from pyetm.services.scenario_runners import FetchMetadataRunner
+        from pyetm.models.metadata import Metadata
+
+        try:
+            return self._metadata
+        except AttributeError:
+            result = FetchMetadataRunner.run(BaseClient(), self)
+            if result.success:
+                self._metadata = Metadata.from_json(result.data)
+                return self._metadata
+            else:
+                raise ScenarioError(f"Could not retrieve metadata: {result.errors}")
+
     # --- VALIDATION ---
 
     # We should have an error object always there to collect that we can insert stuff into!?
