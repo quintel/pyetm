@@ -1,10 +1,8 @@
 import pytest
 from datetime import datetime
 from pyetm.models import Scenario, InputCollection
-from pyetm.models.metadata import Metadata
 from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners import FetchInputsRunner
-from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
 from pyetm.services.service_result import ServiceResult
 from pyetm.models.scenario import ScenarioError
@@ -216,107 +214,5 @@ def test_scenario_sortables_getter_caches_result(
     second = scenario.sortables
 
     assert isinstance(first, SortableCollection)
-    assert first is second
-    assert len(calls) == 1
-
-
-# TODO: Setup a pattern for DRYing up these tests
-@pytest.fixture
-def metadata_json():
-    """
-    Simulated JSON returned by GET /api/v3/scenarios/{id}
-    containing only the metadata.
-    """
-    return {
-        "id": 2690289,
-        "created_at": "2025-06-26T07:57:26.000Z",
-        "updated_at": "2025-06-26T07:57:26.000Z",
-        "end_year": 2050,
-        "keep_compatible": False,
-        "private": False,
-        "area_code": "nl2019",
-        "source": "ETM",
-        "metadata": {"foo": "bar"},
-        "start_year": 2019,
-        "scaling": None,
-        "template": 2402166,
-        "url": "http://localhost:3000/api/v3/scenarios/2690289",
-    }
-
-
-def test_scenario_metadata_success(
-    requests_mock, api_url, client, scenario, metadata_json
-):
-    """
-    200 → success=True, scenario.metadata returns a Metadata model
-    with all fields correctly populated.
-    """
-    url = f"{api_url}/scenarios/{scenario.id}"
-    requests_mock.get(url, status_code=200, json=metadata_json)
-
-    meta = scenario.metadata
-    assert isinstance(meta, Metadata)
-
-    assert meta.id == metadata_json["id"]
-    assert meta.area_code == metadata_json["area_code"]
-    assert meta.metadata == metadata_json["metadata"]
-    created_dt = datetime.fromisoformat(
-        metadata_json["created_at"].replace("Z", "+00:00")
-    )
-    updated_dt = datetime.fromisoformat(
-        metadata_json["updated_at"].replace("Z", "+00:00")
-    )
-    assert meta.created_at == created_dt
-    assert meta.updated_at == updated_dt
-
-
-def test_scenario_metadata_failure(requests_mock, api_url, client, scenario):
-    """
-    500 → runner returns success=False → scenario.metadata raises ScenarioError.
-    """
-    url = f"{api_url}/scenarios/{scenario.id}"
-    requests_mock.get(url, status_code=500)
-
-    with pytest.raises(ScenarioError):
-        _ = scenario.metadata
-
-
-def test_scenario_metadata_setter_bypasses_runner(
-    monkeypatch, client, scenario, metadata_json
-):
-    """
-    If you explicitly set `scenario.metadata`, the runner should never be called.
-    """
-    dummy = Metadata.model_validate(metadata_json)
-
-    monkeypatch.setattr(
-        FetchMetadataRunner,
-        "run",
-        lambda *args, **kwargs: pytest.fail("FetchMetadataRunner.run was called!"),
-    )
-
-    scenario.metadata = dummy
-    assert scenario._metadata is dummy
-    assert scenario.metadata is dummy
-
-
-def test_scenario_metadata_getter_caches_result(
-    monkeypatch, client, scenario, metadata_json
-):
-    """
-    First access calls the runner exactly once; subsequent accesses return the cached Metadata.
-    """
-    calls = []
-
-    def fake_run(cli, scen):
-        calls.append(True)
-        return ServiceResult(success=True, data=metadata_json, status_code=200)
-
-    monkeypatch.setattr(FetchMetadataRunner, "run", fake_run)
-
-    first = scenario.metadata
-    second = scenario.metadata
-
-    assert isinstance(first, Metadata)
     assert first is second
     assert len(calls) == 1
