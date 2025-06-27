@@ -1,24 +1,25 @@
 import pandas as pd
 
-from pydantic import BaseModel, Field
+from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-
-from pyetm.models import InputCollection, CustomCurves
+from pydantic import Field, PrivateAttr
 from pyetm.clients import BaseClient
+from pyetm.models.input_collection import InputCollection, CustomCurves
 from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
 from pyetm.services.custom_curves import fetch_all_curve_data
 
-class ScenarioError(BaseException):
+
+class ScenarioError(Exception):
     """Base scenario error"""
 
 
 # TODO: Tidy up the datetime created_at and updated-at fields - they come through like:  'created_at': datetime.datetime(2025, 6, 25, 14, 18, 6, tzinfo=TzInfo(UTC))
-class Scenario(BaseModel):
+class Scenario(Base):
     """
     Pydantic model for an ETM Scenario, matching the DB schema,
     but with only `id` required so it can be used for API runners.
@@ -38,29 +39,29 @@ class Scenario(BaseModel):
     template: Optional[int] = None
     url: Optional[str] = None
 
-    # internal caches for inputs and sortables - these act as the properties
-    _inputs: Optional[InputCollection] = None
-    _sortables: Optional[SortableCollection] = None
+    # private caches
+    _inputs: Optional[InputCollection] = PrivateAttr(None)
+    _sortables: Optional[SortableCollection] = PrivateAttr(None)
 
     @classmethod
-    def load(cls, scenario_id: int) -> "Scenario":
+    def load(cls, scenario_id: int) -> Scenario:
         """
-        Factory method: fetch metadata for scenario_id and return a fully populated Scenario.
+        Fetch metadata for scenario_id, return a Scenario (with warnings if any keys missing).
         """
-        # Use a simple object with only id to call the runner
-        temp = type("T", (), {"id": scenario_id})
-        result = FetchMetadataRunner.run(BaseClient(), temp)
+        stub = type("Stub", (), {"id": scenario_id})
+        result = FetchMetadataRunner.run(BaseClient(), stub)
+
         if not result.success:
             raise ScenarioError(
                 f"Could not load scenario {scenario_id}: {result.errors}"
             )
-        return cls.model_validate(result.data)
 
-    def user_values(self) -> Dict[str, Any]:
-        """
-        Returns the values set by the user for inputs
-        """
-        return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
+        # parse into a Scenario
+        scenario = cls.model_validate(result.data)
+        # attach any metadata‐fetch warnings
+        for w in result.errors:
+            scenario.add_warning(w)
+        return scenario
 
     @property
     def inputs(self) -> InputCollection:
@@ -72,41 +73,38 @@ class Scenario(BaseModel):
         result = FetchInputsRunner.run(BaseClient(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
-        self._inputs = InputCollection.from_json(result.data)
-        return self._inputs
 
-    @inputs.setter
-    def inputs(self, value: InputCollection) -> None:
-        """
-        TODO: should be removed or reworked, users should not be able to set
-        the inputs themselves
-        """
-        self._inputs = value
+        coll = InputCollection.from_json(result.data)
+        # merge runner warnings and any item‐level warnings
+        for w in result.errors:
+            self.add_warning(w)
+        self._merge_submodel_warnings(coll)
+
+        self._inputs = coll
+        return coll
 
     @property
     def sortables(self) -> SortableCollection:
-        """
-        Lazy-loaded SortableCollection for this scenario
-        """
-        # if we’ve already fetched once, it’ll be in the cache
         if self._sortables is not None:
             return self._sortables
 
-        # otherwise call the runner and cache
         result = FetchSortablesRunner.run(BaseClient(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve sortables: {result.errors}")
-        self._sortables = SortableCollection.from_json(result.data)
-        return self._sortables
 
-    @sortables.setter
-    def sortables(self, value: SortableCollection) -> None:
-        """
-        Allow explicit setting if needed (e.g. in tests)
-        """
-        self._sortables = value
+        coll = SortableCollection.from_json(result.data)
+        for w in result.errors:
+            self.add_warning(w)
+        self._merge_submodel_warnings(coll)
 
-    @property
+        self._sortables = coll
+        return coll
+
+    def user_values(self) -> Dict[str, Any]:
+        """Returns only the inputs where a user override is present."""
+        return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
+
+   @property
     def custom_curves(self):
         """
         Property to hold the Scenario's InputCollection
@@ -138,8 +136,3 @@ class Scenario(BaseModel):
 
     def curve_series(self, curve_name: str) -> pd.Series:
         return self.custom_curves.get_contents(self, curve_name)
-    # --- VALIDATION ---
-
-    # We should have an error object always there to collect that we can insert stuff into!?
-    # And a 'valid' method?
-    # Should it be a model?
