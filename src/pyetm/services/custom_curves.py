@@ -5,9 +5,8 @@ from pyetm.services.service_result import ServiceResult
 
 @base_service
 def download_curve(client, scenario, curve_name: str) -> ServiceResult:
-    response = client.session.get(f"/scenarios/{scenario.id}/custom_curves/{curve_name}")
+    response = client.session.get(f"/scenarios/{scenario.id}/custom_curves/{curve_name}.csv")
 
-    # TODO: Something goes wrong with the endpoint! Loks like the file is not streamed in the IO stream!
     if response.ok:
         return ServiceResult(
             success=True,
