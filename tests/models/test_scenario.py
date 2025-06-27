@@ -216,3 +216,11 @@ def test_scenario_sortables_getter_caches_result(
     assert isinstance(first, SortableCollection)
     assert first is second
     assert len(calls) == 1
+
+
+def test_custom_curves(requests_mock, api_url, scenario, custom_curves_json):
+    url = f"{api_url}/scenarios/{scenario.id}/custom_curves"
+    requests_mock.get(url, status_code=200, json=custom_curves_json)
+
+    assert scenario.custom_curves
+    assert len(scenario.custom_curves) == 3
