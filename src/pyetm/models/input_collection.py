@@ -1,10 +1,9 @@
-from typing import Optional
 from pydantic import BaseModel
 from .input import Input
 
-class InputCollection(BaseModel):
-    inputs: list['Input']
 
+class InputCollection(BaseModel):
+    inputs: list["Input"]
 
     def __len__(self):
         return len(self.inputs)

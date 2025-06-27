@@ -1,7 +1,9 @@
 import pytest
 from datetime import datetime
 from pyetm.models import Scenario, InputCollection
+from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners import FetchInputsRunner
+from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
 from pyetm.services.service_result import ServiceResult
 from pyetm.models.scenario import ScenarioError
 from pydantic import ValidationError
@@ -17,18 +19,6 @@ def full_scenario_json():
     # Every field populated with valid values
     return {
         "id": 123,
-        "created_at": "2025-06-01T12:34:56Z",
-        "updated_at": "2025-06-02T01:23:45Z",
-        "end_year": 2050,
-        "keep_compatible": True,
-        "private": True,
-        "preset_scenario_id": 7,
-        "area_code": "GB",
-        "source": "user_upload",
-        "user_values": "dXNlcl92YWxz",
-        "balanced_values": "YmFsYW5jZWRfdmFscw==",
-        "metadata": "bWV0YWRhdGE=",
-        "active_couplings": "Y3VwbGluZ19kYXRh",
     }
 
 
@@ -125,5 +115,104 @@ def test_inputs_getter_caches_result(monkeypatch, input_collection_json):
     second = scenario.inputs
 
     assert isinstance(first, InputCollection)
+    assert first is second
+    assert len(calls) == 1
+
+
+@pytest.fixture
+def sortable_collection_json():
+    """
+    Simulate the JSON returned by:
+      GET /api/v3/scenarios/{id}/user_sortables
+    """
+    return {
+        "forecast_storage": ["fs1", "fs2"],
+        "heat_network": {"lt": ["a"], "mt": ["b", "c"], "ht": []},
+        "hydrogen_supply": ["hs1"],
+    }
+
+
+def test_scenario_sortables_success(
+    requests_mock, api_url, client, scenario, sortable_collection_json
+):
+    """
+    200 → success=True, scenario.sortables returns a SortableCollection
+            with one item per flat list and one per heat_network subtype.
+    """
+    url = f"{api_url}/scenarios/{scenario.id}/user_sortables"
+    requests_mock.get(url, status_code=200, json=sortable_collection_json)
+
+    coll = scenario.sortables
+    assert isinstance(coll, SortableCollection)
+
+    # 1 forecast_storage + 3 heat_network subtypes + 1 hydrogen_supply = 5
+    assert len(coll) == 5
+
+    assert coll.keys() == [
+        "forecast_storage",
+        "heat_network",
+        "heat_network",
+        "heat_network",
+        "hydrogen_supply",
+    ]
+
+    first = next(iter(coll))
+    assert first.type == "forecast_storage"
+    assert first.subtype is None
+    assert first.order == ["fs1", "fs2"]
+
+
+def test_scenario_sortables_failure(requests_mock, api_url, client, scenario):
+    """
+    500 → success=False in runner → scenario.sortables raises ScenarioError.
+    """
+    url = f"{api_url}/scenarios/{scenario.id}/user_sortables"
+    requests_mock.get(url, status_code=500)
+
+    with pytest.raises(ScenarioError):
+        _ = scenario.sortables
+
+
+def test_scenario_sortables_setter_bypasses_runner(
+    monkeypatch, client, scenario, sortable_collection_json
+):
+    """
+    If you explicitly set `scenario.sortables`, the runner should never be called.
+    """
+    dummy = SortableCollection.from_json(sortable_collection_json)
+
+    monkeypatch.setattr(
+        FetchSortablesRunner,
+        "run",
+        lambda *args, **kwargs: pytest.fail("FetchSortablesRunner.run was called!"),
+    )
+
+    scenario.sortables = dummy  # use the setter
+
+    assert scenario._sortables is dummy
+    # Getter returns what was set
+    assert scenario.sortables is dummy
+
+
+def test_scenario_sortables_getter_caches_result(
+    monkeypatch, client, scenario, sortable_collection_json
+):
+    """
+    First access calls the runner exactly once; subsequent accesses return the cached SortableCollection.
+    """
+    calls = []
+
+    def fake_run(cli, scen):
+        calls.append(True)
+        return ServiceResult(
+            success=True, data=sortable_collection_json, status_code=200
+        )
+
+    monkeypatch.setattr(FetchSortablesRunner, "run", fake_run)
+
+    first = scenario.sortables
+    second = scenario.sortables
+
+    assert isinstance(first, SortableCollection)
     assert first is second
     assert len(calls) == 1

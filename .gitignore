@@ -12,4 +12,6 @@ dist/
 config.yml
 # For mac users
 .DS_Store
+# dev tools
 .coverage
+import_graph.svg
