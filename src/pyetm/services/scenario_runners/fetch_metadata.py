@@ -1,5 +1,5 @@
-from typing import Any, Dict, Optional
-from ..service_result import ServiceResult, GenericError
+from typing import Any, Dict
+from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
@@ -29,39 +29,36 @@ class FetchMetadataRunner:
     @staticmethod
     def run(
         client: BaseClient,
-        scenario,
+        scenario: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         :param client:   API client
         :param scenario: domain object with an `id` attribute
-        :returns:        ServiceResult.success=True with `.data` a dict of
-                         only the META_KEYS (values may be None if absent),
-                         otherwise success=False with errors.
+        :returns:
+          - ServiceResult.ok(data, warnings) if we got JSON back;
+          - ServiceResult.fail(errors) on any breaking error.
         """
         try:
             resp = client.session.get(f"/scenarios/{scenario.id}")
 
             if resp.ok:
                 body = resp.json()
-                # extract only the meta fields
-                meta = {k: body.get(k) for k in FetchMetadataRunner.META_KEYS}
-                return ServiceResult(
-                    success=True, data=meta, status_code=resp.status_code
-                )
+                meta: Dict[str, Any] = {}
+                warnings: list[str] = []
 
-            return ServiceResult(
-                success=False,
-                errors=[f"{resp.status_code}: {resp.text}"],
-                status_code=resp.status_code,
-            )
+                for key in FetchMetadataRunner.META_KEYS:
+                    if key in body:
+                        meta[key] = body[key]
+                    else:
+                        # non-breaking: warning
+                        meta[key] = None
+                        warnings.append(f"Missing field in response: {key!r}")
 
-        except GenericError as error:
-            msg = str(error)
-            try:
-                code = int(msg.split()[1].rstrip(":"))
-            except Exception:
-                code = None
-            return ServiceResult(success=False, errors=[msg], status_code=code)
+                return ServiceResult.ok(data=meta, errors=warnings)
+
+            # HTTP-level failure is breaking
+            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
 
         except Exception as e:
-            return ServiceResult(success=False, errors=[str(e)])
+            # any unexpected exception is a breaking error
+            return ServiceResult.fail([str(e)])

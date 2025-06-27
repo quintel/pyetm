@@ -1,57 +1,52 @@
 from typing import Any, Dict
-from ..service_result import ServiceResult, GenericError
+from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
 class FetchSortablesRunner:
     """
-    Runner for reading all sortables on a scenario.
+    Runner for reading all user sortables on a scenario.
 
     GET /api/v3/scenarios/{scenario_id}/user_sortables
-    Returns a dict of sortable_type → order (and for heat_network a nested dict of subtype → order).
+
+    Returns:
+        ServiceResult.ok(data) where `data` is a dict like:
+            {
+              "forecast_storage": List[int],
+              "hydrogen_supply":  List[int],
+              "hydrogen_demand":  List[int],
+              "space_heating":    List[int],
+              "heat_network": {
+                "lt": List[int],
+                "mt": List[int],
+                "ht": List[int],
+              },
+            }
+
+        ServiceResult.fail(errors) on any breaking error.
     """
 
     @staticmethod
     def run(
         client: BaseClient,
-        scenario,
+        scenario: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         :param client:   API client
         :param scenario: domain object with an `id` attribute
-        :returns:        ServiceResult.success=True with `.data` a dict matching:
-                         {
-                           "forecast_storage": [...],
-                           "hydrogen_supply":  [...],
-                           "hydrogen_demand":  [...],
-                           "space_heating":    [...],
-                           "heat_network": {
-                             "lt": [...],
-                             "mt": [...],
-                             "ht": [...]
-                           }
-                         }
+        :returns:
+          - ServiceResult.ok(data) on success
+          - ServiceResult.fail(errors) on any breaking error
         """
         try:
             resp = client.session.get(f"/scenarios/{scenario.id}/user_sortables")
 
             if resp.ok:
-                return ServiceResult(
-                    success=True, data=resp.json(), status_code=resp.status_code
-                )
+                return ServiceResult.ok(data=resp.json())
 
-            return ServiceResult(
-                success=False,
-                errors=[f"{resp.status_code}: {resp.text}"],
-                status_code=resp.status_code,
-            )
+            # HTTP-level failure is breaking
+            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
 
-        except GenericError as error:
-            msg = str(error)
-            try:
-                code = int(msg.split()[1].rstrip(":"))
-            except Exception:
-                code = None
-            return ServiceResult(success=False, errors=[msg], status_code=code)
         except Exception as e:
-            return ServiceResult(success=False, errors=[str(e)])
+            # any unexpected exception is a breaking error
+            return ServiceResult.fail([str(e)])

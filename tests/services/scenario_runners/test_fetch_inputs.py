@@ -1,125 +1,83 @@
-import pytest
-from pyetm.services.scenario_runners import FetchInputsRunner
-from pyetm.services.service_result import GenericError
+from types import SimpleNamespace
+from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
+
+# TODO: Move all stubs to fixtures
 
 
-def test_fetch_inputs_success_without_defaults(
-    requests_mock, api_url, client, scenario
-):
-    """
-    200 → success=True, data returns the JSON payload.
-    """
-    payload = {"one": {"min": 1.0, "max": 2.0, "default": 1.0, "unit": "%"}}
-    url = f"{api_url}/scenarios/{scenario.id}/inputs"
+class FakeResponse:
+    def __init__(self, ok, status_code, json_data=None, text=""):
+        self.ok = ok
+        self.status_code = status_code
+        self._json_data = json_data or {}
+        self.text = text
 
-    requests_mock.get(url, status_code=200, json=payload)
+    def json(self):
+        return self._json_data
+
+
+class DummyClient:
+    def __init__(self, response):
+        self._response = response
+        self.calls = []
+
+    @property
+    def session(self):
+        return SimpleNamespace(get=self._mock_get)
+
+    def _mock_get(self, url, params=None):
+        self.calls.append((url, params))
+        if isinstance(self._response, Exception):
+            raise self._response
+        return self._response
+
+
+class DummyScenario:
+    def __init__(self, scenario_id):
+        self.id = scenario_id
+
+
+def test_fetch_inputs_success_no_defaults():
+    body = {"i1": {"min": 0.0}}
+    response = FakeResponse(ok=True, status_code=200, json_data=body)
+    client = DummyClient(response)
+    scenario = DummyScenario(1)
 
     result = FetchInputsRunner.run(client, scenario)
-
     assert result.success is True
-    assert result.status_code == 200
-    assert result.data == payload
+    assert result.data == body
+    assert result.errors == []
+    assert client.calls == [("/scenarios/1/inputs", None)]
 
 
-def test_fetch_inputs_success_with_defaults(requests_mock, api_url, client, scenario):
-    """
-    200 with ?defaults=original → success=True + correct payload.
-    """
-    payload = {"two": {"min": 0.0, "max": 1.0, "default": 0.0, "unit": "%"}}
-    url = f"{api_url}/scenarios/{scenario.id}/inputs?defaults=original"
-
-    requests_mock.get(url, status_code=200, json=payload, complete_qs=True)
+def test_fetch_inputs_success_with_defaults():
+    body = {"i2": {"default": 42}}
+    response = FakeResponse(ok=True, status_code=200, json_data=body)
+    client = DummyClient(response)
+    scenario = DummyScenario(2)
 
     result = FetchInputsRunner.run(client, scenario, defaults="original")
-
     assert result.success is True
-    assert result.status_code == 200
-    assert result.data == payload
+    assert result.data == body
+    assert result.errors == []
+    assert client.calls == [("/scenarios/2/inputs", {"defaults": "original"})]
 
 
-def test_fetch_inputs_http_error(requests_mock, api_url, client, scenario):
-    """
-    500 → success=False, status_code set, error message surfaced.
-    """
-    url = f"{api_url}/scenarios/{scenario.id}/inputs"
-
-    requests_mock.get(url, status_code=500, text="server failure")
-
-    result = FetchInputsRunner.run(client, scenario)
-
-    assert result.success is False
-    assert result.status_code == 500
-    assert "500" in result.errors[0]
-    assert "server failure" in result.errors[0]
-
-
-def test_fetch_inputs_network_exception(monkeypatch, client, scenario):
-    """
-    Any exception → success=False, no status_code, error captured.
-    """
-
-    def bad_get(*args, **kwargs):
-        raise RuntimeError("network down")
-
-    monkeypatch.setattr(client.session, "get", bad_get)
-    result = FetchInputsRunner.run(client, scenario)
-
-    assert result.success is False
-    assert result.status_code is None
-    assert "network down" in result.errors[0]
-
-
-def test_generic_error_with_parseable_code(monkeypatch, client, scenario):
-    """
-    GenericError with “Error 404: …” → parse 404 into status_code.
-    """
-
-    def bad_get(*args, **kwargs):
-        raise GenericError("Error 404: Scenario Not Found")
-
-    monkeypatch.setattr(client.session, "get", bad_get)
+def test_fetch_inputs_http_failure():
+    response = FakeResponse(ok=False, status_code=500, text="Server Error")
+    client = DummyClient(response)
+    scenario = DummyScenario(3)
 
     result = FetchInputsRunner.run(client, scenario)
     assert result.success is False
-    assert result.status_code == 404
-    assert "404" in result.errors[0]
+    assert result.data is None
+    assert result.errors == ["500: Server Error"]
 
 
-def test_generic_error_with_unparseable_code(monkeypatch, client, scenario):
-    """
-    GenericError with non-numeric → status_code stays None.
-    """
-
-    def bad_get(*args, **kwargs):
-        raise GenericError("Non numeric error")
-
-    monkeypatch.setattr(client.session, "get", bad_get)
+def test_fetch_inputs_exception():
+    client = DummyClient(RuntimeError("network down"))
+    scenario = DummyScenario(4)
 
     result = FetchInputsRunner.run(client, scenario)
     assert result.success is False
-    assert result.status_code is None
-    assert "Non numeric error" in result.errors[0]
-
-
-def test_fetch_inputs_http_error_via_fake_response(monkeypatch, client, scenario):
-    """
-    Simulate resp.ok == False with a fake response.
-    """
-
-    class FakeResponse:
-        ok = False
-        status_code = 418
-        text = "Text with a difficult apostrophe's"
-
-        def json(self):
-            # should never be called in this branch
-            pytest.fail("json() must not be called on a failed response")
-
-    # stub out session.get to return our fake error
-    monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: FakeResponse())
-
-    result = FetchInputsRunner.run(client, scenario)
-
-    assert result.success is False
-    assert result.status_code == 418
-    assert result.errors == ["418: Text with a difficult apostrophe's"]
+    assert result.data is None
+    assert any("network down" in err for err in result.errors)
