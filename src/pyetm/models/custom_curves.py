@@ -35,12 +35,15 @@ class CustomCurve(Base):
 
             if result.success:
                 try:
-                    curve = pd.read_csv(result.data, index_col=False, dtype=float)
+                    curve = pd.read_csv(
+                        result.data, header=None, index_col=False, dtype=float
+                    ).squeeze('columns').dropna(how='all')
+
                     self.file_path = (
                         get_settings().path_to_tmp(str(scenario.id)) / f"{self.key}.csv"
                     )
                     curve.to_csv(self.file_path, index=False)
-                    return curve
+                    return curve.rename(self.key)
                 except Exception as e:
                     # File processing error - add warning and return None
                     self.add_warning(
@@ -66,9 +69,10 @@ class CustomCurve(Base):
 
         try:
             return (
-                pd.read_csv(self.file_path, index_col=False, dtype=float)
+                pd.read_csv(self.file_path, header=None, index_col=False, dtype=float)
                 .squeeze("columns")
                 .dropna(how="all")
+                .rename(self.key)
             )
         except Exception as e:
             self.add_warning(f"Failed to read curve file for {self.key}: {e}")
@@ -114,6 +118,10 @@ class CustomCurves(Base):
 
     def __iter__(self):
         yield from iter(self.curves)
+
+    def is_attached(self, curve_name: str) -> bool:
+        ''' Returns true if that curve is attached '''
+        return any((curve_name == key for key in self.attached_keys()))
 
     def attached_keys(self):
         """Returns the keys of attached curves"""
