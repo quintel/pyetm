@@ -29,7 +29,7 @@ class CustomCurve(BaseModel):
         if result.success:
             curve = pd.read_csv(result.data, index_col=False, dtype=float)
             self.file_path = get_settings().path_to_tmp(str(scenario.id)) / f'{self.key}.csv'
-            curve.to_csv(self.file_path)
+            curve.to_csv(self.file_path, index=False)
             return curve
         else:
             # TODO: log the error on the object, so we can collect a bunch of

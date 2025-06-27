@@ -137,7 +137,7 @@ class Scenario(BaseModel):
 
 
     def curve_series(self, curve_name: str) -> pd.Series:
-        self.custom_curves.get_contents(self, curve_name)
+        return self.custom_curves.get_contents(self, curve_name)
     # --- VALIDATION ---
 
     # We should have an error object always there to collect that we can insert stuff into!?
