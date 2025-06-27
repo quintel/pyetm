@@ -17,8 +17,7 @@ from pyetm.models.sortable import Sortable
     ],
 )
 def test_from_json_with_list(payload, expected_type, expected_order, expected_subtype):
-    result = Sortable.from_json(payload)
-    # should always return a list of one Sortable for list payloads
+    result = list(Sortable.from_json(payload))
     assert isinstance(result, list) and len(result) == 1
     sortable = result[0]
     assert sortable.type == expected_type
@@ -29,7 +28,7 @@ def test_from_json_with_list(payload, expected_type, expected_order, expected_su
 def test_from_json_with_dict():
     # nested dict → one Sortable per subtype
     payload = ("heat_network", {"lt": [1, 2], "mt": [3, 4], "ht": []})
-    result = Sortable.from_json(payload)
+    result = list(Sortable.from_json(payload))
 
     assert isinstance(result, list) and len(result) == 3
 
@@ -51,8 +50,9 @@ def test_from_json_with_dict():
     ],
 )
 def test_from_json_raises_on_invalid(payload):
+    gen = Sortable.from_json(payload)
     with pytest.raises(ValueError) as exc:
-        Sortable.from_json(payload)
+        next(gen)
 
     msg = str(exc.value)
     assert payload[0] in msg
