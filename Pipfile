@@ -11,6 +11,7 @@ dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
 pyetm = {file = ".", editable = true}
+xlsxwriter = "*"
 
 [dev-packages]
 pytest = "*"
