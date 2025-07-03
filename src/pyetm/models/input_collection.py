@@ -4,6 +4,7 @@ from pyetm.models.base import Base
 from .input import Input
 
 
+# TODO: Make it input'**s**' --> and same for others, put in same file like curves
 class InputCollection(Base):
     inputs: list[Input]
 
