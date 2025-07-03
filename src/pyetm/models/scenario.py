@@ -2,7 +2,7 @@ from __future__ import annotations
 import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, Optional
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, model_validator
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
@@ -28,10 +28,10 @@ class Scenario(Base):
     id: int = Field(..., description="Unique scenario identifier")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    end_year: Optional[int] = None
+    end_year: int = Field(..., description="End year")
     keep_compatible: Optional[bool] = None
     private: Optional[bool] = None
-    area_code: Optional[str] = None
+    area_code: str = Field(..., description="Area code")
     source: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     start_year: Optional[int] = None
@@ -124,3 +124,15 @@ class Scenario(Base):
 
     def curve_series(self, curve_name: str) -> pd.Series:
         return self.custom_curves.get_contents(self, curve_name)
+
+    ## VALIDATORS
+
+    @model_validator(mode="after")
+    def validate_end_year_after_start_year(self):
+        """Rails: validates :end_year, numericality: { greater_than: start_year }"""
+        if self.end_year is not None and self.start_year is not None:
+            if self.end_year <= self.start_year:
+                raise ValueError(
+                    f"End year ({self.end_year}) must be greater than start year ({self.start_year})"
+                )
+        return self
