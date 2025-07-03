@@ -277,3 +277,11 @@ def test_end_year_greater_than_start_year(minimal_scenario_metadata):
 
     with pytest.raises(ValueError, match="End year .* must be greater than start year"):
         Scenario.model_validate(invalid_data)
+
+
+def test_to_dataframe(scenario):
+    scenario.end_year = 2050
+    scenario.area_code = 'nl2015'
+    dataframe = scenario.to_dataframe()
+
+    assert dataframe[scenario.id]['end_year'] == 2050

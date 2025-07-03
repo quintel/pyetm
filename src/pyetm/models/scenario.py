@@ -64,6 +64,27 @@ class Scenario(Base):
             scenario.add_warning(w)
         return scenario
 
+    def __eq__(self, other: "Scenario"):
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash((self.id, self.area_code, self.end_year))
+
+    def to_dataframe(self) -> pd.DataFrame:
+         return pd.DataFrame.from_dict(
+            self.model_dump(include={
+                'end_year', 'area_code', 'private', 'template'
+            }),
+            orient='index',
+            columns=[self.id]
+        )
+
+    def user_values(self) -> Dict[str, Any]:
+        """
+        Returns the values set by the user for inputs
+        """
+        return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
+
     @property
     def inputs(self) -> InputCollection:
         # If we already fetched and cached, return it
@@ -100,10 +121,6 @@ class Scenario(Base):
 
         self._sortables = coll
         return coll
-
-    def user_values(self) -> Dict[str, Any]:
-        """Returns only the inputs where a user override is present."""
-        return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
 
     @property
     def custom_curves(self) -> CustomCurves:

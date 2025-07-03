@@ -24,8 +24,15 @@ class ScenarioPacker(BaseModel):
     def add_sortables(self, *scenarios):
         self._sortables.extend(scenarios)
 
+    def main_info(self):
+        '''
+        Main info to dataframe
+        For now just for the first scenario!!
+        '''
+        for scenario in self._scenarios():
+            return scenario.to_dataframe()
 
-    def collective_inputs(self):
+    def inputs(self):
         '''
         For now just for the first scenario!!
         TODO: think how to combine min/max of different datasets that may
@@ -43,8 +50,14 @@ class ScenarioPacker(BaseModel):
         workbook = Workbook(path)
 
         add_frame(
+            "MAIN",
+            self.main_info(),
+            workbook
+        )
+
+        add_frame(
             "PARAMETERS",
-            self.collective_inputs(),
+            self.inputs(),
             workbook,
             # index_width=[80, 18],
             # column_width=18
