@@ -1,6 +1,10 @@
 import pytest
 
-from pyetm.models import ScenarioPacker, InputCollection, Input, Scenario
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from pyetm.models import ScenarioPacker, InputCollection, Input, CustomCurves, Scenario
+from pyetm.models.custom_curves import CustomCurve
 
 def test_inputs(scenario):
     packer = ScenarioPacker()
@@ -25,3 +29,21 @@ def test_main_info(scenario):
     dataframe = packer.main_info()
 
     assert dataframe[scenario.id]['area_code'] == 'nl2015'
+
+
+def test_custom_curves(scenario):
+    # Mock some stuff
+    curve = CustomCurve(
+        key="interconnector_2_export_availability",
+        type="something",
+        file_path=Path('tests/fixtures/interconnector_2_export_availability.csv'
+    ))
+    scenario._custom_curves = CustomCurves(curves=[curve])
+
+    # Set up Packer
+    packer = ScenarioPacker()
+    packer.add_curves(scenario)
+
+    dataframe = packer.custom_curves()
+
+    assert dataframe['interconnector_2_export_availability'][0] == 1.0
