@@ -1,9 +1,11 @@
 from typing import Any, Dict
+
+from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class FetchMetadataRunner:
+class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for reading just the metadata fields of a scenario.
 
@@ -31,34 +33,24 @@ class FetchMetadataRunner:
         client: BaseClient,
         scenario: Any,
     ) -> ServiceResult[Dict[str, Any]]:
-        """
-        :param client:   API client
-        :param scenario: domain object with an `id` attribute
-        :returns:
-          - ServiceResult.ok(data, warnings) if we got JSON back;
-          - ServiceResult.fail(errors) on any breaking error.
-        """
-        try:
-            resp = client.session.get(f"/scenarios/{scenario.id}")
+        result = FetchMetadataRunner._make_request(
+            client=client, method="get", path=f"/scenarios/{scenario.id}"
+        )
 
-            if resp.ok:
-                body = resp.json()
-                meta: Dict[str, Any] = {}
-                warnings: list[str] = []
+        if not result.success:
+            return result
 
-                for key in FetchMetadataRunner.META_KEYS:
-                    if key in body:
-                        meta[key] = body[key]
-                    else:
-                        # non-breaking: warning
-                        meta[key] = None
-                        warnings.append(f"Missing field in response: {key!r}")
+        # Custom post-processing for metadata
+        body = result.data
+        meta: Dict[str, Any] = {}
+        warnings: list[str] = []
 
-                return ServiceResult.ok(data=meta, errors=warnings)
+        for key in FetchMetadataRunner.META_KEYS:
+            if key in body:
+                meta[key] = body[key]
+            else:
+                # non-breaking: warning
+                meta[key] = None
+                warnings.append(f"Missing field in response: {key!r}")
 
-            # HTTP-level failure is breaking
-            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
-
-        except Exception as e:
-            # any unexpected exception is a breaking error
-            return ServiceResult.fail([str(e)])
+        return ServiceResult.ok(data=meta, errors=warnings)

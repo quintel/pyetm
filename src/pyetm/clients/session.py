@@ -36,10 +36,17 @@ class RequestsSession(requests.Session):
         self._handle_errors(resp)
         return resp
 
-    # TODO: Handle errors using out of the box error types
-    # def _handle_errors(self, response: requests.Response):
-    #     if response.status_code == 401:
-    #         raise AuthenticationError("Invalid or missing ETM_API_TOKEN")
-    #     if 400 <= response.status_code < 600:
-    #         raise GenericError(f"HTTP {response.status_code}: {response.text}")
-    #     # 2xx → OK
+    def _handle_errors(self, resp: requests.Response) -> None:
+        """
+        Handle HTTP errors using standard exception types.
+        """
+        if resp.status_code == 401:
+            raise PermissionError("Invalid or missing ETM_API_TOKEN")
+
+        if 400 <= resp.status_code < 500:
+            # Client errors (4xx)
+            raise ValueError(f"HTTP {resp.status_code}: {resp.text}")
+
+        if 500 <= resp.status_code < 600:
+            # Server errors (5xx)
+            raise ConnectionError(f"HTTP {resp.status_code}: {resp.text}")

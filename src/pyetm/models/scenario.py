@@ -1,17 +1,17 @@
-import pandas as pd
-
 from __future__ import annotations
+import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, Optional
-
 from pydantic import Field, PrivateAttr
 from pyetm.clients import BaseClient
-from pyetm.models.input_collection import InputCollection, CustomCurves
+from pyetm.models.base import Base
+from pyetm.models.custom_curves import CustomCurves
+from pyetm.models.input_collection import InputCollection
 from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
-from pyetm.services.custom_curves import fetch_all_curve_data
+from pyetm.services.scenario_runners.fetch_custom_curves import FetchAllCurveDataRunner
 
 
 class ScenarioError(Exception):
@@ -39,9 +39,10 @@ class Scenario(Base):
     template: Optional[int] = None
     url: Optional[str] = None
 
-    # private caches
+    # private caches for submodels
     _inputs: Optional[InputCollection] = PrivateAttr(None)
     _sortables: Optional[SortableCollection] = PrivateAttr(None)
+    _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
 
     @classmethod
     def load(cls, scenario_id: int) -> Scenario:
@@ -104,35 +105,22 @@ class Scenario(Base):
         """Returns only the inputs where a user override is present."""
         return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
 
-   @property
-    def custom_curves(self):
-        """
-        Property to hold the Scenario's InputCollection
-        """
-        return self._custom_curves
-
-    @custom_curves.setter
-    def custom_curves(self, _value):
-        """
-        TODO: should be removed or reworked, users should not be able to set
-        the custom_curves themselves
-        """
-        return
-
-    @custom_curves.getter
-    def custom_curves(self):
-        try:
+    @property
+    def custom_curves(self) -> CustomCurves:
+        if self._custom_curves is not None:
             return self._custom_curves
-        except AttributeError:
-            result = fetch_all_curve_data(BaseClient(), self)
 
-            if result.success:
-                # Make sure to add validation and error collection to the collection as well
-                self._custom_curves = CustomCurves.from_json(result.data)
-                return self._custom_curves
-            else:
-                raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
+        result = FetchAllCurveDataRunner.run(BaseClient(), self)
+        if not result.success:
+            raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
+        coll = CustomCurves.from_json(result.data)
+        for w in result.errors:
+            self.add_warning(w)
+        self._merge_submodel_warnings(coll)
+
+        self._custom_curves = coll
+        return coll
 
     def curve_series(self, curve_name: str) -> pd.Series:
         return self.custom_curves.get_contents(self, curve_name)
