@@ -16,3 +16,5 @@ config.yml
 .coverage
 import_graph.svg
 tmp/
+
+*.xlsx
