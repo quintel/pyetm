@@ -48,8 +48,8 @@ class Scenario(Base):
         """
         Fetch metadata for scenario_id, return a Scenario (with warnings if any keys missing).
         """
-        stub = type("Stub", (), {"id": scenario_id})
-        result = FetchMetadataRunner.run(BaseClient(), stub)
+        temp = type("T", (), {"id": scenario_id})
+        result = FetchMetadataRunner.run(BaseClient(), temp)
 
         if not result.success:
             raise ScenarioError(

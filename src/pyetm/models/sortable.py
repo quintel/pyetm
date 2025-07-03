@@ -1,8 +1,14 @@
+from __future__ import annotations
 from typing import Any, Iterator, Optional, Tuple, Union, Dict
-from pydantic import BaseModel
+
+from pyetm.models.base import Base
 
 
-class Sortable(BaseModel):
+class SortableError(Exception):
+    """Base sortable error"""
+
+
+class Sortable(Base):
     """
     Represents one sortable order.
     - If payload is a flat list, yields one Sortable.
@@ -16,7 +22,7 @@ class Sortable(BaseModel):
     @classmethod
     def from_json(
         cls, data: Tuple[str, Union[list[Any], Dict[str, list[Any]]]]
-    ) -> Iterator["Sortable"]:
+    ) -> Iterator[Sortable]:
         """
         :param data: (sortable_type, payload)
            - payload list → yield Sortable(type, order)
@@ -25,11 +31,34 @@ class Sortable(BaseModel):
         sort_type, payload = data
 
         if isinstance(payload, list):
-            yield cls(type=sort_type, order=payload)
+            try:
+                sortable = cls.model_validate({"type": sort_type, "order": payload})
+                yield sortable
+            except Exception as e:
+                # Create basic sortable with warning
+                sortable = cls.model_validate({"type": sort_type, "order": []})
+                sortable.add_warning(f"Failed to create sortable for {sort_type}: {e}")
+                yield sortable
 
         elif isinstance(payload, dict):
             for sub, order in payload.items():
-                yield cls(type=sort_type, subtype=sub, order=order)
+                try:
+                    sortable = cls.model_validate(
+                        {"type": sort_type, "subtype": sub, "order": order}
+                    )
+                    yield sortable
+                except Exception as e:
+                    # Create basic sortable with warning
+                    sortable = cls.model_validate(
+                        {"type": sort_type, "subtype": sub, "order": []}
+                    )
+                    sortable.add_warning(
+                        f"Failed to create sortable for {sort_type}.{sub}: {e}"
+                    )
+                    yield sortable
 
         else:
-            raise ValueError(f"Unexpected payload for '{sort_type}': {payload!r}")
+            # Create basic sortable with warning for unexpected payload
+            sortable = cls.model_validate({"type": sort_type, "order": []})
+            sortable.add_warning(f"Unexpected payload for '{sort_type}': {payload!r}")
+            yield sortable
