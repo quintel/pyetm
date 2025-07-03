@@ -30,6 +30,12 @@ class CustomCurve(Base):
 
     def retrieve(self, client, scenario) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
+        file_path = get_settings().path_to_tmp(str(scenario.id)) / f'{self.key.replace('/','-')}.csv'
+
+        # TODO: When to invalidate this cache!? Is this a good idea?
+        if file_path.is_file():
+            self.file_path = file_path
+            return self.contents()
         try:
             result = DownloadCurveRunner.run(client, scenario, self.key)
 
@@ -39,9 +45,7 @@ class CustomCurve(Base):
                         result.data, header=None, index_col=False, dtype=float
                     ).squeeze('columns').dropna(how='all')
 
-                    self.file_path = (
-                        get_settings().path_to_tmp(str(scenario.id)) / f"{self.key}.csv"
-                    )
+                    self.file_path = file_path
                     curve.to_csv(self.file_path, index=False)
                     return curve.rename(self.key)
                 except Exception as e:

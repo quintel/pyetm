@@ -280,8 +280,7 @@ def test_end_year_greater_than_start_year(minimal_scenario_metadata):
 
 
 def test_to_dataframe(scenario):
-    scenario.end_year = 2050
-    scenario.area_code = 'nl2015'
+    scenario = Scenario(id=scenario.id, area_code='nl2015', end_year=2050)
     dataframe = scenario.to_dataframe()
 
     assert dataframe[scenario.id]['end_year'] == 2050
