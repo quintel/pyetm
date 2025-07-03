@@ -1,9 +1,11 @@
 from typing import Any, Dict
+
+from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class FetchSortablesRunner:
+class FetchSortablesRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for reading all user sortables on a scenario.
 
@@ -31,22 +33,6 @@ class FetchSortablesRunner:
         client: BaseClient,
         scenario: Any,
     ) -> ServiceResult[Dict[str, Any]]:
-        """
-        :param client:   API client
-        :param scenario: domain object with an `id` attribute
-        :returns:
-          - ServiceResult.ok(data) on success
-          - ServiceResult.fail(errors) on any breaking error
-        """
-        try:
-            resp = client.session.get(f"/scenarios/{scenario.id}/user_sortables")
-
-            if resp.ok:
-                return ServiceResult.ok(data=resp.json())
-
-            # HTTP-level failure is breaking
-            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
-
-        except Exception as e:
-            # any unexpected exception is a breaking error
-            return ServiceResult.fail([str(e)])
+        return FetchSortablesRunner._make_request(
+            client=client, method="get", path=f"/scenarios/{scenario.id}/user_sortables"
+        )

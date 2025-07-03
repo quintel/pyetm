@@ -1,9 +1,10 @@
 from typing import Any, Dict, Optional
+from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class FetchInputsRunner:
+class FetchInputsRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for reading *all* inputs on a scenario.
 
@@ -33,18 +34,9 @@ class FetchInputsRunner:
     ) -> ServiceResult[Dict[str, Any]]:
         params = {"defaults": defaults} if defaults else None
 
-        try:
-            resp = client.session.get(
-                f"/scenarios/{scenario.id}/inputs",
-                params=params,
-            )
-
-            if resp.ok:
-                return ServiceResult.ok(data=resp.json())
-
-            # HTTP-level failure is breaking
-            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
-
-        except Exception as e:
-            # any unexpected exception is treated as breaking
-            return ServiceResult.fail([str(e)])
+        return FetchInputsRunner._make_request(
+            client=client,
+            method="get",
+            path=f"/scenarios/{scenario.id}/inputs",
+            params=params,
+        )
