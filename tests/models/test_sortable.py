@@ -49,10 +49,21 @@ def test_from_json_with_dict():
         ("foo", object()),
     ],
 )
-def test_from_json_raises_on_invalid(payload):
-    gen = Sortable.from_json(payload)
-    with pytest.raises(ValueError) as exc:
-        next(gen)
+def test_from_json_creates_warning_on_invalid(payload):
+    """Test that invalid payloads create sortables with warnings instead of raising exceptions"""
+    result = list(Sortable.from_json(payload))
 
-    msg = str(exc.value)
-    assert payload[0] in msg
+    # Should always yield exactly one sortable (graceful degradation)
+    assert len(result) == 1
+    sortable = result[0]
+
+    # Should have the correct type and empty order
+    assert sortable.type == payload[0]
+    assert sortable.order == []
+    assert sortable.subtype is None
+
+    # Should have a warning about the unexpected payload
+    assert hasattr(sortable, "warnings")
+    assert len(sortable.warnings) > 0
+    assert "Unexpected payload" in sortable.warnings[0]
+    assert str(payload[1]) in sortable.warnings[0]

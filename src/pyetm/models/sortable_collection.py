@@ -1,9 +1,9 @@
 from typing import Any, Dict, List
-from pydantic import BaseModel
+from pyetm.models.base import Base
 from .sortable import Sortable
 
 
-class SortableCollection(BaseModel):
+class SortableCollection(Base):
     """
     A flat collection of Sortable instances,
     regardless of whether the source JSON was nested.
@@ -30,7 +30,16 @@ class SortableCollection(BaseModel):
         items: List[Sortable] = []
         for pair in data.items():
             items.extend(Sortable.from_json(pair))
-        return cls(sortables=items)
+
+        collection = cls.model_validate({"sortables": items})
+
+        # Merge any warnings from individual sortables
+        for sortable in items:
+            if hasattr(sortable, "warnings") and sortable.warnings:
+                for warning in sortable.warnings:
+                    collection.add_warning(warning)
+
+        return collection
 
     def as_dict(self) -> Dict[str, Any]:
         """

@@ -1,8 +1,13 @@
+from __future__ import annotations
 from typing import Optional, Union
-from pydantic import BaseModel
+from pyetm.models.base import Base
 
 
-class Input(BaseModel):
+class InputError(Exception):
+    """Base input error"""
+
+
+class Input(Base):
     key: str
     unit: str
     default: Optional[Union[float, str, bool]] = None
@@ -13,17 +18,26 @@ class Input(BaseModel):
     disabled_by: Optional[str] = None
 
     @classmethod
-    def from_json(cls, data: tuple[str, dict]):
+    def from_json(cls, data: tuple[str, dict]) -> Input:
         """
-        Initialise an Input from a JSON-like tuple coming from .items()
+        Initialize an Input from a JSON-like tuple coming from .items()
         """
         key, payload = data
-        payload.update({"key": key})
-        klass = cls.class_type(payload["unit"])
-        return klass(**payload)
+        payload["key"] = key
+
+        try:
+            klass = cls.class_type(payload["unit"])
+            input_instance = klass.model_validate(payload)
+            return input_instance
+        except Exception as e:
+            # Create a basic Input with warning attached
+            basic_input = cls.model_validate(payload)
+            basic_input.add_warning(f"Failed to create specialized input: {e}")
+            return basic_input
 
     @staticmethod
-    def class_type(unit: str):
+    def class_type(unit: str) -> type[Input]:
+        """Return the appropriate Input subclass for the given unit"""
         if unit == "bool":
             return BoolInput
         elif unit == "enum":
@@ -32,7 +46,7 @@ class Input(BaseModel):
             return FloatInput
 
     # Nice to have:
-    # Add validation for input SET - correct units, between min and max
+    # TODO: Add validation for input SET - correct units, between min and max
 
 
 class BoolInput(Input):
