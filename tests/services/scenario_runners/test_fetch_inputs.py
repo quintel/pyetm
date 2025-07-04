@@ -1,46 +1,11 @@
-from types import SimpleNamespace
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 
-# TODO: Move all stubs to fixtures
 
-
-class FakeResponse:
-    def __init__(self, ok, status_code, json_data=None, text=""):
-        self.ok = ok
-        self.status_code = status_code
-        self._json_data = json_data or {}
-        self.text = text
-
-    def json(self):
-        return self._json_data
-
-
-class DummyClient:
-    def __init__(self, response):
-        self._response = response
-        self.calls = []
-
-    @property
-    def session(self):
-        return SimpleNamespace(get=self._mock_get)
-
-    def _mock_get(self, url, params=None):
-        self.calls.append((url, params))
-        if isinstance(self._response, Exception):
-            raise self._response
-        return self._response
-
-
-class DummyScenario:
-    def __init__(self, scenario_id):
-        self.id = scenario_id
-
-
-def test_fetch_inputs_success_no_defaults():
+def test_fetch_inputs_success_no_defaults(dummy_client, fake_response, dummy_scenario):
     body = {"i1": {"min": 0.0}}
-    response = FakeResponse(ok=True, status_code=200, json_data=body)
-    client = DummyClient(response)
-    scenario = DummyScenario(1)
+    response = fake_response(ok=True, status_code=200, json_data=body)
+    client = dummy_client(response)
+    scenario = dummy_scenario(1)
 
     result = FetchInputsRunner.run(client, scenario)
     assert result.success is True
@@ -49,11 +14,13 @@ def test_fetch_inputs_success_no_defaults():
     assert client.calls == [("/scenarios/1/inputs", None)]
 
 
-def test_fetch_inputs_success_with_defaults():
+def test_fetch_inputs_success_with_defaults(
+    dummy_client, fake_response, dummy_scenario
+):
     body = {"i2": {"default": 42}}
-    response = FakeResponse(ok=True, status_code=200, json_data=body)
-    client = DummyClient(response)
-    scenario = DummyScenario(2)
+    response = fake_response(ok=True, status_code=200, json_data=body)
+    client = dummy_client(response)
+    scenario = dummy_scenario(2)
 
     result = FetchInputsRunner.run(client, scenario, defaults="original")
     assert result.success is True
@@ -62,10 +29,10 @@ def test_fetch_inputs_success_with_defaults():
     assert client.calls == [("/scenarios/2/inputs", {"defaults": "original"})]
 
 
-def test_fetch_inputs_http_failure():
-    response = FakeResponse(ok=False, status_code=500, text="Server Error")
-    client = DummyClient(response)
-    scenario = DummyScenario(3)
+def test_fetch_inputs_http_failure(dummy_client, fake_response, dummy_scenario):
+    response = fake_response(ok=False, status_code=500, text="Server Error")
+    client = dummy_client(response)
+    scenario = dummy_scenario(3)
 
     result = FetchInputsRunner.run(client, scenario)
     assert result.success is False
@@ -73,11 +40,11 @@ def test_fetch_inputs_http_failure():
     assert result.errors == ["500: Server Error"]
 
 
-def test_fetch_inputs_exception():
-    client = DummyClient(RuntimeError("network down"))
-    scenario = DummyScenario(4)
+def test_fetch_inputs_exception(dummy_client, dummy_scenario):
+    client = dummy_client(RuntimeError("network error"))
+    scenario = dummy_scenario(4)
 
     result = FetchInputsRunner.run(client, scenario)
     assert result.success is False
     assert result.data is None
-    assert any("network down" in err for err in result.errors)
+    assert any("network error" in err for err in result.errors)

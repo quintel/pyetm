@@ -1,0 +1,195 @@
+"""
+Centralized fixtures for model tests. They will automatically be included.
+"""
+
+import pytest
+from datetime import datetime
+from pathlib import Path
+
+
+# --- Scenario Fixtures --- #
+
+
+@pytest.fixture
+def full_scenario_metadata():
+    """Complete scenario metadata for testing full loads"""
+    return {
+        "id": 1,
+        "created_at": datetime(2025, 6, 1, 12, 0),
+        "updated_at": datetime(2025, 6, 2, 12, 0),
+        "end_year": 2030,
+        "keep_compatible": False,
+        "private": True,
+        "area_code": "NL",
+        "source": "api",
+        "metadata": {"foo": "bar"},
+        "start_year": 2020,
+        "scaling": None,
+        "template": 5,
+        "url": "http://example.com",
+    }
+
+
+@pytest.fixture
+def minimal_scenario_metadata():
+    """Minimal valid scenario metadata with only required fields"""
+    return {"id": 2, "end_year": 2040, "area_code": "NL"}
+
+
+@pytest.fixture
+def scenario(minimal_scenario_metadata):
+    """A basic Scenario instance for testing"""
+    from pyetm.models.scenario import Scenario
+
+    return Scenario.model_validate(minimal_scenario_metadata)
+
+
+# --- Input Fixtures --- #
+
+
+@pytest.fixture
+def float_input_json():
+    """JSON data for a float input"""
+    return {
+        "investment_costs_co2_ccs": {
+            "min": 0.0,
+            "max": 1000.0,
+            "default": 500.0,
+            "step": 0.1,
+            "unit": "EUR/tonne",
+            "group": "costs",
+        }
+    }
+
+
+@pytest.fixture
+def enum_input_json():
+    """JSON data for an enum input"""
+    return {
+        "transport_car_fuel_type": {
+            "min": 0,
+            "max": 3,
+            "default": 0,
+            "permitted_values": ["gasoline", "diesel", "electric", "hydrogen"],
+            "unit": "enum",
+        }
+    }
+
+
+@pytest.fixture
+def bool_input_json():
+    """JSON data for a boolean input"""
+    return {
+        "has_electricity_storage": {"min": 0, "max": 1, "default": 0, "unit": "bool"}
+    }
+
+
+@pytest.fixture
+def disabled_input_json():
+    """JSON data for a disabled input"""
+    return {
+        "legacy_input": {"min": 0.0, "max": 100.0, "default": 50.0, "disabled": True}
+    }
+
+
+@pytest.fixture
+def input_collection_json(
+    float_input_json, enum_input_json, bool_input_json, disabled_input_json
+):
+    """Combined input collection JSON"""
+    result = {}
+    result.update(float_input_json)
+    result.update(enum_input_json)
+    result.update(bool_input_json)
+    result.update(disabled_input_json)
+    return result
+
+
+# --- Sortable Fixtures --- #
+
+
+@pytest.fixture
+def sortable_collection_json():
+    """
+    Simulate the JSON returned by the index endpoint, with:
+      - two flat lists
+      - one nested heat_network dict
+    """
+    return {
+        "forecast_storage": ["fs1", "fs2"],
+        "heat_network": {"lt": ["hn_lt_1"], "mt": ["hn_mt_1", "hn_mt_2"], "ht": []},
+        "hydrogen_supply": ["hs1"],
+    }
+
+
+# --- Custom Curves Fixtures --- #
+
+
+@pytest.fixture
+def custom_curves_json():
+    """JSON data for custom curves"""
+    return [
+        {
+            "attached": True,
+            "key": "interconnector_2_export_availability",
+            "type": "availability",
+        },
+        {"attached": True, "key": "solar_pv_profile_1", "type": "profile"},
+        {"attached": False, "key": "wind_profile_1", "type": "profile"},
+    ]
+
+
+# --- Service Result Fixtures --- #
+
+
+@pytest.fixture
+def ok_service_result():
+    """Factory fixture for creating successful ServiceResult objects"""
+    from pyetm.services.service_result import ServiceResult
+
+    def _make_result(data, errors=None):
+        return ServiceResult.ok(data=data, errors=errors or [])
+
+    return _make_result
+
+
+@pytest.fixture
+def fail_service_result():
+    """Factory fixture for creating failed ServiceResult objects"""
+    from pyetm.services.service_result import ServiceResult
+
+    def _make_result(errors):
+        return ServiceResult.fail(errors)
+
+    return _make_result
+
+
+# --- Test Model Fixtures --- #
+
+
+@pytest.fixture
+def dummy_base_model():
+    """A dummy model class for testing Base functionality"""
+    from pyetm.models.base import Base
+
+    class Dummy(Base):
+        a: int
+        b: str
+        c: float = 1.23  # default value
+
+    return Dummy
+
+
+# --- Path Fixtures --- #
+
+
+@pytest.fixture
+def fixture_path():
+    """Path to the fixtures directory"""
+    return Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def interconnector_csv_path(fixture_path):
+    """Path to the interconnector CSV fixture file"""
+    return fixture_path / "interconnector_2_export_availability.csv"

@@ -53,7 +53,7 @@ def test_from_json_creates_warning_on_invalid(payload):
     """Test that invalid payloads create sortables with warnings instead of raising exceptions"""
     result = list(Sortable.from_json(payload))
 
-    # Should always yield exactly one sortable (graceful degradation)
+    # Should always yield exactly one sortable
     assert len(result) == 1
     sortable = result[0]
 

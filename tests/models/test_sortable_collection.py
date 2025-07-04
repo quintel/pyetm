@@ -3,20 +3,6 @@ from pyetm.models.sortable_collection import SortableCollection
 from pyetm.models.sortable import Sortable
 
 
-@pytest.fixture
-def sortable_collection_json():
-    """
-    Simulate the JSON returned by the index endpoint, with:
-      - two flat lists
-      - one nested heat_network dict
-    """
-    return {
-        "forecast_storage": ["fs1", "fs2"],
-        "heat_network": {"lt": ["hn_lt_1"], "mt": ["hn_mt_1", "hn_mt_2"], "ht": []},
-        "hydrogen_supply": ["hs1"],
-    }
-
-
 def test_collection_from_json(sortable_collection_json):
     coll = SortableCollection.from_json(sortable_collection_json)
 

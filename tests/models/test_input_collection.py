@@ -1,6 +1,5 @@
-import pytest
-
 from pyetm.models import InputCollection
+
 
 def test_collection_from_json(input_collection_json):
     input_collection = InputCollection.from_json(input_collection_json)

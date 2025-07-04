@@ -17,7 +17,6 @@ def test_ok_with_warnings():
     result = ServiceResult.ok(data={"key": "value"}, errors=warnings)
     assert result.success is True
     assert result.data == {"key": "value"}
-    # ensure errors are preserved
     assert result.errors == warnings
     # modifying input warnings list should not affect result.errors
     warnings.append("warn3")
