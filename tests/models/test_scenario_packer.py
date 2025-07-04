@@ -38,7 +38,7 @@ def test_custom_curves(scenario):
 
     # Set up Packer
     packer = ScenarioPacker()
-    packer.add_curves(scenario)
+    packer.add_custom_curves(scenario)
 
     dataframe = packer.custom_curves()
 

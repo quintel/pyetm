@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, Optional
 from pydantic import Field, PrivateAttr, model_validator
+from pyetm.models.carrier_curves import CarrierCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
@@ -11,7 +12,12 @@ from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
-from pyetm.services.scenario_runners.fetch_custom_curves import FetchAllCurveDataRunner
+from pyetm.services.scenario_runners.fetch_custom_curves import (
+    FetchAllCustomCurveDataRunner,
+)
+from pyetm.services.scenario_runners.fetch_carrier_curves import (
+    FetchAllCarrierCurvesRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -43,6 +49,7 @@ class Scenario(Base):
     _inputs: Optional[InputCollection] = PrivateAttr(None)
     _sortables: Optional[SortableCollection] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
+    _carrier_curves: Optional[CarrierCurves] = PrivateAttr(default=None)
 
     @classmethod
     def load(cls, scenario_id: int) -> Scenario:
@@ -71,12 +78,10 @@ class Scenario(Base):
         return hash((self.id, self.area_code, self.end_year))
 
     def to_dataframe(self) -> pd.DataFrame:
-         return pd.DataFrame.from_dict(
-            self.model_dump(include={
-                'end_year', 'area_code', 'private', 'template'
-            }),
-            orient='index',
-            columns=[self.id]
+        return pd.DataFrame.from_dict(
+            self.model_dump(include={"end_year", "area_code", "private", "template"}),
+            orient="index",
+            columns=[self.id],
         )
 
     def user_values(self) -> Dict[str, Any]:
@@ -127,7 +132,7 @@ class Scenario(Base):
         if self._custom_curves is not None:
             return self._custom_curves
 
-        result = FetchAllCurveDataRunner.run(BaseClient(), self)
+        result = FetchAllCustomCurveDataRunner.run(BaseClient(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
@@ -139,14 +144,30 @@ class Scenario(Base):
         self._custom_curves = coll
         return coll
 
-    def curve_series(self, curve_name: str) -> pd.Series:
+    def custom_curve_series(self, curve_name: str) -> pd.Series:
         return self.custom_curves.get_contents(self, curve_name)
 
-    def curves_series(self):
-        ''' Yield all Series'''
+    def custom_curves_series(self):
+        """Yield all Series"""
         for key in self.custom_curves.attached_keys():
-            yield self.curve_series(key)
+            yield self.custom_curve_series(key)
 
+    @property
+    def carrier_curves(self) -> CarrierCurves:
+        if self._carrier_curves is not None:
+            return self._carrier_curves
+
+        # Create collection with all known curve types
+        self._carrier_curves = CarrierCurves.create_empty_collection()
+        return self._carrier_curves
+
+    def carrier_curve_series(self, curve_name: str) -> pd.Series:
+        return self.carrier_curves.get_contents(self, curve_name)
+
+    def carrier_curves_series(self):
+        """Yield all Series"""
+        for key in self.carrier_curves.attached_keys():
+            yield self.carrier_curve_series(key)
 
     ## VALIDATORS
 
