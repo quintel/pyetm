@@ -7,25 +7,28 @@ from xlsxwriter import Workbook
 from pyetm.models import Scenario
 from pyetm.utils.excel import add_frame
 
+
 class ScenarioPacker(BaseModel):
-    '''Packs one or multiple scenarios for export to dataframes or excel'''
+    """Packs one or multiple scenarios for export to dataframes or excel"""
 
     # To avoid keeping all in memory, the packer only remembers which scenarios
     # to pack what info for later
-    _curves:    Optional[list['Scenario']] = []
-    _inputs:    Optional[list['Scenario']] = []
-    _sortables: Optional[list['Scenario']] = []
+    _custom_curves: Optional[list["Scenario"]] = []
+    _inputs: Optional[list["Scenario"]] = []
+    _sortables: Optional[list["Scenario"]] = []
+    _carrier_curves: Optional[list["Scenario"]] = []
 
     def add(self, *scenarios):
         """
         Shorthand method for adding all extractions for the scenario
         """
-        self.add_curves(*scenarios)
+        self.add_custom_curves(*scenarios)  # Fixed: was add_curves
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
+        self.add_carrier_curves(*scenarios)
 
-    def add_curves(self, *scenarios):
-        self._curves.extend(scenarios)
+    def add_custom_curves(self, *scenarios):
+        self._custom_curves.extend(scenarios)
 
     def add_inputs(self, *scenarios):
         self._inputs.extend(scenarios)
@@ -33,23 +36,26 @@ class ScenarioPacker(BaseModel):
     def add_sortables(self, *scenarios):
         self._sortables.extend(scenarios)
 
+    def add_carrier_curves(self, *scenarios):
+        self._carrier_curves.extend(scenarios)
+
     # TODO: NTH – ability to remove data from packer as well
 
     def main_info(self):
-        '''
+        """
         Main info to dataframe
         For now just for the first scenario!!
-        '''
+        """
         for scenario in self._scenarios():
             return scenario.to_dataframe()
 
     def inputs(self):
-        '''
+        """
         For now just for the first scenario!!
         TODO: think how to combine min/max of different datasets that may
         appear when multiple scenarios are added - maybe make exception for
         same-region collections
-        '''
+        """
         for scenario in self._inputs:
             # Just return the first one for now - later they need to be combined
             # with a multi-index for different IDs
@@ -60,32 +66,37 @@ class ScenarioPacker(BaseModel):
             return scenario.sortables.to_dataframe()
 
     def custom_curves(self):
-        '''
+        """
         Custom curves together!
         For now just for the first scenario!!
-        '''
-        if len(self._curves) == 0:
-            return pd.DataFrame()
+        """
+        # TODO: what if it was empty?
+        for scenario in self._custom_curves:
+            return pd.concat(
+                [series for series in scenario.custom_curves_series()], axis=1
+            )
 
-        for scenario in self._curves:
-            if len(scenario.custom_curves) == 0:
-                return pd.DataFrame()
+    def carrier_curves(self):
+        """
+        Carrier curves together!  # Fixed comment: was "Custom curves together!"
+        For now just for the first scenario!!
+        """
+        # TODO: what if it was empty?
+        for scenario in self._carrier_curves:
+            return pd.concat(
+                [series for series in scenario.carrier_curves_series()], axis=1
+            )
 
-            return pd.concat((series for series in scenario.curves_series()), axis=1)
-
-
+    # TODO: check which excel workbooks we need later // which tabs
+    # ["MAIN", "PARAMETERS", "GQUERIES", "PRICES", "CUSTOM_CURVES"]
     def to_excel(self, path):
         if len(self._scenarios()) == 0:
-            raise ValueError('Packer was empty, nothing to export')
+            raise ValueError("Packer was empty, nothing to export")
 
         # TODO: extend workbook class to allow add frame to be called on it...?
         workbook = Workbook(path, {"nan_inf_to_errors": True})
 
-        add_frame(
-            "MAIN",
-            self.main_info(),
-            workbook
-        )
+        add_frame("MAIN", self.main_info(), workbook)
 
         if len(self._inputs) > 0:
             add_frame(
@@ -93,7 +104,7 @@ class ScenarioPacker(BaseModel):
                 self.inputs(),
                 workbook,
                 # index_width=[80, 18], # Add in when we have multi-index
-                column_width=18
+                column_width=18,
             )
 
         # "GQUERIES_RESULTS"
@@ -106,26 +117,32 @@ class ScenarioPacker(BaseModel):
                 self.sortables(),
                 workbook,
                 # index_width=[80, 18], # Add in when we have multi-index
-                column_width=18
+                column_width=18,
             )
 
-        if len(self._curves) > 0:
-            add_frame(
-                "CUSTOM_CURVES",
-                self.custom_curves(),
-                workbook,
-                # index_width=[80, 18], # Add in when we have multi-index
-                column_width=18
-            )
+        add_frame(
+            "CUSTOM_CURVES",
+            self.custom_curves(),
+            workbook,
+            # index_width=[80, 18],
+            # column_width=18
+        )
+
+        add_frame(
+            "CARRIER_CURVES",
+            self.carrier_curves(),
+            workbook,
+            # index_width=[80, 18],
+            # column_width=18
+        )
 
         workbook.close()
 
-
-    def _scenarios(self) -> set['Scenario']:
-        '''
+    def _scenarios(self) -> set["Scenario"]:
+        """
         All scenarios we are packing info for: for these we need to insert
         their metadata
-        '''
-        return set(self._curves + self._inputs + self._sortables)
-
-
+        """
+        return set(
+            self._custom_curves + self._inputs + self._sortables + self._carrier_curves
+        )

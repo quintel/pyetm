@@ -2,10 +2,11 @@ from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 from typing import Optional
-
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
-from pyetm.services.scenario_runners.fetch_custom_curves import DownloadCurveRunner
+from pyetm.services.scenario_runners.fetch_custom_curves import (
+    DownloadCustomCurveRunner,
+)
 from pyetm.config.settings import get_settings
 
 
@@ -30,20 +31,27 @@ class CustomCurve(Base):
 
     def retrieve(self, client, scenario) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
-        file_path = get_settings().path_to_tmp(str(scenario.id)) / f'{self.key.replace('/','-')}.csv'
+        file_path = (
+            get_settings().path_to_tmp(str(scenario.id))
+            / f"{self.key.replace('/','-')}.csv"
+        )
 
         # TODO: When to invalidate this cache!? Is this a good idea?
         if file_path.is_file():
             self.file_path = file_path
             return self.contents()
         try:
-            result = DownloadCurveRunner.run(client, scenario, self.key)
+            result = DownloadCustomCurveRunner.run(client, scenario, self.key)
 
             if result.success:
                 try:
-                    curve = pd.read_csv(
-                        result.data, header=None, index_col=False, dtype=float
-                    ).squeeze('columns').dropna(how='all')
+                    curve = (
+                        pd.read_csv(
+                            result.data, header=None, index_col=False, dtype=float
+                        )
+                        .squeeze("columns")
+                        .dropna(how="all")
+                    )
 
                     self.file_path = file_path
                     curve.to_csv(self.file_path, index=False)
@@ -124,7 +132,7 @@ class CustomCurves(Base):
         yield from iter(self.curves)
 
     def is_attached(self, curve_name: str) -> bool:
-        ''' Returns true if that curve is attached '''
+        """Returns true if that curve is attached"""
         return any((curve_name == key for key in self.attached_keys()))
 
     def attached_keys(self):

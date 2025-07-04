@@ -2,7 +2,9 @@ from pydantic import ValidationError
 import pytest
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.scenario import Scenario, ScenarioError
-from pyetm.services.scenario_runners.fetch_custom_curves import FetchAllCurveDataRunner
+from pyetm.services.scenario_runners.fetch_custom_curves import (
+    FetchAllCustomCurveDataRunner,
+)
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
@@ -251,7 +253,7 @@ def test_end_year_greater_than_start_year(minimal_scenario_metadata):
 
 
 def test_to_dataframe(scenario):
-    scenario = Scenario(id=scenario.id, area_code='nl2015', end_year=2050)
+    scenario = Scenario(id=scenario.id, area_code="nl2015", end_year=2050)
     dataframe = scenario.to_dataframe()
 
-    assert dataframe[scenario.id]['end_year'] == 2050
+    assert dataframe[scenario.id]["end_year"] == 2050
