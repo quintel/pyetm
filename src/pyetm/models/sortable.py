@@ -19,6 +19,15 @@ class Sortable(Base):
     order: list[Any]
     subtype: Optional[str] = None
 
+    def name(self):
+        """
+        Returns the display name
+        """
+        if self.subtype:
+            return f'{self.type}_{self.subtype}'
+        else:
+            return self.type
+
     @classmethod
     def from_json(
         cls, data: Tuple[str, Union[list[Any], Dict[str, list[Any]]]]

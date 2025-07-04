@@ -43,3 +43,15 @@ def test_custom_curves(scenario):
     dataframe = packer.custom_curves()
 
     assert dataframe["interconnector_2_export_availability"][0] == 1.0
+
+def test_custom_curves_when_not_set(scenario):
+    # Empty collection
+    scenario._custom_curves = CustomCurves(curves=[])
+
+     # Set up Packer
+    packer = ScenarioPacker()
+    packer.add_curves(scenario)
+
+    dataframe = packer.custom_curves()
+
+    assert dataframe.empty

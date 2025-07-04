@@ -1,3 +1,5 @@
+import pandas as pd
+
 from typing import Any, Dict, List
 from pyetm.models.base import Base
 from .sortable import Sortable
@@ -52,3 +54,8 @@ class SortableCollection(Base):
             else:
                 result[s.type] = s.order
         return result
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame.from_dict(
+            { s.name() : s.order for s in self.sortables}, orient='index'
+        ).T

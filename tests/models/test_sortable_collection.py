@@ -30,3 +30,9 @@ def test_as_dict_roundtrip(sortable_collection_json):
     rebuilt = coll.as_dict()
 
     assert rebuilt == sortable_collection_json
+
+
+def test_to_dataframe(sortable_collection_json):
+    coll = SortableCollection.from_json(sortable_collection_json)
+
+    assert coll.to_dataframe()["forecast_storage"][0] == "fs1"
