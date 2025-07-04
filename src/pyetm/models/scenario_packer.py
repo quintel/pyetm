@@ -16,6 +16,13 @@ class ScenarioPacker(BaseModel):
     _inputs:    Optional[list['Scenario']] = []
     _sortables: Optional[list['Scenario']] = []
 
+    def add(self, *scenarios):
+        """
+        Shorthand method for adding all extractions for the scenario
+        """
+        self.add_curves(*scenarios)
+        self.add_inputs(*scenarios)
+        self.add_sortables(*scenarios)
 
     def add_curves(self, *scenarios):
         self._curves.extend(scenarios)
@@ -25,6 +32,8 @@ class ScenarioPacker(BaseModel):
 
     def add_sortables(self, *scenarios):
         self._sortables.extend(scenarios)
+
+    # TODO: NTH – ability to remove data from packer as well
 
     def main_info(self):
         '''
@@ -46,19 +55,30 @@ class ScenarioPacker(BaseModel):
             # with a multi-index for different IDs
             return scenario.inputs.to_dataframe()
 
+    def sortables(self):
+        for scenario in self._sortables:
+            return scenario.sortables.to_dataframe()
+
     def custom_curves(self):
         '''
         Custom curves together!
         For now just for the first scenario!!
         '''
-        # TODO: what if it was empty?
+        if len(self._curves) == 0:
+            return pd.DataFrame()
+
         for scenario in self._curves:
-            return pd.concat([series for series in scenario.curves_series()], axis=1)
+            if len(scenario.custom_curves) == 0:
+                return pd.DataFrame()
+
+            return pd.concat((series for series in scenario.curves_series()), axis=1)
 
 
     # TODO: check which excel workbooks we need later // which tabs
     # ["MAIN", "PARAMETERS", "GQUERIES", "PRICES", "CUSTOM_CURVES"]
     def to_excel(self, path):
+        # TODO: raise exception when no scenarios were added
+
         # TODO: extend workbook class to allow add frame to be called on it...?
         workbook = Workbook(path, {"nan_inf_to_errors": True})
 
@@ -71,6 +91,14 @@ class ScenarioPacker(BaseModel):
         add_frame(
             "PARAMETERS",
             self.inputs(),
+            workbook,
+            # index_width=[80, 18],
+            # column_width=18
+        )
+
+        add_frame(
+            "SORTABLES",
+            self.sortables(),
             workbook,
             # index_width=[80, 18],
             # column_width=18
