@@ -104,6 +104,15 @@ def input_collection_json(
     result.update(disabled_input_json)
     return result
 
+# --- GQuery Fixtures --- #
+
+@pytest.fixture
+def valid_queries():
+    return [
+        'system_costs',
+        'hydrogen_demand'
+    ]
+
 
 # --- Sortable Fixtures --- #
 
