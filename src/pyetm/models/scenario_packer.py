@@ -74,10 +74,9 @@ class ScenarioPacker(BaseModel):
             return pd.concat((series for series in scenario.curves_series()), axis=1)
 
 
-    # TODO: check which excel workbooks we need later // which tabs
-    # ["MAIN", "PARAMETERS", "GQUERIES", "PRICES", "CUSTOM_CURVES"]
     def to_excel(self, path):
-        # TODO: raise exception when no scenarios were added
+        if len(self._scenarios()) == 0:
+            raise ValueError('Packer was empty, nothing to export')
 
         # TODO: extend workbook class to allow add frame to be called on it...?
         workbook = Workbook(path, {"nan_inf_to_errors": True})
@@ -88,29 +87,36 @@ class ScenarioPacker(BaseModel):
             workbook
         )
 
-        add_frame(
-            "PARAMETERS",
-            self.inputs(),
-            workbook,
-            # index_width=[80, 18],
-            # column_width=18
-        )
+        if len(self._inputs) > 0:
+            add_frame(
+                "PARAMETERS",
+                self.inputs(),
+                workbook,
+                # index_width=[80, 18], # Add in when we have multi-index
+                column_width=18
+            )
 
-        add_frame(
-            "SORTABLES",
-            self.sortables(),
-            workbook,
-            # index_width=[80, 18],
-            # column_width=18
-        )
+        # "GQUERIES_RESULTS"
 
-        add_frame(
-            "CUSTOM_CURVES",
-            self.custom_curves(),
-            workbook,
-            # index_width=[80, 18],
-            # column_width=18
-        )
+        # "CARRIER_CURVES_RESULTS"
+
+        if len(self._sortables) > 0:
+            add_frame(
+                "SORTABLES",
+                self.sortables(),
+                workbook,
+                # index_width=[80, 18], # Add in when we have multi-index
+                column_width=18
+            )
+
+        if len(self._curves) > 0:
+            add_frame(
+                "CUSTOM_CURVES",
+                self.custom_curves(),
+                workbook,
+                # index_width=[80, 18], # Add in when we have multi-index
+                column_width=18
+            )
 
         workbook.close()
 
