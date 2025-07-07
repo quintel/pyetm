@@ -50,6 +50,7 @@ class Scenario(Base):
     _sortables: Optional[SortableCollection] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
     _carrier_curves: Optional[CarrierCurves] = PrivateAttr(default=None)
+    # _queries: Optional[Gqueries] = PrivateAttr(None)
 
     @classmethod
     def load(cls, scenario_id: int) -> Scenario:
