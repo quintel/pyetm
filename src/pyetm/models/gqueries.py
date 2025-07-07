@@ -2,6 +2,7 @@
 Wraps a dict of queries and answers
 '''
 from pyetm.models.base import Base
+from pyetm.services.scenario_runners import GetQueryResultsRunner
 
 class Gqueries(Base):
     '''
@@ -32,7 +33,19 @@ class Gqueries(Base):
         '''
         Add more queries to be requested
         '''
-        self.query_dict.update({q : None for q in query_keys if q not in self.query_dict.keys()})
+        self.query_dict.update(
+            {q : None for q in query_keys if q not in self.query_dict.keys()}
+        )
+
+    def execute(self, client, scenario):
+        result = GetQueryResultsRunner.run(client, scenario, self.query_keys())
+        # What is going wrong here?
+        print(result.data)
+        if result.success:
+            self.update(result.data)
+        else:
+            self.add_warning(f"Error retrieving queries: {result.errors}")
+
 
     @classmethod
     def from_list(cls, query_list: list[str]):
