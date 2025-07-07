@@ -122,7 +122,7 @@ def sortable_collection_json():
     }
 
 
-# --- Custom Curves Fixtures --- #
+# --- Curve Fixtures --- #
 
 
 @pytest.fixture

@@ -1,58 +1,167 @@
 import pandas as pd
-
+import io
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-from pyetm.models import CustomCurves, Scenario
-
-
-def set_path(curve):
-    curve.file_path = Path("tests/fixtures/interconnector_2_export_availability.csv")
+from unittest.mock import Mock, patch
+from pyetm.models.custom_curves import CustomCurve, CustomCurves
+from pyetm.services.service_result import ServiceResult
 
 
-def test_custom_curves_from_json(custom_curves_json):
-    custom_curves = CustomCurves.from_json(custom_curves_json)
+def test_custom_curve_retrieve_success():
+    """Test successful curve retrieval and file saving"""
+    mock_client = Mock()
+    mock_scenario = Mock()
+    mock_scenario.id = 123
 
-    # Check if valid!
-    assert custom_curves
-    assert len(custom_curves) == 3
-    assert next(custom_curves.attached_keys()) == "interconnector_2_export_availability"
-    assert not next(iter(custom_curves)).available()
+    # Mock successful service result
+    csv_data = io.StringIO("1.0\n2.0\n3.0")
+    mock_result = ServiceResult.ok(data=csv_data)
 
-
-def test_get_contents(custom_curves_json, scenario):
-    # 1. curve that was not cached
-    # 2. curve that was cached
-    # 3. curve that does not exist
-
-    custom_curves = CustomCurves.from_json(custom_curves_json)
-    curve = custom_curves._find("interconnector_2_export_availability")
-
-    # Case 1: curve that was not cached
-    curve.file_path = None
-
-    # patch the retrieve method to just set the file path to our fixture
-    with patch(
-        "pyetm.models.custom_curves.CustomCurve.retrieve",
-        new=MagicMock(side_effect=set_path(curve)),
+    with (
+        patch(
+            "pyetm.models.custom_curves.DownloadCustomCurveRunner.run",
+            return_value=mock_result,
+        ),
+        patch("pyetm.models.custom_curves.get_settings") as mock_settings,
+        patch("pandas.Series.to_csv") as mock_to_csv,
     ):
-        curve_content = custom_curves.get_contents(
-            scenario, "interconnector_2_export_availability"
+
+        mock_settings.return_value.path_to_tmp.return_value = Path("/tmp/123")
+
+        curve = CustomCurve(key="test_curve", type="custom")
+        result = curve.retrieve(mock_client, mock_scenario)
+
+        assert isinstance(result, pd.Series)
+        assert result.name == "test_curve"
+        assert curve.file_path is not None
+
+
+def test_custom_curve_retrieve_processing_error():
+    """Test curve retrieval with data processing error"""
+    mock_client = Mock()
+    mock_scenario = Mock()
+    mock_scenario.id = 123
+
+    # Mock successful service result but bad data
+    csv_data = io.StringIO("invalid,data")
+    mock_result = ServiceResult.ok(data=csv_data)
+
+    with (
+        patch(
+            "pyetm.models.custom_curves.DownloadCustomCurveRunner.run",
+            return_value=mock_result,
+        ),
+        patch("pyetm.models.custom_curves.get_settings") as mock_settings,
+    ):
+
+        mock_settings.return_value.path_to_tmp.return_value = Path("/tmp/123")
+
+        curve = CustomCurve(key="test_curve", type="custom")
+        result = curve.retrieve(mock_client, mock_scenario)
+
+        assert result is None
+        assert len(curve.warnings) > 0
+        assert "Failed to process curve data" in curve.warnings[0]
+
+
+def test_custom_curve_retrieve_service_error():
+    """Test curve retrieval with service error"""
+    mock_client = Mock()
+    mock_scenario = Mock()
+    mock_scenario.id = 123
+
+    # Mock failed service result
+    mock_result = ServiceResult.fail(errors=["API error"])
+
+    with patch(
+        "pyetm.models.custom_curves.DownloadCustomCurveRunner.run",
+        return_value=mock_result,
+    ):
+        curve = CustomCurve(key="test_curve", type="custom")
+        result = curve.retrieve(mock_client, mock_scenario)
+
+        assert result is None
+        assert len(curve.warnings) > 0
+        assert "Failed to retrieve curve test_curve: API error" in curve.warnings[0]
+
+
+def test_custom_curve_retrieve_unexpected_error():
+    """Test curve retrieval with unexpected exception"""
+    mock_client = Mock()
+    mock_scenario = Mock()
+    mock_scenario.id = 123
+
+    with patch(
+        "pyetm.models.custom_curves.DownloadCustomCurveRunner.run",
+        side_effect=RuntimeError("Unexpected"),
+    ):
+        curve = CustomCurve(key="test_curve", type="custom")
+        result = curve.retrieve(mock_client, mock_scenario)
+
+        assert result is None
+        assert len(curve.warnings) > 0
+        assert (
+            "Unexpected error retrieving curve test_curve: Unexpected"
+            in curve.warnings[0]
         )
 
-        assert isinstance(curve_content, pd.Series)
 
-    # Case 2: curve that was cached
-    # Mock cached content with fixture
-    set_path(curve)
+def test_custom_curve_contents_not_available():
+    """Test contents when curve not available"""
+    curve = CustomCurve(key="test_curve", type="custom")
+    result = curve.contents()
 
-    curve_content = custom_curves.get_contents(
-        scenario, "interconnector_2_export_availability"
+    assert result is None
+    assert len(curve.warnings) > 0
+    assert "not available - no file path set" in curve.warnings[0]
+
+
+def test_custom_curve_contents_file_error():
+    """Test contents with file reading error"""
+    curve = CustomCurve(
+        key="test_curve", type="custom", file_path=Path("/nonexistent/file.csv")
     )
+    result = curve.contents()
 
-    assert isinstance(curve_content, pd.Series)
+    assert result is None
+    assert len(curve.warnings) > 0
+    assert "Failed to read curve file" in curve.warnings[0]
 
-    # Case 3: curve that was cached
-    curve_content = custom_curves.get_contents(scenario, "non_existent")
 
-    assert not curve_content
+def test_custom_curve_remove_not_available():
+    """Test remove when no file path set"""
+    curve = CustomCurve(key="test_curve", type="custom")
+    result = curve.remove()
+
+    assert result is True
+
+
+def test_custom_curve_remove_file_error():
+    """Test remove with file deletion error"""
+    with patch("pathlib.Path.unlink", side_effect=OSError("Permission denied")):
+        curve = CustomCurve(
+            key="test_curve", type="custom", file_path=Path("/test/file.csv")
+        )
+        result = curve.remove()
+
+        assert result is False
+        assert len(curve.warnings) > 0
+        assert "Failed to remove curve file" in curve.warnings[0]
+
+
+def test_custom_curves_from_json_with_invalid_curve():
+    """Test from_json with some invalid curve data"""
+    data = [{"key": "valid_curve", "type": "custom"}, {"invalid": "data"}]
+
+    with patch.object(
+        CustomCurve,
+        "from_json",
+        side_effect=[
+            CustomCurve(key="valid_curve", type="custom"),
+            Exception("Invalid curve"),
+        ],
+    ):
+        curves = CustomCurves.from_json(data)
+
+        assert len(curves.curves) == 1
+        assert len(curves.warnings) > 0
+        assert "Skipped invalid curve data" in curves.warnings[0]
