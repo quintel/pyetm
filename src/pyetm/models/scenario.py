@@ -8,6 +8,7 @@ from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.input_collection import InputCollection
+from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortable_collection import SortableCollection
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
@@ -50,7 +51,7 @@ class Scenario(Base):
     _sortables: Optional[SortableCollection] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
     _carrier_curves: Optional[CarrierCurves] = PrivateAttr(default=None)
-    # _queries: Optional[Gqueries] = PrivateAttr(None)
+    _queries: Optional[Gqueries] = PrivateAttr(None)
 
     @classmethod
     def load(cls, scenario_id: int) -> Scenario:
@@ -169,6 +170,21 @@ class Scenario(Base):
         """Yield all Series"""
         for key in self.carrier_curves.attached_keys():
             yield self.carrier_curve_series(key)
+    def add_queries_to_request(self, gquery_keys: list[str]):
+        if self._queries is None:
+            self._queries = Gqueries.from_list(gquery_keys)
+        else:
+            self._queries.add(*gquery_keys)
+
+    def execute_queries(self):
+        '''
+        Queries are executed explicitly, as we need to know when the user is
+        ready collecting all of them
+        '''
+        self._queries.execute(BaseClient(), self)
+
+    def results(self):
+        return self._queries
 
     ## VALIDATORS
 
