@@ -36,10 +36,11 @@ class CarrierCurve(Base):
             / f"{self.key.replace('/','-')}.csv"
         )
 
-        # TODO: When to invalidate this cache!? Is this a good idea?
-        if file_path.is_file():
-            self.file_path = file_path
-            return self.contents()
+        # TODO: Examine the caching situation in the future if time permits: could be particularly
+        # relevant for bulk processing
+        # if file_path.is_file():
+        #     self.file_path = file_path
+        #     return self.contents()
         try:
             result = DownloadCarrierCurveRunner.run(client, scenario, self.key)
             if result.success:

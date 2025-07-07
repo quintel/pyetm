@@ -22,7 +22,7 @@ class ScenarioPacker(BaseModel):
         """
         Shorthand method for adding all extractions for the scenario
         """
-        self.add_custom_curves(*scenarios)  # Fixed: was add_curves
+        self.add_custom_curves(*scenarios)
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
         self.add_carrier_curves(*scenarios)
@@ -70,22 +70,28 @@ class ScenarioPacker(BaseModel):
         Custom curves together!
         For now just for the first scenario!!
         """
-        # TODO: what if it was empty?
+        if len(self._custom_curves) == 0:
+            return pd.DataFrame()
+
         for scenario in self._custom_curves:
-            return pd.concat(
-                [series for series in scenario.custom_curves_series()], axis=1
-            )
+            series_list = list(scenario.custom_curves_series())
+            if len(series_list) == 0:
+                return pd.DataFrame()
+            return pd.concat(series_list, axis=1)
 
     def carrier_curves(self):
         """
-        Carrier curves together!  # Fixed comment: was "Custom curves together!"
+        Carrier curves
         For now just for the first scenario!!
         """
-        # TODO: what if it was empty?
+        if len(self._carrier_curves) == 0:
+            return pd.DataFrame()
+
         for scenario in self._carrier_curves:
-            return pd.concat(
-                [series for series in scenario.carrier_curves_series()], axis=1
-            )
+            series_list = list(scenario.carrier_curves_series())
+            if len(series_list) == 0:
+                return pd.DataFrame()
+            return pd.concat(series_list, axis=1)
 
     # TODO: check which excel workbooks we need later // which tabs
     # ["MAIN", "PARAMETERS", "GQUERIES", "PRICES", "CUSTOM_CURVES"]
@@ -119,22 +125,22 @@ class ScenarioPacker(BaseModel):
                 # index_width=[80, 18], # Add in when we have multi-index
                 column_width=18,
             )
-
-        add_frame(
-            "CUSTOM_CURVES",
-            self.custom_curves(),
-            workbook,
-            # index_width=[80, 18],
-            # column_width=18
-        )
-
-        add_frame(
-            "CARRIER_CURVES",
-            self.carrier_curves(),
-            workbook,
-            # index_width=[80, 18],
-            # column_width=18
-        )
+        if len(self._inputs) > 0:
+            add_frame(
+                "CUSTOM_CURVES",
+                self.custom_curves(),
+                workbook,
+                # index_width=[80, 18],
+                # column_width=18
+            )
+        if len(self._inputs) > 0:
+            add_frame(
+                "CARRIER_CURVES",
+                self.carrier_curves(),
+                workbook,
+                # index_width=[80, 18],
+                # column_width=18
+            )
 
         workbook.close()
 

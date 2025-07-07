@@ -201,7 +201,7 @@ def test_custom_curves_success(
     ]
 
     monkeypatch.setattr(
-        FetchAllCurveDataRunner,
+        FetchAllCustomCurveDataRunner,
         "run",
         lambda client, scen: ok_service_result(curves_data),
     )
@@ -219,7 +219,7 @@ def test_custom_curves_with_warnings(
     warns = ["some curves could not be loaded"]
 
     monkeypatch.setattr(
-        FetchAllCurveDataRunner,
+        FetchAllCustomCurveDataRunner,
         "run",
         lambda client, scen: ok_service_result(curves_data, warns),
     )
@@ -231,7 +231,7 @@ def test_custom_curves_with_warnings(
 
 def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
     monkeypatch.setattr(
-        FetchAllCurveDataRunner,
+        FetchAllCustomCurveDataRunner,
         "run",
         lambda client, scen: fail_service_result(["custom curves fetch failed"]),
     )
