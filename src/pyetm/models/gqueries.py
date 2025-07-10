@@ -51,7 +51,7 @@ class Gqueries(Base):
         if not self.is_ready():
             return pd.DataFrame()
 
-        return pd.DataFrame.from_dict(self.query_dict).T
+        return pd.DataFrame.from_dict(self.query_dict).reindex(['unit', 'present', 'future']).T
 
     @classmethod
     def from_list(cls, query_list: list[str]):

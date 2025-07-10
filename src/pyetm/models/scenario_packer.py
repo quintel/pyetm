@@ -59,14 +59,18 @@ class ScenarioPacker(BaseModel):
         for scenario in self._inputs:
             # Just return the first one for now - later they need to be combined
             # with a multi-index for different IDs
-            return scenario.inputs.to_dataframe()
+            data = scenario.inputs.to_dataframe()
+            data.index.name = 'input'
+            return data
 
     def gquery_results(self):
         '''
         For now just for the first scenario!!
         '''
         for scenario in self._scenarios():
-            return scenario.results()
+            data = scenario.results()
+            data.index.name = 'gquery'
+            return data
 
     def sortables(self):
         for scenario in self._sortables:
