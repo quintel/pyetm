@@ -2,6 +2,7 @@ from __future__ import annotations
 import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr, model_validator
 from pyetm.models.carrier_curves import CarrierCurves
 from pyetm.clients import BaseClient
@@ -78,6 +79,17 @@ class Scenario(Base):
 
     def __hash__(self):
         return hash((self.id, self.area_code, self.end_year))
+
+    def version(self) -> str:
+        '''
+        Returns the version of the ETM the scenario was made in
+        '''
+        if not self.url: return ""
+
+        url_parts = urlparse(self.url).netloc.split('.engine.')
+        if len(url_parts) == 1: return "latest"
+
+        return url_parts[0]
 
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame.from_dict(
