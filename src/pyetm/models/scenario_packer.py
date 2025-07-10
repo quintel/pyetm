@@ -139,7 +139,7 @@ class ScenarioPacker(BaseModel):
                 # index_width=[80, 18], # Add in when we have multi-index
                 column_width=18,
             )
-        if len(self._inputs) > 0:
+        if len(self._custom_curves) > 0:
             add_frame(
                 "CUSTOM_CURVES",
                 self.custom_curves(),
@@ -147,7 +147,7 @@ class ScenarioPacker(BaseModel):
                 # index_width=[80, 18],
                 # column_width=18
             )
-        if len(self._inputs) > 0:
+        if len(self._carrier_curves) > 0:
             add_frame(
                 "CARRIER_CURVES",
                 self.carrier_curves(),
