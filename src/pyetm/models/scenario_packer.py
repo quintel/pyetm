@@ -61,6 +61,13 @@ class ScenarioPacker(BaseModel):
             # with a multi-index for different IDs
             return scenario.inputs.to_dataframe()
 
+    def gquery_results(self):
+        '''
+        For now just for the first scenario!!
+        '''
+        for scenario in self._scenarios():
+            return scenario.results()
+
     def sortables(self):
         for scenario in self._sortables:
             return scenario.sortables.to_dataframe()
@@ -113,7 +120,14 @@ class ScenarioPacker(BaseModel):
                 column_width=18,
             )
 
-        # "GQUERIES_RESULTS"
+        if any((scenario.queries_requested() for scenario in self._scenarios())):
+            add_frame(
+                "GQUERIES_RESULTS",
+                self.gquery_results(),
+                workbook,
+                # index_width=[80, 18], # Add in when we have multi-index
+                column_width=18
+            )
 
         # "CARRIER_CURVES_RESULTS"
 
