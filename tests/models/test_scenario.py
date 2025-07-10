@@ -72,26 +72,28 @@ def test_load_missing_required_field(monkeypatch, ok_service_result):
     with pytest.raises((ScenarioError, ValidationError, AttributeError)):
         Scenario.load(4)
 
+
 # ------ version ------- #
 
+
 def test_version_when_no_url_set(scenario):
-    assert scenario.version() == ""
+    assert scenario.version == ""
+
 
 def test_version_when_url_stable():
     scenario = Scenario(
-        id=4,
-        url = "https://2025-01.engine.energytransitionmodel.com/api/v3/scenarios/4"
+        id=4, url="https://2025-01.engine.energytransitionmodel.com/api/v3/scenarios/4"
     )
 
-    assert scenario.version() == "2025-01"
+    assert scenario.version == "2025-01"
+
 
 def test_version_when_url_latest():
     scenario = Scenario(
-        id=4,
-        url = "https://engine.energytransitionmodel.com/api/v3/scenarios/4"
+        id=4, url="https://engine.energytransitionmodel.com/api/v3/scenarios/4"
     )
 
-    assert scenario.version() == "latest"
+    assert scenario.version == "latest"
 
 
 # ------- inputs ------- #
