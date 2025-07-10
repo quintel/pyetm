@@ -19,7 +19,7 @@ class RequestsSession(requests.Session):
         # global headers
         self.headers.update(
             {
-                "Authorization": f"Token {self.token}",
+                "Authorization": f"Bearer {self.token}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
             }
