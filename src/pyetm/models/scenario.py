@@ -170,7 +170,8 @@ class Scenario(Base):
         """Yield all Series"""
         for key in self.carrier_curves.attached_keys():
             yield self.carrier_curve_series(key)
-    def add_queries_to_request(self, gquery_keys: list[str]):
+
+    def add_queries(self, gquery_keys: list[str]):
         if self._queries is None:
             self._queries = Gqueries.from_list(gquery_keys)
         else:
