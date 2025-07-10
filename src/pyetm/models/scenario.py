@@ -80,17 +80,6 @@ class Scenario(Base):
     def __hash__(self):
         return hash((self.id, self.area_code, self.end_year))
 
-    def version(self) -> str:
-        '''
-        Returns the version of the ETM the scenario was made in
-        '''
-        if not self.url: return ""
-
-        url_parts = urlparse(self.url).netloc.split('.engine.')
-        if len(url_parts) == 1: return "latest"
-
-        return url_parts[0]
-
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame.from_dict(
             self.model_dump(include={"end_year", "area_code", "private", "template"}),
@@ -103,6 +92,20 @@ class Scenario(Base):
         Returns the values set by the user for inputs
         """
         return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
+
+    @property
+    def version(self) -> str:
+        """
+        Returns the version of the ETM the scenario was made in
+        """
+        if not self.url:
+            return ""
+
+        url_parts = urlparse(self.url).netloc.split(".engine.")
+        if len(url_parts) == 1:
+            return "latest"
+
+        return url_parts[0]
 
     @property
     def inputs(self) -> InputCollection:
@@ -190,16 +193,16 @@ class Scenario(Base):
             self._queries.add(*gquery_keys)
 
     def execute_queries(self):
-        '''
+        """
         Queries are executed explicitly, as we need to know when the user is
         ready collecting all of them
-        '''
+        """
         self._queries.execute(BaseClient(), self)
 
     def results(self) -> pd.DataFrame:
-        '''
+        """
         Returns the results of the requested queries in a dataframe
-        '''
+        """
         if not self.queries_requested():
             # TODO: Return something nicer, or more useful.
             return None
@@ -210,10 +213,11 @@ class Scenario(Base):
         return self._queries.to_dataframe()
 
     def queries_requested(self):
-        '''
+        """
         Returns True if queries have been requested
-        '''
-        if self._queries is None: return False
+        """
+        if self._queries is None:
+            return False
 
         return len(self._queries.query_keys()) > 0
 
