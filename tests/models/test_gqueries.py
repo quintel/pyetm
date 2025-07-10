@@ -83,3 +83,16 @@ def test_add_multiple_queries_but_one_is_already_present(valid_queries):
     assert queries.get(valid_queries[0]) == 20.5
 
 
+def test_to_dataframe(valid_queries):
+    queries = Gqueries.from_list(valid_queries)
+
+    queries.update({
+        valid_queries[0]: {'present': 0.0, 'future': 20.5, 'unit': 'euros'},
+        valid_queries[1]: {'present': 1.0, 'future': 1.0, 'unit': 'PJ'}
+    })
+
+    dataframe = queries.to_dataframe()
+    print(dataframe)
+
+    assert dataframe['unit'][valid_queries[0]] == 'euros'
+    assert dataframe['future'][valid_queries[1]] == 1.0

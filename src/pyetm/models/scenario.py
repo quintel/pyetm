@@ -183,8 +183,26 @@ class Scenario(Base):
         '''
         self._queries.execute(BaseClient(), self)
 
-    def results(self):
-        return self._queries
+    def results(self) -> pd.DataFrame:
+        '''
+        Returns the results of the requested queries in a dataframe
+        '''
+        if not self.queries_requested():
+            # TODO: Return something nicer, or more useful.
+            return None
+
+        if not self._queries.is_ready():
+            self.execute_queries()
+
+        return self._queries.to_dataframe()
+
+    def queries_requested(self):
+        '''
+        Returns True if queries have been requested
+        '''
+        if self._queries is None: return False
+
+        return len(self._queries.query_keys()) > 0
 
     ## VALIDATORS
 

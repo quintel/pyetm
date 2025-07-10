@@ -26,14 +26,14 @@ class GetQueryResultsRunner(BaseRunner[Dict[str, Any]]):
         scenario: Any,
         gquery_keys: list[str]
     ) -> ServiceResult[Dict[str, Any]]:
-        result = GetQueryResultsRunner._make_request(
+        response = GetQueryResultsRunner._make_request(
             client=client,
             method="put",
             path=f"/scenarios/{scenario.id}",
-            params={'gqueries': gquery_keys}
+            json={'gqueries': gquery_keys}
         )
 
-        if not result.success:
-            return result
+        if not response.success:
+            return response
 
-        return ServiceResult.ok(data=result.data["gqueries"])
+        return ServiceResult.ok(data=response.data["gqueries"])

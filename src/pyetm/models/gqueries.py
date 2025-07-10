@@ -1,6 +1,8 @@
 '''
 Wraps a dict of queries and answers
 '''
+import pandas as pd
+
 from pyetm.models.base import Base
 from pyetm.services.scenario_runners import GetQueryResultsRunner
 
@@ -39,13 +41,17 @@ class Gqueries(Base):
 
     def execute(self, client, scenario):
         result = GetQueryResultsRunner.run(client, scenario, self.query_keys())
-        # What is going wrong here?
-        print(result.data)
+
         if result.success:
             self.update(result.data)
         else:
             self.add_warning(f"Error retrieving queries: {result.errors}")
 
+    def to_dataframe(self):
+        if not self.is_ready():
+            return pd.DataFrame()
+
+        return pd.DataFrame.from_dict(self.query_dict).T
 
     @classmethod
     def from_list(cls, query_list: list[str]):
