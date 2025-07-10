@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr, model_validator
+from pyetm.models.inputs import Inputs
 from pyetm.models.carrier_curves import CarrierCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
-from pyetm.models.input_collection import InputCollection
 from pyetm.models.gqueries import Gqueries
-from pyetm.models.sortable_collection import SortableCollection
+from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
@@ -48,8 +48,8 @@ class Scenario(Base):
     url: Optional[str] = None
 
     # private caches for submodels
-    _inputs: Optional[InputCollection] = PrivateAttr(None)
-    _sortables: Optional[SortableCollection] = PrivateAttr(None)
+    _inputs: Optional[Inputs] = PrivateAttr(None)
+    _sortables: Optional[Sortables] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
     _carrier_curves: Optional[CarrierCurves] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
@@ -118,7 +118,7 @@ class Scenario(Base):
         if not result.success:
             raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
 
-        coll = InputCollection.from_json(result.data)
+        coll = Inputs.from_json(result.data)
         # merge runner warnings and any item‐level warnings
         for w in result.errors:
             self.add_warning(w)
@@ -128,7 +128,7 @@ class Scenario(Base):
         return coll
 
     @property
-    def sortables(self) -> SortableCollection:
+    def sortables(self) -> Sortables:
         if self._sortables is not None:
             return self._sortables
 
@@ -136,7 +136,7 @@ class Scenario(Base):
         if not result.success:
             raise ScenarioError(f"Could not retrieve sortables: {result.errors}")
 
-        coll = SortableCollection.from_json(result.data)
+        coll = Sortables.from_json(result.data)
         for w in result.errors:
             self.add_warning(w)
         self._merge_submodel_warnings(coll)

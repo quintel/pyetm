@@ -1,8 +1,8 @@
-from pyetm.models import InputCollection
+from pyetm.models import Inputs
 
 
 def test_collection_from_json(input_collection_json):
-    input_collection = InputCollection.from_json(input_collection_json)
+    input_collection = Inputs.from_json(input_collection_json)
 
     # Check if valid!
     assert input_collection

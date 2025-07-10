@@ -1,8 +1,6 @@
 from .custom_curves import CustomCurves
 from .gqueries import Gqueries
-from .input import Input
-from .input_collection import InputCollection
+from .inputs import Input, Inputs
 from .scenario import Scenario
-from .sortable import Sortable
-from .sortable_collection import SortableCollection
+from .sortables import Sortable, Sortables
 from .scenario_packer import ScenarioPacker

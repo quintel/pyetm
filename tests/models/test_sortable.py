@@ -1,5 +1,5 @@
 import pytest
-from pyetm.models.sortable import Sortable
+from pyetm.models.sortables import Sortable
 
 
 @pytest.mark.parametrize(
