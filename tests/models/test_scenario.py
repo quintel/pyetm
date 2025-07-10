@@ -1,5 +1,6 @@
 from pydantic import ValidationError
 import pytest
+from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.scenario import Scenario, ScenarioError
 from pyetm.services.scenario_runners.fetch_custom_curves import (
@@ -8,8 +9,7 @@ from pyetm.services.scenario_runners.fetch_custom_curves import (
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
-from pyetm.models.input_collection import InputCollection
-from pyetm.models.sortable_collection import SortableCollection
+from pyetm.models.sortables import Sortables
 
 
 # ------ Load ------ #
@@ -102,7 +102,7 @@ def test_version_when_url_latest():
 @pytest.fixture(autouse=True)
 def patch_input_from_json(monkeypatch):
     dummy = object()
-    monkeypatch.setattr(InputCollection, "from_json", staticmethod(lambda data: dummy))
+    monkeypatch.setattr(Inputs, "from_json", staticmethod(lambda data: dummy))
     return dummy
 
 
@@ -155,9 +155,7 @@ def test_inputs_failure(monkeypatch, scenario, fail_service_result):
 @pytest.fixture(autouse=True)
 def patch_sortables_from_json(monkeypatch):
     dummy = object()
-    monkeypatch.setattr(
-        SortableCollection, "from_json", staticmethod(lambda data: dummy)
-    )
+    monkeypatch.setattr(Sortables, "from_json", staticmethod(lambda data: dummy))
     return dummy
 
 

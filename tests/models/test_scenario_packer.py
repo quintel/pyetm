@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from pyetm.models import ScenarioPacker, InputCollection, Input, CustomCurves, Scenario
+from pyetm.models import ScenarioPacker, Inputs, Input, CustomCurves, Scenario
 from pyetm.models.custom_curves import CustomCurve
 
 
 def test_inputs(scenario):
     packer = ScenarioPacker()
-    scenario._inputs = InputCollection(inputs=[Input(key="test_input", unit="MW")])
+    scenario._inputs = Inputs(inputs=[Input(key="test_input", unit="MW")])
 
     packer.add_inputs(scenario)
 
