@@ -1,7 +1,6 @@
 import pandas as pd
-
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, List, Any, Set
 from xlsxwriter import Workbook
 
 from pyetm.models import Scenario
@@ -11,178 +10,247 @@ from pyetm.utils.excel import add_frame
 class ScenarioPacker(BaseModel):
     """Packs one or multiple scenarios for export to dataframes or excel"""
 
-    # To avoid keeping all in memory, the packer only remembers which scenarios
-    # to pack what info for later
-    _custom_curves: Optional[list["Scenario"]] = []
-    _inputs: Optional[list["Scenario"]] = []
-    _sortables: Optional[list["Scenario"]] = []
-    _carrier_curves: Optional[list["Scenario"]] = []
+    _scenarios: Dict[str, Set["Scenario"]] = {}
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self._scenarios = {
+            "custom_curves": set(),
+            "inputs": set(),
+            "sortables": set(),
+            "carrier_curves": set(),
+        }
 
     def add(self, *scenarios):
-        """
-        Shorthand method for adding all extractions for the scenario
-        """
-        self.add_custom_curves(*scenarios)
-        self.add_inputs(*scenarios)
-        self.add_sortables(*scenarios)
-        self.add_carrier_curves(*scenarios)
+        """Add scenarios to all collections"""
+        for collection in self._scenarios.values():
+            collection.update(scenarios)
 
     def add_custom_curves(self, *scenarios):
-        self._custom_curves.extend(scenarios)
+        self._scenarios["custom_curves"].update(scenarios)
 
     def add_inputs(self, *scenarios):
-        self._inputs.extend(scenarios)
+        self._scenarios["inputs"].update(scenarios)
 
     def add_sortables(self, *scenarios):
-        self._sortables.extend(scenarios)
+        self._scenarios["sortables"].update(scenarios)
 
     def add_carrier_curves(self, *scenarios):
-        self._carrier_curves.extend(scenarios)
+        self._scenarios["carrier_curves"].update(scenarios)
 
-    # TODO: NTH – ability to remove data from packer as well
+    def _all_scenarios(self) -> Set["Scenario"]:
+        """Get all unique scenarios across collections"""
+        return set().union(*self._scenarios.values())
 
-    def main_info(self):
-        """
-        Main info to dataframe
-        """
-        return pd.concat(
-            [scenario.to_dataframe() for scenario in self._scenarios()],
-            axis=1,
-            keys=[scenario.id for scenario in self._scenarios()]
+    def main_info(self) -> pd.DataFrame:
+        """Create main info DataFrame"""
+        scenarios = list(self._all_scenarios())
+        if not scenarios:
+            return pd.DataFrame()
+
+        scenario_data = {s.id: s.to_dataframe().iloc[:, 0] for s in scenarios}
+        return pd.concat(scenario_data, axis=1)
+
+    def inputs(self) -> pd.DataFrame:
+        """Create inputs DataFrame with clean structure"""
+        scenarios = list(self._scenarios["inputs"])
+        if not scenarios:
+            return pd.DataFrame()
+
+        scenario_dataframes = {}
+        all_units = {}
+
+        for scenario in scenarios:
+            df = scenario.inputs.to_dataframe()
+            scenario_dataframes[scenario.id] = df
+
+            if "unit" in df.columns:
+                all_units.update(df["unit"].to_dict())
+
+        all_input_keys = self._get_all_input_keys(scenario_dataframes)
+        result_columns = self._build_input_columns(
+            scenario_dataframes, all_units, all_input_keys
         )
 
-    def inputs(self):
-        """
-        TODO: think how to combine min/max of different datasets that may
-        appear when multiple scenarios are added - maybe make exception for
-        same-region collections
-        """
-        data = pd.concat(
-            [scenario.inputs.to_dataframe() for scenario in self._inputs],
-            axis=1,
-            keys=[scenario.id for scenario in self._inputs]
+        result = pd.DataFrame(result_columns)
+        result.columns = pd.MultiIndex.from_tuples(
+            result.columns, names=["scenario", None]
         )
+        result.index.name = "input"
 
-        data.index.name = 'input'
-        return data
+        return result
 
-    def gquery_results(self):
-        '''
-        Add Gquery results for scenarios with added queries
-        '''
-        # its not so possible -> we should setup the df including units
-        # from the first one and just merge in the rest I guess
-        data = pd.concat(
-            [scenario.results() for scenario in self._scenarios()],
-            axis=1,
-            keys=[scenario.id for scenario in self._scenarios()],
-            copy=False
-        )
-        data.index.name = 'gquery'
+    def _get_all_input_keys(self, scenario_dataframes):
+        all_indices = [set(df.index) for df in scenario_dataframes.values()]
+        return sorted(set().union(*all_indices))
 
-        col = [col['unit'] for col in data.columns]
-        print(col)
+    def _build_input_columns(self, scenario_dataframes, all_units, all_input_keys):
+        result_columns = {}
 
-        # TODO: they have to be merged!
-        data.insert(
-            0,
-            ('unit', ''),
-            data[(list(self._scenarios())[0].id, 'unit')])
-        return data
+        if all_units:
+            result_columns[("unit", "")] = pd.Series(
+                {inp: all_units.get(inp, "") for inp in all_input_keys}
+            )
 
-    def sortables(self):
-        for scenario in self._sortables:
+        for scenario_id, df in scenario_dataframes.items():
+            value_column = self._get_value_column(df)
+
+            if value_column:
+                result_columns[(scenario_id, "value")] = df[value_column].reindex(
+                    all_input_keys
+                )
+
+            if "default" in df.columns:
+                result_columns[(scenario_id, "default")] = df["default"].reindex(
+                    all_input_keys
+                )
+
+        return result_columns
+
+    def _get_value_column(self, df):
+        if "value" in df.columns:
+            return "value"
+
+        non_special_columns = [c for c in df.columns if c not in ["unit", "default"]]
+        return non_special_columns[0] if non_special_columns else None
+
+    def gquery_results(self) -> pd.DataFrame:
+        """Create gquery results DataFrame"""
+        scenarios_with_queries = [
+            s for s in self._all_scenarios() if s.queries_requested()
+        ]
+        if not scenarios_with_queries:
+            return pd.DataFrame()
+
+        scenario_results = {}
+        units = {}
+
+        for scenario in scenarios_with_queries:
+            df = scenario.results()
+            scenario_results[scenario.id] = df
+
+            if "unit" in df.columns and not units:
+                units = df["unit"].to_dict()
+
+        all_query_keys = self._get_all_query_keys(scenario_results)
+        result_data = self._build_query_results(scenario_results, units, all_query_keys)
+
+        result = pd.DataFrame(result_data, index=all_query_keys)
+        result.index.name = "gquery"
+
+        return result
+
+    def _get_all_query_keys(self, scenario_results):
+        all_indices = [
+            set(str(q) for q in df.index) for df in scenario_results.values()
+        ]
+        return sorted(set().union(*all_indices))
+
+    def _build_query_results(self, scenario_results, units, all_query_keys):
+        result_data = {"unit": [units.get(q, "") for q in all_query_keys]}
+
+        for scenario_id, df in scenario_results.items():
+            value_column = self._get_query_value_column(df)
+            scenario_values = []
+
+            for query in all_query_keys:
+                value = self._find_query_value(df, query, value_column)
+                scenario_values.append(value)
+
+            result_data[scenario_id] = scenario_values
+
+        return result_data
+
+    def _get_query_value_column(self, df):
+        if "future" in df.columns:
+            return "future"
+        if "present" in df.columns:
+            return "present"
+
+        non_unit_columns = [c for c in df.columns if c != "unit"]
+        return non_unit_columns[0] if len(non_unit_columns) > 0 else None
+
+    def _find_query_value(self, df, query, value_column):
+        if not value_column:
+            return ""
+
+        for idx in df.index:
+            if str(idx) == query:
+                return df.loc[idx, value_column]
+        return ""
+
+    def _extract_single_scenario_data(
+        self, collection_name: str, extractor_method: str
+    ) -> pd.DataFrame:
+        """Generic method to extract data from the first scenario in a collection"""
+        scenarios = list(self._scenarios[collection_name])
+        if not scenarios:
+            return pd.DataFrame()
+
+        scenario = scenarios[0]
+
+        if collection_name == "sortables":
             return scenario.sortables.to_dataframe()
 
-    def custom_curves(self):
-        """
-        Custom curves together!
-        For now just for the first scenario!!
-        """
-        if len(self._custom_curves) == 0:
-            return pd.DataFrame()
-
-        for scenario in self._custom_curves:
-            series_list = list(scenario.custom_curves_series())
-            if len(series_list) == 0:
-                return pd.DataFrame()
+        series_list = list(getattr(scenario, extractor_method)())
+        if series_list:
             return pd.concat(series_list, axis=1)
 
-    def carrier_curves(self):
-        """
-        Carrier curves
-        For now just for the first scenario!!
-        """
-        if len(self._carrier_curves) == 0:
-            return pd.DataFrame()
+        return pd.DataFrame()
 
-        for scenario in self._carrier_curves:
-            series_list = list(scenario.carrier_curves_series())
-            if len(series_list) == 0:
-                return pd.DataFrame()
-            return pd.concat(series_list, axis=1)
+    def sortables(self) -> pd.DataFrame:
+        return self._extract_single_scenario_data("sortables", None)
 
-    def to_excel(self, path):
-        if len(self._scenarios()) == 0:
+    def custom_curves(self) -> pd.DataFrame:
+        return self._extract_single_scenario_data(
+            "custom_curves", "custom_curves_series"
+        )
+
+    def carrier_curves(self) -> pd.DataFrame:
+        return self._extract_single_scenario_data(
+            "carrier_curves", "carrier_curves_series"
+        )
+
+    def to_excel(self, path: str):
+        """Export to Excel with simplified approach"""
+        if not self._all_scenarios():
             raise ValueError("Packer was empty, nothing to export")
 
-        # TODO: extend workbook class to allow add frame to be called on it...?
         workbook = Workbook(path, {"nan_inf_to_errors": True})
 
-        add_frame("MAIN", self.main_info(), workbook)
+        sheet_configs = [
+            ("MAIN", self.main_info),
+            ("PARAMETERS", self.inputs),
+            ("GQUERIES_RESULTS", self.gquery_results),
+            ("SORTABLES", self.sortables),
+            ("CUSTOM_CURVES", self.custom_curves),
+            ("CARRIER_CURVES", self.carrier_curves),
+        ]
 
-        if len(self._inputs) > 0:
-            add_frame(
-                "PARAMETERS",
-                self.inputs(),
-                workbook,
-                # index_width=[80, 18], # Add in when we have multi-index
-                column_width=18,
-            )
-
-        if any((scenario.queries_requested() for scenario in self._scenarios())):
-            add_frame(
-                "GQUERIES_RESULTS",
-                self.gquery_results(),
-                workbook,
-                # index_width=[80, 18], # Add in when we have multi-index
-                column_width=18
-            )
-
-        # "CARRIER_CURVES_RESULTS"
-
-        if len(self._sortables) > 0:
-            add_frame(
-                "SORTABLES",
-                self.sortables(),
-                workbook,
-                # index_width=[80, 18], # Add in when we have multi-index
-                column_width=18,
-            )
-        if len(self._custom_curves) > 0:
-            add_frame(
-                "CUSTOM_CURVES",
-                self.custom_curves(),
-                workbook,
-                # index_width=[80, 18],
-                # column_width=18
-            )
-        if len(self._carrier_curves) > 0:
-            add_frame(
-                "CARRIER_CURVES",
-                self.carrier_curves(),
-                workbook,
-                # index_width=[80, 18],
-                # column_width=18
-            )
+        for sheet_name, data_method in sheet_configs:
+            df = data_method()
+            if not df.empty:
+                add_frame(sheet_name, df, workbook, column_width=18)
 
         workbook.close()
 
-    def _scenarios(self) -> set["Scenario"]:
-        """
-        All scenarios we are packing info for: for these we need to insert
-        their metadata
-        """
-        return set(
-            self._custom_curves + self._inputs + self._sortables + self._carrier_curves
-        )
+    def clear(self):
+        """Clear all scenarios"""
+        for collection in self._scenarios.values():
+            collection.clear()
+
+    def remove_scenario(self, scenario: "Scenario"):
+        """Remove a specific scenario from all collections"""
+        for collection in self._scenarios.values():
+            collection.discard(scenario)
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get a summary of what's in the packer"""
+        summary = {"total_scenarios": len(self._all_scenarios())}
+
+        for name, scenarios in self._scenarios.items():
+            summary[f"{name}_count"] = len(scenarios)
+
+        summary["scenario_ids"] = sorted([s.id for s in self._all_scenarios()])
+
+        return summary

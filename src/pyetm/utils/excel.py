@@ -1,117 +1,72 @@
-""" write excel methods - from version 1.0 """
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
-from typing import Literal
-
+from typing import Union, List, Optional
 import numpy as np
 import pandas as pd
-
-from xlsxwriter.format import Format
 from xlsxwriter.workbook import Workbook
 from xlsxwriter.worksheet import Worksheet
 
 
-def _handle_nans(
-    worksheet: Worksheet, row: int, col: int, number: float, cell_format=None
-) -> Literal[-1, 0]:
-    """handle nan values and convert float to numpy.float64"""
-
-    # write NaN as NA
-    if np.isnan(number):
-        return worksheet.write_formula(row, col, "=NA()", cell_format, "#N/A")
-
-    # set decimal precision
-    number = math.ceil(number * 1e10) / 1e10
-
-    return worksheet.write_number(row, col, number, cell_format)
-
-
-def _has_names(index: pd.Index | pd.MultiIndex) -> bool:
-    """helper to check if index level(s) are named"""
-    return index.nlevels != list(index.names).count(None)
-
-def _set_column_width(
+def handle_numeric_value(
     worksheet: Worksheet,
-    columns: pd.Index | pd.MultiIndex,
-    offset: int,
-    column_width: int | list | None = None,
-) -> None:
-    """set header column widths in worksheet"""
+    row: int,
+    col: int,
+    value: float,
+    cell_format=None,
+    nan_as_formula: bool = True,
+    decimal_precision: int = 10,
+) -> int:
+    """Handle numeric values with NaN support"""
+    if np.isnan(value):
+        if nan_as_formula:
+            return worksheet.write_formula(row, col, "=NA()", cell_format, "#N/A")
+        return worksheet.write(row, col, "N/A", cell_format)
 
-    # individual value for all header columns
-    if isinstance(column_width, list):
-        # check for valid list
-        if len(column_width) != len(columns):
-            raise ValueError("column widths do not match number of columns")
+    # Set decimal precision
+    factor = 10**decimal_precision
+    value = math.ceil(value * factor) / factor
 
-        # set column widths individually
-        for col_num, col_width in enumerate(column_width):
-            worksheet.set_column(col_num + offset, col_num + offset, col_width)
-
-    # single value for all header columns
-    if isinstance(column_width, int):
-        worksheet.set_column(offset, len(columns) + offset - 1, column_width)
+    return worksheet.write_number(row, col, value, cell_format)
 
 
-def _set_index_width(
+def set_column_widths(
     worksheet: Worksheet,
-    index: pd.Index | pd.MultiIndex,
-    index_width: int | list | None = None,
-    column_width: int | list | None = None,
+    start_col: int,
+    num_cols: int,
+    width: Union[int, List[int], None],
 ) -> None:
-    """set index column widths in worksheet"""
+    """Set column widths in worksheet"""
+    if width is None:
+        return
 
-    # copy column width
-    if index_width is None:
-        if isinstance(column_width, int):
-            index_width = column_width
-
-    # individual value for all index columns
-    if isinstance(index_width, list):
-        # check for valid list
-        if len(index_width) != index.nlevels:
-            raise ValueError("index widths do not match number of levels")
-
-        # set column widths individually
-        for col_num, col_width in enumerate(index_width):
-            worksheet.set_column(col_num, col_num, col_width)
-
-    # single value for all index columns
-    if isinstance(index_width, int):
-        worksheet.set_column(0, index.nlevels - 1, index_width)
-
-
-def _write_index(
-    worksheet: Worksheet,
-    index: pd.Index | pd.MultiIndex,
-    row_offset: int,
-    index_width: int | list | None = None,
-    column_width: int | list | None = None,
-    cell_format: Format | None = None,
-) -> None:
-    """write index to worksheet"""
-
-    # set index widths
-    _set_index_width(worksheet, index, index_width, column_width)
-
-    # write index names
-    if _has_names(index):
-        for idx, level in enumerate(index.names):
-            worksheet.write(row_offset - 1, idx, level, cell_format)
-
-    # write index values
-    if isinstance(index, pd.MultiIndex):
-        # write index values for multiindex
-        for row_num, row_data in enumerate(index.values):
-            for col_num, cell_data in enumerate(row_data):
-                worksheet.write(row_num + row_offset, col_num, cell_data)
-
+    if isinstance(width, list):
+        if len(width) != num_cols:
+            raise ValueError(f"Expected {num_cols} widths, got {len(width)}")
+        for i, w in enumerate(width):
+            worksheet.set_column(start_col + i, start_col + i, w)
     else:
-        # write index values for regular index
-        for row_num, cell_data in enumerate(index.values):
-            worksheet.write(row_num + row_offset, 0, cell_data)
+        worksheet.set_column(start_col, start_col + num_cols - 1, width)
+
+
+def write_index(
+    worksheet: Worksheet, index: pd.Index, row_offset: int, bold_format=None
+) -> None:
+    """Write pandas index to worksheet"""
+    # Write index names if they exist
+    if index.names != [None] * index.nlevels:
+        for col, name in enumerate(index.names):
+            if name is not None:
+                worksheet.write(row_offset - 1, col, name, bold_format)
+
+    # Write index values
+    if isinstance(index, pd.MultiIndex):
+        for row, values in enumerate(index.values):
+            for col, value in enumerate(values):
+                worksheet.write(row + row_offset, col, value)
+    else:
+        for row, value in enumerate(index.values):
+            worksheet.write(row + row_offset, 0, value)
 
 
 def add_frame(
@@ -119,69 +74,72 @@ def add_frame(
     frame: pd.DataFrame,
     workbook: Workbook,
     index: bool = True,
-    column_width: int | list | None = None,
-    index_width: int | list | None = None,
+    column_width: Union[int, List[int], None] = None,
+    index_width: Union[int, List[int], None] = None,
+    freeze_panes: bool = True,
+    bold_headers: bool = True,
+    nan_as_formula: bool = True,
+    decimal_precision: int = 10,
 ) -> Worksheet:
-    """create worksheet from frame"""
+    """Add DataFrame to workbook as a new worksheet"""
 
-    # add formats
-    cell_format = workbook.add_format({"bold": True})
-
-    # add worksheet and nan handler
+    # Create worksheet
     worksheet = workbook.add_worksheet(str(name))
-    worksheet.add_write_handler(float, _handle_nans)
 
-    # set offset
-    skiprows = frame.columns.nlevels
-    skipcolumns = frame.index.nlevels if index else 0
-
-    # write column values
-    if isinstance(frame.columns, pd.MultiIndex):
-        # modify offset when index names are specified
-        if _has_names(frame.index) & (index is True):
-            skiprows += 1
-
-        # write column names
-        if index is True:
-            for idx, level in enumerate(frame.columns.names):
-                worksheet.write(idx, skipcolumns - 1, level, cell_format)
-
-        # write colmns values for multiindex
-        for col_num, col_data in enumerate(frame.columns.values):
-            for row_num, cell_data in enumerate(col_data):
-                worksheet.write(row_num, col_num + skipcolumns, cell_data, cell_format)
-
-    else:
-        # write column values for regular index
-        for col_num, cell_data in enumerate(frame.columns.values):
-            worksheet.write(0, col_num + skipcolumns, cell_data, cell_format)
-
-    # freeze panes with rows and columns
-    worksheet.freeze_panes(skiprows, skipcolumns)
-
-    # set column widths
-    _set_column_width(
-        worksheet=worksheet,
-        columns=frame.columns,
-        offset=skipcolumns,
-        column_width=column_width,
+    # Add numeric handler
+    worksheet.add_write_handler(
+        float,
+        lambda ws, r, c, v, fmt=None: handle_numeric_value(
+            ws, r, c, v, fmt, nan_as_formula, decimal_precision
+        ),
     )
 
-    # write cell values in numeric format
-    for row_num, row_data in enumerate(frame.values):
-        for col_num, cell_data in enumerate(row_data):
-            worksheet.write(row_num + skiprows, col_num + skipcolumns, cell_data)
+    # Create bold format
+    bold_format = workbook.add_format({"bold": True}) if bold_headers else None
 
-    # write index
-    if index is True:
-        _write_index(
-            worksheet=worksheet,
-            index=frame.index,
-            row_offset=skiprows,
-            index_width=index_width,
-            column_width=column_width,
-            cell_format=cell_format,
+    # Calculate offsets
+    col_offset = frame.index.nlevels if index else 0
+    row_offset = frame.columns.nlevels
+
+    # Adjust row offset if index has names
+    if index and frame.index.names != [None] * frame.index.nlevels:
+        row_offset += 1
+
+    # Write column headers
+    if isinstance(frame.columns, pd.MultiIndex):
+        # Write column names
+        if index and frame.columns.names != [None] * frame.columns.nlevels:
+            for idx, name in enumerate(frame.columns.names):
+                if name is not None:
+                    worksheet.write(idx, col_offset - 1, name, bold_format)
+
+        # Write column values
+        for col_num, values in enumerate(frame.columns.values):
+            for row_num, value in enumerate(values):
+                worksheet.write(row_num, col_num + col_offset, value, bold_format)
+    else:
+        # Write simple column headers
+        for col_num, value in enumerate(frame.columns.values):
+            worksheet.write(row_offset - 1, col_num + col_offset, value, bold_format)
+
+    # Set column widths
+    set_column_widths(worksheet, col_offset, len(frame.columns), column_width)
+
+    # Write data
+    for row_num, row_data in enumerate(frame.values):
+        for col_num, value in enumerate(row_data):
+            worksheet.write(row_num + row_offset, col_num + col_offset, value)
+
+    # Write index
+    if index:
+        set_column_widths(
+            worksheet, 0, frame.index.nlevels, index_width or column_width
         )
+        write_index(worksheet, frame.index, row_offset, bold_format)
+
+    # Freeze panes
+    if freeze_panes:
+        worksheet.freeze_panes(row_offset, col_offset)
 
     return worksheet
 
@@ -191,44 +149,56 @@ def add_series(
     series: pd.Series,
     workbook: Workbook,
     index: bool = True,
-    column_width: int | None = None,
-    index_width: int | list | None = None,
+    column_width: Optional[int] = None,
+    index_width: Union[int, List[int], None] = None,
+    freeze_panes: bool = True,
+    bold_headers: bool = True,
+    nan_as_formula: bool = True,
+    decimal_precision: int = 10,
 ) -> Worksheet:
-    """add series to workbook"""
+    """Add Series to workbook as a new worksheet"""
 
-    # add formats
-    cell_format = workbook.add_format({"bold": True})
-
-    # add worksheet and nan handler
+    # Create worksheet
     worksheet = workbook.add_worksheet(str(name))
-    worksheet.add_write_handler(float, _handle_nans)
 
-    # set offset and freeze panes
-    skipcolumns = series.index.nlevels if index else 0
-    worksheet.freeze_panes(1, skipcolumns)
+    # Add numeric handler
+    worksheet.add_write_handler(
+        float,
+        lambda ws, r, c, v, fmt=None: handle_numeric_value(
+            ws, r, c, v, fmt, nan_as_formula, decimal_precision
+        ),
+    )
 
-    # handle iterable header
-    header = str(series.name)
-    if isinstance(header, Iterable) & (not isinstance(header, str)):
-        header = "_".join(map(str, header))
+    # Create bold format if needed
+    bold_format = workbook.add_format({"bold": True}) if bold_headers else None
 
-    # write header and set column width
-    worksheet.write(0, skipcolumns, header, cell_format)
-    worksheet.set_column(skipcolumns, skipcolumns, column_width)
+    # Calculate offsets
+    col_offset = series.index.nlevels if index else 0
 
-    # write cell values
-    for row_num, cell_data in enumerate(series.values):
-        worksheet.write(row_num + 1, skipcolumns, cell_data)
+    # Write header
+    header = str(series.name) if series.name is not None else "Series"
+    if isinstance(series.name, (list, tuple)):
+        header = "_".join(map(str, series.name))
 
-    # include index
-    if index is True:
-        _write_index(
-            worksheet=worksheet,
-            index=series.index,
-            row_offset=1,
-            index_width=index_width,
-            column_width=column_width,
-            cell_format=cell_format,
+    worksheet.write(0, col_offset, header, bold_format)
+
+    # Set column width
+    if column_width:
+        worksheet.set_column(col_offset, col_offset, column_width)
+
+    # Write data
+    for row_num, value in enumerate(series.values):
+        worksheet.write(row_num + 1, col_offset, value)
+
+    # Write index
+    if index:
+        set_column_widths(
+            worksheet, 0, series.index.nlevels, index_width or column_width
         )
+        write_index(worksheet, series.index, 1, bold_format)
+
+    # Freeze panes
+    if freeze_panes:
+        worksheet.freeze_panes(1, col_offset)
 
     return worksheet
