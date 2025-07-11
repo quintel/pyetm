@@ -92,7 +92,6 @@ def test_to_dataframe(valid_queries):
     })
 
     dataframe = queries.to_dataframe()
-    print(dataframe)
 
     assert dataframe['unit'][valid_queries[0]] == 'euros'
     assert dataframe['future'][valid_queries[1]] == 1.0
