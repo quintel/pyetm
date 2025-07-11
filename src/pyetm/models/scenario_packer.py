@@ -44,33 +44,51 @@ class ScenarioPacker(BaseModel):
     def main_info(self):
         """
         Main info to dataframe
-        For now just for the first scenario!!
         """
-        for scenario in self._scenarios():
-            return scenario.to_dataframe()
+        return pd.concat(
+            [scenario.to_dataframe() for scenario in self._scenarios()],
+            axis=1,
+            keys=[scenario.id for scenario in self._scenarios()]
+        )
 
     def inputs(self):
         """
-        For now just for the first scenario!!
         TODO: think how to combine min/max of different datasets that may
         appear when multiple scenarios are added - maybe make exception for
         same-region collections
         """
-        for scenario in self._inputs:
-            # Just return the first one for now - later they need to be combined
-            # with a multi-index for different IDs
-            data = scenario.inputs.to_dataframe()
-            data.index.name = 'input'
-            return data
+        data = pd.concat(
+            [scenario.inputs.to_dataframe() for scenario in self._inputs],
+            axis=1,
+            keys=[scenario.id for scenario in self._inputs]
+        )
+
+        data.index.name = 'input'
+        return data
 
     def gquery_results(self):
         '''
-        For now just for the first scenario!!
+        Add Gquery results for scenarios with added queries
         '''
-        for scenario in self._scenarios():
-            data = scenario.results()
-            data.index.name = 'gquery'
-            return data
+        # its not so possible -> we should setup the df including units
+        # from the first one and just merge in the rest I guess
+        data = pd.concat(
+            [scenario.results() for scenario in self._scenarios()],
+            axis=1,
+            keys=[scenario.id for scenario in self._scenarios()],
+            copy=False
+        )
+        data.index.name = 'gquery'
+
+        col = [col['unit'] for col in data.columns]
+        print(col)
+
+        # TODO: they have to be merged!
+        data.insert(
+            0,
+            ('unit', ''),
+            data[(list(self._scenarios())[0].id, 'unit')])
+        return data
 
     def sortables(self):
         for scenario in self._sortables:
@@ -104,8 +122,6 @@ class ScenarioPacker(BaseModel):
                 return pd.DataFrame()
             return pd.concat(series_list, axis=1)
 
-    # TODO: check which excel workbooks we need later // which tabs
-    # ["MAIN", "PARAMETERS", "GQUERIES", "PRICES", "CUSTOM_CURVES"]
     def to_excel(self, path):
         if len(self._scenarios()) == 0:
             raise ValueError("Packer was empty, nothing to export")

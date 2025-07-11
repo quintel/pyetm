@@ -205,7 +205,7 @@ class Scenario(Base):
         """
         if not self.queries_requested():
             # TODO: Return something nicer, or more useful.
-            return None
+            return pd.DataFrame()
 
         if not self._queries.is_ready():
             self.execute_queries()
