@@ -3,9 +3,8 @@
 
 def setup_notebook():
     import sys
-    import pprint
-
     from pyetm.config.settings import get_settings
+    from IPython import get_ipython
 
     # Hide the trackback for now
 
