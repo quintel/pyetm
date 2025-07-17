@@ -5,16 +5,17 @@ from typing import Optional
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.config.settings import get_settings
-from pyetm.services.scenario_runners.fetch_carrier_curves import (
-    DownloadCarrierCurveRunner,
+from pyetm.services.scenario_runners.fetch_output_curves import (
+    DownloadOutputCurveRunner,
+    FetchAllOutputCurvesRunner,
 )
 
 
-class CarrierCurveError(Exception):
+class OutputCurveError(Exception):
     """Base carrier curve error"""
 
 
-class CarrierCurve(Base):
+class OutputCurve(Base):
     """
     Wrapper around a single carrier curve (output curve).
     Curves are getting saved to the filesystem, as bulk processing of scenarios
@@ -42,7 +43,7 @@ class CarrierCurve(Base):
         #     self.file_path = file_path
         #     return self.contents()
         try:
-            result = DownloadCarrierCurveRunner.run(client, scenario, self.key)
+            result = DownloadOutputCurveRunner.run(client, scenario, self.key)
             if result.success:
                 try:
                     result.data.seek(0)
@@ -91,9 +92,9 @@ class CarrierCurve(Base):
             return False
 
     @classmethod
-    def from_json(cls, data: dict) -> CarrierCurve:
+    def from_json(cls, data: dict) -> OutputCurve:
         """
-        Initialize a CarrierCurve from JSON data
+        Initialize a OutputCurve from JSON data
         """
         try:
             curve = cls.model_validate(data)
@@ -109,8 +110,8 @@ class CarrierCurve(Base):
             return curve
 
 
-class CarrierCurves(Base):
-    curves: list[CarrierCurve]
+class OutputCurves(Base):
+    curves: list[OutputCurve]
 
     def __len__(self) -> int:
         return len(self.curves)
@@ -185,20 +186,20 @@ class CarrierCurves(Base):
 
         return results
 
-    def _find(self, curve_name: str) -> Optional[CarrierCurve]:
+    def _find(self, curve_name: str) -> Optional[OutputCurve]:
         return next((c for c in self.curves if c.key == curve_name), None)
 
     @classmethod
-    def from_json(cls, data: list[dict]) -> CarrierCurves:
+    def from_json(cls, data: list[dict]) -> OutputCurves:
         """
-        Initialize CarrierCurves collection from JSON data
+        Initialize OutputCurves collection from JSON data
         """
         curves = []
         collection_warnings = []
 
         for curve_data in data:
             try:
-                curve = CarrierCurve.from_json(curve_data)
+                curve = OutputCurve.from_json(curve_data)
                 curves.append(curve)
             except Exception as e:
                 # Log the problematic curve but continue processing
@@ -219,8 +220,8 @@ class CarrierCurves(Base):
     @classmethod
     def from_service_result(
         cls, service_result, scenario, cache_curves: bool = True
-    ) -> "CarrierCurves":
-        """Create CarrierCurves instance from service result"""
+    ) -> "OutputCurves":
+        """Create OutputCurves instance from service result"""
         if not service_result.success or not service_result.data:
             empty_curves = cls(curves=[])
             for error in service_result.errors:
@@ -235,7 +236,7 @@ class CarrierCurves(Base):
 
         for curve_name, curve_data in service_result.data.items():
             try:
-                curve = CarrierCurve.model_validate(
+                curve = OutputCurve.model_validate(
                     {"key": curve_name, "type": cls._infer_curve_type(curve_name)}
                 )
 
@@ -251,7 +252,7 @@ class CarrierCurves(Base):
 
             except Exception as e:
                 curves_list.append(
-                    CarrierCurve.model_validate({"key": curve_name, "type": "unknown"})
+                    OutputCurve.model_validate({"key": curve_name, "type": "unknown"})
                 )
                 curves_list[-1].add_warning(f"Failed to process curve data: {e}")
 
@@ -280,33 +281,29 @@ class CarrierCurves(Base):
             "residual_load": "query_curve",
             "hydrogen_integral_cost": "query_curve",
         }
-        return type_mapping.get(curve_name, "carrier_curve")
+        return type_mapping.get(curve_name, "output_curve")
 
     @classmethod
-    def fetch_all(cls, scenario, cache_curves: bool = True) -> "CarrierCurves":
+    def fetch_all(cls, scenario, cache_curves: bool = True) -> "OutputCurves":
         """
         Convenience method to fetch all carrier curves for a scenario.
         """
-        from pyetm.services.scenario_runners.fetch_carrier_curves import (
-            FetchAllCarrierCurvesRunner,
-        )
-
-        service_result = FetchAllCarrierCurvesRunner.run(BaseClient(), scenario)
+        service_result = FetchAllOutputCurvesRunner.run(BaseClient(), scenario)
         return cls.from_service_result(service_result, scenario, cache_curves)
 
     @classmethod
-    def create_empty_collection(cls) -> "CarrierCurves":
+    def create_empty_collection(cls) -> "OutputCurves":
         """
         Create a collection with all known carrier curve types but no data.
         This allows is_attached() to work before data is retrieved.
         """
-        from pyetm.services.scenario_runners.fetch_carrier_curves import (
-            FetchAllCarrierCurvesRunner,
+        from pyetm.services.scenario_runners.fetch_output_curves import (
+            FetchAllOutputCurvesRunner,
         )
 
         curves_list = []
-        for curve_name in FetchAllCarrierCurvesRunner.CURVE_TYPES:
-            curve = CarrierCurve.model_validate(
+        for curve_name in FetchAllOutputCurvesRunner.CURVE_TYPES:
+            curve = OutputCurve.model_validate(
                 {"key": curve_name, "type": cls._infer_curve_type(curve_name)}
             )
             curves_list.append(curve)

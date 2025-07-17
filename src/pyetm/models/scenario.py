@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr, model_validator
 from pyetm.models.inputs import Inputs
-from pyetm.models.carrier_curves import CarrierCurves
+from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
@@ -54,7 +54,7 @@ class Scenario(Base):
     _inputs: Optional[Inputs] = PrivateAttr(None)
     _sortables: Optional[Sortables] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
-    _carrier_curves: Optional[CarrierCurves] = PrivateAttr(default=None)
+    _output_curves: Optional[OutputCurves] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
 
     @classmethod
@@ -251,23 +251,23 @@ class Scenario(Base):
             yield self.custom_curve_series(key)
 
     @property
-    def carrier_curves(self) -> CarrierCurves:
-        if self._carrier_curves is not None:
-            return self._carrier_curves
+    def output_curves(self) -> OutputCurves:
+        if self._output_curves is not None:
+            return self._output_curves
 
         # Create collection with all known curve types
-        self._carrier_curves = CarrierCurves.create_empty_collection()
-        return self._carrier_curves
+        self._output_curves = OutputCurves.create_empty_collection()
+        return self._output_curves
 
-    def carrier_curve(self, curve_name: str) -> pd.DataFrame:
-        return self.carrier_curves.get_contents(self, curve_name)
+    def output_curve(self, curve_name: str) -> pd.DataFrame:
+        return self.output_curves.get_contents(self, curve_name)
 
-    def all_carrier_curves(self):
-        for key in self.carrier_curves.attached_keys():
-            yield self.carrier_curve(key)
+    def all_output_curves(self):
+        for key in self.output_curves.attached_keys():
+            yield self.output_curve(key)
 
-    def get_carrier_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
-        return self.carrier_curves.get_curves_by_carrier_type(self, carrier_type)
+    def get_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+        return self.output_curves.get_curves_by_carrier_type(self, carrier_type)
 
     def add_queries(self, gquery_keys: list[str]):
         if self._queries is None:
