@@ -126,9 +126,7 @@ class CarrierCurves(Base):
         """Returns the keys of attached curves"""
         yield from (curve.key for curve in self.curves)
 
-    def get_contents(
-        self, scenario, curve_name: str
-    ) -> Optional[pd.DataFrame | pd.Series]:
+    def get_contents(self, scenario, curve_name: str) -> Optional[pd.DataFrame]:
         curve = self._find(curve_name)
 
         if not curve:
@@ -146,6 +144,46 @@ class CarrierCurves(Base):
             # Merge any warnings from reading contents
             self._merge_submodel_warnings(curve)
             return contents
+
+    def get_curves_by_carrier_type(
+        self, scenario, carrier_type: str
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Get all curves for a specific carrier type.
+
+        Args:
+            scenario: The scenario object
+            carrier_type: One of 'electricity', 'heat', 'hydrogen', 'methane'
+
+        Returns:
+            Dictionary mapping curve names to DataFrames
+        """
+        carrier_mapping = {
+            "electricity": ["merit_order", "electricity_price", "residual_load"],
+            "heat": [
+                "heat_network",
+                "agriculture_heat",
+                "household_heat",
+                "buildings_heat",
+            ],
+            "hydrogen": ["hydrogen", "hydrogen_integral_cost"],
+            "methane": ["network_gas"],
+        }
+
+        if carrier_type not in carrier_mapping:
+            valid_types = ", ".join(carrier_mapping.keys())
+            self.add_warning(
+                f"Invalid carrier type '{carrier_type}'. Valid types: {valid_types}"
+            )
+            return {}
+
+        results = {}
+        for curve_name in carrier_mapping[carrier_type]:
+            curve_data = self.get_contents(scenario, curve_name)
+            if curve_data is not None:
+                results[curve_name] = curve_data
+
+        return results
 
     def _find(self, curve_name: str) -> Optional[CarrierCurve]:
         return next((c for c in self.curves if c.key == curve_name), None)
