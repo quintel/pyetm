@@ -259,13 +259,15 @@ class Scenario(Base):
         self._carrier_curves = CarrierCurves.create_empty_collection()
         return self._carrier_curves
 
-    def carrier_curve_series(self, curve_name: str) -> pd.Series:
+    def carrier_curve(self, curve_name: str) -> pd.DataFrame:
         return self.carrier_curves.get_contents(self, curve_name)
 
-    def carrier_curves_series(self):
-        """Yield all Series"""
+    def all_carrier_curves(self):
         for key in self.carrier_curves.attached_keys():
-            yield self.carrier_curve_series(key)
+            yield self.carrier_curve(key)
+
+    def get_carrier_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+        return self.carrier_curves.get_curves_by_carrier_type(self, carrier_type)
 
     def add_queries(self, gquery_keys: list[str]):
         if self._queries is None:
