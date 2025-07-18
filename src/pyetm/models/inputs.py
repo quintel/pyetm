@@ -1,9 +1,11 @@
 from __future__ import annotations
-from typing import Optional, Union
+from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
 from pyetm.models.base import Base
+from pyetm.models.serializers.base_serializer import BaseDataSerializer, SerializerMixin
+from pyetm.models.serializers.input_serializer import InputsSerializer
 
 
 class InputError(Exception):
@@ -78,7 +80,9 @@ class FloatInput(Input):
     step: Optional[float] = None
 
 
-class Inputs(Base):
+class Inputs(Base, SerializerMixin):
+    _serializer: ClassVar[BaseDataSerializer] = InputsSerializer()
+
     inputs: list[Input]
 
     def __len__(self):
@@ -90,6 +94,8 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
+    # TODO: with this and the other similar methods in the other models, deprecate
+    # and don't use these anymore after serializers are implemented everywhere
     def to_dataframe(self) -> pd.DataFrame:
         """Used for export"""
         columns = ["unit", "value", "default"]  # , 'min', 'max']

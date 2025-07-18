@@ -6,6 +6,8 @@ import pytest
 from datetime import datetime
 from pathlib import Path
 
+from pyetm.models.serializers.input_serializer import InputsSerializer
+
 
 # --- Scenario Fixtures --- #
 
@@ -88,7 +90,13 @@ def bool_input_json():
 def disabled_input_json():
     """JSON data for a disabled input"""
     return {
-        "legacy_input": {"min": 0.0, "max": 100.0, "default": 50.0, "disabled": True}
+        "legacy_input": {
+            "min": 0.0,
+            "max": 100.0,
+            "default": 50.0,
+            "unit": "percent",
+            "disabled": True,
+        }
     }
 
 
@@ -104,14 +112,13 @@ def input_collection_json(
     result.update(disabled_input_json)
     return result
 
+
 # --- GQuery Fixtures --- #
+
 
 @pytest.fixture
 def valid_queries():
-    return [
-        'system_costs',
-        'hydrogen_demand'
-    ]
+    return ["system_costs", "hydrogen_demand"]
 
 
 # --- Sortable Fixtures --- #
@@ -202,3 +209,29 @@ def fixture_path():
 def interconnector_csv_path(fixture_path):
     """Path to the interconnector CSV fixture file"""
     return fixture_path / "interconnector_2_export_availability.csv"
+
+
+@pytest.fixture
+def fixed_input_collection_json(input_collection_json):
+    """Fix the input collection to include missing unit field"""
+    # Add unit field to legacy_input if missing
+    if "legacy_input" in input_collection_json:
+        if "unit" not in input_collection_json["legacy_input"]:
+            input_collection_json["legacy_input"][
+                "unit"
+            ] = "percent"  # or whatever unit makes sense
+    return input_collection_json
+
+
+@pytest.fixture
+def inputs_model(fixed_input_collection_json):
+    """Create Inputs model from existing fixture"""
+    from pyetm.models.inputs import Inputs
+
+    return Inputs.from_json(fixed_input_collection_json)
+
+
+@pytest.fixture
+def serializer():
+    """InputsSerializer instance"""
+    return InputsSerializer()
