@@ -1,16 +1,10 @@
-"""
-Centralized fixtures for service tests. They will automatically be included.
-"""
-
 import pytest
-from datetime import datetime
-from pathlib import Path
 
 
 @pytest.fixture
 def api_url():
     """Base API URL for testing"""
-    return "https://api.energytransitionmodel.com"
+    return "https://engine.energytransitionmodel.com"
 
 
 @pytest.fixture
@@ -36,27 +30,48 @@ def dummy_client(fake_response):
     from types import SimpleNamespace
 
     class DummyClient:
-        def __init__(self, response):
+        def __init__(self, response, supported_methods=None):
             self._response = response
             self.calls = []
+            self.supported_methods = supported_methods or ["get"]
 
         @property
         def session(self):
-            return SimpleNamespace(get=self._mock_get)
+            # Create a session with all supported HTTP methods
+            session_methods = {}
+            for method in self.supported_methods:
+                session_methods[method] = self._create_mock_method(method)
+            return SimpleNamespace(**session_methods)
 
-        def _mock_get(self, url, params=None):
-            self.calls.append((url, params))
-            if isinstance(self._response, Exception):
-                raise self._response
-            return self._response
+        def _create_mock_method(self, method):
+            def mock_method(url, params=None, json=None, **kwargs):
+                # Record the call with all parameters
+                call_data = {}
+                if params is not None:
+                    call_data["params"] = params
+                if json is not None:
+                    call_data["json"] = json
+                if kwargs:
+                    call_data.update(kwargs)
 
-    def _make_client(response):
+                # If no parameters, record None for backwards compatibility
+                call_record = (url, call_data if call_data else None)
+                self.calls.append(call_record)
+
+                if isinstance(self._response, Exception):
+                    raise self._response
+                return self._response
+
+            return mock_method
+
+    def _make_client(response, method="get"):
         if isinstance(response, dict):
             # If dict is provided, create a successful response
             return DummyClient(
-                fake_response(ok=True, status_code=200, json_data=response)
+                fake_response(ok=True, status_code=200, json_data=response),
+                supported_methods=[method],
             )
-        return DummyClient(response)
+        return DummyClient(response, supported_methods=[method])
 
     return _make_client
 
@@ -76,9 +91,6 @@ def dummy_scenario():
             self.id = scenario_id
 
     return DummyScenario
-
-
-# --- Custom Curves Fixtures --- #
 
 
 @pytest.fixture
