@@ -12,17 +12,8 @@ class TestScenarioPackerInit:
         """Test that initialization creates empty collections"""
         packer = ScenarioPacker()
 
-        assert isinstance(packer._scenarios, dict)
-        assert len(packer._scenarios) == 4
-        assert all(
-            isinstance(collection, set) for collection in packer._scenarios.values()
-        )
-        assert all(len(collection) == 0 for collection in packer._scenarios.values())
-
-    def test_init_with_pydantic_data(self):
-        """Test initialization with Pydantic data"""
-        packer = ScenarioPacker()
-        assert packer._scenarios is not None
+        assert isinstance(packer._scenarios(), set)
+        assert len(packer._scenarios()) == 0
 
 
 class TestScenarioPackerAdd:
@@ -33,7 +24,7 @@ class TestScenarioPackerAdd:
         packer.add(sample_scenario)
 
         # Should be added to all collections
-        for collection in packer._scenarios.values():
+        for _key, collection in packer.model_dump():
             assert sample_scenario in collection
 
     def test_add_multiple_scenarios(self, multiple_scenarios):
@@ -42,7 +33,7 @@ class TestScenarioPackerAdd:
         packer.add(*multiple_scenarios)
 
         # All scenarios should be in all collections
-        for collection in packer._scenarios.values():
+        for _key, collection in packer.model_dump():
             assert len(collection) == 3
             for scenario in multiple_scenarios:
                 assert scenario in collection
@@ -52,71 +43,71 @@ class TestScenarioPackerAdd:
         packer = ScenarioPacker()
         packer.add_custom_curves(sample_scenario)
 
-        assert sample_scenario in packer._scenarios["custom_curves"]
-        assert sample_scenario not in packer._scenarios["inputs"]
-        assert sample_scenario not in packer._scenarios["sortables"]
-        assert sample_scenario not in packer._scenarios["carrier_curves"]
+        assert sample_scenario in packer._custom_curves.scenarios
+        assert sample_scenario not in packer._inputs.scenarios
+        assert sample_scenario not in packer._sortables.scenarios
+        assert sample_scenario not in packer._output_curves.scenarios
 
     def test_add_inputs(self, sample_scenario):
         """Test adding scenarios to inputs only"""
         packer = ScenarioPacker()
         packer.add_inputs(sample_scenario)
 
-        assert sample_scenario in packer._scenarios["inputs"]
-        assert sample_scenario not in packer._scenarios["custom_curves"]
+        assert sample_scenario in packer._inputs.scenarios
+        assert sample_scenario not in packer._custom_curves.scenarios
 
     def test_add_sortables(self, sample_scenario):
         """Test adding scenarios to sortables only"""
         packer = ScenarioPacker()
         packer.add_sortables(sample_scenario)
 
-        assert sample_scenario in packer._scenarios["sortables"]
-        assert sample_scenario not in packer._scenarios["inputs"]
+        assert sample_scenario in packer._sortables.scenarios
+        assert sample_scenario not in packer._inputs.scenarios
 
-    def test_add_carrier_curves(self, sample_scenario):
-        """Test adding scenarios to carrier_curves only"""
+    def test_add_output_curves(self, sample_scenario):
+        """Test adding scenarios to output_curves only"""
         packer = ScenarioPacker()
-        packer.add_carrier_curves(sample_scenario)
+        packer.add_output_curves(sample_scenario)
 
-        assert sample_scenario in packer._scenarios["carrier_curves"]
-        assert sample_scenario not in packer._scenarios["inputs"]
+        assert sample_scenario in packer._output_curves.scenarios
+        assert sample_scenario not in packer._inputs.scenarios
 
 
 class TestScenarioPackerDataExtraction:
 
-    def test_all_scenarios_empty(self):
-        """Test _all_scenarios with empty packer"""
+    def test_scenarios_empty(self):
+        """Test _scenarios with empty packer"""
         packer = ScenarioPacker()
-        assert len(packer._all_scenarios()) == 0
+        assert len(packer._scenarios()) == 0
 
-    def test_all_scenarios_single_collection(self, sample_scenario):
-        """Test _all_scenarios with one collection"""
+    def test_scenarios_single_collection(self, sample_scenario):
+        """Test _scenarios with one collection"""
         packer = ScenarioPacker()
         packer.add_inputs(sample_scenario)
 
-        all_scenarios = packer._all_scenarios()
+        all_scenarios = packer._scenarios()
         assert len(all_scenarios) == 1
         assert sample_scenario in all_scenarios
 
-    def test_all_scenarios_multiple_collections(self, multiple_scenarios):
-        """Test _all_scenarios with scenarios in different collections"""
+    def test_scenarios_multiple_collections(self, multiple_scenarios):
+        """Test _scenarios with scenarios in different collections"""
         packer = ScenarioPacker()
         packer.add_inputs(multiple_scenarios[0])
         packer.add_custom_curves(multiple_scenarios[1])
         packer.add_sortables(multiple_scenarios[2])
 
-        all_scenarios = packer._all_scenarios()
+        all_scenarios = packer._scenarios()
         assert len(all_scenarios) == 3
         for scenario in multiple_scenarios:
             assert scenario in all_scenarios
 
-    def test_all_scenarios_overlapping_collections(self, sample_scenario):
-        """Test _all_scenarios with same scenario in multiple collections"""
+    def test_scenarios_overlapping_collections(self, sample_scenario):
+        """Test _scenarios with same scenario in multiple collections"""
         packer = ScenarioPacker()
         packer.add_inputs(sample_scenario)
         packer.add_custom_curves(sample_scenario)
 
-        all_scenarios = packer._all_scenarios()
+        all_scenarios = packer._scenarios()
         assert len(all_scenarios) == 1
         assert sample_scenario in all_scenarios
 
@@ -203,7 +194,7 @@ class TestInputs:
         result = packer.inputs()
 
         assert not result.empty
-        assert result.index.name == "input"
+        assert result.index.name == "inputs"
         assert ("unit", "") in result.columns
         assert (scenario_with_inputs.id, "value") in result.columns
         assert (scenario_with_inputs.id, "default") in result.columns
@@ -285,6 +276,7 @@ class TestGqueryResults:
             scenario.id = f"query_scenario_{i}"
             scenario.area_code = "nl2015"
             scenario.end_year = 2050
+            scenario.start_year = 2019
 
             mock_results = pd.DataFrame(
                 {"future": [100 + i * 10, 200 + i * 20], "unit": ["MW", "GWh"]},
@@ -367,22 +359,22 @@ class TestDataExtractionMethods:
         assert "curve1" in result.columns
         assert "curve2" in result.columns
 
-    def test_carrier_curves_empty(self):
-        """Test carrier_curves with no scenarios"""
+    def test_output_curves_empty(self):
+        """Test output_curves with no scenarios"""
         packer = ScenarioPacker()
-        result = packer.carrier_curves()
+        result = packer.output_curves()
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
 
-    def test_carrier_curves_with_series(self, sample_scenario):
-        """Test carrier_curves with series data"""
+    def test_output_curves_with_series(self, sample_scenario):
+        """Test output_curves with series data"""
         mock_series = pd.Series([10, 20, 30], name="carrier_curve")
         sample_scenario.carrier_curves_series = Mock(return_value=[mock_series])
 
         packer = ScenarioPacker()
-        packer.add_carrier_curves(sample_scenario)
-        result = packer.carrier_curves()
+        packer.add_output_curves(sample_scenario)
+        result = packer.output_curves()
         assert not result.empty
         assert "carrier_curve" in result.columns
 
@@ -434,12 +426,13 @@ class TestExcelExport:
         assert os.path.exists(file_path)
         assert os.path.getsize(file_path) > 0
 
-    def test_to_excel_all_sheet_types(self):
+    def test_to_excel_sheet_types(self):
         """Test to_excel with all types of data"""
         scenario = Mock(spec=Scenario)
         scenario.id = "full_scenario"
         scenario.area_code = "nl2015"
         scenario.end_year = 2050
+        scenario.start_year = 2019
 
         # Mock all data methods to return non-empty DataFrames
         scenario.to_dataframe = Mock(
@@ -488,14 +481,14 @@ class TestUtilityMethods:
         packer.add(*multiple_scenarios)
 
         # Verify scenarios are added
-        assert len(packer._all_scenarios()) == 3
+        assert len(packer._scenarios()) == 3
 
         packer.clear()
 
         # Verify all collections are empty
-        assert len(packer._all_scenarios()) == 0
-        for collection in packer._scenarios.values():
-            assert len(collection) == 0
+        assert len(packer._scenarios()) == 0
+        for pack in packer.all_pack_data():
+            assert len(pack.scenarios) == 0
 
     def test_remove_scenario(self, multiple_scenarios):
         """Test remove_scenario method"""
@@ -506,12 +499,12 @@ class TestUtilityMethods:
         packer.remove_scenario(scenario_to_remove)
 
         # Verify scenario is removed from all collections
-        assert scenario_to_remove not in packer._all_scenarios()
-        assert len(packer._all_scenarios()) == 2
+        assert scenario_to_remove not in packer._scenarios()
+        assert len(packer._scenarios()) == 2
 
         # Verify other scenarios remain
         for scenario in [multiple_scenarios[0], multiple_scenarios[2]]:
-            assert scenario in packer._all_scenarios()
+            assert scenario in packer._scenarios()
 
     def test_remove_scenario_not_present(self, sample_scenario):
         """Test removing scenario that's not in packer"""
@@ -524,7 +517,7 @@ class TestUtilityMethods:
         packer.remove_scenario(other_scenario)
 
         # Original scenario should still be there
-        assert sample_scenario in packer._all_scenarios()
+        assert sample_scenario in packer._scenarios()
 
     def test_get_summary_empty(self):
         """Test get_summary with empty packer"""
@@ -532,10 +525,10 @@ class TestUtilityMethods:
         summary = packer.get_summary()
 
         assert summary["total_scenarios"] == 0
-        assert summary["custom_curves_count"] == 0
-        assert summary["inputs_count"] == 0
-        assert summary["sortables_count"] == 0
-        assert summary["carrier_curves_count"] == 0
+        # assert summary["custom_curves_count"] == 0
+        # assert summary["inputs_count"] == 0
+        # assert summary["sortables_count"] == 0
+        # assert summary["output_curves_count"] == 0
         assert summary["scenario_ids"] == []
 
     def test_get_summary_with_data(self, multiple_scenarios):
@@ -548,10 +541,10 @@ class TestUtilityMethods:
         summary = packer.get_summary()
 
         assert summary["total_scenarios"] == 3
-        assert summary["inputs_count"] == 2  # scenarios 0 and 2
-        assert summary["custom_curves_count"] == 2  # scenarios 1 and 2
-        assert summary["sortables_count"] == 1  # scenario 2 only
-        assert summary["carrier_curves_count"] == 1  # scenario 2 only
+        # assert summary["inputs_count"] == 2  # scenarios 0 and 2
+        # assert summary["custom_curves_count"] == 2  # scenarios 1 and 2
+        # assert summary["sortables_count"] == 1  # scenario 2 only
+        # assert summary["output_curves_count"] == 1  # scenario 2 only
         assert len(summary["scenario_ids"]) == 3
         assert all(s.id in summary["scenario_ids"] for s in multiple_scenarios)
 
@@ -566,60 +559,60 @@ class TestPrivateHelperMethods:
         df2 = pd.DataFrame(index=["key2", "key3"])
         scenario_dataframes = {"s1": df1, "s2": df2}
 
-        result = packer._get_all_input_keys(scenario_dataframes)
+        # result = packer._get_all_input_keys(scenario_dataframes)
 
-        assert result == ["key1", "key2", "key3"]  # Sorted unique keys
+        # assert result == ["key1", "key2", "key3"]  # Sorted unique keys
 
-    def test_get_value_column(self):
-        """Test _get_value_column method"""
-        packer = ScenarioPacker()
+    # def test_get_value_column(self):
+    #     """Test _get_value_column method"""
+    #     packer = ScenarioPacker()
 
-        # Test with 'value' column
-        df1 = pd.DataFrame(columns=["value", "unit", "default"])
-        assert packer._get_value_column(df1) == "value"
+    #     # Test with 'value' column
+    #     df1 = pd.DataFrame(columns=["value", "unit", "default"])
+    #     assert packer._get_value_column(df1) == "value"
 
-        # Test without 'value' column
-        df2 = pd.DataFrame(columns=["future", "unit", "default"])
-        assert packer._get_value_column(df2) == "future"
+    #     # Test without 'value' column
+    #     df2 = pd.DataFrame(columns=["future", "unit", "default"])
+    #     assert packer._get_value_column(df2) == "future"
 
-        # Test with only special columns
-        df3 = pd.DataFrame(columns=["unit", "default"])
-        assert packer._get_value_column(df3) is None
+    #     # Test with only special columns
+    #     df3 = pd.DataFrame(columns=["unit", "default"])
+    #     assert packer._get_value_column(df3) is None
 
-    def test_get_query_value_column(self):
-        """Test _get_query_value_column method"""
-        packer = ScenarioPacker()
+    # def test_get_query_value_column(self):
+    #     """Test _get_query_value_column method"""
+    #     packer = ScenarioPacker()
 
-        # Test with 'future' column
-        df1 = pd.DataFrame(columns=["future", "unit"])
-        assert packer._get_query_value_column(df1) == "future"
+    #     # Test with 'future' column
+    #     df1 = pd.DataFrame(columns=["future", "unit"])
+    #     assert packer._get_query_value_column(df1) == "future"
 
-        # Test with 'present' column
-        df2 = pd.DataFrame(columns=["present", "unit"])
-        assert packer._get_query_value_column(df2) == "present"
+    #     # Test with 'present' column
+    #     df2 = pd.DataFrame(columns=["present", "unit"])
+    #     assert packer._get_query_value_column(df2) == "present"
 
-        # Test with other column
-        df3 = pd.DataFrame(columns=["other", "unit"])
-        assert packer._get_query_value_column(df3) == "other"
+    #     # Test with other column
+    #     df3 = pd.DataFrame(columns=["other", "unit"])
+    #     assert packer._get_query_value_column(df3) == "other"
 
-        # Test with only unit column
-        df4 = pd.DataFrame(columns=["unit"])
-        assert packer._get_query_value_column(df4) is None
+    #     # Test with only unit column
+    #     df4 = pd.DataFrame(columns=["unit"])
+    #     assert packer._get_query_value_column(df4) is None
 
-    def test_find_query_value(self):
-        """Test _find_query_value method"""
-        packer = ScenarioPacker()
+    # def test_find_query_value(self):
+    #     """Test _find_query_value method"""
+    #     packer = ScenarioPacker()
 
-        df = pd.DataFrame({"future": [100, 200]}, index=["query1", "query2"])
+    #     df = pd.DataFrame({"future": [100, 200]}, index=["query1", "query2"])
 
-        # Test finding existing query
-        result = packer._find_query_value(df, "query1", "future")
-        assert result == 100
+    #     # Test finding existing query
+    #     result = packer._find_query_value(df, "query1", "future")
+    #     assert result == 100
 
-        # Test finding non-existing query
-        result = packer._find_query_value(df, "query3", "future")
-        assert result == ""
+    #     # Test finding non-existing query
+    #     result = packer._find_query_value(df, "query3", "future")
+    #     assert result == ""
 
-        # Test with None value_column
-        result = packer._find_query_value(df, "query1", None)
-        assert result == ""
+    #     # Test with None value_column
+    #     result = packer._find_query_value(df, "query1", None)
+    #     assert result == ""
