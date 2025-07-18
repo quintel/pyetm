@@ -20,6 +20,7 @@ from pyetm.services.scenario_runners.fetch_custom_curves import (
 from pyetm.services.scenario_runners.fetch_carrier_curves import (
     FetchAllCarrierCurvesRunner,
 )
+from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 
 
 class ScenarioError(Exception):
@@ -108,7 +109,7 @@ class Scenario(Base):
         return url_parts[0]
 
     @property
-    def inputs(self) -> InputCollection:
+    def inputs(self) -> Inputs:
         # If we already fetched and cached, return it
         if self._inputs is not None:
             return self._inputs
@@ -126,6 +127,22 @@ class Scenario(Base):
 
         self._inputs = coll
         return coll
+
+    def update_inputs(self, inputs: Dict[str, Any]) -> None:
+        """
+        Args:
+            inputs: Dictionary of input key-value pairs to update
+        """
+        result = UpdateInputsRunner.run(BaseClient(), self, inputs)
+
+        if not result.success:
+            raise ScenarioError(f"Could not update inputs: {result.errors}")
+
+        for w in result.errors:
+            self.add_warning(w)
+
+        # Invalidate the cached inputs so they'll be refetched next time
+        self._inputs = None
 
     @property
     def sortables(self) -> Sortables:
