@@ -10,6 +10,171 @@ from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
 from pyetm.models.sortables import Sortables
+from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
+from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
+from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+
+# ------ New ------ #
+
+
+def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
+    """Test successful scenario creation with minimal required fields"""
+    created_scenario_data = {
+        "id": 12345,
+        "area_code": "nl",
+        "end_year": 2050,
+        "private": False,
+        "created_at": "2019-01-01T00:00:00Z",
+    }
+
+    monkeypatch.setattr(
+        CreateScenarioRunner,
+        "run",
+        lambda client, data: ok_service_result(created_scenario_data),
+    )
+
+    scenario = Scenario.new("nl", 2050)
+    assert scenario.id == 12345
+    assert scenario.area_code == "nl"
+    assert scenario.end_year == 2050
+    assert scenario.private is False
+    assert scenario.warnings == []
+
+
+def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
+    """Test successful scenario creation with optional fields"""
+    created_scenario_data = {
+        "id": 12346,
+        "area_code": "nl",
+        "end_year": 2050,
+        "private": True,
+        "start_year": 2019,
+        "source": "pyetm",
+        "metadata": {"description": "Test scenario"},
+    }
+
+    monkeypatch.setattr(
+        CreateScenarioRunner,
+        "run",
+        lambda client, data: ok_service_result(created_scenario_data),
+    )
+
+    scenario = Scenario.new(
+        area_code="nl",
+        end_year=2050,
+        private=True,
+        start_year=2019,
+        source="pyetm",
+        metadata={"description": "Test scenario"},
+    )
+    assert scenario.id == 12346
+    assert scenario.area_code == "nl"
+    assert scenario.private is True
+    assert scenario.start_year == 2019
+    assert scenario.source == "pyetm"
+    assert scenario.warnings == []
+
+
+def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
+    """Test scenario creation with warnings"""
+    created_scenario_data = {"id": 12347, "area_code": "nl", "end_year": 2050}
+    warnings = ["Ignoring invalid field for scenario creation: 'invalid_field'"]
+
+    monkeypatch.setattr(
+        CreateScenarioRunner,
+        "run",
+        lambda client, data: ok_service_result(created_scenario_data, warnings),
+    )
+
+    scenario = Scenario.new("nl", 2050, invalid_field="should_be_ignored")
+    assert scenario.id == 12347
+    assert scenario.warnings == warnings
+
+
+def test_new_scenario_failure(monkeypatch, fail_service_result):
+    """Test scenario creation failure"""
+    monkeypatch.setattr(
+        CreateScenarioRunner,
+        "run",
+        lambda client, data: fail_service_result(["Missing required field: area_code"]),
+    )
+
+    with pytest.raises(ScenarioError, match="Could not create scenario"):
+        Scenario.new("", 2050)  # Invalid area_code
+
+
+# ------ update_metadata ------ #
+
+
+def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
+    """Test successful metadata update"""
+    updated_data = {
+        "scenario": {
+            "id": scenario.id,
+            "end_year": 2060,
+            "private": True,
+            "source": "pyetm_update",
+        }
+    }
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
+
+    metadata_updates = {"end_year": 2060, "private": True, "source": "pyetm_update"}
+
+    result = scenario.update_metadata(metadata_updates)
+    assert result == updated_data
+    assert scenario.warnings == []
+
+
+def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
+    """Test metadata update with warnings"""
+    updated_data = {"scenario": {"id": scenario.id, "private": True}}
+    warnings = ["Ignoring non-updatable metadata field: 'id'"]
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data, warnings),
+    )
+
+    metadata_updates = {"private": True, "id": 999}  # Should generate warning
+
+    result = scenario.update_metadata(metadata_updates)
+    assert result == updated_data
+    assert scenario.warnings == warnings
+
+
+def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
+    """Test metadata update failure"""
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: fail_service_result(["422: Validation Error"]),
+    )
+
+    metadata_updates = {"end_year": "invalid"}
+
+    with pytest.raises(ScenarioError, match="Could not update metadata"):
+        scenario.update_metadata(metadata_updates)
+
+
+def test_update_metadata_empty_dict(monkeypatch, scenario, ok_service_result):
+    """Test metadata update with empty dictionary"""
+    updated_data = {"scenario": {"id": scenario.id}}
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
+
+    result = scenario.update_metadata({})
+    assert result == updated_data
+    assert scenario.warnings == []
 
 
 # ------ Load ------ #
@@ -147,6 +312,133 @@ def test_inputs_failure(monkeypatch, scenario, fail_service_result):
         _ = scenario.inputs
 
 
+def test_update_inputs_success(monkeypatch, scenario, ok_service_result):
+    """Test successful inputs update"""
+    updated_data = {
+        "scenario": {
+            "id": scenario.id,
+            "user_values": {"input_key_1": 42.5, "input_key_2": 100.0},
+        }
+    }
+
+    monkeypatch.setattr(
+        UpdateInputsRunner,
+        "run",
+        lambda client, scen, inputs: ok_service_result(updated_data),
+    )
+
+    input_updates = {"input_key_1": 42.5, "input_key_2": 100.0}
+
+    # Should not return anything (returns None)
+    result = scenario.update_inputs(input_updates)
+    assert result is None
+    assert scenario.warnings == []
+    # Cache should be invalidated
+    assert scenario._inputs is None
+
+
+def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result):
+    """Test updating a single input"""
+    updated_data = {
+        "scenario": {"id": scenario.id, "user_values": {"co_firing_biocoal_share": 80}}
+    }
+
+    # Set up a cached inputs object first
+    scenario._inputs = "cached_inputs_object"
+
+    monkeypatch.setattr(
+        UpdateInputsRunner,
+        "run",
+        lambda client, scen, inputs: ok_service_result(updated_data),
+    )
+
+    scenario.update_inputs({"co_firing_biocoal_share": 80})
+
+    # Cache should be invalidated
+    assert scenario._inputs is None
+    assert scenario.warnings == []
+
+
+def test_update_inputs_with_warnings(monkeypatch, scenario, ok_service_result):
+    """Test inputs update with warnings"""
+    updated_data = {"scenario": {"id": scenario.id}}
+    warnings = ["Input validation warning"]
+
+    monkeypatch.setattr(
+        UpdateInputsRunner,
+        "run",
+        lambda client, scen, inputs: ok_service_result(updated_data, warnings),
+    )
+
+    scenario.update_inputs({"some_input": 42.5})
+    assert scenario.warnings == warnings
+    assert scenario._inputs is None
+
+
+def test_update_inputs_failure(monkeypatch, scenario, fail_service_result):
+    """Test inputs update failure"""
+    monkeypatch.setattr(
+        UpdateInputsRunner,
+        "run",
+        lambda client, scen, inputs: fail_service_result(["422: Invalid input value"]),
+    )
+
+    with pytest.raises(ScenarioError, match="Could not update inputs"):
+        scenario.update_inputs({"invalid_input": "bad_value"})
+
+
+def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result):
+    """Test inputs update with empty dictionary"""
+    updated_data = {"scenario": {"id": scenario.id, "user_values": {}}}
+
+    monkeypatch.setattr(
+        UpdateInputsRunner,
+        "run",
+        lambda client, scen, inputs: ok_service_result(updated_data),
+    )
+
+    scenario.update_inputs({})
+    assert scenario.warnings == []
+    assert scenario._inputs is None
+
+
+def test_update_inputs_preserves_existing_warnings(scenario):
+    """Test that update_inputs preserves existing warnings on the scenario"""
+    scenario.add_warning("Existing warning 1")
+    scenario.add_warning("Existing warning 2")
+
+    # Mock a successful update with new warnings
+    def mock_runner_run(client, scen, inputs):
+        from pyetm.services.service_result import ServiceResult
+
+        return ServiceResult.ok(
+            data={"scenario": {"id": scen.id}}, errors=["New warning from update"]
+        )
+
+    import pyetm.services.scenario_runners.update_inputs
+
+    original_run = pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run
+    pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = staticmethod(
+        mock_runner_run
+    )
+
+    try:
+        scenario.update_inputs({"test_input": 42})
+
+        # Should have both existing and new warnings
+        expected_warnings = [
+            "Existing warning 1",
+            "Existing warning 2",
+            "New warning from update",
+        ]
+        assert scenario.warnings == expected_warnings
+    finally:
+        # Restore original method
+        pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = (
+            original_run
+        )
+
+
 # ------ sortables ------ #
 
 
@@ -272,7 +564,7 @@ def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
 
 
 def test_to_dataframe(scenario):
-    scenario = Scenario(id=scenario.id, area_code="nl2015", end_year=2050)
+    scenario = Scenario(id=scenario.id, area_code="nl2019", end_year=2050)
     dataframe = scenario.to_dataframe()
 
     assert dataframe[scenario.id]["end_year"] == 2050
