@@ -18,18 +18,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
     """
 
     # Valid metadata keys that can be updated
-    META_KEYS = [
-        "end_year",
-        "keep_compatible",
-        "private",
-        "area_code",
-        "source",
-        "metadata",
-        "start_year",
-        "scaling",
-        "template",
-        "url",
-    ]
+    META_KEYS = ["keep_compatible", "private", "source", "metadata", "title"]
 
     @staticmethod
     def run(
