@@ -21,6 +21,8 @@ from pyetm.services.scenario_runners.fetch_carrier_curves import (
     FetchAllCarrierCurvesRunner,
 )
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
+from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 
 
 class ScenarioError(Exception):
@@ -56,12 +58,33 @@ class Scenario(Base):
     _queries: Optional[Gqueries] = PrivateAttr(None)
 
     @classmethod
+    def new(cls, area_code: str, end_year: int, **kwargs) -> "Scenario":
+        """
+        Create a new scenario with the specified parameters.
+
+        Returns:
+            A new Scenario instance
+        """
+        scenario_data = {"area_code": area_code, "end_year": end_year, **kwargs}
+        result = CreateScenarioRunner.run(BaseClient(), scenario_data)
+
+        if not result.success:
+            raise ScenarioError(f"Could not create scenario: {result.errors}")
+
+        # parse into a Scenario
+        scenario = cls.model_validate(result.data)
+        for warning in result.errors:
+            scenario.add_warning(warning)
+
+        return scenario
+
+    @classmethod
     def load(cls, scenario_id: int) -> Scenario:
         """
         Fetch metadata for scenario_id, return a Scenario (with warnings if any keys missing).
         """
-        temp = type("T", (), {"id": scenario_id})
-        result = FetchMetadataRunner.run(BaseClient(), temp)
+        template = type("T", (), {"id": scenario_id})
+        result = FetchMetadataRunner.run(BaseClient(), template)
 
         if not result.success:
             raise ScenarioError(
@@ -70,10 +93,24 @@ class Scenario(Base):
 
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
-        # attach any metadata‐fetch warnings
         for w in result.errors:
             scenario.add_warning(w)
         return scenario
+
+    def update_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update metadata for this scenario.
+        """
+        result = UpdateMetadataRunner.run(BaseClient(), self, metadata)
+
+        if not result.success:
+            raise ScenarioError(f"Could not update metadata: {result.errors}")
+
+        # Add any warnings from the update
+        for w in result.errors:
+            self.add_warning(w)
+
+        return result.data
 
     def __eq__(self, other: "Scenario"):
         return self.id == other.id
