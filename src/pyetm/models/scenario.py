@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr, model_validator
 from pyetm.models.inputs import Inputs
@@ -174,6 +174,25 @@ class Scenario(Base):
 
         if not result.success:
             raise ScenarioError(f"Could not update inputs: {result.errors}")
+
+        for w in result.errors:
+            self.add_warning(w)
+
+        # Invalidate the cached inputs so they'll be refetched next time
+        self._inputs = None
+
+    def remove_inputs(self, input_keys: Union[List[str], Set[str]]) -> None:
+        """
+        Remove user values for specified inputs, resetting them to default values.
+
+        Args:
+            input_keys: List or set of input keys to reset to default values
+        """
+        reset_inputs = {key: "reset" for key in input_keys}
+        result = UpdateInputsRunner.run(BaseClient(), self, reset_inputs)
+
+        if not result.success:
+            raise ScenarioError(f"Could not remove inputs: {result.errors}")
 
         for w in result.errors:
             self.add_warning(w)

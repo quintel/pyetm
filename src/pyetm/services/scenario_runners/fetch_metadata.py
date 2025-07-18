@@ -22,6 +22,7 @@ class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
         "area_code",
         "source",
         "metadata",
+        "title",
         "start_year",
         "scaling",
         "template",
