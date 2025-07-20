@@ -198,7 +198,7 @@ def bool_input_json():
 def disabled_input_json():
     """JSON data for a disabled input"""
     return {
-        "legacy_input": {"min": 0.0, "max": 100.0, "default": 50.0, "disabled": True}
+        "legacy_input": {"min": 0.0, "max": 100.0, "unit": 'euros', "default": 50.0, "disabled": True}
     }
 
 

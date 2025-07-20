@@ -43,9 +43,9 @@ class Packable(Base):
 class InputsPack(Packable):
     key: ClassVar[str] = 'inputs'
 
-    def _to_dataframe(self, values=''):
+    def _to_dataframe(self, values='user'):
         return pd.concat(
-            [scenario.inputs.to_dataframe() for scenario in self.scenarios],
+            [scenario.inputs.to_dataframe(values=values) for scenario in self.scenarios],
             axis=1,
             keys=[scenario.id for scenario in self.scenarios]
         )
@@ -143,8 +143,8 @@ class ScenarioPacker(BaseModel):
             axis=1
         )
 
-    def inputs(self) -> pd.DataFrame:
-        return self._inputs.to_dataframe()
+    def inputs(self, values='user') -> pd.DataFrame:
+        return self._inputs.to_dataframe(values=values)
 
     def gquery_results(self, values='future') -> pd.DataFrame:
         return QueryPack(scenarios=self._scenarios()).to_dataframe(values=values)

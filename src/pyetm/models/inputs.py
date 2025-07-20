@@ -90,13 +90,15 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def to_dataframe(self) -> pd.DataFrame:
+    def to_dataframe(self, values='user') -> pd.DataFrame:
         ''' Used for export '''
-        columns = ['unit', 'value', 'default']#, 'min', 'max']
+        # if values is a list, just add unit, else make a list
+        if not isinstance(values,list):
+            values = [values]
+        columns = ['unit'] + values
 
-        # Should come from input itself once we know what we want ;)
         df = pd.DataFrame.from_dict(
-            {input.key: [input.unit, input.user, input.default] for input in self.inputs},
+            {input.key: [getattr(input, key, None) for key in columns] for input in self.inputs},
             orient='index',
             columns=columns
         )
