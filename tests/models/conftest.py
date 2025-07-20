@@ -61,6 +61,7 @@ def sample_scenario():
     scenario.custom_curves_series = Mock(return_value=[])
     scenario.carrier_curves_series = Mock(return_value=[])
     scenario.queries_requested = Mock(return_value=False)
+    scenario.results = Mock(return_value=pd.DataFrame())
 
     # Mock sortables
     scenario.sortables = Mock()
@@ -84,6 +85,7 @@ def scenario_with_inputs():
     scenario.custom_curves_series = Mock(return_value=[])
     scenario.carrier_curves_series = Mock(return_value=[])
     scenario.queries_requested = Mock(return_value=False)
+    scenario.results = Mock(return_value=pd.DataFrame())
 
     # Mock sortables
     scenario.sortables = Mock()
@@ -109,8 +111,9 @@ def scenario_with_queries():
         },
         index=["total_costs", "co2_emissions", "energy_demand"],
     )
+    mock_results.index.name = 'gquery'
 
-    scenario.results = Mock(return_value=mock_results)
+    scenario.results = Mock(return_value=mock_results.set_index('unit', append=True))
     scenario.queries_requested = Mock(return_value=True)
 
     # Set up default mock methods
@@ -141,6 +144,7 @@ def multiple_scenarios():
         scenario.custom_curves_series = Mock(return_value=[])
         scenario.carrier_curves_series = Mock(return_value=[])
         scenario.queries_requested = Mock(return_value=False)
+        scenario.results = Mock(return_value=pd.DataFrame())
 
         # Mock sortables
         scenario.sortables = Mock()

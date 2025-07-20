@@ -67,10 +67,8 @@ def test_load_missing_required_field(monkeypatch, ok_service_result):
         "run",
         lambda client, stub: ok_service_result(incomplete_data),
     )
-
-    # Should raise ScenarioError, but the underlying cause might be ValidationError
-    with pytest.raises((ScenarioError, ValidationError, AttributeError)):
-        Scenario.load(4)
+    print(Scenario.load(4).warnings)
+    assert "end_year: Field required" in Scenario.load(4).warnings
 
 
 # ------ version ------- #

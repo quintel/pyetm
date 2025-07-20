@@ -93,5 +93,5 @@ def test_to_dataframe(valid_queries):
 
     dataframe = queries.to_dataframe()
 
-    assert dataframe['unit'][valid_queries[0]] == 'euros'
-    assert dataframe['future'][valid_queries[1]] == 1.0
+    assert dataframe.loc[valid_queries[0]].loc['euros']['future'] == 20.5
+    assert dataframe['future'][(valid_queries[1], 'PJ')] == 1.0

@@ -126,7 +126,7 @@ class TestMainInfo:
         """Test main_info with single scenario"""
         # Mock the to_dataframe method
         mock_df = pd.DataFrame(
-            {"metadata": ["nl2015", 2050, "test_value"]},
+            {sample_scenario.id: ["nl2015", 2050, "test_value"]},
             index=["area_code", "end_year", "other"],
         )
 
@@ -145,7 +145,7 @@ class TestMainInfo:
         """Test main_info with multiple scenarios"""
         for i, scenario in enumerate(multiple_scenarios):
             mock_df = pd.DataFrame(
-                {"metadata": ["nl2015", 2050, f"value_{i}"]},
+                {scenario.id: ["nl2015", 2050, f"value_{i}"]},
                 index=["area_code", "end_year", "custom"],
             )
             scenario.to_dataframe = Mock(return_value=mock_df)
@@ -185,8 +185,9 @@ class TestInputs:
             {"value": [1000, 2000], "unit": ["MW", "MW"], "default": [500, 800]},
             index=["wind_capacity", "solar_capacity"],
         )
+        mock_df.index.name = "inputs"
 
-        scenario_with_inputs.inputs.to_dataframe = Mock(return_value=mock_df)
+        scenario_with_inputs.inputs.to_dataframe = Mock(return_value=mock_df.set_index("unit", append=True))
 
         packer = ScenarioPacker()
         packer.add_inputs(scenario_with_inputs)
@@ -194,8 +195,7 @@ class TestInputs:
         result = packer.inputs()
 
         assert not result.empty
-        assert result.index.name == "inputs"
-        assert ("unit", "") in result.columns
+        assert "inputs" in result.index.names
         assert (scenario_with_inputs.id, "value") in result.columns
         assert (scenario_with_inputs.id, "default") in result.columns
 
@@ -210,7 +210,9 @@ class TestInputs:
                 },
                 index=["wind_capacity", f"unique_input_{i}"],
             )
-            scenario.inputs.to_dataframe = Mock(return_value=mock_df)
+            mock_df.index.name ="inputs"
+
+            scenario.inputs.to_dataframe = Mock(return_value=mock_df.set_index('unit', append=True))
 
         packer = ScenarioPacker()
         packer.add_inputs(*multiple_scenarios)
@@ -223,14 +225,14 @@ class TestInputs:
             + [(s.id, "value") for s in multiple_scenarios]
             + [(s.id, "default") for s in multiple_scenarios]
         )
-        assert len(result.columns) >= len(multiple_scenarios) * 2 + 1
+        assert len(result.columns) >= len(multiple_scenarios) * 2
 
         # Should have all unique input keys
         all_keys = {
-            "wind_capacity",
-            "unique_input_0",
-            "unique_input_1",
-            "unique_input_2",
+            ("wind_capacity", "MW"),
+            ("unique_input_0", "GW"),
+            ("unique_input_1", "GW"),
+            ("unique_input_2", "GW")
         }
         assert set(result.index) == all_keys
 
@@ -263,8 +265,8 @@ class TestGqueryResults:
         result = packer.gquery_results()
 
         assert not result.empty
-        assert result.index.name == "gquery"
-        assert "unit" in result.columns
+        assert "gquery" in result.index.names
+        assert "unit" in result.index.names
         assert scenario_with_queries.id in result.columns
         assert len(result) == 3
 
@@ -282,8 +284,9 @@ class TestGqueryResults:
                 {"future": [100 + i * 10, 200 + i * 20], "unit": ["MW", "GWh"]},
                 index=[f"query_1", f"query_{i+2}"],
             )
+            mock_results.index.name = 'gquery'
 
-            scenario.results = Mock(return_value=mock_results)
+            scenario.results = Mock(return_value=mock_results.set_index('unit', append=True))
             scenario.queries_requested = Mock(return_value=True)
             scenarios.append(scenario)
 
@@ -293,7 +296,7 @@ class TestGqueryResults:
         result = packer.gquery_results()
 
         assert not result.empty
-        assert "unit" in result.columns
+        assert "unit" in result.index.names
         for scenario in scenarios:
             assert scenario.id in result.columns
 
@@ -408,16 +411,19 @@ class TestExcelExport:
             )
         )
 
-        scenario_with_inputs.inputs.to_dataframe = Mock(
-            return_value=pd.DataFrame(
-                {"value": [1000], "unit": ["MW"]}, index=["wind_capacity"]
-            )
+        inputs_df = pd.DataFrame(
+            {"value": [1000], "unit": ["MW"]}, index=["wind_capacity"]
         )
+        inputs_df.index.name = 'input'
 
-        scenario_with_inputs.queries_requested = Mock(return_value=False)
+        scenario_with_inputs.inputs.to_dataframe = Mock(
+            return_value= inputs_df.set_index('unit', append=True)
+        )
 
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)
+
+        # packer.gquery_results = Mock(return_value=pd.DataFrame())
 
         file_path = os.path.join(self.temp_dir, "test_export.xlsx")
         packer.to_excel(file_path)
@@ -525,10 +531,10 @@ class TestUtilityMethods:
         summary = packer.get_summary()
 
         assert summary["total_scenarios"] == 0
-        # assert summary["custom_curves_count"] == 0
-        # assert summary["inputs_count"] == 0
-        # assert summary["sortables_count"] == 0
-        # assert summary["output_curves_count"] == 0
+        assert summary["custom_curves"]["scenario_count"] == 0
+        assert summary["inputs"]["scenario_count"] == 0
+        assert summary["sortables"]["scenario_count"] == 0
+        assert summary["output_curves"]["scenario_count"] == 0
         assert summary["scenario_ids"] == []
 
     def test_get_summary_with_data(self, multiple_scenarios):
@@ -541,78 +547,9 @@ class TestUtilityMethods:
         summary = packer.get_summary()
 
         assert summary["total_scenarios"] == 3
-        # assert summary["inputs_count"] == 2  # scenarios 0 and 2
-        # assert summary["custom_curves_count"] == 2  # scenarios 1 and 2
-        # assert summary["sortables_count"] == 1  # scenario 2 only
-        # assert summary["output_curves_count"] == 1  # scenario 2 only
+        assert summary["inputs"]["scenario_count"] == 2  # scenarios 0 and 2
+        assert summary["custom_curves"]["scenario_count"] == 2  # scenarios 1 and 2
+        assert summary["sortables"]["scenario_count"] == 1  # scenario 2 only
+        assert summary["output_curves"]["scenario_count"] == 1  # scenario 2 only
         assert len(summary["scenario_ids"]) == 3
         assert all(s.id in summary["scenario_ids"] for s in multiple_scenarios)
-
-
-class TestPrivateHelperMethods:
-
-    def test_get_all_input_keys(self):
-        """Test _get_all_input_keys method"""
-        packer = ScenarioPacker()
-
-        df1 = pd.DataFrame(index=["key1", "key2"])
-        df2 = pd.DataFrame(index=["key2", "key3"])
-        scenario_dataframes = {"s1": df1, "s2": df2}
-
-        # result = packer._get_all_input_keys(scenario_dataframes)
-
-        # assert result == ["key1", "key2", "key3"]  # Sorted unique keys
-
-    # def test_get_value_column(self):
-    #     """Test _get_value_column method"""
-    #     packer = ScenarioPacker()
-
-    #     # Test with 'value' column
-    #     df1 = pd.DataFrame(columns=["value", "unit", "default"])
-    #     assert packer._get_value_column(df1) == "value"
-
-    #     # Test without 'value' column
-    #     df2 = pd.DataFrame(columns=["future", "unit", "default"])
-    #     assert packer._get_value_column(df2) == "future"
-
-    #     # Test with only special columns
-    #     df3 = pd.DataFrame(columns=["unit", "default"])
-    #     assert packer._get_value_column(df3) is None
-
-    # def test_get_query_value_column(self):
-    #     """Test _get_query_value_column method"""
-    #     packer = ScenarioPacker()
-
-    #     # Test with 'future' column
-    #     df1 = pd.DataFrame(columns=["future", "unit"])
-    #     assert packer._get_query_value_column(df1) == "future"
-
-    #     # Test with 'present' column
-    #     df2 = pd.DataFrame(columns=["present", "unit"])
-    #     assert packer._get_query_value_column(df2) == "present"
-
-    #     # Test with other column
-    #     df3 = pd.DataFrame(columns=["other", "unit"])
-    #     assert packer._get_query_value_column(df3) == "other"
-
-    #     # Test with only unit column
-    #     df4 = pd.DataFrame(columns=["unit"])
-    #     assert packer._get_query_value_column(df4) is None
-
-    # def test_find_query_value(self):
-    #     """Test _find_query_value method"""
-    #     packer = ScenarioPacker()
-
-    #     df = pd.DataFrame({"future": [100, 200]}, index=["query1", "query2"])
-
-    #     # Test finding existing query
-    #     result = packer._find_query_value(df, "query1", "future")
-    #     assert result == 100
-
-    #     # Test finding non-existing query
-    #     result = packer._find_query_value(df, "query3", "future")
-    #     assert result == ""
-
-    #     # Test with None value_column
-    #     result = packer._find_query_value(df, "query1", None)
-    #     assert result == ""
