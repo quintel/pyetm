@@ -47,11 +47,13 @@ class Gqueries(Base):
         else:
             self.add_warning(f"Error retrieving queries: {result.errors}")
 
-    def to_dataframe(self):
+    def to_dataframe(self, values='future'):
         if not self.is_ready():
             return pd.DataFrame()
 
-        return pd.DataFrame.from_dict(self.query_dict).reindex(['unit', 'present', 'future']).T
+        df = pd.DataFrame.from_dict(self.query_dict).reindex(['unit']+[values]).T
+        df.index.name = 'gquery'
+        return df.set_index('unit', append=True)
 
     @classmethod
     def from_list(cls, query_list: list[str]):

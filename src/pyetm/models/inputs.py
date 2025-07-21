@@ -90,19 +90,20 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """Used for export"""
-        columns = ["unit", "value", "default"]  # , 'min', 'max']
+    def to_dataframe(self, values='user') -> pd.DataFrame:
+        ''' Used for export '''
+        # if values is a list, just add unit, else make a list
+        if not isinstance(values,list):
+            values = [values]
+        columns = ['unit'] + values
 
-        # Should come from input itself once we know what we want ;)
-        return pd.DataFrame.from_dict(
-            {
-                input.key: [input.unit, input.user, input.default]
-                for input in self.inputs
-            },
-            orient="index",
-            columns=columns,
+        df = pd.DataFrame.from_dict(
+            {input.key: [getattr(input, key, None) for key in columns] for input in self.inputs},
+            orient='index',
+            columns=columns
         )
+        df.index.name = 'input'
+        return df.set_index('unit', append=True)
 
     @classmethod
     def from_json(cls, data) -> Inputs:

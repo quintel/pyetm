@@ -199,18 +199,18 @@ class Scenario(Base):
         """
         self._queries.execute(BaseClient(), self)
 
-    def results(self) -> pd.DataFrame:
+    def results(self, values='future') -> pd.DataFrame:
         """
         Returns the results of the requested queries in a dataframe
         """
         if not self.queries_requested():
             # TODO: Return something nicer, or more useful.
-            return None
+            return pd.DataFrame()
 
         if not self._queries.is_ready():
             self.execute_queries()
 
-        return self._queries.to_dataframe()
+        return self._queries.to_dataframe(values=values)
 
     def queries_requested(self):
         """
@@ -223,12 +223,13 @@ class Scenario(Base):
 
     ## VALIDATORS
 
-    @model_validator(mode="after")
-    def validate_end_year_after_start_year(self):
-        """Rails: validates :end_year, numericality: { greater_than: start_year }"""
-        if self.end_year is not None and self.start_year is not None:
-            if self.end_year <= self.start_year:
-                raise ValueError(
-                    f"End year ({self.end_year}) must be greater than start year ({self.start_year})"
-                )
-        return self
+    # NOTE: I left this out, as users cannot set the start year anyways
+    # @model_validator(mode="after")
+    # def validate_end_year_after_start_year(self):
+    #     """Rails: validates :end_year, numericality: { greater_than: start_year }"""
+    #     if self.end_year is not None and self.start_year is not None:
+    #         if self.end_year <= self.start_year:
+    #             raise ValueError(
+    #                 f"End year ({self.end_year}) must be greater than start year ({self.start_year})"
+    #             )
+    #     return self
