@@ -209,7 +209,7 @@ def disabled_input_json():
 
 
 @pytest.fixture
-def input_collection_json(
+def inputs_json(
     float_input_json, enum_input_json, bool_input_json, disabled_input_json
 ):
     """Combined input collection JSON"""
