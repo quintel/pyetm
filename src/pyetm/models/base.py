@@ -128,43 +128,19 @@ class Base(BaseModel):
             pd.DataFrame: Serialized DataFrame with class name as index level
         """
         columns = self._get_serializable_fields()
+        kwargs.setdefault("available_columns", columns)
 
-        # Add columns info to kwargs for subclass use if needed
-        if "available_columns" not in kwargs:
-            kwargs["available_columns"] = columns
-
+        # Get DataFrame with unified error handling
         try:
             df = self._to_dataframe(**kwargs)
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"Expected DataFrame, got {type(df)}")
         except Exception as e:
-            self.add_warning(
-                f"{self.__class__.__name__}._to_dataframe() raised exception: {e}"
-            )
+            self.add_warning(f"{self.__class__.__name__}._to_dataframe() failed: {e}")
             df = pd.DataFrame()
 
-        # Handle case where _to_dataframe returns None or invalid data
-        if df is None:
-            self.add_warning(f"{self.__class__.__name__}._to_dataframe() returned None")
-            df = pd.DataFrame()
-        elif not isinstance(df, pd.DataFrame):
-            self.add_warning(
-                f"{self.__class__.__name__}._to_dataframe() returned {type(df)}, expected DataFrame"
-            )
-            df = pd.DataFrame()
-
-        # Set index with class name (common for all classes)
-        class_name = self.__class__.__name__.lower()
-
-        # If the DataFrame doesn't already have a named index, add the class name
+        # Set index name if not already set
         if df.index.name is None:
-            df.index.name = class_name
-        else:
-            # If it already has a named index, make it a MultiIndex with class name as first level
-            df = df.copy()
-            df["_class"] = class_name
-            df = df.set_index("_class", append=True)
-            # Reorder index levels so class name comes first
-            df = df.reorder_levels(
-                [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
-            )
+            df.index.name = self.__class__.__name__.lower()
 
         return df
