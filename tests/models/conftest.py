@@ -111,9 +111,9 @@ def scenario_with_queries():
         },
         index=["total_costs", "co2_emissions", "energy_demand"],
     )
-    mock_results.index.name = 'gquery'
+    mock_results.index.name = "gquery"
 
-    scenario.results = Mock(return_value=mock_results.set_index('unit', append=True))
+    scenario.results = Mock(return_value=mock_results.set_index("unit", append=True))
     scenario.queries_requested = Mock(return_value=True)
 
     # Set up default mock methods
@@ -198,12 +198,18 @@ def bool_input_json():
 def disabled_input_json():
     """JSON data for a disabled input"""
     return {
-        "legacy_input": {"min": 0.0, "max": 100.0, "unit": 'euros', "default": 50.0, "disabled": True}
+        "legacy_input": {
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "euros",
+            "default": 50.0,
+            "disabled": True,
+        }
     }
 
 
 @pytest.fixture
-def input_collection_json(
+def inputs_json(
     float_input_json, enum_input_json, bool_input_json, disabled_input_json
 ):
     """Combined input collection JSON"""
