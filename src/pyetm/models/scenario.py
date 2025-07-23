@@ -123,7 +123,7 @@ class Scenario(Base):
     def __hash__(self):
         return hash((self.id, self.area_code, self.end_year))
 
-    def to_dataframe(self) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
         return pd.DataFrame.from_dict(
             self.model_dump(include={"end_year", "area_code", "private", "template"}),
             orient="index",
@@ -300,16 +300,3 @@ class Scenario(Base):
             return False
 
         return len(self._queries.query_keys()) > 0
-
-    ## VALIDATORS
-
-    # NOTE: I left this out, as users cannot set the start year anyways
-    # @model_validator(mode="after")
-    # def validate_end_year_after_start_year(self):
-    #     """Rails: validates :end_year, numericality: { greater_than: start_year }"""
-    #     if self.end_year is not None and self.start_year is not None:
-    #         if self.end_year <= self.start_year:
-    #             raise ValueError(
-    #                 f"End year ({self.end_year}) must be greater than start year ({self.start_year})"
-    #             )
-    #     return self
