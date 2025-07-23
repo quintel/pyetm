@@ -1,8 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Union
-
 import pandas as pd
-
 from pyetm.models.base import Base
 
 
@@ -48,9 +46,6 @@ class Input(Base):
         else:
             return FloatInput
 
-    # Nice to have:
-    # TODO: Add validation for input SET - correct units, between min and max
-
 
 class BoolInput(Input):
     """Input representing a boolean"""
@@ -66,6 +61,14 @@ class EnumInput(Input):
     permitted_values: list[str]
     default: Optional[str] = None
 
+    def _get_serializable_fields(self) -> list[str]:
+        """Include permitted_values in serialization for EnumInput"""
+        base_fields = super()._get_serializable_fields()
+        # Ensure permitted_values is included
+        if "permitted_values" not in base_fields:
+            base_fields.append("permitted_values")
+        return base_fields
+
 
 class FloatInput(Input):
     """Input representing a float"""
@@ -76,6 +79,14 @@ class FloatInput(Input):
     default: Optional[float] = None
     share_group: Optional[str] = None
     step: Optional[float] = None
+
+    def _get_serializable_fields(self) -> list[str]:
+        """Include min/max in serialization for FloatInput"""
+        base_fields = super()._get_serializable_fields()
+        for field in ["min", "max", "step", "share_group"]:
+            if field not in base_fields:
+                base_fields.append(field)
+        return base_fields
 
 
 class Inputs(Base):
@@ -90,20 +101,25 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def to_dataframe(self, values='user') -> pd.DataFrame:
-        ''' Used for export '''
-        # if values is a list, just add unit, else make a list
-        if not isinstance(values,list):
+    def _to_dataframe(self, values="user", **kwargs) -> pd.DataFrame:
+        """
+        Serialize the Inputs collection to DataFrame.
+        """
+        if not isinstance(values, list):
             values = [values]
-        columns = ['unit'] + values
+        columns = ["unit"] + values
 
+        # Create DataFrame from inputs
         df = pd.DataFrame.from_dict(
-            {input.key: [getattr(input, key, None) for key in columns] for input in self.inputs},
-            orient='index',
-            columns=columns
+            {
+                input.key: [getattr(input, key, None) for key in columns]
+                for input in self.inputs
+            },
+            orient="index",
+            columns=columns,
         )
-        df.index.name = 'input'
-        return df.set_index('unit', append=True)
+        df.index.name = "input"
+        return df.set_index("unit", append=True)
 
     @classmethod
     def from_json(cls, data) -> Inputs:

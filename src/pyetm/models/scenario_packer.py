@@ -26,29 +26,17 @@ class Packable(Base):
     def summary(self) -> dict:
         return {self.key: {"scenario_count": len(self.scenarios)}}
 
-    def to_dataframe(self, values="") -> pd.DataFrame:
-        """Convert the pack into a dataframe"""
-        if len(self.scenarios) == 0:
-            return pd.DataFrame()
-
-        return self._to_dataframe(values=values)
-
-    # private
-
-    def _to_dataframe(self, values="") -> pd.DataFrame:
-        """Base: kids should implement this method"""
+    def _to_dataframe(self, values="", **kwargs) -> pd.DataFrame:
+        """Base implementation - kids should implement this"""
         return pd.DataFrame()
 
 
 class InputsPack(Packable):
     key: ClassVar[str] = "inputs"
 
-    def _to_dataframe(self, values="user"):
+    def _to_dataframe(self, values="user", **kwargs):
         return pd.concat(
-            [
-                scenario.inputs.to_dataframe(values=values)
-                for scenario in self.scenarios
-            ],
+            [scenario.inputs.to_df(values=values) for scenario in self.scenarios],
             axis=1,
             keys=[scenario.id for scenario in self.scenarios],
         )
@@ -57,7 +45,12 @@ class InputsPack(Packable):
 class QueryPack(Packable):
     key: ClassVar[str] = "gquery"
 
-    def _to_dataframe(self, values="future") -> pd.DataFrame:
+    def _to_dataframe(
+        self, values="future", **kwargs
+    ) -> pd.DataFrame:  # Make sure **kwargs is here
+        if not self.scenarios:
+            return pd.DataFrame()
+
         return pd.concat(
             [scenario.results(values=values) for scenario in self.scenarios],
             axis=1,
@@ -69,16 +62,16 @@ class QueryPack(Packable):
 class SortablePack(Packable):
     key: ClassVar[str] = "sortables"
 
-    def _to_dataframe(self, values="") -> pd.DataFrame:
+    def _to_dataframe(self, values="", **kwargs) -> pd.DataFrame:
         """PACKS ONLY FIRST SCENARIO"""
         for scenario in self.scenarios:
-            return scenario.sortables.to_dataframe()
+            return scenario.sortables.to_df()
 
 
 class CustomCurvesPack(Packable):
     key: ClassVar[str] = "custom_curves"
 
-    def _to_dataframe(self, values="") -> pd.DataFrame:
+    def _to_dataframe(self, values="", **kwargs) -> pd.DataFrame:
         """PACKS ONLY FIRST SCENARIO"""
         for scenario in self.scenarios:
             series_list = list(scenario.custom_curves_series())
@@ -91,7 +84,7 @@ class CustomCurvesPack(Packable):
 class OutputCurvesPack(Packable):
     key: ClassVar[str] = "output_curves"
 
-    def _to_dataframe(self, values="") -> pd.DataFrame:
+    def _to_dataframe(self, values="", **kwargs) -> pd.DataFrame:
         """PACKS ONLY FIRST SCENARIO"""
         for scenario in self.scenarios:
             series_list = list(scenario.all_output_curves())
@@ -141,24 +134,22 @@ class ScenarioPacker(BaseModel):
         if len(self._scenarios()) == 0:
             return pd.DataFrame()
 
-        return pd.concat(
-            [scenario.to_dataframe() for scenario in self._scenarios()], axis=1
-        )
+        return pd.concat([scenario.to_df() for scenario in self._scenarios()], axis=1)
 
     def inputs(self, values="user") -> pd.DataFrame:
-        return self._inputs.to_dataframe(values=values)
+        return self._inputs.to_df(values=values)
 
     def gquery_results(self, values="future") -> pd.DataFrame:
-        return QueryPack(scenarios=self._scenarios()).to_dataframe(values=values)
+        return QueryPack(scenarios=self._scenarios()).to_df(values=values)
 
     def sortables(self) -> pd.DataFrame:
-        return self._sortables.to_dataframe()
+        return self._sortables.to_df()
 
     def custom_curves(self) -> pd.DataFrame:
-        return self._custom_curves.to_dataframe()
+        return self._custom_curves.to_df()
 
     def output_curves(self) -> pd.DataFrame:
-        return self._output_curves.to_dataframe()
+        return self._output_curves.to_df()
 
     def to_excel(self, path: str):
         """Export to Excel with simplified approach"""
@@ -169,11 +160,11 @@ class ScenarioPacker(BaseModel):
 
         sheet_configs = [
             ("MAIN", self.main_info),
-            ("PARAMETERS", self._inputs.to_dataframe),
+            ("PARAMETERS", self._inputs.to_df),
             ("GQUERIES_RESULTS", self.gquery_results),
-            ("SORTABLES", self._sortables.to_dataframe),
-            ("CUSTOM_CURVES", self._custom_curves.to_dataframe),
-            ("OUTPUT_CURVES", self._output_curves.to_dataframe),
+            ("SORTABLES", self._sortables.to_df),
+            ("CUSTOM_CURVES", self._custom_curves.to_df),
+            ("output_CURVES", self._output_curves.to_df),
         ]
 
         for sheet_name, data_method in sheet_configs:
