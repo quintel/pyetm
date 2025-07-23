@@ -6,6 +6,7 @@ import os
 from unittest.mock import Mock
 from pyetm.models import ScenarioPacker, Scenario
 
+
 class TestScenarioPackerInit:
 
     def test_init_creates_empty_collections(self):
@@ -187,7 +188,9 @@ class TestInputs:
         )
         mock_df.index.name = "inputs"
 
-        scenario_with_inputs.inputs.to_dataframe = Mock(return_value=mock_df.set_index("unit", append=True))
+        scenario_with_inputs.inputs.to_dataframe = Mock(
+            return_value=mock_df.set_index("unit", append=True)
+        )
 
         packer = ScenarioPacker()
         packer.add_inputs(scenario_with_inputs)
@@ -210,9 +213,11 @@ class TestInputs:
                 },
                 index=["wind_capacity", f"unique_input_{i}"],
             )
-            mock_df.index.name ="inputs"
+            mock_df.index.name = "inputs"
 
-            scenario.inputs.to_dataframe = Mock(return_value=mock_df.set_index('unit', append=True))
+            scenario.inputs.to_dataframe = Mock(
+                return_value=mock_df.set_index("unit", append=True)
+            )
 
         packer = ScenarioPacker()
         packer.add_inputs(*multiple_scenarios)
@@ -232,7 +237,7 @@ class TestInputs:
             ("wind_capacity", "MW"),
             ("unique_input_0", "GW"),
             ("unique_input_1", "GW"),
-            ("unique_input_2", "GW")
+            ("unique_input_2", "GW"),
         }
         assert set(result.index) == all_keys
 
@@ -284,9 +289,11 @@ class TestGqueryResults:
                 {"future": [100 + i * 10, 200 + i * 20], "unit": ["MW", "GWh"]},
                 index=[f"query_1", f"query_{i+2}"],
             )
-            mock_results.index.name = 'gquery'
+            mock_results.index.name = "gquery"
 
-            scenario.results = Mock(return_value=mock_results.set_index('unit', append=True))
+            scenario.results = Mock(
+                return_value=mock_results.set_index("unit", append=True)
+            )
             scenario.queries_requested = Mock(return_value=True)
             scenarios.append(scenario)
 
@@ -374,6 +381,7 @@ class TestDataExtractionMethods:
         """Test output_curves with series data"""
         mock_series = pd.Series([10, 20, 30], name="carrier_curve")
         sample_scenario.carrier_curves_series = Mock(return_value=[mock_series])
+        sample_scenario.all_output_curves = Mock(return_value=[mock_series])
 
         packer = ScenarioPacker()
         packer.add_output_curves(sample_scenario)
@@ -414,11 +422,13 @@ class TestExcelExport:
         inputs_df = pd.DataFrame(
             {"value": [1000], "unit": ["MW"]}, index=["wind_capacity"]
         )
-        inputs_df.index.name = 'input'
+        inputs_df.index.name = "input"
 
         scenario_with_inputs.inputs.to_dataframe = Mock(
-            return_value= inputs_df.set_index('unit', append=True)
+            return_value=inputs_df.set_index("unit", append=True)
         )
+
+        scenario_with_inputs.all_output_curves = Mock(return_value=[])
 
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)
@@ -467,6 +477,13 @@ class TestExcelExport:
         )
         scenario.carrier_curves_series = Mock(
             return_value=[pd.Series([3, 4], name="carrier1")]
+        )
+
+        scenario.all_output_curves = Mock(
+            return_value=[
+                pd.Series([1, 2], name="curve1"),
+                pd.Series([3, 4], name="carrier1"),
+            ]
         )
 
         packer = ScenarioPacker()

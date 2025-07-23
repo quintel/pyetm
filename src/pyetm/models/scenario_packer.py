@@ -94,7 +94,7 @@ class OutputCurvesPack(Packable):
     def _to_dataframe(self, values="") -> pd.DataFrame:
         """PACKS ONLY FIRST SCENARIO"""
         for scenario in self.scenarios:
-            series_list = list(scenario.carrier_curves_series())
+            series_list = list(scenario.all_output_curves())
             if len(series_list) == 0:
                 continue
             return pd.concat(series_list, axis=1)
