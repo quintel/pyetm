@@ -17,8 +17,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         **kwargs: Additional arguments passed to the request
     """
 
-    # Valid metadata keys that can be updated
-    META_KEYS = ["keep_compatible", "private", "source", "metadata", "title"]
+    META_KEYS = ["keep_compatible", "private", "source", "metadata"]
 
     @staticmethod
     def run(
@@ -26,6 +25,9 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update metadata for a scenario.
+
+        Fields in META_KEYS are set directly on the scenario.
+        Other fields are automatically nested under the 'metadata' field.
 
         Example usage:
             result = UpdateMetadataRunner.run(
@@ -38,21 +40,27 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
                 }
             )
         """
-        # Filter out any keys that can't be updated
-        filtered_metadata = {
-            key: value
-            for key, value in metadata.items()
-            if key in UpdateMetadataRunner.META_KEYS
-        }
+        direct_fields = {}
+        nested_metadata = {}
 
-        # Create warnings for any filtered keys
-        warnings = []
-        filtered_keys = set(metadata.keys()) - set(filtered_metadata.keys())
-        for key in filtered_keys:
-            warnings.append(f"Ignoring non-updatable metadata field: {key!r}")
+        for key, value in metadata.items():
+            if key in UpdateMetadataRunner.META_KEYS:
+                direct_fields[key] = value
+            else:
+                nested_metadata[key] = value
+
+        if nested_metadata:
+            # If user also provided a direct "metadata" field, merge with nested fields
+            if "metadata" in direct_fields:
+                if isinstance(direct_fields["metadata"], dict):
+                    direct_fields["metadata"].update(nested_metadata)
+                else:
+                    direct_fields["metadata"] = nested_metadata
+            else:
+                direct_fields["metadata"] = nested_metadata
 
         # Transform metadata to the API format
-        payload = {"scenario": filtered_metadata}
+        payload = {"scenario": direct_fields}
 
         result = UpdateMetadataRunner._make_request(
             client=client,
@@ -60,10 +68,5 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
             path=f"/scenarios/{scenario.id}",
             payload=payload,
         )
-
-        if result.success and warnings:
-            # Merge our warnings with any from the API call
-            combined_errors = list(result.errors) + warnings
-            return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

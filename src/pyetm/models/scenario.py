@@ -110,6 +110,14 @@ class Scenario(Base):
         for w in result.errors:
             self.add_warning(w)
 
+        # Update the current scenario object with the server response
+        if result.data and "scenario" in result.data:
+            scenario_data = result.data["scenario"]
+            # Update the current object's attributes with the server response
+            for field, value in scenario_data.items():
+                if hasattr(self, field):
+                    setattr(self, field, value)
+
         return result.data
 
     def __eq__(self, other: "Scenario"):
@@ -272,7 +280,7 @@ class Scenario(Base):
         """
         self._queries.execute(BaseClient(), self)
 
-    def results(self, values='future') -> pd.DataFrame:
+    def results(self, values="future") -> pd.DataFrame:
         """
         Returns the results of the requested queries in a dataframe
         """
