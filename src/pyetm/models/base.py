@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Type, TypeVar
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
+import pandas as pd
 
 T = TypeVar("T", bound="Base")
 
@@ -12,6 +13,7 @@ class Base(BaseModel):
       - Fails fast on critical errors
       - Catches validation errors and converts them into warnings
       - Validates on assignment, converting assignment errors into warnings
+      - Provides serialization to DataFrame
     """
 
     # Enable assignment validation
@@ -94,3 +96,75 @@ class Base(BaseModel):
         converting all validation errors into warnings.
         """
         return cls(**data)
+
+    def _get_serializable_fields(self) -> list[str]:
+        """
+        Parse and return column names for serialization.
+        Override this method in subclasses if you need custom field selection logic.
+        """
+        return [
+            field_name
+            for field_name in self.model_fields.keys()
+            if not field_name.startswith("_")
+        ]
+
+    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+        """
+        Private method to be implemented by each subclass for specific serialization logic.
+        This method should contain the actual DataFrame creation logic.
+
+        Returns:
+            pd.DataFrame: The serialized DataFrame
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _to_dataframe() method"
+        )
+
+    def to_df(self, **kwargs) -> pd.DataFrame:
+        """
+        Public method that handles common serialization logic and delegates to _to_dataframe().
+
+        Returns:
+            pd.DataFrame: Serialized DataFrame with class name as index level
+        """
+        columns = self._get_serializable_fields()
+
+        # Add columns info to kwargs for subclass use if needed
+        if "available_columns" not in kwargs:
+            kwargs["available_columns"] = columns
+
+        try:
+            df = self._to_dataframe(**kwargs)
+        except Exception as e:
+            self.add_warning(
+                f"{self.__class__.__name__}._to_dataframe() raised exception: {e}"
+            )
+            df = pd.DataFrame()
+
+        # Handle case where _to_dataframe returns None or invalid data
+        if df is None:
+            self.add_warning(f"{self.__class__.__name__}._to_dataframe() returned None")
+            df = pd.DataFrame()
+        elif not isinstance(df, pd.DataFrame):
+            self.add_warning(
+                f"{self.__class__.__name__}._to_dataframe() returned {type(df)}, expected DataFrame"
+            )
+            df = pd.DataFrame()
+
+        # Set index with class name (common for all classes)
+        class_name = self.__class__.__name__.lower()
+
+        # If the DataFrame doesn't already have a named index, add the class name
+        if df.index.name is None:
+            df.index.name = class_name
+        else:
+            # If it already has a named index, make it a MultiIndex with class name as first level
+            df = df.copy()
+            df["_class"] = class_name
+            df = df.set_index("_class", append=True)
+            # Reorder index levels so class name comes first
+            df = df.reorder_levels(
+                [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+            )
+
+        return df
