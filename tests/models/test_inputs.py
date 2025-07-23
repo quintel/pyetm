@@ -15,7 +15,7 @@ def test_to_df(inputs_json):
     input_collection = Inputs.from_json(inputs_json)
 
     df_standard = input_collection.to_df()
-    df_with_defaults = input_collection.to_df(values=["user", "default"])
+    df_with_defaults = input_collection.to_df(columns=["user", "default"])
 
     assert "user" in df_standard.columns
     assert "user" in df_with_defaults.columns
@@ -23,6 +23,6 @@ def test_to_df(inputs_json):
     assert "default" not in df_standard.columns
     assert "default" in df_with_defaults.columns
 
-    df_with_non_existing = input_collection.to_df(values="foo")
+    df_with_non_existing = input_collection.to_df(columns="foo")
 
     assert df_with_non_existing["foo"].isnull().all()

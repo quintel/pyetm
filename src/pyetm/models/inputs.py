@@ -101,13 +101,13 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def _to_dataframe(self, values="user", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
         """
         Serialize the Inputs collection to DataFrame.
         """
-        if not isinstance(values, list):
-            values = [values]
-        columns = ["unit"] + values
+        if not isinstance(columns, list):
+            columns = [columns]
+        columns = ["unit"] + columns
 
         # Create DataFrame from inputs
         df = pd.DataFrame.from_dict(

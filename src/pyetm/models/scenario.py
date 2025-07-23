@@ -279,7 +279,7 @@ class Scenario(Base):
         """
         self._queries.execute(BaseClient(), self)
 
-    def results(self, values="future") -> pd.DataFrame:
+    def results(self, columns="future") -> pd.DataFrame:
         """
         Returns the results of the requested queries in a dataframe
         """
@@ -290,7 +290,7 @@ class Scenario(Base):
         if not self._queries.is_ready():
             self.execute_queries()
 
-        return self._queries.to_dataframe(values=values)
+        return self._queries.to_dataframe(columns=columns)
 
     def queries_requested(self):
         """
