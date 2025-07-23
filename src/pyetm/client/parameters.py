@@ -40,7 +40,7 @@ class ParameterMethods(SessionMethods):
 
         # convert records to frame
         parameters = pd.DataFrame.from_records(records).T
-        parameters = parameters.drop(columns="cache_error")
+        parameters = parameters.drop(columns="cache_error", errors="ignore")
 
         # infer dtypes
         parameters = parameters.infer_objects()
@@ -141,9 +141,6 @@ class ParameterMethods(SessionMethods):
         """set scenario input parameters,
         resets all other user specified parameters"""
 
-        # first collect all user input parameters
-        # check
-
         # convert None to dict
         if inputs is None:
             inputs = {}
@@ -152,16 +149,16 @@ class ParameterMethods(SessionMethods):
         if isinstance(inputs, pd.DataFrame):
             inputs = inputs["user"]
 
-        # prepare request
-        headers = {"content-type": "application/json"}
-        data = {"scenario": {"user_values": dict(inputs)}, "detailed": True}
+        # drop nans
+        inputs = pd.Series(inputs, name="user").dropna()
 
-        # make request
-        url = self.make_endpoint_url(endpoint="scenario_id")
-        self.session.put(url, json=data, headers=headers)
+        # reset user configured parameters
+        _inputs = self.get_input_parameters(user_only=True)
+        _inputs = pd.Series("reset", index=_inputs.index, name="user")
 
-        # reset cached parameters
-        self._reset_cache()
+        # combine series and upload values
+        inputs.combine_first(_inputs)
+        self.upload_input_parameters(inputs)
 
     def upload_input_parameters(
         self, inputs: dict[str, str | float] | pd.Series[Any] | pd.DataFrame | None
@@ -176,6 +173,9 @@ class ParameterMethods(SessionMethods):
         # subset series from df
         if isinstance(inputs, pd.DataFrame):
             inputs = inputs["user"]
+
+        # drop nans
+        inputs = pd.Series(inputs, name="user").dropna()
 
         # prepare request
         headers = {"content-type": "application/json"}
