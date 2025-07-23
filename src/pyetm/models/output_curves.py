@@ -1,7 +1,10 @@
 from __future__ import annotations
+from functools import lru_cache
 import pandas as pd
 from pathlib import Path
 from typing import Optional
+
+import yaml
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.config.settings import get_settings
@@ -145,6 +148,31 @@ class OutputCurves(Base):
             # Merge any warnings from reading contents
             self._merge_submodel_warnings(curve)
             return contents
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _load_carrier_mappings() -> dict:
+        """Load carrier mappings from YAML config file"""
+        config_path = (
+            Path(__file__).parent.parent / "config" / "output_curve_mappings.yml"
+        )
+        try:
+            with open(config_path, "r") as file:
+                config = yaml.safe_load(file)
+                return config.get("carrier_mappings", {})
+        except (FileNotFoundError, yaml.YAMLError):
+            # Fallback to hardcoded mappings
+            return {
+                "electricity": ["merit_order", "electricity_price", "residual_load"],
+                "heat": [
+                    "heat_network",
+                    "agriculture_heat",
+                    "household_heat",
+                    "buildings_heat",
+                ],
+                "hydrogen": ["hydrogen", "hydrogen_integral_cost"],
+                "methane": ["network_gas"],
+            }
 
     def get_curves_by_carrier_type(
         self, scenario, carrier_type: str

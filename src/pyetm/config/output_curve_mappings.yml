@@ -1,0 +1,18 @@
+carrier_mappings:
+  electricity:
+    - merit_order
+    - electricity_price
+    - residual_load
+
+  heat:
+    - heat_network
+    - agriculture_heat
+    - household_heat
+    - buildings_heat
+
+  hydrogen:
+    - hydrogen
+    - hydrogen_integral_cost
+
+  methane:
+    - network_gas
