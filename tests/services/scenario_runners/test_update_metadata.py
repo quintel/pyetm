@@ -67,7 +67,11 @@ def test_update_metadata_auto_nests_unrecognized_fields(
     result = UpdateMetadataRunner.run(client, scenario, metadata)
     assert result.success is True
     assert result.data == body
-    assert result.errors == []
+    assert len(result.errors) == 1
+    assert (
+        "Field 'title' cannot be updated directly and has been added to nested metadata instead"
+        in result.errors
+    )
 
     # Should auto-nest unrecognized fields
     expected_payload = {
@@ -94,21 +98,31 @@ def test_update_metadata_filters_and_nests_fields(
     metadata = {
         "private": True,  # Direct field
         "keep_compatible": True,  # Direct field
-        "end_year": 2050,  # Should be nested
-        "area_code": "nl",  # Should be nested
-        "title": "Test Scenario",  # Should be nested
+        "end_year": 2050,  # Direct field (settable)
+        "area_code": "nl",  # Should be nested with warning (unsettable)
+        "title": "Test Scenario",  # Should be nested with warning (unsettable)
     }
 
     result = UpdateMetadataRunner.run(client, scenario, metadata)
     assert result.success is True
     assert result.data == body
-    assert result.errors == []
+    assert len(result.errors) == 2
+    expected_warnings = [
+        "Field 'area_code' cannot be updated directly and has been added to nested metadata instead",
+        "Field 'title' cannot be updated directly and has been added to nested metadata instead",
+    ]
+    for warning in expected_warnings:
+        assert warning in result.errors
 
     expected_payload = {
         "scenario": {
             "private": True,
             "keep_compatible": True,
-            "metadata": {"end_year": 2050, "area_code": "nl", "title": "Test Scenario"},
+            "end_year": 2050,
+            "metadata": {
+                "area_code": "nl",
+                "title": "Test Scenario",
+            },
         }
     }
     assert client.calls == [("/scenarios/5", {"json": expected_payload})]
@@ -162,14 +176,18 @@ def test_update_metadata_merges_explicit_and_auto_nested_metadata(
     metadata = {
         "private": True,
         "metadata": {"description": "Existing metadata", "tags": ["existing"]},
-        "title": "Auto-nested title",  # Should merge into metadata
-        "author": "Auto-nested author",  # Should merge into metadata
+        "title": "Auto-nested title",
+        "author": "Auto-nested author",
     }
 
     result = UpdateMetadataRunner.run(client, scenario, metadata)
     assert result.success is True
     assert result.data == body
-    assert result.errors == []
+    assert len(result.errors) == 1
+    assert (
+        "Field 'title' cannot be updated directly and has been added to nested metadata instead"
+        in result.errors
+    )
 
     expected_payload = {
         "scenario": {
@@ -194,7 +212,7 @@ def test_update_metadata_replaces_non_dict_metadata(
     client = dummy_client(response, method="put")
     scenario = dummy_scenario(9)
     metadata = {
-        "metadata": "not a dict",  # Will be replaced
+        "metadata": "not a dict",
         "title": "New title",
         "author": "New author",
     }
@@ -202,7 +220,11 @@ def test_update_metadata_replaces_non_dict_metadata(
     result = UpdateMetadataRunner.run(client, scenario, metadata)
     assert result.success is True
     assert result.data == body
-    assert result.errors == []
+    assert len(result.errors) == 1
+    assert (
+        "Field 'title' cannot be updated directly and has been added to nested metadata instead"
+        in result.errors
+    )
 
     expected_payload = {
         "scenario": {"metadata": {"title": "New title", "author": "New author"}}
@@ -220,7 +242,11 @@ def test_update_metadata_with_kwargs(dummy_client, fake_response, dummy_scenario
     result = UpdateMetadataRunner.run(client, scenario, metadata, timeout=30)
     assert result.success is True
     assert result.data == body
-    assert result.errors == []
+    assert len(result.errors) == 1
+    assert (
+        "Field 'title' cannot be updated directly and has been added to nested metadata instead"
+        in result.errors
+    )
 
     expected_payload = {"scenario": {"metadata": {"title": "Updated Scenario"}}}
     assert client.calls == [("/scenarios/10", {"json": expected_payload})]
@@ -303,16 +329,18 @@ def test_update_metadata_only_nested_fields(
     result = UpdateMetadataRunner.run(client, scenario, metadata)
     assert result.success is True
     assert result.data == body
-    assert result.errors == []
+    assert len(result.errors) == 1
+    expected_warning = "Field 'title' cannot be updated directly and has been added to nested metadata instead"
+    assert expected_warning in result.errors
 
     expected_payload = {
         "scenario": {
+            "end_year": 2050,
             "metadata": {
                 "title": "Test Scenario",
                 "description": "A test",
                 "author": "John Doe",
-                "end_year": 2050,
-            }
+            },
         }
     }
     assert client.calls == [("/scenarios/14", {"json": expected_payload})]

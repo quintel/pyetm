@@ -263,31 +263,6 @@ def custom_curves_json():
     ]
 
 
-# --- Service Result Fixtures --- #
-
-
-@pytest.fixture
-def ok_service_result():
-    """Factory fixture for creating successful ServiceResult objects"""
-    from pyetm.services.service_result import ServiceResult
-
-    def _make_result(data, errors=None):
-        return ServiceResult.ok(data=data, errors=errors or [])
-
-    return _make_result
-
-
-@pytest.fixture
-def fail_service_result():
-    """Factory fixture for creating failed ServiceResult objects"""
-    from pyetm.services.service_result import ServiceResult
-
-    def _make_result(errors):
-        return ServiceResult.fail(errors)
-
-    return _make_result
-
-
 # --- Test Model Fixtures --- #
 
 

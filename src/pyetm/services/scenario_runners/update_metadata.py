@@ -17,7 +17,25 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         **kwargs: Additional arguments passed to the request
     """
 
-    META_KEYS = ["keep_compatible", "private", "source", "metadata"]
+    # TODO: Investigate why end_year is not setting correctly
+    META_KEYS = [
+        "keep_compatible",
+        "private",
+        "source",
+        "metadata",
+        "end_year",
+    ]
+    UNSETTABLE_META_KEYS = [
+        "id",
+        "created_at",
+        "updated_at",
+        "area_code",
+        "title",
+        "start_year",
+        "scaling",
+        "template",
+        "url",
+    ]
 
     @staticmethod
     def run(
@@ -42,32 +60,35 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         """
         direct_fields = {}
         nested_metadata = {}
+        warnings = []
 
         for key, value in metadata.items():
             if key in UpdateMetadataRunner.META_KEYS:
                 direct_fields[key] = value
+            elif key in UpdateMetadataRunner.UNSETTABLE_META_KEYS:
+                # Field exists on scenario but cannot be updated - add to nested metadata with warning
+                nested_metadata[key] = value
+                warnings.append(
+                    f"Field '{key}' cannot be updated directly and has been added to nested metadata instead"
+                )
             else:
                 nested_metadata[key] = value
 
+        existing_metadata = {}
+        if hasattr(scenario, "metadata") and isinstance(scenario.metadata, dict):
+            existing_metadata = scenario.metadata.copy()
+
+        final_metadata = existing_metadata.copy()
         if nested_metadata:
-            # Get existing metadata from the scenario to merge with
-            existing_metadata = {}
-            if hasattr(scenario, "metadata") and isinstance(scenario.metadata, dict):
-                existing_metadata = scenario.metadata.copy()
+            final_metadata.update(nested_metadata)
 
-            # Merge nested metadata with existing metadata
-            existing_metadata.update(nested_metadata)
+        # If user provided a direct "metadata" field, merge it in last (highest priority)
+        if "metadata" in direct_fields:
+            if isinstance(direct_fields["metadata"], dict):
+                final_metadata.update(direct_fields["metadata"])
 
-            # If user also provided a direct "metadata" field, merge with the combined metadata
-            if "metadata" in direct_fields:
-                if isinstance(direct_fields["metadata"], dict):
-                    combined_metadata = existing_metadata.copy()
-                    combined_metadata.update(direct_fields["metadata"])
-                    direct_fields["metadata"] = combined_metadata
-                else:
-                    direct_fields["metadata"] = existing_metadata
-            else:
-                direct_fields["metadata"] = existing_metadata
+        if final_metadata or nested_metadata or "metadata" in direct_fields:
+            direct_fields["metadata"] = final_metadata
 
         # Transform metadata to the API format
         payload = {"scenario": direct_fields}
