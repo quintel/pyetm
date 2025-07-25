@@ -27,7 +27,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         Update metadata for a scenario.
 
         Fields in META_KEYS are set directly on the scenario.
-        Other fields are automatically nested under the 'metadata' field.
+        Other fields are automatically merged and nested under the 'metadata' field.
 
         Example usage:
             result = UpdateMetadataRunner.run(
@@ -50,14 +50,24 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
                 nested_metadata[key] = value
 
         if nested_metadata:
-            # If user also provided a direct "metadata" field, merge with nested fields
+            # Get existing metadata from the scenario to merge with
+            existing_metadata = {}
+            if hasattr(scenario, "metadata") and isinstance(scenario.metadata, dict):
+                existing_metadata = scenario.metadata.copy()
+
+            # Merge nested metadata with existing metadata
+            existing_metadata.update(nested_metadata)
+
+            # If user also provided a direct "metadata" field, merge with the combined metadata
             if "metadata" in direct_fields:
                 if isinstance(direct_fields["metadata"], dict):
-                    direct_fields["metadata"].update(nested_metadata)
+                    combined_metadata = existing_metadata.copy()
+                    combined_metadata.update(direct_fields["metadata"])
+                    direct_fields["metadata"] = combined_metadata
                 else:
-                    direct_fields["metadata"] = nested_metadata
+                    direct_fields["metadata"] = existing_metadata
             else:
-                direct_fields["metadata"] = nested_metadata
+                direct_fields["metadata"] = existing_metadata
 
         # Transform metadata to the API format
         payload = {"scenario": direct_fields}
