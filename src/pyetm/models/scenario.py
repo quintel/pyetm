@@ -94,11 +94,11 @@ class Scenario(Base):
             scenario.add_warning(w)
         return scenario
 
-    def update_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """
         Update metadata for this scenario.
         """
-        result = UpdateMetadataRunner.run(BaseClient(), self, metadata)
+        result = UpdateMetadataRunner.run(BaseClient(), self, kwargs)
 
         if not result.success:
             raise ScenarioError(f"Could not update metadata: {result.errors}")
@@ -110,7 +110,6 @@ class Scenario(Base):
         # Update the current scenario object with the server response
         if result.data and "scenario" in result.data:
             scenario_data = result.data["scenario"]
-            # Update the current object's attributes with the server response
             for field, value in scenario_data.items():
                 if hasattr(self, field):
                     setattr(self, field, value)
