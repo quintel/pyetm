@@ -74,6 +74,37 @@ class Sortable(Base):
             sortable.add_warning(f"Unexpected payload for '{sort_type}': {payload!r}")
             yield sortable
 
+    @classmethod
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> Sortable:
+        """
+        Deserialize DataFrame back to a single Sortable.
+        Expected DataFrame structure: single column with sortable name, order as values.
+        """
+        if df.empty:
+            raise ValueError("Cannot create Sortable from empty DataFrame")
+
+        if len(df.columns) != 1:
+            raise ValueError(
+                f"Expected single column DataFrame, got {len(df.columns)} columns"
+            )
+
+        # Get the sortable name from column name
+        sortable_name = df.columns[0]
+
+        # Extract order from DataFrame values (drop NaN values)
+        order = df[sortable_name].dropna().tolist()
+
+        # Parse type and subtype from name
+        if "_" in sortable_name:
+            parts = sortable_name.split("_", 1)
+            type_name = parts[0]
+            subtype = parts[1]
+        else:
+            type_name = sortable_name
+            subtype = None
+
+        return cls.load_safe(type=type_name, subtype=subtype, order=order)
+
 
 class Sortables(Base):
     """
@@ -125,7 +156,85 @@ class Sortables(Base):
                 result[s.type] = s.order
         return result
 
-    def to_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame.from_dict(
-            {s.name(): s.order for s in self.sortables}, orient="index"
-        ).T
+    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+        """
+        Serialize the Sortables collection to DataFrame.
+        Creates a DataFrame where each column represents a sortable's order.
+        Structure: sortable names as columns, order positions as index.
+        """
+        if not self.sortables:
+            return pd.DataFrame()
+
+        # Create a dictionary with sortable names as keys and orders as values
+        data_dict = {}
+        for sortable in self.sortables:
+            try:
+                data_dict[sortable.name()] = sortable.order
+            except Exception as e:
+                data_dict[sortable.name()] = []
+                self.add_warning(
+                    f"Failed to serialize sortable '{sortable.name()}': {e}"
+                )
+
+        result_df = pd.DataFrame.from_dict(data_dict, orient="index").T
+
+        return result_df
+
+    @classmethod
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> Sortables:
+        """
+        Deserialize DataFrame back to Sortables collection.
+        Expected DataFrame structure: sortable names as columns, order positions as index.
+        """
+        sortables_list = []
+
+        if df.empty:
+            return cls.load_safe(sortables=[])
+
+        for sortable_name in df.columns:
+            try:
+                order = df[sortable_name].dropna().tolist()
+
+                # Parse type and subtype from name
+                if "_" in sortable_name:
+                    parts = sortable_name.split("_", 1)
+                    type_name = parts[0]
+                    subtype = parts[1]
+                else:
+                    type_name = sortable_name
+                    subtype = None
+
+                # Create the Sortable object
+                sortable_obj = Sortable.load_safe(
+                    type=type_name, subtype=subtype, order=order
+                )
+                sortables_list.append(sortable_obj)
+
+            except Exception as e:
+                # Create a minimal sortable with warning
+                if "_" in sortable_name:
+                    parts = sortable_name.split("_", 1)
+                    type_name = parts[0]
+                    subtype = parts[1]
+                else:
+                    type_name = sortable_name
+                    subtype = None
+
+                sortable_obj = Sortable.load_safe(
+                    type=type_name, subtype=subtype, order=[]
+                )
+                sortable_obj.add_warning(
+                    f"Failed to deserialize sortable '{sortable_name}': {e}"
+                )
+                sortables_list.append(sortable_obj)
+
+        collection = cls.load_safe(sortables=sortables_list)
+
+        for sortable_obj in sortables_list:
+            if hasattr(sortable_obj, "warnings") and sortable_obj.warnings:
+                for warning in sortable_obj.warnings:
+                    collection.add_warning(
+                        f"Sortable '{sortable_obj.name()}': {warning}"
+                    )
+
+        return collection
