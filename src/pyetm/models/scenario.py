@@ -71,7 +71,7 @@ class Scenario(Base):
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for warning in result.errors:
-            scenario.add_warning('base', warning)
+            scenario.add_warning("base", warning)
 
         return scenario
 
@@ -91,7 +91,7 @@ class Scenario(Base):
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for w in result.errors:
-            scenario.add_warning('metadata', w)
+            scenario.add_warning("metadata", w)
         return scenario
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
@@ -105,7 +105,7 @@ class Scenario(Base):
 
         # Add any warnings from the update
         for w in result.errors:
-            self.add_warning('metadata', w)
+            self.add_warning("metadata", w)
 
         # Update the current scenario object with the server response
         if result.data and "scenario" in result.data:
@@ -163,7 +163,7 @@ class Scenario(Base):
         coll = Inputs.from_json(result.data)
         # merge runner warnings and any item‐level warnings
         for w in result.errors:
-            self.add_warning('inputs', w)
+            self.add_warning("inputs", w)
         self._merge_submodel_warnings(coll)
 
         self._inputs = coll
@@ -175,7 +175,7 @@ class Scenario(Base):
         This ensures the dataframe exactly represents the inputs.
         """
         self.update_user_values(
-            dataframe['user'].droplevel('unit').fillna("reset").to_dict()
+            dataframe["user"].droplevel("unit").fillna("reset").to_dict()
         )
 
     def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
@@ -195,7 +195,6 @@ class Scenario(Base):
 
         self.inputs.update(update_inputs)
 
-
     def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
         """
         Remove user values for specified inputs, resetting them to default values.
@@ -212,7 +211,6 @@ class Scenario(Base):
         # Update them in the Inputs object
         self.inputs.update(reset_inputs)
 
-
     @property
     def sortables(self) -> Sortables:
         if self._sortables is not None:
@@ -224,7 +222,7 @@ class Scenario(Base):
 
         coll = Sortables.from_json(result.data)
         for w in result.errors:
-            self.add_warning('sortables', w)
+            self.add_warning("sortables", w)
         self._merge_submodel_warnings(coll)
 
         self._sortables = coll
@@ -241,7 +239,7 @@ class Scenario(Base):
 
         coll = CustomCurves.from_json(result.data)
         for w in result.errors:
-            self.add_warning('custom_curves', w)
+            self.add_warning("custom_curves", w)
         self._merge_submodel_warnings(coll)
 
         self._custom_curves = coll
