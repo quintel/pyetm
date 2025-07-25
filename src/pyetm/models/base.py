@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Type, TypeVar
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
+import pandas as pd
 
 T = TypeVar("T", bound="Base")
 
@@ -12,6 +13,7 @@ class Base(BaseModel):
       - Fails fast on critical errors
       - Catches validation errors and converts them into warnings
       - Validates on assignment, converting assignment errors into warnings
+      - Provides serialization to DataFrame
     """
 
     # Enable assignment validation
@@ -94,3 +96,51 @@ class Base(BaseModel):
         converting all validation errors into warnings.
         """
         return cls(**data)
+
+    def _get_serializable_fields(self) -> list[str]:
+        """
+        Parse and return column names for serialization.
+        Override this method in subclasses if you need custom field selection logic.
+        """
+        return [
+            field_name
+            for field_name in self.model_fields.keys()
+            if not field_name.startswith("_")
+        ]
+
+    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+        """
+        Private method to be implemented by each subclass for specific serialization logic.
+        This method should contain the actual DataFrame creation logic.
+
+        Returns:
+            pd.DataFrame: The serialized DataFrame
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _to_dataframe() method"
+        )
+
+    def to_df(self, **kwargs) -> pd.DataFrame:
+        """
+        Public method that handles common serialization logic and delegates to _to_dataframe().
+
+        Returns:
+            pd.DataFrame: Serialized DataFrame with class name as index level
+        """
+        columns = self._get_serializable_fields()
+        kwargs.setdefault("available_columns", columns)
+
+        # Get DataFrame with unified error handling
+        try:
+            df = self._to_dataframe(**kwargs)
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"Expected DataFrame, got {type(df)}")
+        except Exception as e:
+            self.add_warning(f"{self.__class__.__name__}._to_dataframe() failed: {e}")
+            df = pd.DataFrame()
+
+        # Set index name if not already set
+        if df.index.name is None:
+            df.index.name = self.__class__.__name__.lower()
+
+        return df

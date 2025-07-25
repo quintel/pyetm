@@ -551,20 +551,8 @@ def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
         _ = scenario.custom_curves
 
 
-# ------ Validation tests ------ #
-
-
-# def test_end_year_greater_than_start_year(minimal_scenario_metadata):
-#     """Test that end_year must be greater than start_year"""
-#     invalid_data = minimal_scenario_metadata.copy()
-#     invalid_data.update({"start_year": 2040, "end_year": 2030})
-
-#     with pytest.raises(ValueError, match="End year .* must be greater than start year"):
-#         Scenario.model_validate(invalid_data)
-
-
-def test_to_dataframe(scenario):
+def test_to_df(scenario):
     scenario = Scenario(id=scenario.id, area_code="nl2019", end_year=2050)
-    dataframe = scenario.to_dataframe()
+    dataframe = scenario.to_df()
 
     assert dataframe[scenario.id]["end_year"] == 2050
