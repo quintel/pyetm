@@ -20,6 +20,7 @@ from pyetm.services.scenario_runners.fetch_custom_curves import (
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
+from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 
 
 class ScenarioError(Exception):
@@ -113,6 +114,30 @@ class Scenario(Base):
             for field, value in scenario_data.items():
                 if hasattr(self, field):
                     setattr(self, field, value)
+
+        return result.data
+
+    def update_sortables(self, **kwargs) -> Dict[str, Any]:
+        """
+        Update sortable order for this scenario.
+
+        Required kwargs:
+            sortable_type: Type of sortable (forecast_storage, hydrogen_supply, etc.)
+            order: List of items in desired order
+        Optional kwargs:
+            subtype: Subtype for heat_network (lt, mt, ht)
+        """
+        result = UpdateSortablesRunner.run(BaseClient(), self, **kwargs)
+
+        if not result.success:
+            raise ScenarioError(f"Could not update sortables: {result.errors}")
+
+        for w in result.errors:
+            self.add_warning(w)
+
+        sortable_type = kwargs.get("sortable")
+        if result.data and hasattr(self, f"{sortable_type}_order"):
+            setattr(self, f"{sortable_type}_order", result.data)
 
         return result.data
 
