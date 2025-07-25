@@ -85,6 +85,9 @@ class BoolInput(Input):
             f"{value} should be 1.0 or 0.0 representing True/False, or On/Off"
         )
 
+    # NOTE: I need a lot of validation, and I need my own update method that
+    # will cast true/false into 1.0 and 0.0
+
 
 class EnumInput(Input):
     """Input representing an enumeration"""
@@ -106,11 +109,12 @@ class EnumInput(Input):
         if self.user is None or self.user in self.permitted_values:
             return self
         self._raise_exception_on_loc(
-            'ValueError',
-            type='inclusion',
-            loc='user',
-            msg=f"Value error, {self.user} should be in {self.permitted_values}"
+            "ValueError",
+            type="inclusion",
+            loc="user",
+            msg=f"Value error, {self.user} should be in {self.permitted_values}",
         )
+
 
 class FloatInput(Input):
     """Input representing a float"""
@@ -136,14 +140,14 @@ class FloatInput(Input):
             # We let pydantic handle the field validation
             return self
         if self.user is None or (self.user <= self.max and self.user >= self.min):
-            print(f'we chill {self.user}')
+            print(f"we chill {self.user}")
             return self
-        print(f'we not chill {self.user}')
+        print(f"we not chill {self.user}")
         self._raise_exception_on_loc(
-            'ValueError',
-            type='out_of_bounds',
-            loc='user',
-            msg=f"Value error, {self.user} should be between {self.min} and {self.max}"
+            "ValueError",
+            type="out_of_bounds",
+            loc="user",
+            msg=f"Value error, {self.user} should be between {self.min} and {self.max}",
         )
 
 
@@ -209,6 +213,6 @@ class Inputs(Base):
         inputs = [Input.from_json(item) for item in data.items()]
 
         collection = cls.model_validate({"inputs": inputs})
-        collection._merge_submodel_warnings(*inputs, key_attr='key')
+        collection._merge_submodel_warnings(*inputs, key_attr="key")
 
         return collection
