@@ -107,38 +107,26 @@ def test_new_scenario_failure(monkeypatch, fail_service_result):
 
 
 def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
-    """Test successful metadata update"""
-    updated_data = {
-        "scenario": {
-            "id": scenario.id,
-            "end_year": 2060,
-            "private": True,
-            "source": "pyetm_update",
-        }
-    }
+    """Test successful metadata update."""
+    updated_data = {"scenario": {"id": scenario.id, "end_year": 2050, "private": True}}
 
-    # Mock the runner to return warnings for unsettable fields
-    def mock_run(client, scen, metadata):
-        warnings = [
-            "Field 'end_year' cannot be updated directly and has been added to nested metadata instead"
-        ]
-        return ok_service_result(updated_data, warnings)
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
 
-    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
+    result = scenario.update_metadata(end_year=2050, private=True, custom_field="value")
 
-    metadata_updates = {"end_year": 2060, "private": True, "source": "pyetm_update"}
-
-    result = scenario.update_metadata(metadata_updates)
     assert result == updated_data
-    # end_year is unsettable, so we expect a warning
-    assert len(scenario.warnings) == 1
-    assert "Field 'end_year' cannot be updated directly" in scenario.warnings[0]
+    assert scenario.end_year == 2050
+    assert scenario.private == True
 
 
 def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
-    """Test metadata update with warnings"""
+    """Test metadata update with warnings."""
     updated_data = {"scenario": {"id": scenario.id, "private": True}}
-    warnings = ["Ignoring non-updatable metadata field: 'id'"]
+    warnings = ["Field 'id' cannot be updated directly"]
 
     monkeypatch.setattr(
         UpdateMetadataRunner,
@@ -146,29 +134,26 @@ def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result)
         lambda client, scen, metadata: ok_service_result(updated_data, warnings),
     )
 
-    metadata_updates = {"private": True, "id": 999}  # Should generate warning
+    result = scenario.update_metadata(private=True, id=999)
 
-    result = scenario.update_metadata(metadata_updates)
     assert result == updated_data
     assert scenario.warnings == warnings
 
 
 def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
-    """Test metadata update failure"""
+    """Test metadata update failure raises ScenarioError."""
     monkeypatch.setattr(
         UpdateMetadataRunner,
         "run",
         lambda client, scen, metadata: fail_service_result(["422: Validation Error"]),
     )
 
-    metadata_updates = {"end_year": "invalid"}
-
     with pytest.raises(ScenarioError, match="Could not update metadata"):
-        scenario.update_metadata(metadata_updates)
+        scenario.update_metadata(end_year="invalid")
 
 
-def test_update_metadata_empty_dict(monkeypatch, scenario, ok_service_result):
-    """Test metadata update with empty dictionary"""
+def test_update_metadata_empty_kwargs(monkeypatch, scenario, ok_service_result):
+    """Test metadata update with no arguments."""
     updated_data = {"scenario": {"id": scenario.id}}
 
     monkeypatch.setattr(
@@ -177,60 +162,21 @@ def test_update_metadata_empty_dict(monkeypatch, scenario, ok_service_result):
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    result = scenario.update_metadata({})
+    result = scenario.update_metadata()
+
     assert result == updated_data
     assert scenario.warnings == []
 
 
-def test_update_metadata_merges_with_existing(monkeypatch, scenario, ok_service_result):
-    """Test that nested metadata is merged with existing metadata rather than replaced"""
-    # Set up scenario with existing metadata
-    scenario.metadata = {
-        "area_code": "nl",
-        "description": "Original description",
-        "custom_field": "existing_value",
-    }
-
-    updated_data = {
-        "scenario": {
-            "id": scenario.id,
-            "metadata": {
-                "area_code": "de",  # Updated
-                "description": "Original description",  # Preserved
-                "custom_field": "existing_value",  # Preserved
-                "new_field": "new_value",  # Added
-            },
-        }
-    }
-
-    # Capture what gets sent to the runner
-    captured_payload = None
-
-    def mock_run(client, scen, metadata):
-        nonlocal captured_payload
-        captured_payload = metadata
-        return ok_service_result(updated_data)
-
-    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
-
-    metadata_updates = {"area_code": "de", "new_field": "new_value"}
-    result = scenario.update_metadata(metadata_updates)
-
-    assert result == updated_data
-    assert captured_payload == {"area_code": "de", "new_field": "new_value"}
-
-
-def test_update_metadata_with_no_existing_metadata(
+def test_update_metadata_partial_scenario_update(
     monkeypatch, scenario, ok_service_result
 ):
-    """Test metadata update when scenario has no existing metadata"""
-    # Scenario has no metadata attribute or it's None
-    scenario.metadata = None
-
+    """Test scenario object update with partial data."""
+    original_end_year = scenario.end_year
     updated_data = {
         "scenario": {
-            "id": scenario.id,
-            "metadata": {"area_code": "nl", "end_year": 2050},
+            "metadata": {"updated_key": "updated_value"}
+            # Note: no end_year field in response
         }
     }
 
@@ -240,33 +186,17 @@ def test_update_metadata_with_no_existing_metadata(
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    metadata_updates = {"area_code": "nl", "end_year": 2050}
-    result = scenario.update_metadata(metadata_updates)
+    result = scenario.update_metadata(some_field="value")
 
-    assert result == updated_data
+    # Only metadata should be updated, end_year should remain unchanged
+    assert scenario.metadata == {"updated_key": "updated_value"}
+    assert scenario.end_year == original_end_year
 
 
-def test_update_metadata_with_direct_metadata_field(
-    monkeypatch, scenario, ok_service_result
-):
-    """Test update when user provides both nested fields and direct metadata field"""
-    scenario.metadata = {
-        "existing_field": "existing_value",
-        "to_be_updated": "old_value",
-    }
-
-    updated_data = {
-        "scenario": {
-            "id": scenario.id,
-            "private": True,
-            "metadata": {
-                "existing_field": "existing_value",  # Preserved from existing
-                "to_be_updated": "direct_value",  # Overridden by direct metadata
-                "nested_field": "nested_value",  # Added from nested
-                "direct_field": "direct_value",  # Added from direct metadata
-            },
-        }
-    }
+def test_update_metadata_no_scenario_data(monkeypatch, scenario, ok_service_result):
+    """Test update when response contains no scenario data."""
+    original_metadata = getattr(scenario, "metadata", None)
+    updated_data = {"other_data": "value"}  # No scenario key
 
     monkeypatch.setattr(
         UpdateMetadataRunner,
@@ -274,34 +204,38 @@ def test_update_metadata_with_direct_metadata_field(
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    metadata_updates = {
-        "private": True,  # Direct field
-        "nested_field": "nested_value",  # Will be nested
-        "metadata": {  # Direct metadata field
-            "to_be_updated": "direct_value",
-            "direct_field": "direct_value",
-        },
-    }
+    result = scenario.update_metadata(some_field="value")
 
-    result = scenario.update_metadata(metadata_updates)
+    # Scenario object should remain unchanged
+    assert getattr(scenario, "metadata", None) == original_metadata
     assert result == updated_data
 
 
-def test_update_metadata_preserves_existing_when_only_direct_fields_updated(
+def test_update_metadata_ignores_nonexistent_fields(
     monkeypatch, scenario, ok_service_result
 ):
-    """Test that existing metadata is preserved when only direct fields are updated"""
-    scenario.metadata = {"area_code": "nl", "description": "Should be preserved"}
+    """Test update when scenario doesn't have a field from response."""
+    original_end_year = scenario.end_year
+    updated_data = {"scenario": {"nonexistent_field": "value", "end_year": 2060}}
 
-    updated_data = {
-        "scenario": {
-            "id": scenario.id,
-            "private": True,
-            # Note: existing metadata should be unchanged since only direct fields were updated
-        }
-    }
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
 
-    # Capture what actually gets sent to verify existing metadata isn't touched
+    result = scenario.update_metadata(some_field="value")
+
+    # Only existing fields should be updated
+    assert scenario.end_year == 2060
+    assert not hasattr(scenario, "nonexistent_field")
+
+
+def test_update_metadata_runner_receives_kwargs(
+    monkeypatch, scenario, ok_service_result
+):
+    """Test that runner receives the kwargs as metadata parameter."""
+    updated_data = {"scenario": {"id": scenario.id}}
     captured_metadata = None
 
     def mock_run(client, scen, metadata):
@@ -311,11 +245,51 @@ def test_update_metadata_preserves_existing_when_only_direct_fields_updated(
 
     monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
 
-    metadata_updates = {"private": True}  # Only direct field
-    result = scenario.update_metadata(metadata_updates)
+    scenario.update_metadata(end_year=2050, private=True, custom_field="custom_value")
 
-    # Should only contain the direct field, no metadata manipulation
-    assert captured_metadata == {"private": True}
+    assert captured_metadata == {
+        "end_year": 2050,
+        "private": True,
+        "custom_field": "custom_value",
+    }
+
+
+def test_update_metadata_runner_receives_scenario_object(
+    monkeypatch, scenario, ok_service_result
+):
+    """Test that runner receives the scenario object."""
+    updated_data = {"scenario": {"id": scenario.id}}
+    captured_scenario = None
+
+    def mock_run(client, scen, metadata):
+        nonlocal captured_scenario
+        captured_scenario = scen
+        return ok_service_result(updated_data)
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
+
+    scenario.update_metadata(test="value")
+
+    assert captured_scenario is scenario
+
+
+def test_update_metadata_uses_base_client(monkeypatch, scenario, ok_service_result):
+    """Test that runner is called with BaseClient instance."""
+    updated_data = {"scenario": {"id": scenario.id}}
+    captured_client = None
+
+    def mock_run(client, scen, metadata):
+        nonlocal captured_client
+        captured_client = client
+        return ok_service_result(updated_data)
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
+
+    scenario.update_metadata(test="value")
+
+    from pyetm.clients.base_client import BaseClient
+
+    assert isinstance(captured_client, BaseClient)
 
 
 # ------ Load ------ #
