@@ -169,23 +169,34 @@ class Scenario(Base):
         self._inputs = coll
         return coll
 
-    def update_inputs(self, inputs: Dict[str, Any]) -> None:
+    def set_user_values_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+        """
+        Extract df to dict, set None/NaN sliders to reset, and call update_inputs.
+        This ensures the dataframe exactly represents the inputs.
+        """
+        self.update_user_values(
+            dataframe['user'].droplevel('unit').fillna("reset").to_dict()
+        )
+
+    def update_user_values(self, inputs: Dict[str, Any]) -> None:
         """
         Args:
             inputs: Dictionary of input key-value pairs to update
         """
+        # Update them in the Inputs object, and check validation
+        validity_errors = self.inputs.is_valid_update(inputs)
+        if validity_errors:
+            raise ScenarioError(f"Could not update user values: {validity_errors}")
+
         result = UpdateInputsRunner.run(BaseClient(), self, inputs)
 
         if not result.success:
-            raise ScenarioError(f"Could not update inputs: {result.errors}")
+            raise ScenarioError(f"Could not update user values: {result.errors}")
 
-        for w in result.errors:
-            self.add_warning(w)
+        self.inputs.update(inputs)
 
-        # Invalidate the cached inputs so they'll be refetched next time
-        self._inputs = None
 
-    def remove_inputs(self, input_keys: Union[List[str], Set[str]]) -> None:
+    def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
         """
         Remove user values for specified inputs, resetting them to default values.
 
@@ -198,11 +209,9 @@ class Scenario(Base):
         if not result.success:
             raise ScenarioError(f"Could not remove inputs: {result.errors}")
 
-        for w in result.errors:
-            self.add_warning(w)
+        # Update them in the Inputs object
+        self.inputs.update(reset_inputs)
 
-        # Invalidate the cached inputs so they'll be refetched next time
-        self._inputs = None
 
     @property
     def sortables(self) -> Sortables:
