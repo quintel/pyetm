@@ -119,27 +119,47 @@ class Scenario(Base):
 
     def update_sortables(self, **kwargs) -> Dict[str, Any]:
         """
-        Update sortable order for this scenario.
+        Update sortable order with validation.
 
         Required kwargs:
-            sortable_type: Type of sortable (forecast_storage, hydrogen_supply, etc.)
-            order: List of items in desired order
+            sortable: Type of sortable (forecast_storage, hydrogen_supply, etc.)
+            order: List[str] - List of items in desired order
         Optional kwargs:
             subtype: Subtype for heat_network (lt, mt, ht)
+            validate: bool - Whether to validate before updating (default: True)
         """
+        sortable_type = kwargs.get("sortable")
+        order = kwargs.get("order")
+        subtype = kwargs.get("subtype")
+        validate = kwargs.get("validate", True)
+
+        if not sortable_type or order is None:
+            raise ScenarioError("Both 'sortable' and 'order' parameters are required")
+
+        if validate:
+            # Use the sortables model for validation
+            validation_result = self.sortables.validate_update(
+                sortable_type, order, subtype
+            )
+
+            # Handle validation errors
+            if not validation_result["valid"]:
+                raise ScenarioError(
+                    f"Sortables validation failed: {'; '.join(validation_result['errors'])}"
+                )
+
+            # Add warnings
+            for warning in validation_result["warnings"]:
+                self.add_warning(warning)
+
+        # Perform the update
         result = UpdateSortablesRunner.run(BaseClient(), self, **kwargs)
 
         if not result.success:
             raise ScenarioError(f"Could not update sortables: {result.errors}")
 
-        for w in result.errors:
-            self.add_warning(w)
-
-        sortable_type = kwargs.get("sortable")
-        if result.data and hasattr(self, f"{sortable_type}_order"):
-            setattr(self, f"{sortable_type}_order", result.data)
-
-        return result.data
+        # Clear sortables cache so it gets refreshed on next access
+        self._sortables = None
 
     def __eq__(self, other: "Scenario"):
         return self.id == other.id

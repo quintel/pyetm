@@ -14,14 +14,14 @@ class FetchSortablesRunner(BaseRunner[Dict[str, Any]]):
     Returns:
         ServiceResult.ok(data) where `data` is a dict like:
             {
-              "forecast_storage": List[int],
-              "hydrogen_supply":  List[int],
-              "hydrogen_demand":  List[int],
-              "space_heating":    List[int],
+              "forecast_storage": List[str],
+              "hydrogen_supply":  List[str],
+              "hydrogen_demand":  List[str],
+              "space_heating":    List[str],
               "heat_network": {
-                "lt": List[int],
-                "mt": List[int],
-                "ht": List[int],
+                "lt": List[str],
+                "mt": List[str],
+                "ht": List[str],
               },
             }
 
