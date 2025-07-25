@@ -144,3 +144,44 @@ class Base(BaseModel):
             df.index.name = self.__class__.__name__.lower()
 
         return df
+
+    @classmethod
+    def _from_dataframe(cls: Type[T], df: pd.DataFrame, **kwargs) -> T:
+        """
+        Private method to be implemented by each subclass for specific deserialization logic.
+        This method should contain the actual model creation logic from DataFrame.
+
+        Returns:
+            Instance of the model class
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} must implement _from_dataframe() class method"
+        )
+
+    @classmethod
+    def from_df(cls: Type[T], df: pd.DataFrame, **kwargs) -> T:
+        """
+        Public class method that handles common deserialization logic and delegates to _from_dataframe().
+
+        Returns:
+            Instance of the model class (with warnings)
+        """
+        try:
+            instance = cls._from_dataframe(df, **kwargs)
+            if not isinstance(instance, cls):
+                raise ValueError(
+                    f"Expected {cls.__name__} instance, got {type(instance)}"
+                )
+            return instance
+        except Exception as e:
+            try:
+                instance = cls.model_construct()
+            except Exception:
+                instance = object.__new__(cls)
+                object.__setattr__(instance, "_warnings", [])
+
+            if not hasattr(instance, "_warnings"):
+                object.__setattr__(instance, "_warnings", [])
+
+            instance.add_warning(f"{cls.__name__}._from_dataframe() failed: {e}")
+            return instance

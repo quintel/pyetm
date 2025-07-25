@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 import pandas as pd
 from pyetm.models.base import Base
 
@@ -46,6 +46,34 @@ class Input(Base):
         else:
             return FloatInput
 
+    @classmethod
+    def _from_dataframe_row(cls, key: str, row_data: Dict[str, Any]) -> Input:
+        """
+        Create an Input instance from a single row of DataFrame data.
+
+        Args:
+            key: The input key (from index)
+            row_data: Dictionary of column values for this row
+
+        Returns:
+            Input instance of appropriate subclass
+        """
+        # Add the key to the row data
+        data = {"key": key, **row_data}
+
+        # Determine the appropriate class based on unit
+        unit = data.get("unit", "")
+        try:
+            klass = cls.class_type(unit)
+            return klass.load_safe(**data)
+        except Exception as e:
+            # Fallback to base Input class
+            instance = cls.load_safe(**data)
+            instance.add_warning(
+                f"Failed to create specialized input for unit '{unit}': {e}"
+            )
+            return instance
+
 
 class BoolInput(Input):
     """Input representing a boolean"""
@@ -58,7 +86,7 @@ class EnumInput(Input):
     """Input representing an enumeration"""
 
     user: Optional[str] = None
-    permitted_values: list[str]
+    permitted_values: list[str] = []
     default: Optional[str] = None
 
     def _get_serializable_fields(self) -> list[str]:
@@ -74,8 +102,8 @@ class FloatInput(Input):
     """Input representing a float"""
 
     user: Optional[float] = None
-    min: float
-    max: float
+    min: Optional[float] = None
+    max: Optional[float] = None
     default: Optional[float] = None
     share_group: Optional[str] = None
     step: Optional[float] = None
@@ -90,7 +118,7 @@ class FloatInput(Input):
 
 
 class Inputs(Base):
-    inputs: list[Input]
+    inputs: list[Input] = []
 
     def __len__(self):
         return len(self.inputs)
@@ -120,6 +148,51 @@ class Inputs(Base):
         )
         df.index.name = "input"
         return df.set_index("unit", append=True)
+
+    @classmethod
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> Inputs:
+        """
+        Deserialize DataFrame back to Inputs collection.
+        Expected DataFrame structure: MultiIndex(['input', 'unit']) with value columns.
+        """
+        inputs_list = []
+
+        # Verify expected structure
+        if not isinstance(df.index, pd.MultiIndex) or df.index.names != [
+            "input",
+            "unit",
+        ]:
+            raise ValueError(
+                f"Expected MultiIndex with names ['input', 'unit'], got {df.index.names}"
+            )
+
+        # Iterate through each row in the DataFrame
+        for (input_key, unit), row in df.iterrows():
+            try:
+                # Convert row to dictionary and add the unit and key
+                row_data = row.to_dict()
+                row_data["unit"] = unit
+
+                # Create the appropriate Input object
+                input_obj = Input._from_dataframe_row(input_key, row_data)
+                inputs_list.append(input_obj)
+
+            except Exception as e:
+                # Create a minimal input with warning
+                input_obj = Input.load_safe(key=input_key, unit=unit, default=None)
+                input_obj.add_warning(f"Failed to deserialize input '{input_key}': {e}")
+                inputs_list.append(input_obj)
+
+        # Create the Inputs collection
+        collection = cls.load_safe(inputs=inputs_list)
+
+        # Merge warnings from individual inputs
+        for input_obj in inputs_list:
+            if hasattr(input_obj, "warnings") and input_obj.warnings:
+                for warning in input_obj.warnings:
+                    collection.add_warning(f"Input '{input_obj.key}': {warning}")
+
+        return collection
 
     @classmethod
     def from_json(cls, data) -> Inputs:
