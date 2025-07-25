@@ -18,6 +18,27 @@ class Input(Base):
     coupling_groups: Optional[list[str]] = []
     disabled_by: Optional[str] = None
 
+    def update(self, value):
+        """
+        Validates and updates internal user value
+        """
+        if value == "reset":
+            self.user = None
+        else:
+            self.user = value
+
+    def is_valid_update(self, value) -> list[str]:
+        """
+        Returns a list of validation warnings without updating the current object
+        """
+        if value == "reset":
+            return []
+
+        new_obj_dict = self.model_dump()
+        new_obj_dict['user'] = value
+
+        return self.__class__.model_validate(new_obj_dict).warnings
+
     @classmethod
     def from_json(cls, data: tuple[str, dict]) -> Input:
         """
@@ -50,9 +71,11 @@ class Input(Base):
 class BoolInput(Input):
     """Input representing a boolean"""
 
-    user: Optional[bool] = None
-    default: Optional[bool] = None
+    user: Optional[float] = None
+    default: Optional[float] = None
 
+    # NOTE: I need a lot of validation, and I need my own update method that
+    # will cast true/false into 1.0 and 0.0
 
 class EnumInput(Input):
     """Input representing an enumeration"""
@@ -100,6 +123,27 @@ class Inputs(Base):
 
     def keys(self):
         return [input.key for input in self.inputs]
+
+    def is_valid_update(self, key_vals) -> dict:
+        """
+        Returns a dict of input keys and errors when errors were found
+        """
+        warnings = {}
+        for input in self.inputs:
+            if input.key in key_vals:
+                input_warn = input.is_valid_update(key_vals[input.key])
+                if len(input_warn) > 0:
+                    warnings[input.key] = input_warn
+
+        return warnings
+
+    def update(self, key_vals: dict):
+        """
+        Update the values of certain inputs
+        """
+        for input in self.inputs:
+            if input.key in key_vals:
+                input.update(key_vals[input.key])
 
     def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
         """
