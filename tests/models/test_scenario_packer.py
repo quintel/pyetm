@@ -181,7 +181,6 @@ class TestInputs:
 
     def test_inputs_single_scenario(self, scenario_with_inputs):
         """Test inputs with single scenario"""
-        # Mock the inputs.to_df method (new pattern)
         mock_df = pd.DataFrame(
             {"value": [1000, 2000], "unit": ["MW", "MW"], "default": [500, 800]},
             index=["wind_capacity", "solar_capacity"],
@@ -189,7 +188,6 @@ class TestInputs:
         mock_df.index.name = "input"
         final_df = mock_df.set_index("unit", append=True)
 
-        # Mock the inputs object to have the new to_df method
         scenario_with_inputs.inputs.to_df = Mock(return_value=final_df)
 
         packer = ScenarioPacker()
@@ -198,7 +196,7 @@ class TestInputs:
         result = packer.inputs()
 
         assert not result.empty
-        assert "inputs" or "inputs" in result.index.names
+        assert "input" in result.index.names
         assert (scenario_with_inputs.id, "value") in result.columns
         assert (scenario_with_inputs.id, "default") in result.columns
 
@@ -215,7 +213,7 @@ class TestInputs:
             )
             mock_df.index.name = "inputs"
 
-            scenario.inputs.to_dataframe = Mock(
+            scenario.inputs.to_df = Mock(
                 return_value=mock_df.set_index("unit", append=True)
             )
 
@@ -324,7 +322,7 @@ class TestDataExtractionMethods:
         )
 
         sample_scenario.sortables = Mock()
-        sample_scenario.sortables.to_dataframe = Mock(return_value=mock_df)
+        sample_scenario.sortables.to_df = Mock(return_value=mock_df)
 
         packer = ScenarioPacker()
         packer.add_sortables(sample_scenario)
@@ -412,7 +410,7 @@ class TestExcelExport:
     def test_to_excel_with_data(self, scenario_with_inputs):
         """Test to_excel with actual data"""
         # Mock all the data methods
-        scenario_with_inputs.to_dataframe = Mock(
+        scenario_with_inputs.to_df = Mock(
             return_value=pd.DataFrame(
                 {"metadata": ["nl2015", 2050]}, index=["area_code", "end_year"]
             )
@@ -467,7 +465,7 @@ class TestExcelExport:
         )
 
         scenario.sortables = Mock()
-        scenario.sortables.to_dataframe = Mock(  # Still using old method
+        scenario.sortables.to_df = Mock(
             return_value=pd.DataFrame({"value": [1]}, index=["sort1"])
         )
 
