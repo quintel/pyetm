@@ -17,9 +17,6 @@ from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )
-from pyetm.services.scenario_runners.fetch_carrier_curves import (
-    FetchAllCarrierCurvesRunner,
-)
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
