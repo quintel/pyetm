@@ -171,7 +171,7 @@ class ScenarioPacker(BaseModel):
             ("GQUERIES_RESULTS", self.gquery_results),
             ("SORTABLES", self._sortables.to_df),
             ("CUSTOM_CURVES", self._custom_curves.to_df),
-            ("output_CURVES", self._output_curves.to_df),
+            ("OUTPUT_CURVES", self._output_curves.to_df),
         ]
 
         for sheet_name, data_method in sheet_configs:
