@@ -121,10 +121,10 @@ class Scenario(Base):
         """
         Update sortable order with validation.
 
-        Required kwargs:
+        Required:
             sortable: Type of sortable (forecast_storage, hydrogen_supply, etc.)
             order: List[str] - List of items in desired order
-        Optional kwargs:
+        Optional:
             subtype: Subtype for heat_network (lt, mt, ht)
             validate: bool - Whether to validate before updating (default: True)
         """
@@ -137,19 +137,12 @@ class Scenario(Base):
             raise ScenarioError("Both 'sortable' and 'order' parameters are required")
 
         if validate:
-            # Use the sortables model for validation
-            validation_result = self.sortables.validate_update(
-                sortable_type, order, subtype
-            )
-
-            # Handle validation errors
-            if not validation_result["valid"]:
+            validation = self.sortables.validate_update(sortable_type, order, subtype)
+            if not validation.valid:
                 raise ScenarioError(
-                    f"Sortables validation failed: {'; '.join(validation_result['errors'])}"
+                    f"Sortables validation failed: {'; '.join(validation.errors)}"
                 )
-
-            # Add warnings
-            for warning in validation_result["warnings"]:
+            for warning in validation.warnings:
                 self.add_warning(warning)
 
         # Perform the update
@@ -158,8 +151,9 @@ class Scenario(Base):
         if not result.success:
             raise ScenarioError(f"Could not update sortables: {result.errors}")
 
-        # Clear sortables cache so it gets refreshed on next access
+        # Clear cache
         self._sortables = None
+        return result.data
 
     def __eq__(self, other: "Scenario"):
         return self.id == other.id

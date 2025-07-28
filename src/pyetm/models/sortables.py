@@ -10,25 +10,90 @@ class SortableError(Exception):
     """Base sortable error"""
 
 
+class ValidationResult:
+    """Simple validation result container"""
+
+    def __init__(
+        self, valid: bool = True, errors: List[str] = None, warnings: List[str] = None
+    ):
+        self.valid = valid
+        self.errors = errors or []
+        self.warnings = warnings or []
+
+    def add_error(self, error: str):
+        self.errors.append(error)
+        self.valid = False
+
+    def add_warning(self, warning: str):
+        self.warnings.append(warning)
+
+    def merge(self, other: "ValidationResult"):
+        """Merge another validation result into this one"""
+        if not other.valid:
+            self.valid = False
+        self.errors.extend(other.errors)
+        self.warnings.extend(other.warnings)
+
+
 class Sortable(Base):
     """
     Represents one sortable order.
-    - If payload is a flat list, yields one Sortable.
-    - If payload is a dict (heat_network), yields one Sortable per subtype.
     """
 
     type: str
     order: list[Any]
     subtype: Optional[str] = None
 
-    def name(self):
-        """
-        Returns the display name
-        """
-        if self.subtype:
-            return f"{self.type}_{self.subtype}"
+    def name(self) -> str:
+        """Returns the display name"""
+        return f"{self.type}_{self.subtype}" if self.subtype else self.type
+
+    def matches(self, sortable_type: str, subtype: Optional[str] = None) -> bool:
+        """Check if this sortable matches the given type and subtype"""
+        if self.type != sortable_type:
+            return False
+
+        if sortable_type == "heat_network":
+            return self.subtype == subtype
         else:
-            return self.type
+            return self.subtype is None
+
+    def validate_order_update(self, new_order: List[str]) -> ValidationResult:
+        """
+        Validate a new order for this sortable.
+
+        Args:
+            new_order: The proposed new order
+
+        Returns:
+            ValidationResult with validation details
+        """
+        result = ValidationResult()
+
+        current_items = set(self.order)
+        new_items = set(new_order)
+
+        # Check for invalid items
+        invalid_items = new_items - current_items
+        if invalid_items:
+            result.add_error(
+                f"Invalid items for '{self.name()}': {list(invalid_items)}. "
+                f"Available items: {list(current_items)}"
+            )
+
+        # Check for duplicates
+        if len(new_order) != len(set(new_order)):
+            duplicates = [item for item in new_order if new_order.count(item) > 1]
+            result.add_error(f"Duplicate items found in order: {list(set(duplicates))}")
+
+        # Add warnings about changes
+        missing_items = current_items - new_items
+        if missing_items:
+            result.add_warning(
+                f"Items being removed from '{self.name()}': {list(missing_items)}"
+            )
+
+        return result
 
     @classmethod
     def from_json(
@@ -43,10 +108,8 @@ class Sortable(Base):
 
         if isinstance(payload, list):
             try:
-                sortable = cls.model_validate({"type": sort_type, "order": payload})
-                yield sortable
+                yield cls.model_validate({"type": sort_type, "order": payload})
             except Exception as e:
-                # Create basic sortable with warning
                 sortable = cls.model_validate({"type": sort_type, "order": []})
                 sortable.add_warning(f"Failed to create sortable for {sort_type}: {e}")
                 yield sortable
@@ -54,12 +117,10 @@ class Sortable(Base):
         elif isinstance(payload, dict):
             for sub, order in payload.items():
                 try:
-                    sortable = cls.model_validate(
+                    yield cls.model_validate(
                         {"type": sort_type, "subtype": sub, "order": order}
                     )
-                    yield sortable
                 except Exception as e:
-                    # Create basic sortable with warning
                     sortable = cls.model_validate(
                         {"type": sort_type, "subtype": sub, "order": []}
                     )
@@ -67,9 +128,7 @@ class Sortable(Base):
                         f"Failed to create sortable for {sort_type}.{sub}: {e}"
                     )
                     yield sortable
-
         else:
-            # Create basic sortable with warning for unexpected payload
             sortable = cls.model_validate({"type": sort_type, "order": []})
             sortable.add_warning(f"Unexpected payload for '{sort_type}': {payload!r}")
             yield sortable
@@ -77,8 +136,7 @@ class Sortable(Base):
 
 class Sortables(Base):
     """
-    A flat collection of Sortable instances,
-    regardless of whether the source JSON was nested.
+    A flat collection of Sortable instances.
     """
 
     sortables: List[Sortable]
@@ -90,22 +148,18 @@ class Sortables(Base):
         yield from self.sortables
 
     def keys(self) -> List[str]:
-        # will repeat 'heat_network' for each subtype
         return [s.type for s in self.sortables]
 
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> "Sortables":
-        """
-        :param data: the raw JSON dict from
-                     GET /api/v3/scenarios/:id/user_sortables
-        """
+        """Create Sortables from API response"""
         items: List[Sortable] = []
         for pair in data.items():
             items.extend(Sortable.from_json(pair))
 
         collection = cls.model_validate({"sortables": items})
 
-        # Merge any warnings from individual sortables
+        # Merge warnings from individual sortables
         for sortable in items:
             if hasattr(sortable, "warnings") and sortable.warnings:
                 for warning in sortable.warnings:
@@ -113,10 +167,115 @@ class Sortables(Base):
 
         return collection
 
+    def find_sortable(
+        self, sortable_type: str, subtype: Optional[str] = None
+    ) -> Optional[Sortable]:
+        """Find a sortable by type and subtype"""
+        return next(
+            (s for s in self.sortables if s.matches(sortable_type, subtype)), None
+        )
+
+    def validate_update(
+        self, sortable_type: str, order: List[str], subtype: Optional[str] = None
+    ) -> ValidationResult:
+        """
+        Validate a sortable update.
+
+        Args:
+            sortable_type: Type of sortable to update
+            order: New order to validate
+            subtype: Optional subtype for heat_network
+
+        Returns:
+            ValidationResult with validation details
+        """
+        result = ValidationResult()
+
+        # First, validate that the sortable exists and type/subtype are valid
+        sortable_validation = self._validate_sortable_exists(sortable_type, subtype)
+        if not sortable_validation.valid:
+            return sortable_validation
+
+        # Get the target sortable and validate the order
+        target_sortable = self.find_sortable(sortable_type, subtype)
+        order_validation = target_sortable.validate_order_update(order)
+
+        # Merge validations
+        result.merge(sortable_validation)
+        result.merge(order_validation)
+
+        return result
+
+    def _validate_sortable_exists(
+        self, sortable_type: str, subtype: Optional[str] = None
+    ) -> ValidationResult:
+        """Validate that a sortable type and subtype combination exists"""
+        result = ValidationResult()
+
+        available_types = self.get_available_types()
+
+        # Check if sortable type exists
+        if sortable_type not in available_types:
+            result.add_error(
+                f"Invalid sortable type '{sortable_type}'. Available types: {available_types}"
+            )
+            return result
+
+        # Special handling for heat_network
+        if sortable_type == "heat_network":
+            if not subtype:
+                result.add_error("Subtype is required for heat_network sortables")
+                return result
+
+            available_subtypes = self.get_available_subtypes(sortable_type)
+            if subtype not in available_subtypes:
+                result.add_error(
+                    f"Invalid heat_network subtype '{subtype}'. Available subtypes: {available_subtypes}"
+                )
+                return result
+        else:
+            if subtype:
+                result.add_error(
+                    f"Subtype '{subtype}' not allowed for sortable type '{sortable_type}'"
+                )
+                return result
+
+        # Check if the specific combination exists
+        if not self.find_sortable(sortable_type, subtype):
+            result.add_error(
+                f"Could not find sortable '{sortable_type}'"
+                + (f" with subtype '{subtype}'" if subtype else "")
+            )
+
+        return result
+
+    def get_available_items(
+        self, sortable_type: str, subtype: Optional[str] = None
+    ) -> List[str]:
+        """Get available items for a specific sortable type"""
+        sortable = self.find_sortable(sortable_type, subtype)
+        if not sortable:
+            raise SortableError(
+                f"Sortable '{sortable_type}'"
+                + (f" with subtype '{subtype}'" if subtype else "")
+                + " not found"
+            )
+        return sortable.order.copy()
+
+    def get_available_types(self) -> List[str]:
+        """Get all available sortable types"""
+        return list(set(s.type for s in self.sortables))
+
+    def get_available_subtypes(self, sortable_type: str) -> List[str]:
+        """Get available subtypes for a sortable type"""
+        return [
+            s.subtype
+            for s in self.sortables
+            if s.type == sortable_type and s.subtype is not None
+        ]
+
     def as_dict(self) -> Dict[str, Any]:
-        """
-        Return a dict mimicking the index endpoint.
-        """
+        """Return a dict mimicking the index endpoint"""
         result: Dict[str, Any] = {}
         for s in self.sortables:
             if s.subtype:
@@ -129,161 +288,3 @@ class Sortables(Base):
         return pd.DataFrame.from_dict(
             {s.name(): s.order for s in self.sortables}, orient="index"
         ).T
-
-    def validate_update(
-        self, sortable_type: str, order: List[str], subtype: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Validate a sortable update and return validation results.
-
-        Args:
-            sortable_type: Type of sortable to update
-            order: New order to validate
-            subtype: Optional subtype for heat_network
-
-        Returns:
-            Dict with validation results:
-            {
-                "valid": bool,
-                "errors": List[str],
-                "warnings": List[str],
-                "target_sortable": Optional[Sortable]
-            }
-        """
-        validation_result = {
-            "valid": True,
-            "errors": [],
-            "warnings": [],
-            "target_sortable": None,
-        }
-
-        # Find the target sortable
-        target_sortable = self.find_sortable(sortable_type, subtype)
-
-        if not target_sortable:
-            validation_result["valid"] = False
-
-            # Check if it's a valid sortable type at all
-            available_types = list(set(s.type for s in self.sortables))
-            if sortable_type not in available_types:
-                validation_result["errors"].append(
-                    f"Invalid sortable type '{sortable_type}'. Available types: {available_types}"
-                )
-                return validation_result
-
-            # Check if it's a heat_network subtype issue
-            if sortable_type == "heat_network":
-                if not subtype:
-                    validation_result["errors"].append(
-                        "Subtype is required for heat_network sortables"
-                    )
-                else:
-                    available_subtypes = [
-                        s.subtype for s in self.sortables if s.type == "heat_network"
-                    ]
-                    validation_result["errors"].append(
-                        f"Invalid heat_network subtype '{subtype}'. Available subtypes: {available_subtypes}"
-                    )
-            else:
-                if subtype:
-                    validation_result["errors"].append(
-                        f"Subtype '{subtype}' not allowed for sortable type '{sortable_type}'"
-                    )
-                else:
-                    validation_result["errors"].append(
-                        f"Could not find sortable '{sortable_type}'"
-                    )
-
-            return validation_result
-
-        validation_result["target_sortable"] = target_sortable
-
-        # Validate the order
-        current_items = set(target_sortable.order)
-        new_items = set(order)
-
-        # Check for invalid items
-        invalid_items = new_items - current_items
-        if invalid_items:
-            validation_result["valid"] = False
-            validation_result["errors"].append(
-                f"Invalid items for '{target_sortable.name()}': {list(invalid_items)}. "
-                f"Available items: {list(current_items)}"
-            )
-
-        # Check for duplicates
-        if len(order) != len(set(order)):
-            duplicates = [item for item in order if order.count(item) > 1]
-            validation_result["valid"] = False
-            validation_result["errors"].append(
-                f"Duplicate items found in order: {list(set(duplicates))}"
-            )
-
-        # Add warnings about changes
-        missing_items = current_items - new_items
-        if missing_items:
-            validation_result["warnings"].append(
-                f"Items being removed from '{target_sortable.name()}': {list(missing_items)}"
-            )
-
-        return validation_result
-
-    def find_sortable(
-        self, sortable_type: str, subtype: Optional[str] = None
-    ) -> Optional[Sortable]:
-        """
-        Find a specific sortable by type and optional subtype.
-
-        Args:
-            sortable_type: The sortable type to find
-            subtype: Optional subtype for heat_network
-
-        Returns:
-            The matching Sortable or None if not found
-        """
-        for sortable in self.sortables:
-            if sortable.type == sortable_type:
-                if sortable_type == "heat_network":
-                    if sortable.subtype == subtype:
-                        return sortable
-                else:
-                    if sortable.subtype is None:
-                        return sortable
-        return None
-
-    def get_available_items(
-        self, sortable_type: str, subtype: Optional[str] = None
-    ) -> List[str]:
-        """
-        Get available items for a specific sortable type.
-
-        Args:
-            sortable_type: The sortable type
-            subtype: Optional subtype for heat_network
-
-        Returns:
-            List of available items
-
-        Raises:
-            SortableError: If sortable not found
-        """
-        sortable = self.find_sortable(sortable_type, subtype)
-        if not sortable:
-            raise SortableError(
-                f"Sortable '{sortable_type}'"
-                + (f" with subtype '{subtype}'" if subtype else "")
-                + " not found"
-            )
-        return sortable.order.copy()
-
-    def get_available_types(self) -> List[str]:
-        """Get all available sortable types."""
-        return list(set(s.type for s in self.sortables))
-
-    def get_available_subtypes(self, sortable_type: str) -> List[str]:
-        """Get available subtypes for a sortable type (mainly for heat_network)."""
-        return [
-            s.subtype
-            for s in self.sortables
-            if s.type == sortable_type and s.subtype is not None
-        ]
