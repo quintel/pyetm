@@ -3,7 +3,13 @@ import pandas as pd
 import numpy as np
 import tempfile
 import os
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from pyetm.models.scenario_packer import (
+    CustomCurvesPack,
+    InputsPack,
+    OutputCurvesPack,
+    SortablePack,
+)
 from pyetm.models import ScenarioPacker, Scenario
 
 
@@ -379,15 +385,14 @@ class TestDataExtractionMethods:
 
     def test_output_curves_with_series(self, sample_scenario):
         """Test output_curves with series data"""
-        mock_series = pd.Series([10, 20, 30], name="carrier_curve")
-        sample_scenario.carrier_curves_series = Mock(return_value=[mock_series])
+        mock_series = pd.Series([10, 20, 30], name="output_curve")
         sample_scenario.all_output_curves = Mock(return_value=[mock_series])
 
         packer = ScenarioPacker()
         packer.add_output_curves(sample_scenario)
         result = packer.output_curves()
         assert not result.empty
-        assert "carrier_curve" in result.columns
+        assert "output_curve" in result.columns
 
 
 class TestExcelExport:
@@ -411,36 +416,30 @@ class TestExcelExport:
             packer.to_excel(file_path)
 
     def test_to_excel_with_data(self, scenario_with_inputs):
-        """Test to_excel with actual data"""
-        # Mock all the data methods
-        scenario_with_inputs.to_dataframe = Mock(
-            return_value=pd.DataFrame(
-                {"metadata": ["nl2015", 2050]}, index=["area_code", "end_year"]
-            )
+        dummy_main_df = pd.DataFrame(
+            {"metadata": ["nl2015", 2050]}, index=["area_code", "end_year"]
         )
-
-        inputs_df = pd.DataFrame(
-            {"value": [1000], "unit": ["MW"]}, index=["wind_capacity"]
-        )
-        inputs_df.index.name = "input"
-
-        scenario_with_inputs.inputs.to_dataframe = Mock(
-            return_value=inputs_df.set_index("unit", append=True)
-        )
-
-        scenario_with_inputs.all_output_curves = Mock(return_value=[])
+        dummy_inputs_df = pd.DataFrame({"value": [1000]}, index=["wind_capacity"])
+        dummy_empty_df = pd.DataFrame()
 
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)
 
-        # packer.gquery_results = Mock(return_value=pd.DataFrame())
+        with (
+            patch.object(ScenarioPacker, "main_info", return_value=dummy_main_df),
+            patch.object(InputsPack, "to_dataframe", return_value=dummy_inputs_df),
+            patch.object(ScenarioPacker, "gquery_results", return_value=dummy_empty_df),
+            patch.object(SortablePack, "to_dataframe", return_value=dummy_empty_df),
+            patch.object(CustomCurvesPack, "to_dataframe", return_value=dummy_empty_df),
+            patch.object(OutputCurvesPack, "to_dataframe", return_value=dummy_empty_df),
+        ):
 
-        file_path = os.path.join(self.temp_dir, "test_export.xlsx")
-        packer.to_excel(file_path)
+            file_path = os.path.join(self.temp_dir, "test_export.xlsx")
+            packer.to_excel(file_path)
 
-        # Verify file was created
-        assert os.path.exists(file_path)
-        assert os.path.getsize(file_path) > 0
+            # Verify file was created
+            assert os.path.exists(file_path)
+            assert os.path.getsize(file_path) > 0
 
     def test_to_excel_sheet_types(self):
         """Test to_excel with all types of data"""
@@ -475,7 +474,7 @@ class TestExcelExport:
         scenario.custom_curves_series = Mock(
             return_value=[pd.Series([1, 2], name="curve1")]
         )
-        scenario.carrier_curves_series = Mock(
+        scenario.all_output_curves = Mock(
             return_value=[pd.Series([3, 4], name="carrier1")]
         )
 

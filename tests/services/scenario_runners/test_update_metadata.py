@@ -1,318 +1,377 @@
+import pytest
+from unittest.mock import Mock, patch
+from pyetm.services.service_result import ServiceResult
+from pyetm.clients.base_client import BaseClient
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 
 
-def test_update_metadata_success(dummy_client, fake_response, dummy_scenario):
-    body = {"scenario": {"id": 1, "private": True}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(1)
-    metadata = {"private": True}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-    assert client.calls == [("/scenarios/1", {"json": {"scenario": metadata}})]
-
-
-def test_update_metadata_single_field(dummy_client, fake_response, dummy_scenario):
-    body = {"scenario": {"id": 2, "source": "pyetm"}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(2)
-    metadata = {"source": "pyetm"}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-    assert client.calls == [("/scenarios/2", {"json": {"scenario": metadata}})]
-
-
-def test_update_metadata_multiple_valid_fields(
+def test_update_metadata_runner_direct_fields_only(
     dummy_client, fake_response, dummy_scenario
 ):
-    body = {"scenario": {"id": 3}}
+    """Test updating only fields in META_KEYS."""
+    body = {"scenario": {"id": 123, "updated": True}}
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response, method="put")
-    scenario = dummy_scenario(3)
-    metadata = {
-        "private": False,
-        "keep_compatible": True,
-        "source": "api_update",
-    }
+    scenario = dummy_scenario(123)
+    scenario.metadata = {"existing": "value"}
 
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-    assert client.calls == [("/scenarios/3", {"json": {"scenario": metadata}})]
+    metadata = {"end_year": 2050, "private": True, "keep_compatible": False}
 
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data=body, errors=[])
+        mock_request.return_value = mock_result
 
-def test_update_metadata_auto_nests_unrecognized_fields(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test that unrecognized fields are automatically nested under 'metadata'"""
-    body = {"scenario": {"id": 4}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(4)
-    metadata = {
-        "private": True,  # Direct field
-        "title": "My Test",  # Should be nested
-        "description": "A test scenario",  # Should be nested
-        "author": "John Doe",  # Should be nested
-    }
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
 
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-
-    # Should auto-nest unrecognized fields
-    expected_payload = {
-        "scenario": {
-            "private": True,
-            "metadata": {
-                "title": "My Test",
-                "description": "A test scenario",
-                "author": "John Doe",
-            },
-        }
-    }
-    assert client.calls == [("/scenarios/4", {"json": expected_payload})]
-
-
-def test_update_metadata_filters_and_nests_fields(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test mixed direct fields and fields that should be auto-nested"""
-    body = {"scenario": {"id": 5}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(5)
-    metadata = {
-        "private": True,  # Direct field
-        "keep_compatible": True,  # Direct field
-        "end_year": 2050,  # Should be nested
-        "area_code": "nl",  # Should be nested
-        "title": "Test Scenario",  # Should be nested
-    }
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-
-    expected_payload = {
-        "scenario": {
-            "private": True,
-            "keep_compatible": True,
-            "metadata": {"end_year": 2050, "area_code": "nl", "title": "Test Scenario"},
-        }
-    }
-    assert client.calls == [("/scenarios/5", {"json": expected_payload})]
-
-
-def test_update_metadata_empty_metadata(dummy_client, fake_response, dummy_scenario):
-    body = {"scenario": {"id": 6}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(6)
-    metadata = {}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-    assert client.calls == [("/scenarios/6", {"json": {"scenario": {}}})]
-
-
-def test_update_metadata_with_nested_metadata_field(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test when user explicitly provides a metadata field"""
-    body = {"scenario": {"id": 7}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(7)
-    metadata = {
-        "metadata": {
-            "description": "Updated scenario",
-            "author": "bert",
-            "tags": ["test", "pyetm"],
-        }
-    }
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-    assert client.calls == [("/scenarios/7", {"json": {"scenario": metadata}})]
-
-
-def test_update_metadata_merges_explicit_and_auto_nested_metadata(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test merging when user provides both explicit metadata and fields that should be auto-nested"""
-    body = {"scenario": {"id": 8}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(8)
-    metadata = {
-        "private": True,
-        "metadata": {"description": "Existing metadata", "tags": ["existing"]},
-        "title": "Auto-nested title",  # Should merge into metadata
-        "author": "Auto-nested author",  # Should merge into metadata
-    }
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-
-    expected_payload = {
-        "scenario": {
-            "private": True,
-            "metadata": {
-                "description": "Existing metadata",
-                "tags": ["existing"],
-                "title": "Auto-nested title",
-                "author": "Auto-nested author",
-            },
-        }
-    }
-    assert client.calls == [("/scenarios/8", {"json": expected_payload})]
-
-
-def test_update_metadata_replaces_non_dict_metadata(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test that non-dict metadata field gets replaced when auto-nesting occurs"""
-    body = {"scenario": {"id": 9}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(9)
-    metadata = {
-        "metadata": "not a dict",  # Will be replaced
-        "title": "New title",
-        "author": "New author",
-    }
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-
-    expected_payload = {
-        "scenario": {"metadata": {"title": "New title", "author": "New author"}}
-    }
-    assert client.calls == [("/scenarios/9", {"json": expected_payload})]
-
-
-def test_update_metadata_with_kwargs(dummy_client, fake_response, dummy_scenario):
-    body = {"scenario": {"id": 10}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(10)
-    metadata = {"title": "Updated Scenario"}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata, timeout=30)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-
-    expected_payload = {"scenario": {"metadata": {"title": "Updated Scenario"}}}
-    assert client.calls == [("/scenarios/10", {"json": expected_payload})]
-
-
-def test_update_metadata_http_failure_422(dummy_client, fake_response, dummy_scenario):
-    response = fake_response(ok=False, status_code=422, text="Validation Error")
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(11)
-    metadata = {"private": "invalid_value"}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is False
-    assert result.data is None
-    assert result.errors == ["422: Validation Error"]
-
-
-def test_update_metadata_http_failure_404(dummy_client, fake_response, dummy_scenario):
-    response = fake_response(ok=False, status_code=404, text="Scenario not found")
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(999)
-    metadata = {"private": True}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is False
-    assert result.data is None
-    assert result.errors == ["404: Scenario not found"]
-
-
-def test_update_metadata_connection_error(dummy_client, dummy_scenario):
-    client = dummy_client(ConnectionError("Connection failed"), method="put")
-    scenario = dummy_scenario(12)
-    metadata = {"private": True}
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is False
-    assert result.data is None
-    assert any("Connection failed" in err for err in result.errors)
-
-
-def test_update_metadata_all_valid_direct_fields(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test updating all valid direct META_KEYS fields"""
-    body = {"scenario": {"id": 13}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(13)
-
-    metadata = {
-        "keep_compatible": True,
-        "private": False,
-        "source": "pyetm",
-        "metadata": {"test": "data", "author": "test_user"},
-    }
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-    assert client.calls == [("/scenarios/13", {"json": {"scenario": metadata}})]
-
-
-def test_update_metadata_only_nested_fields(
-    dummy_client, fake_response, dummy_scenario
-):
-    """Test updating only fields that should be auto-nested"""
-    body = {"scenario": {"id": 14}}
-    response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="put")
-    scenario = dummy_scenario(14)
-
-    metadata = {
-        "title": "Test Scenario",
-        "description": "A test",
-        "author": "John Doe",
-        "end_year": 2050,
-    }
-
-    result = UpdateMetadataRunner.run(client, scenario, metadata)
-    assert result.success is True
-    assert result.data == body
-    assert result.errors == []
-
-    expected_payload = {
-        "scenario": {
-            "metadata": {
-                "title": "Test Scenario",
-                "description": "A test",
-                "author": "John Doe",
+        expected_payload = {
+            "scenario": {
                 "end_year": 2050,
+                "private": True,
+                "keep_compatible": False,
+                "metadata": {"existing": "value"},
             }
         }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+        assert result == mock_result
+
+
+def test_update_metadata_runner_nested_metadata_only(
+    dummy_client, fake_response, dummy_scenario
+):
+    """Test updating only custom fields (nested in metadata)."""
+    body = {"scenario": {"id": 123, "updated": True}}
+    response = fake_response(ok=True, status_code=200, json_data=body)
+    client = dummy_client(response, method="put")
+    scenario = dummy_scenario(123)
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {"custom_field": "custom_value", "another_field": 42}
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data=body, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {
+                "metadata": {
+                    "existing": "value",
+                    "custom_field": "custom_value",
+                    "another_field": 42,
+                }
+            }
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_mixed_fields(
+    dummy_client, fake_response, dummy_scenario
+):
+    """Test updating both direct and nested fields."""
+    body = {"scenario": {"id": 123, "updated": True}}
+    response = fake_response(ok=True, status_code=200, json_data=body)
+    client = dummy_client(response, method="put")
+    scenario = dummy_scenario(123)
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {"end_year": 2050, "private": True, "custom_field": "custom_value"}
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data=body, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {
+                "end_year": 2050,
+                "private": True,
+                "metadata": {"existing": "value", "custom_field": "custom_value"},
+            }
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_unsettable_keys_generate_warnings():
+    """Test that unsettable keys generate warnings and are nested."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {
+        "id": 456,  # Unsettable
+        "title": "New Title",  # Unsettable
+        "end_year": 2050,  # Settable
     }
-    assert client.calls == [("/scenarios/14", {"json": expected_payload})]
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {
+                "end_year": 2050,
+                "metadata": {"existing": "value", "id": 456, "title": "New Title"},
+            }
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_direct_metadata_field_priority():
+    """Test that direct 'metadata' field has highest priority."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {
+        "custom_field": "will_be_overridden",
+        "metadata": {"custom_field": "priority_value", "new_field": "new_value"},
+    }
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {
+                "metadata": {
+                    "existing": "value",
+                    "custom_field": "priority_value",  # Direct metadata wins
+                    "new_field": "new_value",
+                }
+            }
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_scenario_without_existing_metadata():
+    """Test updating scenario that has no existing metadata."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = None  # No existing metadata
+
+    metadata = {"custom_field": "value", "end_year": 2050}
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {"end_year": 2050, "metadata": {"custom_field": "value"}}
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_scenario_with_non_dict_metadata():
+    """Test updating scenario with non-dict metadata attribute."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = "not_a_dict"  # Invalid metadata type
+
+    metadata = {"custom_field": "value"}
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {"scenario": {"metadata": {"custom_field": "value"}}}
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_scenario_without_metadata_attribute():
+    """Test updating scenario that doesn't have metadata attribute."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    # Don't set metadata attribute at all
+
+    metadata = {"custom_field": "value"}
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        # Mock hasattr to return False for metadata
+        with patch("builtins.hasattr", return_value=False):
+            result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {"scenario": {"metadata": {"custom_field": "value"}}}
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_empty_metadata():
+    """Test running with empty metadata dictionary."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {}
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        # Should still send existing metadata
+        expected_payload = {"scenario": {"metadata": {"existing": "value"}}}
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_all_meta_keys():
+    """Test updating with all possible META_KEYS."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {
+        "keep_compatible": True,
+        "private": False,
+        "source": "test_source",
+        "metadata": {"nested": "value"},
+        "end_year": 2060,
+    }
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {
+                "keep_compatible": True,
+                "private": False,
+                "source": "test_source",
+                "end_year": 2060,
+                "metadata": {"existing": "value", "nested": "value"},
+            }
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_meta_keys_constants():
+    """Test that META_KEYS and UNSETTABLE_META_KEYS are properly defined."""
+    expected_meta_keys = [
+        "keep_compatible",
+        "private",
+        "source",
+        "metadata",
+        "end_year",
+    ]
+
+    expected_unsettable_keys = [
+        "id",
+        "created_at",
+        "updated_at",
+        "area_code",
+        "title",
+        "start_year",
+        "scaling",
+        "template",
+        "url",
+    ]
+
+    assert UpdateMetadataRunner.META_KEYS == expected_meta_keys
+    assert UpdateMetadataRunner.UNSETTABLE_META_KEYS == expected_unsettable_keys
+
+
+def test_update_metadata_runner_non_dict_direct_metadata_field():
+    """Test handling when direct 'metadata' field is not a dict."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = {"existing": "value"}
+
+    metadata = {
+        "custom_field": "value",
+        "metadata": "not_a_dict",  # Invalid metadata type
+    }
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        # Should still include existing metadata and custom_field, but skip invalid direct metadata
+        expected_payload = {
+            "scenario": {"metadata": {"existing": "value", "custom_field": "value"}}
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )
+
+
+def test_update_metadata_runner_preserves_existing_metadata_when_merging():
+    """Test that existing metadata is preserved when adding new fields."""
+    client = Mock(spec=BaseClient)
+    scenario = Mock()
+    scenario.id = 123
+    scenario.metadata = {
+        "author": "original_author",
+        "description": "original_description",
+        "tags": ["original"],
+    }
+
+    metadata = {
+        "description": "updated_description",  # Should override
+        "new_field": "new_value",  # Should be added
+        "end_year": 2050,  # Direct field
+    }
+
+    with patch.object(UpdateMetadataRunner, "_make_request") as mock_request:
+        mock_result = ServiceResult(success=True, data={"updated": True}, errors=[])
+        mock_request.return_value = mock_result
+
+        result = UpdateMetadataRunner.run(client, scenario, metadata)
+
+        expected_payload = {
+            "scenario": {
+                "end_year": 2050,
+                "metadata": {
+                    "author": "original_author",  # Preserved
+                    "description": "updated_description",  # Updated
+                    "tags": ["original"],  # Preserved
+                    "new_field": "new_value",  # Added
+                },
+            }
+        }
+        mock_request.assert_called_once_with(
+            client=client, method="put", path="/scenarios/123", payload=expected_payload
+        )

@@ -1,5 +1,5 @@
-from pydantic import ValidationError
 import pytest
+from pyetm.clients.base_client import BaseClient
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.scenario import Scenario, ScenarioError
@@ -14,7 +14,7 @@ from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 
-# ------ New ------ #
+# ------ New scenario ------ #
 
 
 def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
@@ -107,13 +107,76 @@ def test_new_scenario_failure(monkeypatch, fail_service_result):
 
 
 def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
-    """Test successful metadata update"""
+    """Test successful metadata update."""
+    updated_data = {"scenario": {"id": scenario.id, "end_year": 2050, "private": True}}
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
+
+    result = scenario.update_metadata(end_year=2050, private=True, custom_field="value")
+
+    assert result == updated_data
+    assert scenario.end_year == 2050
+    assert scenario.private == True
+
+
+def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
+    """Test metadata update with warnings."""
+    updated_data = {"scenario": {"id": scenario.id, "private": True}}
+    warnings = ["Field 'id' cannot be updated directly"]
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data, warnings),
+    )
+
+    result = scenario.update_metadata(private=True, id=999)
+
+    assert result == updated_data
+    assert scenario.warnings == warnings
+
+
+def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
+    """Test metadata update failure raises ScenarioError."""
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: fail_service_result(["422: Validation Error"]),
+    )
+
+    with pytest.raises(ScenarioError, match="Could not update metadata"):
+        scenario.update_metadata(end_year="invalid")
+
+
+def test_update_metadata_empty_kwargs(monkeypatch, scenario, ok_service_result):
+    """Test metadata update with no arguments."""
+    updated_data = {"scenario": {"id": scenario.id}}
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
+
+    result = scenario.update_metadata()
+
+    assert result == updated_data
+    assert scenario.warnings == []
+
+
+def test_update_metadata_partial_scenario_update(
+    monkeypatch, scenario, ok_service_result
+):
+    """Test scenario object update with partial data."""
+    original_end_year = scenario.end_year
     updated_data = {
         "scenario": {
-            "id": scenario.id,
-            "end_year": 2060,
-            "private": True,
-            "source": "pyetm_update",
+            "metadata": {"updated_key": "updated_value"}
+            # Note: no end_year field in response
         }
     }
 
@@ -123,48 +186,17 @@ def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    metadata_updates = {"end_year": 2060, "private": True, "source": "pyetm_update"}
+    result = scenario.update_metadata(some_field="value")
 
-    result = scenario.update_metadata(metadata_updates)
-    assert result == updated_data
-    assert scenario.warnings == []
-
-
-def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
-    """Test metadata update with warnings"""
-    updated_data = {"scenario": {"id": scenario.id, "private": True}}
-    warnings = ["Ignoring non-updatable metadata field: 'id'"]
-
-    monkeypatch.setattr(
-        UpdateMetadataRunner,
-        "run",
-        lambda client, scen, metadata: ok_service_result(updated_data, warnings),
-    )
-
-    metadata_updates = {"private": True, "id": 999}  # Should generate warning
-
-    result = scenario.update_metadata(metadata_updates)
-    assert result == updated_data
-    assert scenario.warnings == warnings
+    # Only metadata should be updated, end_year should remain unchanged
+    assert scenario.metadata == {"updated_key": "updated_value"}
+    assert scenario.end_year == original_end_year
 
 
-def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
-    """Test metadata update failure"""
-    monkeypatch.setattr(
-        UpdateMetadataRunner,
-        "run",
-        lambda client, scen, metadata: fail_service_result(["422: Validation Error"]),
-    )
-
-    metadata_updates = {"end_year": "invalid"}
-
-    with pytest.raises(ScenarioError, match="Could not update metadata"):
-        scenario.update_metadata(metadata_updates)
-
-
-def test_update_metadata_empty_dict(monkeypatch, scenario, ok_service_result):
-    """Test metadata update with empty dictionary"""
-    updated_data = {"scenario": {"id": scenario.id}}
+def test_update_metadata_no_scenario_data(monkeypatch, scenario, ok_service_result):
+    """Test update when response contains no scenario data."""
+    original_metadata = getattr(scenario, "metadata", None)
+    updated_data = {"other_data": "value"}  # No scenario key
 
     monkeypatch.setattr(
         UpdateMetadataRunner,
@@ -172,9 +204,92 @@ def test_update_metadata_empty_dict(monkeypatch, scenario, ok_service_result):
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    result = scenario.update_metadata({})
+    result = scenario.update_metadata(some_field="value")
+
+    # Scenario object should remain unchanged
+    assert getattr(scenario, "metadata", None) == original_metadata
     assert result == updated_data
-    assert scenario.warnings == []
+
+
+def test_update_metadata_ignores_nonexistent_fields(
+    monkeypatch, scenario, ok_service_result
+):
+    """Test update when scenario doesn't have a field from response."""
+    original_end_year = scenario.end_year
+    updated_data = {"scenario": {"nonexistent_field": "value", "end_year": 2060}}
+
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ok_service_result(updated_data),
+    )
+
+    result = scenario.update_metadata(some_field="value")
+
+    # Only existing fields should be updated
+    assert scenario.end_year == 2060
+    assert not hasattr(scenario, "nonexistent_field")
+
+
+def test_update_metadata_runner_receives_kwargs(
+    monkeypatch, scenario, ok_service_result
+):
+    """Test that runner receives the kwargs as metadata parameter."""
+    updated_data = {"scenario": {"id": scenario.id}}
+    captured_metadata = None
+
+    def mock_run(client, scen, metadata):
+        nonlocal captured_metadata
+        captured_metadata = metadata
+        return ok_service_result(updated_data)
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
+
+    scenario.update_metadata(end_year=2050, private=True, custom_field="custom_value")
+
+    assert captured_metadata == {
+        "end_year": 2050,
+        "private": True,
+        "custom_field": "custom_value",
+    }
+
+
+def test_update_metadata_runner_receives_scenario_object(
+    monkeypatch, scenario, ok_service_result
+):
+    """Test that runner receives the scenario object."""
+    updated_data = {"scenario": {"id": scenario.id}}
+    captured_scenario = None
+
+    def mock_run(client, scen, metadata):
+        nonlocal captured_scenario
+        captured_scenario = scen
+        return ok_service_result(updated_data)
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
+
+    scenario.update_metadata(test="value")
+
+    assert captured_scenario is scenario
+
+
+def test_update_metadata_uses_base_client(monkeypatch, scenario, ok_service_result):
+    """Test that runner is called with BaseClient instance."""
+    updated_data = {"scenario": {"id": scenario.id}}
+    captured_client = None
+
+    def mock_run(client, scen, metadata):
+        nonlocal captured_client
+        captured_client = client
+        return ok_service_result(updated_data)
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
+
+    scenario.update_metadata(test="value")
+
+    from pyetm.clients.base_client import BaseClient
+
+    assert isinstance(captured_client, BaseClient)
 
 
 # ------ Load ------ #
