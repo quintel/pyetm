@@ -177,9 +177,7 @@ def enum_input_json():
     """JSON data for an enum input"""
     return {
         "transport_car_fuel_type": {
-            "min": 0,
-            "max": 3,
-            "default": 0,
+            "default": "gasoline",
             "permitted_values": ["gasoline", "diesel", "electric", "hydrogen"],
             "unit": "enum",
         }

@@ -135,6 +135,8 @@ class Inputs(Base):
                 if len(input_warn) > 0:
                     warnings[input.key] = input_warn
 
+        # TODO: check if all keys exist, add a warning and throw them
+        # out of the put
         return warnings
 
     def update(self, key_vals: dict):
