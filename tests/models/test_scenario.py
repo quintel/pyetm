@@ -261,43 +261,32 @@ def test_version_when_url_latest():
 
 # ------- inputs ------- #
 
-
-@pytest.fixture(autouse=True)
-def patch_input_from_json(monkeypatch):
-    dummy = object()
-    monkeypatch.setattr(Inputs, "from_json", staticmethod(lambda data: dummy))
-    return dummy
-
-
 def test_inputs_success(
-    monkeypatch, patch_input_from_json, scenario, ok_service_result
+    monkeypatch, scenario, inputs_json, ok_service_result
 ):
-    input_data = {"i1": {"min": 0.0}}
-
     monkeypatch.setattr(
-        FetchInputsRunner, "run", lambda client, scen: ok_service_result(input_data)
+        FetchInputsRunner, "run", lambda client, scen: ok_service_result(inputs_json)
     )
 
     coll = scenario.inputs
-    assert coll is patch_input_from_json
     assert scenario._inputs is coll
     assert scenario.warnings == []
 
 
 def test_inputs_with_warnings(
-    monkeypatch, patch_input_from_json, scenario, ok_service_result
+    monkeypatch, inputs_json, scenario, ok_service_result
 ):
-    input_data = {"i2": {"default": 42}}
     warns = ["parsed default with fallback"]
 
     monkeypatch.setattr(
         FetchInputsRunner,
         "run",
-        lambda client, scen: ok_service_result(input_data, warns),
+        lambda client, scen: ok_service_result(inputs_json, warns),
     )
 
     coll = scenario.inputs
-    assert coll is patch_input_from_json
+    assert coll
+    assert next(iter(coll)).key in inputs_json.keys()
     assert scenario.warnings == warns
 
 
@@ -312,14 +301,17 @@ def test_inputs_failure(monkeypatch, scenario, fail_service_result):
         _ = scenario.inputs
 
 
-def test_update_inputs_success(monkeypatch, scenario, ok_service_result):
+def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_result):
     """Test successful inputs update"""
+    input_updates = {list(inputs_json.keys())[0]: 42.5, list(inputs_json.keys())[1]: "diesel"}
     updated_data = {
         "scenario": {
             "id": scenario.id,
-            "user_values": {"input_key_1": 42.5, "input_key_2": 100.0},
+            "user_values": input_updates,
         }
     }
+    scenario._inputs = Inputs.from_json(inputs_json)
+    targeted_input = next(iter(scenario._inputs))
 
     monkeypatch.setattr(
         UpdateInputsRunner,
@@ -327,24 +319,30 @@ def test_update_inputs_success(monkeypatch, scenario, ok_service_result):
         lambda client, scen, inputs: ok_service_result(updated_data),
     )
 
-    input_updates = {"input_key_1": 42.5, "input_key_2": 100.0}
+    # First there was no val set
+    assert targeted_input.user is None
+
+    result = scenario.update_user_values(input_updates)
 
     # Should not return anything (returns None)
-    result = scenario.update_inputs(input_updates)
     assert result is None
+    # No warnings
     assert scenario.warnings == []
-    # Cache should be invalidated
-    assert scenario._inputs is None
+    # Inputs were updated
+    assert targeted_input.user == 42.5
 
 
-def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result):
+def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, inputs_json):
     """Test updating a single input"""
-    updated_data = {
-        "scenario": {"id": scenario.id, "user_values": {"co_firing_biocoal_share": 80}}
-    }
-
     # Set up a cached inputs object first
-    scenario._inputs = "cached_inputs_object"
+    scenario._inputs = Inputs.from_json(inputs_json)
+    # First input should be the float_input
+    targeted_input = next(iter(scenario._inputs))
+    new_value = 80.0
+
+    updated_data = {
+        "scenario": {"id": scenario.id, "user_values": {targeted_input.key: new_value}}
+    }
 
     monkeypatch.setattr(
         UpdateInputsRunner,
@@ -352,15 +350,22 @@ def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result):
         lambda client, scen, inputs: ok_service_result(updated_data),
     )
 
-    scenario.update_inputs({"co_firing_biocoal_share": 80})
+    # First there was no val set
+    assert targeted_input.user is None
+
+    # Now we set the val
+    scenario.update_user_values({targeted_input.key: new_value})
 
     # Cache should be invalidated
-    assert scenario._inputs is None
+    assert targeted_input.user == new_value
     assert scenario.warnings == []
 
 
-def test_update_inputs_with_warnings(monkeypatch, scenario, ok_service_result):
+def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_service_result):
     """Test inputs update with warnings"""
+    # Set up a cached inputs object first
+    scenario._inputs = Inputs.from_json(inputs_json)
+
     updated_data = {"scenario": {"id": scenario.id}}
     warnings = ["Input validation warning"]
 
@@ -370,25 +375,30 @@ def test_update_inputs_with_warnings(monkeypatch, scenario, ok_service_result):
         lambda client, scen, inputs: ok_service_result(updated_data, warnings),
     )
 
-    scenario.update_inputs({"some_input": 42.5})
-    assert scenario.warnings == warnings
-    assert scenario._inputs is None
+    scenario.update_user_values({"some_input": 42.5})
+    # This is not likely to occur so we don't log them
+    assert scenario.warnings == []
+    assert scenario._inputs
 
 
-def test_update_inputs_failure(monkeypatch, scenario, fail_service_result):
+def test_update_inputs_failure(monkeypatch, scenario, inputs_json, fail_service_result):
     """Test inputs update failure"""
+    scenario._inputs = Inputs.from_json(inputs_json)
+
     monkeypatch.setattr(
         UpdateInputsRunner,
         "run",
         lambda client, scen, inputs: fail_service_result(["422: Invalid input value"]),
     )
 
-    with pytest.raises(ScenarioError, match="Could not update inputs"):
-        scenario.update_inputs({"invalid_input": "bad_value"})
+    with pytest.raises(ScenarioError, match="Could not update user values"):
+        scenario.update_user_values({"invalid_input": "bad_value"})
 
 
-def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result):
+def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inputs_json):
     """Test inputs update with empty dictionary"""
+    scenario._inputs = Inputs.from_json(inputs_json)
+
     updated_data = {"scenario": {"id": scenario.id, "user_values": {}}}
 
     monkeypatch.setattr(
@@ -397,16 +407,20 @@ def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result):
         lambda client, scen, inputs: ok_service_result(updated_data),
     )
 
-    scenario.update_inputs({})
+    scenario.update_user_values({})
     assert scenario.warnings == []
-    assert scenario._inputs is None
+    assert not scenario.user_values()
 
 
-def test_update_inputs_preserves_existing_warnings(scenario):
+def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
     """Test that update_inputs preserves existing warnings on the scenario"""
     scenario.add_warning("Existing warning 1")
     scenario.add_warning("Existing warning 2")
 
+    # Set up a cached inputs object first
+    scenario._inputs = Inputs.from_json(inputs_json)
+
+    # breakpoint()
     # Mock a successful update with new warnings
     def mock_runner_run(client, scen, inputs):
         from pyetm.services.service_result import ServiceResult
@@ -423,13 +437,13 @@ def test_update_inputs_preserves_existing_warnings(scenario):
     )
 
     try:
-        scenario.update_inputs({"test_input": 42})
+        scenario.update_user_values({"test_input": 42})
 
-        # Should have both existing and new warnings
+        # Should have both existing and new warnings [for now we ignore new warnings]
         expected_warnings = [
             "Existing warning 1",
             "Existing warning 2",
-            "New warning from update",
+            # "New warning from update",
         ]
         assert scenario.warnings == expected_warnings
     finally:

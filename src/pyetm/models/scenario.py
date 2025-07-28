@@ -179,22 +179,22 @@ class Scenario(Base):
             dataframe['user'].droplevel('unit').fillna("reset").to_dict()
         )
 
-    def update_user_values(self, inputs: Dict[str, Any]) -> None:
+    def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
         """
         Args:
             inputs: Dictionary of input key-value pairs to update
         """
         # Update them in the Inputs object, and check validation
-        validity_errors = self.inputs.is_valid_update(inputs)
+        validity_errors = self.inputs.is_valid_update(update_inputs)
         if validity_errors:
             raise ScenarioError(f"Could not update user values: {validity_errors}")
 
-        result = UpdateInputsRunner.run(BaseClient(), self, inputs)
+        result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
 
         if not result.success:
             raise ScenarioError(f"Could not update user values: {result.errors}")
 
-        self.inputs.update(inputs)
+        self.inputs.update(update_inputs)
 
 
     def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
