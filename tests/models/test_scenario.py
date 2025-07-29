@@ -535,7 +535,6 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
 
-    # breakpoint()
     # Mock a successful update with new warnings
     def mock_runner_run(client, scen, inputs):
         from pyetm.services.service_result import ServiceResult
