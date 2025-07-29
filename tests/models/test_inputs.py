@@ -26,3 +26,22 @@ def test_to_df(inputs_json):
     df_with_non_existing = input_collection.to_df(columns="foo")
 
     assert df_with_non_existing["foo"].isnull().all()
+
+def test_valid_update(inputs_json):
+    input_collection = Inputs.from_json(inputs_json)
+
+    # A good update
+    warnings = input_collection.is_valid_update({"investment_costs_co2_ccs": 50.0})
+    assert len(warnings) == 0
+
+    # An update that will trigger validation
+    warnings = input_collection.is_valid_update({"investment_costs_co2_ccs": "hello"})
+    assert len(warnings) > 0
+    assert "investment_costs_co2_ccs" in warnings
+    assert warnings["investment_costs_co2_ccs"] == ["user: Input should be a valid number, unable to parse string as a number"]
+
+    # An update of a non existent key
+    warnings = input_collection.is_valid_update({"hello": "hello"})
+    assert len(warnings) > 0
+    assert "hello" in warnings
+    assert warnings["hello"] == "Key does not exist"

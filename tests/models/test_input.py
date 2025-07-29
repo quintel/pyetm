@@ -1,6 +1,6 @@
 import pytest
 from pyetm.models import Input
-from pyetm.models.inputs import BoolInput, EnumInput
+from pyetm.models.inputs import BoolInput, EnumInput, FloatInput
 
 
 @pytest.mark.parametrize(
@@ -64,6 +64,32 @@ def test_enum_input():
     # Try to update to 0.5
     input.user = 0.5
     assert input.user == 'gasoline'
+
+    # Reset the input
+    input.user = "reset"
+    assert input.user is None
+
+def test_float_input():
+    input = FloatInput(
+        key='my_float',
+        unit='euro',
+        min=0.0,
+        max=20.0
+    )
+
+    # Setting the input
+    input.user = 2.0
+    assert input.user == 2.0
+
+    # TODO: @Louis ValidationError is not caught in .warnings?? why?
+    # Is it valid to update to -1.0?
+    validity = input.is_valid_update(-1.0)
+    assert len(validity) > 0
+    assert "user: Value error, -1.0 should be between 0.0 and 20.0" in validity
+
+    # Try to update to 30
+    input.user = 30.0
+    assert input.user == 2.0
 
     # Reset the input
     input.user = "reset"
