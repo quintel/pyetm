@@ -23,9 +23,6 @@ class Input(Base):
         """
         Returns a list of validation warnings without updating the current object
         """
-        if value == "reset":
-            return []
-
         new_obj_dict = self.model_dump()
         new_obj_dict['user'] = value
 
@@ -128,6 +125,15 @@ class FloatInput(Input):
                 base_fields.append(field)
         return base_fields
 
+    @model_validator(mode='after')
+    def check_min_max(self) -> FloatInput:
+        if not isinstance(self.user, float):
+            # We let pydantic handle the field validation
+            return self
+        if self.user is None or (self.user < self.max and self.user > self.min):
+             return self
+        raise ValueError(f'{self.user} should be between {self.min} and {self.max}')
+
 
 class Inputs(Base):
     inputs: list[Input]
@@ -141,7 +147,7 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def is_valid_update(self, key_vals) -> dict:
+    def is_valid_update(self, key_vals: dict) -> dict:
         """
         Returns a dict of input keys and errors when errors were found
         """
@@ -152,8 +158,10 @@ class Inputs(Base):
                 if len(input_warn) > 0:
                     warnings[input.key] = input_warn
 
-        # TODO: check if all keys exist, add a warning and throw them
-        # out of the put
+        non_existent_keys = set(key_vals.keys()) - set(self.keys())
+        for key in non_existent_keys:
+            warnings[key] = 'Key does not exist'
+
         return warnings
 
     def update(self, key_vals: dict):
