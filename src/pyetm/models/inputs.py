@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Union
+from pydantic import field_validator, model_validator, ValidationInfo
 import pandas as pd
 from pyetm.models.base import Base
 
@@ -11,21 +12,12 @@ class InputError(Exception):
 class Input(Base):
     key: str
     unit: str
-    default: Optional[Union[float, str, bool]] = None
-    user: Optional[Union[float, str, bool]] = None
+    default: Optional[Union[float, str]] = None
+    user: Optional[Union[float, str]] = None
     disabled: Optional[bool] = False
     coupling_disabled: Optional[bool] = False
     coupling_groups: Optional[list[str]] = []
     disabled_by: Optional[str] = None
-
-    def update(self, value):
-        """
-        Validates and updates internal user value
-        """
-        if value == "reset":
-            self.user = None
-        else:
-            self.user = value
 
     def is_valid_update(self, value) -> list[str]:
         """
@@ -67,22 +59,41 @@ class Input(Base):
         else:
             return FloatInput
 
+    @field_validator('user', mode='before')
+    @classmethod
+    def check_reset(cls, value):
+        """If a reset value is sent, treat it as setting the user value to None"""
+        if isinstance(value, str) and value == "reset":
+            return None
+        else:
+            return value
+
 
 class BoolInput(Input):
-    """Input representing a boolean"""
+    """
+    Input representing a boolean.
+    Uses floats to represent bools (1.0 true, 0.0 false)
+    """
 
     user: Optional[float] = None
     default: Optional[float] = None
 
-    # NOTE: I need a lot of validation, and I need my own update method that
-    # will cast true/false into 1.0 and 0.0
+    @field_validator('user', mode='after')
+    @classmethod
+    def is_bool_float(cls, value: float) -> float:
+        if value == 1.0 or value == 0.0 or value is None:
+            return value
+        raise ValueError(
+            f'{value} should be 1.0 or 0.0 representing True/False, or On/Off'
+        )
+
 
 class EnumInput(Input):
     """Input representing an enumeration"""
 
-    user: Optional[str] = None
     permitted_values: list[str]
     default: Optional[str] = None
+    user: Optional[str] = None
 
     def _get_serializable_fields(self) -> list[str]:
         """Include permitted_values in serialization for EnumInput"""
@@ -91,6 +102,12 @@ class EnumInput(Input):
         if "permitted_values" not in base_fields:
             base_fields.append("permitted_values")
         return base_fields
+
+    @model_validator(mode='after')
+    def check_permitted(self) -> EnumInput:
+        if self.user is None or self.user in self.permitted_values:
+             return self
+        raise ValueError(f'{self.user} should be in {self.permitted_values}')
 
 
 class FloatInput(Input):
@@ -145,7 +162,7 @@ class Inputs(Base):
         """
         for input in self.inputs:
             if input.key in key_vals:
-                input.update(key_vals[input.key])
+                input.user = key_vals[input.key]
 
     def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
         """
