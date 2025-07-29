@@ -490,7 +490,7 @@ def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_serv
         lambda client, scen, inputs: ok_service_result(updated_data, warnings),
     )
 
-    scenario.update_user_values({"some_input": 42.5})
+    scenario.update_user_values({"investment_costs_co2_ccs": 42.5})
     # This is not likely to occur so we don't log them
     assert scenario.warnings == []
     assert scenario._inputs
@@ -551,7 +551,7 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
     )
 
     try:
-        scenario.update_user_values({"test_input": 42})
+        scenario.update_user_values({"investment_costs_co2_ccs": 42})
 
         # Should have both existing and new warnings [for now we ignore new warnings]
         expected_warnings = [
