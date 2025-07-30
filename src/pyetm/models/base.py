@@ -67,10 +67,23 @@ class Base(BaseModel):
 
     def add_warning(self, key: str, message: str) -> None:
         """Append a warning message to this model."""
+        # TODO: this is horrible. we need a struct for it!!
         if key in self._warnings:
-            self._warnings[key].append(message)
+            if isinstance(self._warnings[key], dict):
+                if isinstance(message, dict):
+                    self._warnings[key].update(message)
+                else:
+                    self._warnings[key].update({'base', message})
+            elif isinstance(message, list):
+                self._warnings[key].extend(message)
+            else:
+                self._warnings[key].append(message)
         else:
-            self._warnings[key] = [message]
+            # TODO: this is horrible. we need a struct for it
+            if isinstance(message, list) or isinstance(message, dict):
+                self._warnings[key] = message
+            else:
+                self._warnings[key] = [message]
 
     @property
     def warnings(self) -> dict[str, list[str]]:
@@ -83,6 +96,7 @@ class Base(BaseModel):
             print("No warnings.")
             return
         print("Warnings:")
+        # TODO: use prettyprint
         for i, w in enumerate(self._warnings, start=1):
             print(f" {i}. {w}")
 
@@ -92,7 +106,7 @@ class Base(BaseModel):
         """
         self._warnings.pop(key, None)
 
-    def _merge_submodel_warnings(self, submodel: Any) -> None:
+    def _merge_submodel_warnings(self, *submodels: Base, key_attr=None) -> None:
         """
         Bring warnings from a nested Base (or list thereof)
         into this model's warnings list.
@@ -100,15 +114,16 @@ class Base(BaseModel):
         from typing import Iterable
 
         def _collect(wm: Base):
-            for w in wm.warnings:
-                self.add_warning(wm.__class__.__name__, w)
+            if not wm.warnings: return
 
-        if isinstance(submodel, Base):
-            _collect(submodel)
-        elif isinstance(submodel, Iterable):
-            for item in submodel:
-                if isinstance(item, Base):
-                    _collect(item)
+            key = wm.__class__.__name__
+            if not key_attr is None:
+                key += f'({key_attr}={getattr(wm, key_attr)})'
+            self.add_warning(key, wm.warnings)
+
+        for item in submodels:
+            if isinstance(item, Base):
+                _collect(item)
 
     @classmethod
     def load_safe(cls: Type[T], **data: Any) -> T:

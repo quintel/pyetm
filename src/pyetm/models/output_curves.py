@@ -225,26 +225,25 @@ class OutputCurves(Base):
         Initialize OutputCurves collection from JSON data
         """
         curves = []
-        collection_warnings = []
+        collection_warnings = {}
 
         for curve_data in data:
             try:
+                key = curve_data['key']
                 curve = OutputCurve.from_json(curve_data)
                 curves.append(curve)
             except Exception as e:
                 # Log the problematic curve but continue processing
-                collection_warnings.append(f"Skipped invalid curve data: {e}")
+                collection_warnings[f"OutputCurve(key={key})"] = f"Skipped invalid curve data: {e}"
 
         collection = cls.model_validate({"curves": curves})
 
         # Add any collection-level warnings
-        # TODO: do we still need this?
-        # for warning in collection_warnings:
-        #     collection.add_warning(warning)
+        for loc, msg in collection_warnings.items():
+            collection.add_warning(loc, msg)
 
         # Merge warnings from individual curves
-        for curve in curves:
-            collection._merge_submodel_warnings(curve)
+        collection._merge_submodel_warnings(*curves, key_attr='key')
 
         return collection
 
@@ -292,8 +291,7 @@ class OutputCurves(Base):
         for error in service_result.errors:
             curves_collection.add_warning('base', f"Download warning: {error}")
 
-        for curve in curves_list:
-            curves_collection._merge_submodel_warnings(curve)
+        curves_collection._merge_submodel_warnings(curves_list, key_attr='key')
 
         return curves_collection
 

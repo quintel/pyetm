@@ -209,12 +209,6 @@ class Inputs(Base):
         inputs = [Input.from_json(item) for item in data.items()]
 
         collection = cls.model_validate({"inputs": inputs})
-
-        # Merge any warnings from individual inputs
-        # Isn't this already done in Base?
-        # for input_obj in inputs:
-        #     if input_obj.warnings:
-        #         for warning in input_obj.warnings.items():
-        #             collection.add_warning(warning)
+        collection._merge_submodel_warnings(*inputs, key_attr='key')
 
         return collection

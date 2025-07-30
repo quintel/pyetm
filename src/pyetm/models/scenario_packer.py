@@ -8,7 +8,7 @@ from pyetm.models import Scenario
 from pyetm.utils.excel import add_frame
 
 
-class Packable(Base):
+class Packable(BaseModel):
     scenarios: Optional[set["Scenario"]] = set()
     key: ClassVar[str] = "base_pack"
 
@@ -144,19 +144,19 @@ class ScenarioPacker(BaseModel):
         return pd.concat([scenario.to_df() for scenario in self._scenarios()], axis=1)
 
     def inputs(self, columns="user") -> pd.DataFrame:
-        return self._inputs.to_df(columns=columns)
+        return self._inputs.to_dataframe(columns=columns)
 
     def gquery_results(self, columns="future") -> pd.DataFrame:
-        return QueryPack(scenarios=self._scenarios()).to_df(columns=columns)
+        return QueryPack(scenarios=self._scenarios()).to_dataframe(columns=columns)
 
     def sortables(self) -> pd.DataFrame:
-        return self._sortables.to_df()
+        return self._sortables.to_dataframe()
 
     def custom_curves(self) -> pd.DataFrame:
-        return self._custom_curves.to_df()
+        return self._custom_curves.to_dataframe()
 
     def output_curves(self) -> pd.DataFrame:
-        return self._output_curves.to_df()
+        return self._output_curves.to_dataframe()
 
     def to_excel(self, path: str):
         """Export to Excel with simplified approach"""
@@ -167,11 +167,11 @@ class ScenarioPacker(BaseModel):
 
         sheet_configs = [
             ("MAIN", self.main_info),
-            ("PARAMETERS", self._inputs.to_df),
+            ("PARAMETERS", self.inputs),
             ("GQUERIES_RESULTS", self.gquery_results),
-            ("SORTABLES", self._sortables.to_df),
-            ("CUSTOM_CURVES", self._custom_curves.to_df),
-            ("OUTPUT_CURVES", self._output_curves.to_df),
+            ("SORTABLES", self.sortables),
+            ("CUSTOM_CURVES", self.custom_curves),
+            ("OUTPUT_CURVES", self.output_curves),
         ]
 
         for sheet_name, data_method in sheet_configs:

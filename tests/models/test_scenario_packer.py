@@ -421,7 +421,7 @@ class TestExcelExport:
         )
         inputs_df.index.name = "input"
 
-        scenario_with_inputs.inputs.to_dataframe = Mock(
+        scenario_with_inputs.inputs.to_df = Mock(
             return_value=inputs_df.set_index("unit", append=True)
         )
 

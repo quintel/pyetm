@@ -171,24 +171,24 @@ class CustomCurves(Base):
         Initialize CustomCurves collection from JSON data
         """
         curves = []
-        collection_warnings = []
+        collection_warnings = {}
 
         for curve_data in data:
             try:
+                key = curve_data['key']
                 curve = CustomCurve.from_json(curve_data)
                 curves.append(curve)
             except Exception as e:
                 # Log the problematic curve but continue processing
-                collection_warnings.append(f"Skipped invalid curve data: {e}")
+                collection_warnings[f"CustomCurve(key={key})"] = f"Skipped invalid curve data: {e}"
 
         collection = cls.model_validate({"curves": curves})
 
         # Add any collection-level warnings
-        for warning, msg in collection_warnings.item():
-            collection.add_warning(warning, msg)
+        for loc, msg in collection_warnings.items():
+            collection.add_warning(loc, msg)
 
         # Merge warnings from individual curves
-        for curve in curves:
-            collection._merge_submodel_warnings(curve)
+        collection._merge_submodel_warnings(*curves, key_attr='key')
 
         return collection
