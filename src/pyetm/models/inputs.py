@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from pydantic import field_validator, model_validator, ValidationInfo
 import pandas as pd
 from pyetm.models.base import Base
@@ -24,9 +24,10 @@ class Input(Base):
         Returns a list of validation warnings without updating the current object
         """
         new_obj_dict = self.model_dump()
-        new_obj_dict['user'] = value
+        new_obj_dict["user"] = value
 
-        return self.__class__.model_validate(new_obj_dict).warnings
+        warnings_obj = self.__class__(**new_obj_dict)
+        return warnings_obj.warnings
 
     @classmethod
     def from_json(cls, data: tuple[str, dict]) -> Input:
@@ -56,7 +57,7 @@ class Input(Base):
         else:
             return FloatInput
 
-    @field_validator('user', mode='before')
+    @field_validator("user", mode="before")
     @classmethod
     def check_reset(cls, value):
         """If a reset value is sent, treat it as setting the user value to None"""
@@ -75,13 +76,13 @@ class BoolInput(Input):
     user: Optional[float] = None
     default: Optional[float] = None
 
-    @field_validator('user', mode='after')
+    @field_validator("user", mode="after")
     @classmethod
     def is_bool_float(cls, value: float) -> float:
         if value == 1.0 or value == 0.0 or value is None:
             return value
         raise ValueError(
-            f'{value} should be 1.0 or 0.0 representing True/False, or On/Off'
+            f"{value} should be 1.0 or 0.0 representing True/False, or On/Off"
         )
 
 
@@ -100,11 +101,11 @@ class EnumInput(Input):
             base_fields.append("permitted_values")
         return base_fields
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def check_permitted(self) -> EnumInput:
         if self.user is None or self.user in self.permitted_values:
-             return self
-        raise ValueError(f'{self.user} should be in {self.permitted_values}')
+            return self
+        raise ValueError(f"{self.user} should be in {self.permitted_values}")
 
 
 class FloatInput(Input):
@@ -125,14 +126,14 @@ class FloatInput(Input):
                 base_fields.append(field)
         return base_fields
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def check_min_max(self) -> FloatInput:
         if not isinstance(self.user, float):
             # We let pydantic handle the field validation
             return self
         if self.user is None or (self.user < self.max and self.user > self.min):
-             return self
-        raise ValueError(f'{self.user} should be between {self.min} and {self.max}')
+            return self
+        raise ValueError(f"{self.user} should be between {self.min} and {self.max}")
 
 
 class Inputs(Base):
@@ -160,7 +161,7 @@ class Inputs(Base):
 
         non_existent_keys = set(key_vals.keys()) - set(self.keys())
         for key in non_existent_keys:
-            warnings[key] = 'Key does not exist'
+            warnings[key] = "Key does not exist"
 
         return warnings
 
