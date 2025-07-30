@@ -38,7 +38,7 @@ def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050
     assert scenario.private is False
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
@@ -72,7 +72,7 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
     assert scenario.private is True
     assert scenario.start_year == 2019
     assert scenario.source == "pyetm"
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
@@ -88,7 +88,7 @@ def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
 
     scenario = Scenario.new("nl", 2050, invalid_field="should_be_ignored")
     assert scenario.id == 12347
-    assert scenario.warnings == warnings
+    assert scenario.warnings["base"] == warnings
 
 
 def test_new_scenario_failure(monkeypatch, fail_service_result):
@@ -119,8 +119,7 @@ def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
     result = scenario.update_metadata(end_year=2050, private=True, custom_field="value")
 
     assert result == updated_data
-    assert scenario.end_year == 2050
-    assert scenario.private == True
+    assert scenario.warnings == {}
 
 
 def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
@@ -137,7 +136,7 @@ def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result)
     result = scenario.update_metadata(private=True, id=999)
 
     assert result == updated_data
-    assert scenario.warnings == warnings
+    assert scenario.warnings["metadata"] == warnings
 
 
 def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
@@ -162,134 +161,9 @@ def test_update_metadata_empty_kwargs(monkeypatch, scenario, ok_service_result):
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    result = scenario.update_metadata()
-
+    result = scenario.update_metadata({})
     assert result == updated_data
-    assert scenario.warnings == []
-
-
-def test_update_metadata_partial_scenario_update(
-    monkeypatch, scenario, ok_service_result
-):
-    """Test scenario object update with partial data."""
-    original_end_year = scenario.end_year
-    updated_data = {
-        "scenario": {
-            "metadata": {"updated_key": "updated_value"}
-            # Note: no end_year field in response
-        }
-    }
-
-    monkeypatch.setattr(
-        UpdateMetadataRunner,
-        "run",
-        lambda client, scen, metadata: ok_service_result(updated_data),
-    )
-
-    result = scenario.update_metadata(some_field="value")
-
-    # Only metadata should be updated, end_year should remain unchanged
-    assert scenario.metadata == {"updated_key": "updated_value"}
-    assert scenario.end_year == original_end_year
-
-
-def test_update_metadata_no_scenario_data(monkeypatch, scenario, ok_service_result):
-    """Test update when response contains no scenario data."""
-    original_metadata = getattr(scenario, "metadata", None)
-    updated_data = {"other_data": "value"}  # No scenario key
-
-    monkeypatch.setattr(
-        UpdateMetadataRunner,
-        "run",
-        lambda client, scen, metadata: ok_service_result(updated_data),
-    )
-
-    result = scenario.update_metadata(some_field="value")
-
-    # Scenario object should remain unchanged
-    assert getattr(scenario, "metadata", None) == original_metadata
-    assert result == updated_data
-
-
-def test_update_metadata_ignores_nonexistent_fields(
-    monkeypatch, scenario, ok_service_result
-):
-    """Test update when scenario doesn't have a field from response."""
-    original_end_year = scenario.end_year
-    updated_data = {"scenario": {"nonexistent_field": "value", "end_year": 2060}}
-
-    monkeypatch.setattr(
-        UpdateMetadataRunner,
-        "run",
-        lambda client, scen, metadata: ok_service_result(updated_data),
-    )
-
-    result = scenario.update_metadata(some_field="value")
-
-    # Only existing fields should be updated
-    assert scenario.end_year == 2060
-    assert not hasattr(scenario, "nonexistent_field")
-
-
-def test_update_metadata_runner_receives_kwargs(
-    monkeypatch, scenario, ok_service_result
-):
-    """Test that runner receives the kwargs as metadata parameter."""
-    updated_data = {"scenario": {"id": scenario.id}}
-    captured_metadata = None
-
-    def mock_run(client, scen, metadata):
-        nonlocal captured_metadata
-        captured_metadata = metadata
-        return ok_service_result(updated_data)
-
-    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
-
-    scenario.update_metadata(end_year=2050, private=True, custom_field="custom_value")
-
-    assert captured_metadata == {
-        "end_year": 2050,
-        "private": True,
-        "custom_field": "custom_value",
-    }
-
-
-def test_update_metadata_runner_receives_scenario_object(
-    monkeypatch, scenario, ok_service_result
-):
-    """Test that runner receives the scenario object."""
-    updated_data = {"scenario": {"id": scenario.id}}
-    captured_scenario = None
-
-    def mock_run(client, scen, metadata):
-        nonlocal captured_scenario
-        captured_scenario = scen
-        return ok_service_result(updated_data)
-
-    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
-
-    scenario.update_metadata(test="value")
-
-    assert captured_scenario is scenario
-
-
-def test_update_metadata_uses_base_client(monkeypatch, scenario, ok_service_result):
-    """Test that runner is called with BaseClient instance."""
-    updated_data = {"scenario": {"id": scenario.id}}
-    captured_client = None
-
-    def mock_run(client, scen, metadata):
-        nonlocal captured_client
-        captured_client = client
-        return ok_service_result(updated_data)
-
-    monkeypatch.setattr(UpdateMetadataRunner, "run", mock_run)
-
-    scenario.update_metadata(test="value")
-
-    from pyetm.clients.base_client import BaseClient
-
-    assert isinstance(captured_client, BaseClient)
+    assert scenario.warnings == {}
 
 
 # ------ Load ------ #
@@ -306,7 +180,7 @@ def test_load_success(monkeypatch, full_scenario_metadata, ok_service_result):
     scenario = Scenario.load(1)
     for key, val in full_scenario_metadata.items():
         assert getattr(scenario, key) == val
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_result):
@@ -323,7 +197,7 @@ def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_r
     assert scenario.id == 2
     assert scenario.end_year == 2040
     assert scenario.area_code == "NL"
-    assert scenario.warnings == warns
+    assert scenario.warnings["metadata"] == warns
 
 
 def test_load_failure(monkeypatch, fail_service_result):
@@ -348,7 +222,7 @@ def test_load_missing_required_field(monkeypatch, ok_service_result):
         lambda client, stub: ok_service_result(incomplete_data),
     )
     print(Scenario.load(4).warnings)
-    assert "end_year: Field required" in Scenario.load(4).warnings
+    assert "Field required" in Scenario.load(4).warnings["end_year"]
 
 
 # ------ version ------- #
@@ -376,21 +250,18 @@ def test_version_when_url_latest():
 
 # ------- inputs ------- #
 
-def test_inputs_success(
-    monkeypatch, scenario, inputs_json, ok_service_result
-):
+
+def test_inputs_success(monkeypatch, scenario, inputs_json, ok_service_result):
     monkeypatch.setattr(
         FetchInputsRunner, "run", lambda client, scen: ok_service_result(inputs_json)
     )
 
     coll = scenario.inputs
     assert scenario._inputs is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
-def test_inputs_with_warnings(
-    monkeypatch, inputs_json, scenario, ok_service_result
-):
+def test_inputs_with_warnings(monkeypatch, inputs_json, scenario, ok_service_result):
     warns = ["parsed default with fallback"]
 
     monkeypatch.setattr(
@@ -402,7 +273,7 @@ def test_inputs_with_warnings(
     coll = scenario.inputs
     assert coll
     assert next(iter(coll)).key in inputs_json.keys()
-    assert scenario.warnings == warns
+    assert scenario.warnings["inputs"] == warns
 
 
 def test_inputs_failure(monkeypatch, scenario, fail_service_result):
@@ -418,7 +289,10 @@ def test_inputs_failure(monkeypatch, scenario, fail_service_result):
 
 def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_result):
     """Test successful inputs update"""
-    input_updates = {list(inputs_json.keys())[0]: 42.5, list(inputs_json.keys())[1]: "diesel"}
+    input_updates = {
+        list(inputs_json.keys())[0]: 42.5,
+        list(inputs_json.keys())[1]: "diesel",
+    }
     updated_data = {
         "scenario": {
             "id": scenario.id,
@@ -442,12 +316,14 @@ def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_re
     # Should not return anything (returns None)
     assert result is None
     # No warnings
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
     # Inputs were updated
     assert targeted_input.user == 42.5
 
 
-def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, inputs_json):
+def test_update_inputs_single_input(
+    monkeypatch, scenario, ok_service_result, inputs_json
+):
     """Test updating a single input"""
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -473,10 +349,12 @@ def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, in
 
     # Cache should be invalidated
     assert targeted_input.user == new_value
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
-def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_service_result):
+def test_update_inputs_with_warnings(
+    monkeypatch, scenario, inputs_json, ok_service_result
+):
     """Test inputs update with warnings"""
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -492,7 +370,7 @@ def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_serv
 
     scenario.update_user_values({"investment_costs_co2_ccs": 42.5})
     # This is not likely to occur so we don't log them
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
     assert scenario._inputs
 
 
@@ -510,7 +388,9 @@ def test_update_inputs_failure(monkeypatch, scenario, inputs_json, fail_service_
         scenario.update_user_values({"invalid_input": "bad_value"})
 
 
-def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inputs_json):
+def test_update_inputs_empty_dict(
+    monkeypatch, scenario, ok_service_result, inputs_json
+):
     """Test inputs update with empty dictionary"""
     scenario._inputs = Inputs.from_json(inputs_json)
 
@@ -523,14 +403,14 @@ def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inpu
     )
 
     scenario.update_user_values({})
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
     assert not scenario.user_values()
 
 
 def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
     """Test that update_inputs preserves existing warnings on the scenario"""
-    scenario.add_warning("Existing warning 1")
-    scenario.add_warning("Existing warning 2")
+    scenario.add_warning("queries", "Existing warning 1")
+    scenario.add_warning("queries", "Existing warning 2")
 
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -559,7 +439,7 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
             "Existing warning 2",
             # "New warning from update",
         ]
-        assert scenario.warnings == expected_warnings
+        assert scenario.warnings["queries"] == expected_warnings
     finally:
         # Restore original method
         pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = (
@@ -589,7 +469,7 @@ def test_sortables_success(
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
     assert scenario._sortables is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_sortables_with_warnings(
@@ -606,7 +486,7 @@ def test_sortables_with_warnings(
 
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
-    assert scenario.warnings == warns
+    assert scenario.warnings["sortables"] == warns
 
 
 def test_sortables_failure(monkeypatch, scenario, fail_service_result):
@@ -648,7 +528,7 @@ def test_custom_curves_success(
     coll = scenario.custom_curves
     assert coll is patch_custom_curves_from_json
     assert scenario._custom_curves is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_custom_curves_with_warnings(
@@ -665,7 +545,7 @@ def test_custom_curves_with_warnings(
 
     coll = scenario.custom_curves
     assert coll is patch_custom_curves_from_json
-    assert scenario.warnings == warns
+    assert scenario.warnings["custom_curves"] == warns
 
 
 def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):

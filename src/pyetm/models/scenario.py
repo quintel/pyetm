@@ -71,7 +71,7 @@ class Scenario(Base):
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for warning in result.errors:
-            scenario.add_warning(warning)
+            scenario.add_warning('base', warning)
 
         return scenario
 
@@ -91,7 +91,7 @@ class Scenario(Base):
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for w in result.errors:
-            scenario.add_warning(w)
+            scenario.add_warning('metadata', w)
         return scenario
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
@@ -105,7 +105,7 @@ class Scenario(Base):
 
         # Add any warnings from the update
         for w in result.errors:
-            self.add_warning(w)
+            self.add_warning('metadata', w)
 
         # Update the current scenario object with the server response
         if result.data and "scenario" in result.data:
@@ -163,7 +163,7 @@ class Scenario(Base):
         coll = Inputs.from_json(result.data)
         # merge runner warnings and any item‐level warnings
         for w in result.errors:
-            self.add_warning(w)
+            self.add_warning('inputs', w)
         self._merge_submodel_warnings(coll)
 
         self._inputs = coll
@@ -224,7 +224,7 @@ class Scenario(Base):
 
         coll = Sortables.from_json(result.data)
         for w in result.errors:
-            self.add_warning(w)
+            self.add_warning('sortables', w)
         self._merge_submodel_warnings(coll)
 
         self._sortables = coll
@@ -241,7 +241,7 @@ class Scenario(Base):
 
         coll = CustomCurves.from_json(result.data)
         for w in result.errors:
-            self.add_warning(w)
+            self.add_warning('custom_curves', w)
         self._merge_submodel_warnings(coll)
 
         self._custom_curves = coll
