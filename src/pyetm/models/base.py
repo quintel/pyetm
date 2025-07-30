@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Type, TypeVar
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
+from pydantic_core import InitErrorDetails, PydanticCustomError
 import pandas as pd
 
 T = TypeVar("T", bound="Base")
@@ -20,11 +21,11 @@ class Base(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     # Internal list of warnings (not part of serialized schema)
-    _warnings: list[str] = PrivateAttr(default_factory=list)
+    _warnings: dict[str, list[str]] = PrivateAttr(default_factory=dict)
 
     def __init__(self, **data: Any) -> None:
         # Ensure private warnings list exists before any validation
-        object.__setattr__(self, "_warnings", [])
+        object.__setattr__(self, "_warnings", {})
         try:
             super().__init__(**data)
         except ValidationError as e:
@@ -34,33 +35,47 @@ class Base(BaseModel):
             object.__setattr__(self, "__dict__", inst.__dict__.copy())
             # Ensure warnings list on this instance
             if not hasattr(self, "_warnings"):
-                object.__setattr__(self, "_warnings", [])
+                object.__setattr__(self, "_warnings", {})
             # Convert each validation error into a warning
             for err in e.errors():
                 loc = ".".join(str(x) for x in err.get("loc", []))
                 msg = err.get("msg", "")
-                self.add_warning(f"{loc}: {msg}")
+                self.add_warning(loc, msg)
 
     def __setattr__(self, name: str, value: Any) -> None:
+        """ Abuses the fact that init does not return on valdiation errors"""
         # Intercept assignment-time validation errors
-        try:
-            super().__setattr__(name, value)
-        except ValidationError as e:
-            # Add warning instead of raising
-            for err in e.errors():
-                loc = ".".join(str(x) for x in err.get("loc", []))
-                msg = err.get("msg", "")
-                self.add_warning(f"Assignment {loc}: {msg}")
-            # Do not assign invalid value
+        if name in self.__class__.model_fields:
+            try:
+                self._clear_warnings_for_attr(name)
+                current_data = self.model_dump()
+                current_data[name] = value
+                obj =self.__class__.model_validate(current_data)
+                if name in obj.warnings:
+                    self.add_warning(name, obj.warnings[name])
+                    # Do not assign invalid value
+                    return
+            except ValidationError as e:
+                for err in e.errors():
+                    if err.get("loc") == (name,):
+                        msg = err.get("msg", "")
+                        self.add_warning(name, msg)
+                # Do not assign invalid value
+                return
 
-    def add_warning(self, message: str) -> None:
+        super().__setattr__(name, value)
+
+    def add_warning(self, key: str, message: str) -> None:
         """Append a warning message to this model."""
-        self._warnings.append(message)
+        if key in self._warnings:
+            self._warnings[key].append(message)
+        else:
+            self._warnings[key] = [message]
 
     @property
-    def warnings(self) -> list[str]:
+    def warnings(self) -> dict[str, list[str]]:
         """Return a copy of the warnings list."""
-        return list(self._warnings)
+        return self._warnings
 
     def show_warnings(self) -> None:
         """Print all warnings to the console."""
@@ -71,6 +86,12 @@ class Base(BaseModel):
         for i, w in enumerate(self._warnings, start=1):
             print(f" {i}. {w}")
 
+    def _clear_warnings_for_attr(self, key):
+        """
+        Remove a key from the warnings.
+        """
+        self._warnings.pop(key, None)
+
     def _merge_submodel_warnings(self, submodel: Any) -> None:
         """
         Bring warnings from a nested Base (or list thereof)
@@ -80,7 +101,7 @@ class Base(BaseModel):
 
         def _collect(wm: Base):
             for w in wm.warnings:
-                self.add_warning(f"{wm.__class__.__name__}: {w}")
+                self.add_warning(wm.__class__.__name__, w)
 
         if isinstance(submodel, Base):
             _collect(submodel)
@@ -107,6 +128,25 @@ class Base(BaseModel):
             for field_name in self.model_fields.keys()
             if not field_name.startswith("_")
         ]
+
+    def _raise_exception_on_loc(self, err: str, type: str, loc: str, msg: str):
+        """
+        Nice and convoluted way to raise validation errors on custom locs.
+        Used in model validators
+        """
+        raise ValidationError.from_exception_data(
+            err,
+            [
+                InitErrorDetails(
+                    type=PydanticCustomError(
+                        type,
+                        msg,
+                    ),
+                    loc=(loc,),
+                    input=self,
+                ),
+            ],
+        )
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
         """
@@ -136,7 +176,7 @@ class Base(BaseModel):
             if not isinstance(df, pd.DataFrame):
                 raise ValueError(f"Expected DataFrame, got {type(df)}")
         except Exception as e:
-            self.add_warning(f"{self.__class__.__name__}._to_dataframe() failed: {e}")
+            self.add_warning(f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}")
             df = pd.DataFrame()
 
         # Set index name if not already set

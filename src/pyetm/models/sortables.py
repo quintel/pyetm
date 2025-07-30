@@ -48,7 +48,7 @@ class Sortable(Base):
             except Exception as e:
                 # Create basic sortable with warning
                 sortable = cls.model_validate({"type": sort_type, "order": []})
-                sortable.add_warning(f"Failed to create sortable for {sort_type}: {e}")
+                sortable.add_warning('base', f"Failed to create sortable for {sort_type}: {e}")
                 yield sortable
 
         elif isinstance(payload, dict):
@@ -64,14 +64,14 @@ class Sortable(Base):
                         {"type": sort_type, "subtype": sub, "order": []}
                     )
                     sortable.add_warning(
-                        f"Failed to create sortable for {sort_type}.{sub}: {e}"
+                        'base', f"Failed to create sortable for {sort_type}.{sub}: {e}"
                     )
                     yield sortable
 
         else:
             # Create basic sortable with warning for unexpected payload
             sortable = cls.model_validate({"type": sort_type, "order": []})
-            sortable.add_warning(f"Unexpected payload for '{sort_type}': {payload!r}")
+            sortable.add_warning('type', f"Unexpected payload for '{sort_type}': {payload!r}")
             yield sortable
 
 

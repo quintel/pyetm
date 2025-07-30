@@ -59,26 +59,27 @@ class OutputCurve(Base):
 
                 except Exception as e:
                     self.add_warning(
+                        'data',
                         f"Failed to process curve data for {self.key}: {e}"
                     )
                     return None
 
         except Exception as e:
             # Unexpected error - add warning
-            self.add_warning(f"Unexpected error retrieving curve {self.key}: {e}")
+            self.add_warning('base', f"Unexpected error retrieving curve {self.key}: {e}")
             return None
 
     def contents(self) -> Optional[pd.DataFrame]:
         """Open file from path and return contents"""
         if not self.available():
-            self.add_warning(f"Curve {self.key} not available - no file path set")
+            self.add_warning('file_path', f"Curve {self.key} not available - no file path set")
             return None
 
         try:
             df = pd.read_csv(self.file_path, index_col=0)
             return df.dropna(how="all")
         except Exception as e:
-            self.add_warning(f"Failed to read curve file for {self.key}: {e}")
+            self.add_warning('file_path', f"Failed to read curve file for {self.key}: {e}")
             return None
 
     def remove(self) -> bool:
@@ -91,7 +92,7 @@ class OutputCurve(Base):
             self.file_path = None
             return True
         except Exception as e:
-            self.add_warning(f"Failed to remove curve file for {self.key}: {e}")
+            self.add_warning('file_path', f"Failed to remove curve file for {self.key}: {e}")
             return False
 
     @classmethod
@@ -109,7 +110,7 @@ class OutputCurve(Base):
                 "type": data.get("type", "unknown"),
             }
             curve = cls.model_validate(basic_data)
-            curve.add_warning(f"Failed to create curve from data: {e}")
+            curve.add_warning('base', f"Failed to create curve from data: {e}")
             return curve
 
 
@@ -134,7 +135,7 @@ class OutputCurves(Base):
         curve = self._find(curve_name)
 
         if not curve:
-            self.add_warning(f"Curve {curve_name} not found in collection")
+            self.add_warning('curves', f"Curve {curve_name} not found in collection")
             return None
 
         if not curve.available():
@@ -202,6 +203,7 @@ class OutputCurves(Base):
         if carrier_type not in carrier_mapping:
             valid_types = ", ".join(carrier_mapping.keys())
             self.add_warning(
+                'carrier_type',
                 f"Invalid carrier type '{carrier_type}'. Valid types: {valid_types}"
             )
             return {}
@@ -236,8 +238,9 @@ class OutputCurves(Base):
         collection = cls.model_validate({"curves": curves})
 
         # Add any collection-level warnings
-        for warning in collection_warnings:
-            collection.add_warning(warning)
+        # TODO: do we still need this?
+        # for warning in collection_warnings:
+        #     collection.add_warning(warning)
 
         # Merge warnings from individual curves
         for curve in curves:
@@ -253,7 +256,7 @@ class OutputCurves(Base):
         if not service_result.success or not service_result.data:
             empty_curves = cls(curves=[])
             for error in service_result.errors:
-                empty_curves.add_warning(f"Service error: {error}")
+                empty_curves.add_warning('base', f"Service error: {error}")
             return empty_curves
 
         curves_list = []
@@ -282,12 +285,12 @@ class OutputCurves(Base):
                 curves_list.append(
                     OutputCurve.model_validate({"key": curve_name, "type": "unknown"})
                 )
-                curves_list[-1].add_warning(f"Failed to process curve data: {e}")
+                curves_list[-1].add_warning('base', f"Failed to process curve data: {e}")
 
         curves_collection = cls(curves=curves_list)
 
         for error in service_result.errors:
-            curves_collection.add_warning(f"Download warning: {error}")
+            curves_collection.add_warning('base', f"Download warning: {error}")
 
         for curve in curves_list:
             curves_collection._merge_submodel_warnings(curve)

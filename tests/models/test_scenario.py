@@ -38,7 +38,7 @@ def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050
     assert scenario.private is False
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
@@ -72,7 +72,7 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
     assert scenario.private is True
     assert scenario.start_year == 2019
     assert scenario.source == "pyetm"
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
@@ -88,7 +88,7 @@ def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
 
     scenario = Scenario.new("nl", 2050, invalid_field="should_be_ignored")
     assert scenario.id == 12347
-    assert scenario.warnings == warnings
+    assert scenario.warnings['base'] == warnings
 
 
 def test_new_scenario_failure(monkeypatch, fail_service_result):
@@ -127,7 +127,7 @@ def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
 
     result = scenario.update_metadata(metadata_updates)
     assert result == updated_data
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
@@ -145,7 +145,7 @@ def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result)
 
     result = scenario.update_metadata(metadata_updates)
     assert result == updated_data
-    assert scenario.warnings == warnings
+    assert scenario.warnings['metadata'] == warnings
 
 
 def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
@@ -174,7 +174,7 @@ def test_update_metadata_empty_dict(monkeypatch, scenario, ok_service_result):
 
     result = scenario.update_metadata({})
     assert result == updated_data
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 # ------ Load ------ #
@@ -191,7 +191,7 @@ def test_load_success(monkeypatch, full_scenario_metadata, ok_service_result):
     scenario = Scenario.load(1)
     for key, val in full_scenario_metadata.items():
         assert getattr(scenario, key) == val
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_result):
@@ -208,7 +208,7 @@ def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_r
     assert scenario.id == 2
     assert scenario.end_year == 2040
     assert scenario.area_code == "NL"
-    assert scenario.warnings == warns
+    assert scenario.warnings['metadata'] == warns
 
 
 def test_load_failure(monkeypatch, fail_service_result):
@@ -233,7 +233,7 @@ def test_load_missing_required_field(monkeypatch, ok_service_result):
         lambda client, stub: ok_service_result(incomplete_data),
     )
     print(Scenario.load(4).warnings)
-    assert "end_year: Field required" in Scenario.load(4).warnings
+    assert "Field required" in Scenario.load(4).warnings['end_year']
 
 
 # ------ version ------- #
@@ -270,7 +270,7 @@ def test_inputs_success(
 
     coll = scenario.inputs
     assert scenario._inputs is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_inputs_with_warnings(
@@ -287,7 +287,7 @@ def test_inputs_with_warnings(
     coll = scenario.inputs
     assert coll
     assert next(iter(coll)).key in inputs_json.keys()
-    assert scenario.warnings == warns
+    assert scenario.warnings['inputs'] == warns
 
 
 def test_inputs_failure(monkeypatch, scenario, fail_service_result):
@@ -327,7 +327,7 @@ def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_re
     # Should not return anything (returns None)
     assert result is None
     # No warnings
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
     # Inputs were updated
     assert targeted_input.user == 42.5
 
@@ -358,7 +358,7 @@ def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, in
 
     # Cache should be invalidated
     assert targeted_input.user == new_value
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_service_result):
@@ -377,7 +377,7 @@ def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_serv
 
     scenario.update_user_values({"investment_costs_co2_ccs": 42.5})
     # This is not likely to occur so we don't log them
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
     assert scenario._inputs
 
 
@@ -408,14 +408,14 @@ def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inpu
     )
 
     scenario.update_user_values({})
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
     assert not scenario.user_values()
 
 
 def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
     """Test that update_inputs preserves existing warnings on the scenario"""
-    scenario.add_warning("Existing warning 1")
-    scenario.add_warning("Existing warning 2")
+    scenario.add_warning('queries', "Existing warning 1")
+    scenario.add_warning('queries', "Existing warning 2")
 
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -444,7 +444,7 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
             "Existing warning 2",
             # "New warning from update",
         ]
-        assert scenario.warnings == expected_warnings
+        assert scenario.warnings['queries'] == expected_warnings
     finally:
         # Restore original method
         pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = (
@@ -474,7 +474,7 @@ def test_sortables_success(
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
     assert scenario._sortables is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_sortables_with_warnings(
@@ -491,7 +491,7 @@ def test_sortables_with_warnings(
 
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
-    assert scenario.warnings == warns
+    assert scenario.warnings['sortables'] == warns
 
 
 def test_sortables_failure(monkeypatch, scenario, fail_service_result):
@@ -533,7 +533,7 @@ def test_custom_curves_success(
     coll = scenario.custom_curves
     assert coll is patch_custom_curves_from_json
     assert scenario._custom_curves is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_custom_curves_with_warnings(
@@ -550,7 +550,7 @@ def test_custom_curves_with_warnings(
 
     coll = scenario.custom_curves
     assert coll is patch_custom_curves_from_json
-    assert scenario.warnings == warns
+    assert scenario.warnings['custom_curves'] == warns
 
 
 def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
