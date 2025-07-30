@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import pandas as pd
+from pydantic import field_validator, model_validator
 
 from pyetm.models.base import Base
 
@@ -29,6 +30,66 @@ class Sortable(Base):
             return f"{self.type}_{self.subtype}"
         else:
             return self.type
+
+    def is_valid_update(self, new_order: list[Any]) -> list[str]:
+        """
+        Returns a list of validation warnings without updating the current object
+        """
+        new_obj_dict = self.model_dump()
+        new_obj_dict["order"] = new_order
+
+        warnings_obj = self.__class__(**new_obj_dict)
+        return warnings_obj.warnings
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, value: str) -> str:
+        """Validate that type is a non-empty string"""
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("Type must be a non-empty string")
+        return value.strip()
+
+    @field_validator("subtype")
+    @classmethod
+    def validate_subtype(cls, value: Optional[str]) -> Optional[str]:
+        """Validate subtype if provided"""
+        if value is not None:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("Subtype must be a non-empty string or None")
+            return value.strip()
+        return value
+
+    @field_validator("order")
+    @classmethod
+    def validate_order(cls, value: list[Any]) -> list[Any]:
+        """Validate that order is a list and check for duplicates"""
+        if not isinstance(value, list):
+            raise ValueError("Order must be a list")
+
+        # Check for duplicates
+        seen = set()
+        duplicates = []
+        for item in value:
+            if item in seen:
+                duplicates.append(item)
+            seen.add(item)
+
+        if duplicates:
+            raise ValueError(f"Order contains duplicate items: {duplicates}")
+
+        return value
+
+    @model_validator(mode="after")
+    def validate_sortable_consistency(self) -> "Sortable":
+        """Additional validation for the entire sortable"""
+        if self.type == "heat_network" and self.subtype is None:
+            raise ValueError("heat_network type requires a subtype")
+
+        # TODO: check how long these actually ought to be
+        if len(self.order) > 10:
+            raise ValueError("Order cannot contain more than 10 items")
+
+        return self
 
     @classmethod
     def from_json(
@@ -93,6 +154,85 @@ class Sortables(Base):
         # will repeat 'heat_network' for each subtype
         return [s.type for s in self.sortables]
 
+    def names(self) -> List[str]:
+        """Get all sortable names (including subtype suffixes)"""
+        return [s.name() for s in self.sortables]
+
+    def is_valid_update(self, updates: Dict[str, list[Any]]) -> Dict[str, list[str]]:
+        """
+        Returns a dict of sortable names and their validation warnings
+
+        :param updates: Dict mapping sortable names to new orders
+        :return: Dict mapping sortable names to list of validation warnings
+        """
+        warnings = {}
+
+        # Check each sortable that has an update
+        sortable_by_name = {s.name(): s for s in self.sortables}
+
+        for name, new_order in updates.items():
+            if name in sortable_by_name:
+                sortable = sortable_by_name[name]
+                sortable_warnings = sortable.is_valid_update(new_order)
+                if sortable_warnings:
+                    warnings[name] = sortable_warnings
+            else:
+                warnings[name] = ["Sortable does not exist"]
+
+        # Check for non-existent sortables
+        non_existent_names = set(updates.keys()) - set(self.names())
+        for name in non_existent_names:
+            if name not in warnings:
+                warnings[name] = [f"Sortable {name} does not exist"]
+
+        return warnings
+
+    def update(self, updates: Dict[str, list[Any]]):
+        """
+        Update the orders of specified sortables
+
+        :param updates: Dict mapping sortable names to new orders
+        """
+        sortable_by_name = {s.name(): s for s in self.sortables}
+
+        for name, new_order in updates.items():
+            if name in sortable_by_name:
+                sortable_by_name[name].order = new_order
+
+    @field_validator("sortables")
+    @classmethod
+    def validate_sortables_list(cls, value: List[Sortable]) -> List[Sortable]:
+        """Validate the list of sortables"""
+        if not isinstance(value, list):
+            raise ValueError("Sortables must be a list")
+
+        # Check for duplicate names
+        names = [s.name() for s in value if isinstance(s, Sortable)]
+        duplicates = []
+        seen = set()
+        for name in names:
+            if name in seen:
+                duplicates.append(name)
+            seen.add(name)
+
+        if duplicates:
+            raise ValueError(f"Duplicate sortable names found: {duplicates}")
+
+        return value
+
+    @model_validator(mode="after")
+    def validate_sortables_consistency(self) -> "Sortables":
+        """Additional validation for the entire sortables collection"""
+        # Example: Ensure we don't have conflicting heat_network configurations
+        heat_network_types = [s for s in self.sortables if s.type == "heat_network"]
+        if len(heat_network_types) > 0:
+            # All heat_network sortables should have subtypes
+            without_subtypes = [s for s in heat_network_types if s.subtype is None]
+            if without_subtypes:
+                raise ValueError("All heat_network sortables must have subtypes")
+
+        return self
+
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> "Sortables":
         """
@@ -125,7 +265,10 @@ class Sortables(Base):
                 result[s.type] = s.order
         return result
 
-    def to_dataframe(self) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+        """
+        Serialize the Sortables collection to DataFrame.
+        """
         return pd.DataFrame.from_dict(
             {s.name(): s.order for s in self.sortables}, orient="index"
         ).T
