@@ -61,7 +61,7 @@ def test_output_curve_retrieve_processing_error():
 
         assert result is None
         assert len(curve.warnings) > 0
-        assert "Failed to process curve data" in curve.warnings[0]
+        assert "Failed to process curve data" in curve.warnings['data'][0]
 
 
 def test_output_curve_retrieve_unexpected_error():
@@ -81,7 +81,7 @@ def test_output_curve_retrieve_unexpected_error():
         assert len(curve.warnings) > 0
         assert (
             "Unexpected error retrieving curve test_curve: Unexpected"
-            in curve.warnings[0]
+            in curve.warnings['base'][0]
         )
 
 
@@ -92,7 +92,7 @@ def test_output_curve_contents_not_available():
 
     assert result is None
     assert len(curve.warnings) > 0
-    assert "not available - no file path set" in curve.warnings[0]
+    assert "not available - no file path set" in curve.warnings['file_path'][0]
 
 
 def test_output_curve_contents_file_error():
@@ -104,7 +104,7 @@ def test_output_curve_contents_file_error():
 
     assert result is None
     assert len(curve.warnings) > 0
-    assert "Failed to read curve file" in curve.warnings[0]
+    assert "Failed to read curve file" in curve.warnings['file_path'][0]
 
 
 def test_output_curve_remove_not_available():
@@ -125,7 +125,7 @@ def test_output_curve_remove_file_error():
 
         assert result is False
         assert len(curve.warnings) > 0
-        assert "Failed to remove curve file" in curve.warnings[0]
+        assert "Failed to remove curve file" in curve.warnings['file_path'][0]
 
 
 def test_output_curves_from_json_with_invalid_curve():
@@ -144,7 +144,7 @@ def test_output_curves_from_json_with_invalid_curve():
 
         assert len(curves.curves) == 1
         assert len(curves.warnings) > 0
-        assert "Skipped invalid curve data" in curves.warnings[0]
+        assert "Skipped invalid curve data" in curves.warnings['OutputCurve(key=valid_curve)'][0]
 
 
 def test_output_curves_from_service_result_failure():
@@ -157,9 +157,9 @@ def test_output_curves_from_service_result_failure():
     curves = OutputCurves.from_service_result(failed_result, mock_scenario)
 
     assert len(curves.curves) == 0
-    assert len(curves.warnings) == 2
-    assert "Service error: API error" in curves.warnings[0]
-    assert "Service error: Network error" in curves.warnings[1]
+    assert len(curves.warnings['base']) == 2
+    assert "Service error: API error" in curves.warnings['base'][0]
+    assert "Service error: Network error" in curves.warnings['base'][1]
 
 
 def test_output_curves_from_service_result_no_data():
@@ -196,7 +196,7 @@ def test_output_curves_from_service_result_processing_error():
         assert curves.curves[0].key == "test_curve"
         assert curves.curves[0].type == "unknown"
         assert len(curves.curves[0].warnings) > 0
-        assert "Failed to process curve data" in curves.curves[0].warnings[0]
+        assert "Failed to process curve data" in curves.curves[0].warnings['base'][0]
 
 
 def test_output_curves_from_service_result_no_caching():
