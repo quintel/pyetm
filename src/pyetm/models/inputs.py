@@ -44,7 +44,7 @@ class Input(Base):
         except Exception as e:
             # Create a basic Input with warning attached
             basic_input = cls.model_validate(payload)
-            basic_input.add_warning(f"Failed to create specialized input: {e}")
+            basic_input.add_warning(key, f"Failed to create specialized input: {e}")
             return basic_input
 
     @staticmethod
@@ -105,8 +105,12 @@ class EnumInput(Input):
     def check_permitted(self) -> EnumInput:
         if self.user is None or self.user in self.permitted_values:
             return self
-        raise ValueError(f"{self.user} should be in {self.permitted_values}")
-
+        self._raise_exception_on_loc(
+            'ValueError',
+            type='inclusion',
+            loc='user',
+            msg=f"Value error, {self.user} should be in {self.permitted_values}"
+        )
 
 class FloatInput(Input):
     """Input representing a float"""
@@ -131,9 +135,16 @@ class FloatInput(Input):
         if not isinstance(self.user, float):
             # We let pydantic handle the field validation
             return self
-        if self.user is None or (self.user < self.max and self.user > self.min):
+        if self.user is None or (self.user <= self.max and self.user >= self.min):
+            print(f'we chill {self.user}')
             return self
-        raise ValueError(f"{self.user} should be between {self.min} and {self.max}")
+        print(f'we not chill {self.user}')
+        self._raise_exception_on_loc(
+            'ValueError',
+            type='out_of_bounds',
+            loc='user',
+            msg=f"Value error, {self.user} should be between {self.min} and {self.max}"
+        )
 
 
 class Inputs(Base):
@@ -200,9 +211,10 @@ class Inputs(Base):
         collection = cls.model_validate({"inputs": inputs})
 
         # Merge any warnings from individual inputs
-        for input_obj in inputs:
-            if hasattr(input_obj, "warnings") and input_obj.warnings:
-                for warning in input_obj.warnings:
-                    collection.add_warning(warning)
+        # Isn't this already done in Base?
+        # for input_obj in inputs:
+        #     if input_obj.warnings:
+        #         for warning in input_obj.warnings.items():
+        #             collection.add_warning(warning)
 
         return collection

@@ -6,7 +6,7 @@ def test_valid_initialization_has_no_warnings(dummy_base_model):
     assert d.a == 10
     assert d.b == "string"
     assert d.c == 3.14
-    assert d.warnings == []
+    assert d.warnings == {}
 
 
 def test_invalid_initialization_becomes_warning_not_exception(dummy_base_model):
@@ -28,7 +28,7 @@ def test_assignment_validation_generates_warning_and_skips_assignment(dummy_base
     # good assignment
     d.a = 42
     assert d.a == 42
-    assert d.warnings == []
+    assert d.warnings == {}
 
     # bad assignment
     d.b = 123

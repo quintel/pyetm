@@ -60,24 +60,25 @@ class CustomCurve(Base):
                 except Exception as e:
                     # File processing error - add warning and return None
                     self.add_warning(
-                        f"Failed to process curve data for {self.key}: {e}"
+                        self.key,
+                        f"Failed to process curve data: {e}"
                     )
                     return None
             else:
                 # API call failed - add warning for each error
                 for error in result.errors:
-                    self.add_warning(f"Failed to retrieve curve {self.key}: {error}")
+                    self.add_warning(self.key, f"Failed to retrieve curve: {error}")
                 return None
 
         except Exception as e:
             # Unexpected error - add warning
-            self.add_warning(f"Unexpected error retrieving curve {self.key}: {e}")
+            self.add_warning(self.key, f"Unexpected error retrieving curve: {e}")
             return None
 
     def contents(self) -> Optional[pd.Series]:
         """Open file from path and return contents"""
         if not self.available():
-            self.add_warning(f"Curve {self.key} not available - no file path set")
+            self.add_warning(self.key, f"Curve not available - no file path set")
             return None
 
         try:
@@ -88,7 +89,7 @@ class CustomCurve(Base):
                 .rename(self.key)
             )
         except Exception as e:
-            self.add_warning(f"Failed to read curve file for {self.key}: {e}")
+            self.add_warning(self.key, f"Failed to read curve file: {e}")
             return None
 
     def remove(self) -> bool:
@@ -101,7 +102,7 @@ class CustomCurve(Base):
             self.file_path = None
             return True
         except Exception as e:
-            self.add_warning(f"Failed to remove curve file for {self.key}: {e}")
+            self.add_warning(self.key, f"Failed to remove curve file: {e}")
             return False
 
     @classmethod
@@ -119,7 +120,7 @@ class CustomCurve(Base):
                 "type": data.get("type", "unknown"),
             }
             curve = cls.model_validate(basic_data)
-            curve.add_warning(f"Failed to create curve from data: {e}")
+            curve.add_warning(basic_data["key"], f"Failed to create curve from data: {e}")
             return curve
 
 
@@ -146,7 +147,7 @@ class CustomCurves(Base):
         curve = self._find(curve_name)
 
         if not curve:
-            self.add_warning(f"Curve {curve_name} not found in collection")
+            self.add_warning('curves', f"Curve {curve_name} not found in collection")
             return None
 
         if not curve.available():
@@ -183,8 +184,8 @@ class CustomCurves(Base):
         collection = cls.model_validate({"curves": curves})
 
         # Add any collection-level warnings
-        for warning in collection_warnings:
-            collection.add_warning(warning)
+        for warning, msg in collection_warnings.item():
+            collection.add_warning(warning, msg)
 
         # Merge warnings from individual curves
         for curve in curves:

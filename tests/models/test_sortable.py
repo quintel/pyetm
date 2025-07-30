@@ -64,6 +64,6 @@ def test_from_json_creates_warning_on_invalid(payload):
 
     # Should have a warning about the unexpected payload
     assert hasattr(sortable, "warnings")
-    assert len(sortable.warnings) > 0
-    assert "Unexpected payload" in sortable.warnings[0]
-    assert str(payload[1]) in sortable.warnings[0]
+    assert 'type' in sortable.warnings
+    assert "Unexpected payload" in sortable.warnings['type'][0]
+    assert str(payload[1]) in sortable.warnings['type'][0]

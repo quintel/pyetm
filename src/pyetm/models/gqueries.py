@@ -48,7 +48,7 @@ class Gqueries(Base):
         if result.success:
             self.update(result.data)
         else:
-            self.add_warning(f"Error retrieving queries: {result.errors}")
+            self.add_warning('results', f"Error retrieving queries: {result.errors}")
 
     def to_dataframe(self, columns="future"):
         if not self.is_ready():
