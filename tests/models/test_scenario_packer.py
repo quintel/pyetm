@@ -420,8 +420,17 @@ class TestExcelExport:
                 {"metadata": ["nl2015", 2050]}, index=["area_code", "end_year"]
             )
         )
-        dummy_inputs_df = pd.DataFrame({"value": [1000]}, index=["wind_capacity"])
-        dummy_empty_df = pd.DataFrame()
+
+        inputs_df = pd.DataFrame(
+            {"value": [1000], "unit": ["MW"]}, index=["wind_capacity"]
+        )
+        inputs_df.index.name = "input"
+
+        scenario_with_inputs.inputs.to_df = Mock(
+            return_value=inputs_df.set_index("unit", append=True)
+        )
+
+        scenario_with_inputs.all_output_curves = Mock(return_value=[])
 
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)

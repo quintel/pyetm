@@ -60,7 +60,7 @@ def test_custom_curve_retrieve_processing_error():
 
         assert result is None
         assert len(curve.warnings) > 0
-        assert "Failed to process curve data" in curve.warnings[0]
+        assert "Failed to process curve data" in curve.warnings[curve.key][0]
 
 
 def test_custom_curve_retrieve_service_error():
@@ -81,7 +81,7 @@ def test_custom_curve_retrieve_service_error():
 
         assert result is None
         assert len(curve.warnings) > 0
-        assert "Failed to retrieve curve test_curve: API error" in curve.warnings[0]
+        assert "Failed to retrieve curve: API error" in curve.warnings[curve.key][0]
 
 
 def test_custom_curve_retrieve_unexpected_error():
@@ -100,8 +100,8 @@ def test_custom_curve_retrieve_unexpected_error():
         assert result is None
         assert len(curve.warnings) > 0
         assert (
-            "Unexpected error retrieving curve test_curve: Unexpected"
-            in curve.warnings[0]
+            "Unexpected error retrieving curve: Unexpected"
+            in curve.warnings[curve.key][0]
         )
 
 
@@ -112,7 +112,7 @@ def test_custom_curve_contents_not_available():
 
     assert result is None
     assert len(curve.warnings) > 0
-    assert "not available - no file path set" in curve.warnings[0]
+    assert "not available - no file path set" in curve.warnings[curve.key][0]
 
 
 def test_custom_curve_contents_file_error():
@@ -124,7 +124,7 @@ def test_custom_curve_contents_file_error():
 
     assert result is None
     assert len(curve.warnings) > 0
-    assert "Failed to read curve file" in curve.warnings[0]
+    assert "Failed to read curve file" in curve.warnings[curve.key][0]
 
 
 def test_custom_curve_remove_not_available():
@@ -145,7 +145,7 @@ def test_custom_curve_remove_file_error():
 
         assert result is False
         assert len(curve.warnings) > 0
-        assert "Failed to remove curve file" in curve.warnings[0]
+        assert "Failed to remove curve file" in curve.warnings[curve.key][0]
 
 
 def test_custom_curves_from_json_with_invalid_curve():
@@ -164,4 +164,4 @@ def test_custom_curves_from_json_with_invalid_curve():
 
         assert len(curves.curves) == 1
         assert len(curves.warnings) > 0
-        assert "Skipped invalid curve data" in curves.warnings[0]
+        assert "Skipped invalid curve data" in curves.warnings['CustomCurve(key=valid_curve)'][0]
