@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from datetime import datetime
 from pathlib import Path
+from pyetm.models.sortables import Sortables
 from pyetm.models.scenario import Scenario
 
 
@@ -154,6 +155,13 @@ def multiple_scenarios():
     return scenarios
 
 
+@pytest.fixture(autouse=True)
+def patch_sortables_from_json(monkeypatch):
+    dummy = object()
+    monkeypatch.setattr(Sortables, "from_json", staticmethod(lambda data: dummy))
+    return dummy
+
+
 # --- Input Fixtures --- #
 
 
@@ -241,6 +249,20 @@ def sortable_collection_json():
         "forecast_storage": ["fs1", "fs2"],
         "heat_network": {"lt": ["hn_lt_1"], "mt": ["hn_mt_1", "hn_mt_2"], "ht": []},
         "hydrogen_supply": ["hs1"],
+    }
+
+
+@pytest.fixture
+def valid_sortable_collection_json():
+    """Fixture with valid data that won't trigger validation warnings"""
+    return {
+        "forecast_storage": ["fs1", "fs2"],
+        "heat_network": {
+            "lt": ["hn1", "hn2"],
+            "mt": ["hn3"],
+            "ht": ["hn4", "hn5", "hn6"],
+        },
+        "hydrogen_supply": ["hs1", "hs2", "hs3"],
     }
 
 
