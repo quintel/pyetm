@@ -31,9 +31,9 @@ class Sortable(Base):
         else:
             return self.type
 
-    def is_valid_update(self, new_order: list[Any]) -> list[str]:
+    def is_valid_update(self, new_order: list[Any]) -> dict[str, list[str]]:
         """
-        Returns a list of validation warnings without updating the current object
+        Returns a dict of validation warnings without updating the current object
         """
         new_obj_dict = self.model_dump()
         new_obj_dict["order"] = new_order
@@ -82,6 +82,7 @@ class Sortable(Base):
     @model_validator(mode="after")
     def validate_sortable_consistency(self) -> "Sortable":
         """Additional validation for the entire sortable"""
+        # Example: validate that certain types require subtypes
         if self.type == "heat_network" and self.subtype is None:
             raise ValueError("heat_network type requires a subtype")
 
@@ -103,36 +104,20 @@ class Sortable(Base):
         sort_type, payload = data
 
         if isinstance(payload, list):
-            try:
-                sortable = cls.model_validate({"type": sort_type, "order": payload})
-                yield sortable
-            except Exception as e:
-                # Create basic sortable with warning
-                sortable = cls.model_validate({"type": sort_type, "order": []})
-                sortable.add_warning(f"Failed to create sortable for {sort_type}: {e}")
-                yield sortable
+            sortable = cls(type=sort_type, order=payload)
+            yield sortable
 
         elif isinstance(payload, dict):
             for sub, order in payload.items():
-                try:
-                    sortable = cls.model_validate(
-                        {"type": sort_type, "subtype": sub, "order": order}
-                    )
-                    yield sortable
-                except Exception as e:
-                    # Create basic sortable with warning
-                    sortable = cls.model_validate(
-                        {"type": sort_type, "subtype": sub, "order": []}
-                    )
-                    sortable.add_warning(
-                        f"Failed to create sortable for {sort_type}.{sub}: {e}"
-                    )
-                    yield sortable
+                sortable = cls(type=sort_type, subtype=sub, order=order)
+                yield sortable
 
         else:
             # Create basic sortable with warning for unexpected payload
-            sortable = cls.model_validate({"type": sort_type, "order": []})
-            sortable.add_warning(f"Unexpected payload for '{sort_type}': {payload!r}")
+            sortable = cls(type=sort_type, order=[])
+            sortable.add_warning(
+                "payload", f"Unexpected payload for '{sort_type}': {payload!r}"
+            )
             yield sortable
 
 
@@ -182,8 +167,8 @@ class Sortables(Base):
         # Check for non-existent sortables
         non_existent_names = set(updates.keys()) - set(self.names())
         for name in non_existent_names:
-            if name not in warnings:
-                warnings[name] = [f"Sortable {name} does not exist"]
+            if name not in warnings:  # Don't overwrite existing warnings
+                warnings[name] = ["Sortable does not exist"]
 
         return warnings
 
@@ -243,13 +228,15 @@ class Sortables(Base):
         for pair in data.items():
             items.extend(Sortable.from_json(pair))
 
-        collection = cls.model_validate({"sortables": items})
+        # Use Base class constructor that handles validation gracefully
+        collection = cls(sortables=items)
 
         # Merge any warnings from individual sortables
         for sortable in items:
             if hasattr(sortable, "warnings") and sortable.warnings:
-                for warning in sortable.warnings:
-                    collection.add_warning(warning)
+                for warning_key, warning_list in sortable.warnings.items():
+                    for warning in warning_list:
+                        collection.add_warning(f"Sortable.{warning_key}", warning)
 
         return collection
 

@@ -230,12 +230,6 @@ class Scenario(Base):
         self._sortables = coll
         return coll
 
-    def sortable_values(self) -> Dict[str, List[Any]]:
-        """
-        Returns the current orders for all sortables
-        """
-        return {sortable.name(): sortable.order for sortable in self.sortables}
-
     def set_sortables_from_dataframe(self, dataframe: pd.DataFrame) -> None:
         """
         Extract sortables from dataframe and update them.
@@ -266,16 +260,14 @@ class Scenario(Base):
         if validity_errors:
             raise ScenarioError(f"Could not update sortables: {validity_errors}")
 
-        # Make individual API calls for each sortable
+        # Make individual API calls for each sortable as there is no bulk endpoint
         for name, order in update_sortables.items():
             if name.startswith("heat_network_"):
-                # Handle heat_network with subtype
                 subtype = name.replace("heat_network_", "")
                 result = UpdateSortablesRunner.run(
                     BaseClient(), self, "heat_network", order, subtype=subtype
                 )
             else:
-                # Handle simple sortables
                 result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
 
             if not result.success:
@@ -283,7 +275,6 @@ class Scenario(Base):
                     f"Could not update sortable '{name}': {result.errors}"
                 )
 
-        # Update the local sortables object
         self.sortables.update(update_sortables)
 
     def remove_sortables(self, sortable_names: Union[List[str], Set[str]]) -> None:
@@ -302,7 +293,6 @@ class Scenario(Base):
                     BaseClient(), self, "heat_network", [], subtype=subtype
                 )
             else:
-                # Handle simple sortables
                 result = UpdateSortablesRunner.run(BaseClient(), self, name, [])
 
             if not result.success:
@@ -310,7 +300,6 @@ class Scenario(Base):
                     f"Could not remove sortable '{name}': {result.errors}"
                 )
 
-        # Update the local sortables object
         reset_sortables = {name: [] for name in sortable_names}
         self.sortables.update(reset_sortables)
 

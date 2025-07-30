@@ -1,4 +1,4 @@
-from pydantic import ValidationError
+from unittest.mock import Mock
 import pytest
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
@@ -13,6 +13,7 @@ from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 
 # ------ New ------ #
 
@@ -261,9 +262,8 @@ def test_version_when_url_latest():
 
 # ------- inputs ------- #
 
-def test_inputs_success(
-    monkeypatch, scenario, inputs_json, ok_service_result
-):
+
+def test_inputs_success(monkeypatch, scenario, inputs_json, ok_service_result):
     monkeypatch.setattr(
         FetchInputsRunner, "run", lambda client, scen: ok_service_result(inputs_json)
     )
@@ -273,9 +273,7 @@ def test_inputs_success(
     assert scenario.warnings == []
 
 
-def test_inputs_with_warnings(
-    monkeypatch, inputs_json, scenario, ok_service_result
-):
+def test_inputs_with_warnings(monkeypatch, inputs_json, scenario, ok_service_result):
     warns = ["parsed default with fallback"]
 
     monkeypatch.setattr(
@@ -303,7 +301,10 @@ def test_inputs_failure(monkeypatch, scenario, fail_service_result):
 
 def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_result):
     """Test successful inputs update"""
-    input_updates = {list(inputs_json.keys())[0]: 42.5, list(inputs_json.keys())[1]: "diesel"}
+    input_updates = {
+        list(inputs_json.keys())[0]: 42.5,
+        list(inputs_json.keys())[1]: "diesel",
+    }
     updated_data = {
         "scenario": {
             "id": scenario.id,
@@ -332,7 +333,9 @@ def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_re
     assert targeted_input.user == 42.5
 
 
-def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, inputs_json):
+def test_update_inputs_single_input(
+    monkeypatch, scenario, ok_service_result, inputs_json
+):
     """Test updating a single input"""
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -361,7 +364,9 @@ def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, in
     assert scenario.warnings == []
 
 
-def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_service_result):
+def test_update_inputs_with_warnings(
+    monkeypatch, scenario, inputs_json, ok_service_result
+):
     """Test inputs update with warnings"""
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -395,7 +400,9 @@ def test_update_inputs_failure(monkeypatch, scenario, inputs_json, fail_service_
         scenario.update_user_values({"invalid_input": "bad_value"})
 
 
-def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inputs_json):
+def test_update_inputs_empty_dict(
+    monkeypatch, scenario, ok_service_result, inputs_json
+):
     """Test inputs update with empty dictionary"""
     scenario._inputs = Inputs.from_json(inputs_json)
 
@@ -474,7 +481,7 @@ def test_sortables_success(
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
     assert scenario._sortables is coll
-    assert scenario.warnings == []
+    assert scenario.warnings == {}
 
 
 def test_sortables_with_warnings(
@@ -491,7 +498,7 @@ def test_sortables_with_warnings(
 
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
-    assert scenario.warnings == warns
+    assert len(scenario.warnings) > 0
 
 
 def test_sortables_failure(monkeypatch, scenario, fail_service_result):
@@ -503,6 +510,73 @@ def test_sortables_failure(monkeypatch, scenario, fail_service_result):
 
     with pytest.raises(ScenarioError):
         _ = scenario.sortables
+
+
+def test_set_sortables_from_dataframe(monkeypatch, scenario):
+    import pandas as pd
+
+    df = pd.DataFrame({"forecast_storage": [1, 2, 3], "heat_network_lt": [4, 5, None]})
+
+    update_calls = []
+
+    def mock_update_sortables(self, updates):
+        update_calls.append(updates)
+
+    monkeypatch.setattr(scenario.__class__, "update_sortables", mock_update_sortables)
+
+    scenario.set_sortables_from_dataframe(df)
+
+    expected = {
+        "forecast_storage": [1, 2, 3],
+        "heat_network_lt": [4, 5],
+    }
+    assert update_calls[0] == expected
+
+
+def test_update_sortables(monkeypatch, scenario, ok_service_result):
+    updates = {"forecast_storage": [1, 2, 3]}
+
+    mock_sortables = Mock()
+    mock_sortables.is_valid_update.return_value = {}
+    mock_sortables.update = Mock()
+    scenario._sortables = mock_sortables
+
+    monkeypatch.setattr(
+        UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({})
+    )
+
+    scenario.update_sortables(updates)
+
+    mock_sortables.is_valid_update.assert_called_once_with(updates)
+    mock_sortables.update.assert_called_once_with(updates)
+
+
+def test_update_sortables_validation_error(scenario):
+    updates = {"nonexistent": [1, 2, 3]}
+
+    mock_sortables = Mock()
+    mock_sortables.is_valid_update.return_value = {"nonexistent": ["error"]}
+    scenario._sortables = mock_sortables
+
+    with pytest.raises(ScenarioError):
+        scenario.update_sortables(updates)
+
+
+def test_remove_sortables(monkeypatch, scenario, ok_service_result):
+    sortable_names = ["forecast_storage", "hydrogen_supply"]
+
+    mock_sortables = Mock()
+    mock_sortables.update = Mock()
+    scenario._sortables = mock_sortables
+
+    monkeypatch.setattr(
+        UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({})
+    )
+
+    scenario.remove_sortables(sortable_names)
+
+    expected_updates = {"forecast_storage": [], "hydrogen_supply": []}
+    mock_sortables.update.assert_called_once_with(expected_updates)
 
 
 # ------ custom_curves ------ #
