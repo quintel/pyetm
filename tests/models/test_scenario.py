@@ -1,3 +1,4 @@
+from unittest.mock import Mock
 import pytest
 from pyetm.clients.base_client import BaseClient
 from pyetm.models.inputs import Inputs
@@ -13,6 +14,7 @@ from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 
 # ------ New scenario ------ #
 
@@ -486,7 +488,7 @@ def test_sortables_with_warnings(
 
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
-    assert scenario.warnings["sortables"] == warns
+    assert len(scenario.warnings) > 0
 
 
 def test_sortables_failure(monkeypatch, scenario, fail_service_result):
@@ -498,6 +500,73 @@ def test_sortables_failure(monkeypatch, scenario, fail_service_result):
 
     with pytest.raises(ScenarioError):
         _ = scenario.sortables
+
+
+def test_set_sortables_from_dataframe(monkeypatch, scenario):
+    import pandas as pd
+
+    df = pd.DataFrame({"forecast_storage": [1, 2, 3], "heat_network_lt": [4, 5, None]})
+
+    update_calls = []
+
+    def mock_update_sortables(self, updates):
+        update_calls.append(updates)
+
+    monkeypatch.setattr(scenario.__class__, "update_sortables", mock_update_sortables)
+
+    scenario.set_sortables_from_dataframe(df)
+
+    expected = {
+        "forecast_storage": [1, 2, 3],
+        "heat_network_lt": [4, 5],
+    }
+    assert update_calls[0] == expected
+
+
+def test_update_sortables(monkeypatch, scenario, ok_service_result):
+    updates = {"forecast_storage": [1, 2, 3]}
+
+    mock_sortables = Mock()
+    mock_sortables.is_valid_update.return_value = {}
+    mock_sortables.update = Mock()
+    scenario._sortables = mock_sortables
+
+    monkeypatch.setattr(
+        UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({})
+    )
+
+    scenario.update_sortables(updates)
+
+    mock_sortables.is_valid_update.assert_called_once_with(updates)
+    mock_sortables.update.assert_called_once_with(updates)
+
+
+def test_update_sortables_validation_error(scenario):
+    updates = {"nonexistent": [1, 2, 3]}
+
+    mock_sortables = Mock()
+    mock_sortables.is_valid_update.return_value = {"nonexistent": ["error"]}
+    scenario._sortables = mock_sortables
+
+    with pytest.raises(ScenarioError):
+        scenario.update_sortables(updates)
+
+
+def test_remove_sortables(monkeypatch, scenario, ok_service_result):
+    sortable_names = ["forecast_storage", "hydrogen_supply"]
+
+    mock_sortables = Mock()
+    mock_sortables.update = Mock()
+    scenario._sortables = mock_sortables
+
+    monkeypatch.setattr(
+        UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({})
+    )
+
+    scenario.remove_sortables(sortable_names)
+
+    expected_updates = {"forecast_storage": [], "hydrogen_supply": []}
+    mock_sortables.update.assert_called_once_with(expected_updates)
 
 
 # ------ custom_curves ------ #

@@ -43,14 +43,14 @@ class Base(BaseModel):
                 self.add_warning(loc, msg)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """ Abuses the fact that init does not return on valdiation errors"""
+        """Abuses the fact that init does not return on valdiation errors"""
         # Intercept assignment-time validation errors
         if name in self.__class__.model_fields:
             try:
                 self._clear_warnings_for_attr(name)
                 current_data = self.model_dump()
                 current_data[name] = value
-                obj =self.__class__.model_validate(current_data)
+                obj = self.__class__.model_validate(current_data)
                 if name in obj.warnings:
                     self.add_warning(name, obj.warnings[name])
                     # Do not assign invalid value
@@ -73,7 +73,7 @@ class Base(BaseModel):
                 if isinstance(message, dict):
                     self._warnings[key].update(message)
                 else:
-                    self._warnings[key].update({'base', message})
+                    self._warnings[key].update({"base", message})
             elif isinstance(message, list):
                 self._warnings[key].extend(message)
             else:
@@ -114,11 +114,12 @@ class Base(BaseModel):
         from typing import Iterable
 
         def _collect(wm: Base):
-            if not wm.warnings: return
+            if not wm.warnings:
+                return
 
             key = wm.__class__.__name__
             if not key_attr is None:
-                key += f'({key_attr}={getattr(wm, key_attr)})'
+                key += f"({key_attr}={getattr(wm, key_attr)})"
             self.add_warning(key, wm.warnings)
 
         for item in submodels:
@@ -191,7 +192,9 @@ class Base(BaseModel):
             if not isinstance(df, pd.DataFrame):
                 raise ValueError(f"Expected DataFrame, got {type(df)}")
         except Exception as e:
-            self.add_warning(f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}")
+            self.add_warning(
+                f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}"
+            )
             df = pd.DataFrame()
 
         # Set index name if not already set
