@@ -18,6 +18,7 @@ from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 
@@ -227,6 +228,90 @@ class Scenario(Base):
 
         self._sortables = coll
         return coll
+
+    def sortable_values(self) -> Dict[str, List[Any]]:
+        """
+        Returns the current orders for all sortables
+        """
+        return {sortable.name(): sortable.order for sortable in self.sortables}
+
+    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+        """
+        Extract sortables from dataframe and update them.
+        The dataframe should have sortable names as columns and orders as rows.
+
+        Args:
+            dataframe: DataFrame with sortable names as columns and order values as rows
+        """
+        # Convert DataFrame to dict of lists, handling NaN/None values
+        sortables_dict = {}
+        for column in dataframe.columns:
+            # Filter out NaN/None values and convert to list
+            order_values = dataframe[column].dropna().tolist()
+            if order_values:  # Only include if there are actual values
+                sortables_dict[column] = order_values
+
+        self.update_sortables(sortables_dict)
+
+    def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
+        """
+        Update the order of specified sortables.
+
+        Args:
+            update_sortables: Dictionary mapping sortable names to their new orders
+        """
+        # Validate the updates first
+        validity_errors = self.sortables.is_valid_update(update_sortables)
+        if validity_errors:
+            raise ScenarioError(f"Could not update sortables: {validity_errors}")
+
+        # Make individual API calls for each sortable
+        for name, order in update_sortables.items():
+            if name.startswith("heat_network_"):
+                # Handle heat_network with subtype
+                subtype = name.replace("heat_network_", "")
+                result = UpdateSortablesRunner.run(
+                    BaseClient(), self, "heat_network", order, subtype=subtype
+                )
+            else:
+                # Handle simple sortables
+                result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
+
+            if not result.success:
+                raise ScenarioError(
+                    f"Could not update sortable '{name}': {result.errors}"
+                )
+
+        # Update the local sortables object
+        self.sortables.update(update_sortables)
+
+    def remove_sortables(self, sortable_names: Union[List[str], Set[str]]) -> None:
+        """
+        Reset specified sortables to their default/empty orders.
+
+        Args:
+            sortable_names: List or set of sortable names to reset
+        """
+        # Make individual API calls to reset each sortable
+        for name in sortable_names:
+            if name.startswith("heat_network_"):
+                # Handle heat_network with subtype
+                subtype = name.replace("heat_network_", "")
+                result = UpdateSortablesRunner.run(
+                    BaseClient(), self, "heat_network", [], subtype=subtype
+                )
+            else:
+                # Handle simple sortables
+                result = UpdateSortablesRunner.run(BaseClient(), self, name, [])
+
+            if not result.success:
+                raise ScenarioError(
+                    f"Could not remove sortable '{name}': {result.errors}"
+                )
+
+        # Update the local sortables object
+        reset_sortables = {name: [] for name in sortable_names}
+        self.sortables.update(reset_sortables)
 
     @property
     def custom_curves(self) -> CustomCurves:
