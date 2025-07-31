@@ -414,23 +414,11 @@ class TestExcelExport:
 
     def test_to_excel_with_data(self, scenario_with_inputs):
         """Test to_excel with actual data"""
-        # Mock all the data methods
-        scenario_with_inputs.to_df = Mock(
-            return_value=pd.DataFrame(
-                {"metadata": ["nl2015", 2050]}, index=["area_code", "end_year"]
-            )
+        dummy_main_df = pd.DataFrame(
+            {"metadata": ["nl2015", 2050]}, index=["area_code", "end_year"]
         )
-
-        inputs_df = pd.DataFrame(
-            {"value": [1000], "unit": ["MW"]}, index=["wind_capacity"]
-        )
-        inputs_df.index.name = "input"
-
-        scenario_with_inputs.inputs.to_df = Mock(
-            return_value=inputs_df.set_index("unit", append=True)
-        )
-
-        scenario_with_inputs.all_output_curves = Mock(return_value=[])
+        dummy_inputs_df = pd.DataFrame({"value": [1000]}, index=["wind_capacity"])
+        dummy_empty_df = pd.DataFrame()
 
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)

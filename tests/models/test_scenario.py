@@ -161,7 +161,7 @@ def test_update_metadata_empty_kwargs(monkeypatch, scenario, ok_service_result):
         lambda client, scen, metadata: ok_service_result(updated_data),
     )
 
-    result = scenario.update_metadata({})
+    result = scenario.update_metadata()
     assert result == updated_data
     assert scenario.warnings == {}
 
