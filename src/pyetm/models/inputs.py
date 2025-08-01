@@ -136,9 +136,7 @@ class FloatInput(Input):
             # We let pydantic handle the field validation
             return self
         if self.user is None or (self.user <= self.max and self.user >= self.min):
-            print(f'we chill {self.user}')
             return self
-        print(f'we not chill {self.user}')
         self._raise_exception_on_loc(
             'ValueError',
             type='out_of_bounds',

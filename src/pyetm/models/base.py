@@ -175,7 +175,7 @@ class Base(BaseModel):
             f"{self.__class__.__name__} must implement _to_dataframe() method"
         )
 
-    def to_df(self, **kwargs) -> pd.DataFrame:
+    def to_dataframe(self, **kwargs) -> pd.DataFrame:
         """
         Public method that handles common serialization logic and delegates to _to_dataframe().
 

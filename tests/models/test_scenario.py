@@ -559,8 +559,8 @@ def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
         _ = scenario.custom_curves
 
 
-def test_to_df(scenario):
+def test_to_dataframe(scenario):
     scenario = Scenario(id=scenario.id, area_code="nl2019", end_year=2050)
-    dataframe = scenario.to_df()
+    dataframe = scenario.to_dataframe()
 
     assert dataframe[scenario.id]["end_year"] == 2050

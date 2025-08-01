@@ -131,13 +131,13 @@ class TestMainInfo:
 
     def test_main_info_single_scenario(self, sample_scenario):
         """Test main_info with single scenario"""
-        # Mock the to_df method to return a proper DataFrame
+        # Mock the to_dataframe method to return a proper DataFrame
         mock_df = pd.DataFrame(
             {sample_scenario.id: ["nl2015", 2050, "test_value"]},
             index=["area_code", "end_year", "other"],
         )
 
-        sample_scenario.to_df = Mock(return_value=mock_df)
+        sample_scenario.to_dataframe = Mock(return_value=mock_df)
 
         packer = ScenarioPacker()
         packer.add(sample_scenario)
@@ -155,7 +155,7 @@ class TestMainInfo:
                 {scenario.id: ["nl2015", 2050, f"value_{i}"]},
                 index=["area_code", "end_year", "custom"],
             )
-            scenario.to_df = Mock(return_value=mock_df)
+            scenario.to_dataframe = Mock(return_value=mock_df)
 
         packer = ScenarioPacker()
         packer.add(*multiple_scenarios)
@@ -194,7 +194,7 @@ class TestInputs:
         mock_df.index.name = "input"
         final_df = mock_df.set_index("unit", append=True)
 
-        scenario_with_inputs.inputs.to_df = Mock(return_value=final_df)
+        scenario_with_inputs.inputs.to_dataframe = Mock(return_value=final_df)
 
         packer = ScenarioPacker()
         packer.add_inputs(scenario_with_inputs)
@@ -219,7 +219,7 @@ class TestInputs:
             )
             mock_df.index.name = "inputs"
 
-            scenario.inputs.to_df = Mock(
+            scenario.inputs.to_dataframe = Mock(
                 return_value=mock_df.set_index("unit", append=True)
             )
 
@@ -328,7 +328,7 @@ class TestDataExtractionMethods:
         )
 
         sample_scenario.sortables = Mock()
-        sample_scenario.sortables.to_df = Mock(return_value=mock_df)
+        sample_scenario.sortables.to_dataframe = Mock(return_value=mock_df)
 
         packer = ScenarioPacker()
         packer.add_sortables(sample_scenario)
@@ -448,12 +448,12 @@ class TestExcelExport:
         scenario.start_year = 2019
 
         # Mock all data methods to return non-empty DataFrames
-        scenario.to_df = Mock(
+        scenario.to_dataframe = Mock(
             return_value=pd.DataFrame({scenario.id: [1]}, index=["row"])
         )
 
         scenario.inputs = Mock()
-        scenario.inputs.to_df = Mock(
+        scenario.inputs.to_dataframe = Mock(
             return_value=pd.DataFrame({"value": [1], "unit": ["MW"]}, index=["input1"])
         )
 
@@ -465,7 +465,7 @@ class TestExcelExport:
         )
 
         scenario.sortables = Mock()
-        scenario.sortables.to_df = Mock(
+        scenario.sortables.to_dataframe = Mock(
             return_value=pd.DataFrame({"value": [1]}, index=["sort1"])
         )
 

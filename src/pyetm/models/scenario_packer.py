@@ -43,7 +43,7 @@ class InputsPack(Packable):
 
     def _to_dataframe(self, columns="user", **kwargs):
         return pd.concat(
-            [scenario.inputs.to_df(columns=columns) for scenario in self.scenarios],
+            [scenario.inputs.to_dataframe(columns=columns) for scenario in self.scenarios],
             axis=1,
             keys=[scenario.id for scenario in self.scenarios],
         )
@@ -72,7 +72,7 @@ class SortablePack(Packable):
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         """PACKS ONLY FIRST SCENARIO"""
         for scenario in self.scenarios:
-            return scenario.sortables.to_df()
+            return scenario.sortables.to_dataframe()
 
 
 class CustomCurvesPack(Packable):
@@ -141,7 +141,7 @@ class ScenarioPacker(BaseModel):
         if len(self._scenarios()) == 0:
             return pd.DataFrame()
 
-        return pd.concat([scenario.to_df() for scenario in self._scenarios()], axis=1)
+        return pd.concat([scenario.to_dataframe() for scenario in self._scenarios()], axis=1)
 
     def inputs(self, columns="user") -> pd.DataFrame:
         return self._inputs.to_dataframe(columns=columns)

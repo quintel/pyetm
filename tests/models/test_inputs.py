@@ -11,11 +11,11 @@ def test_collection_from_json(inputs_json):
     assert len(input_collection.keys()) == 4
 
 
-def test_to_df(inputs_json):
+def test_to_dataframe(inputs_json):
     input_collection = Inputs.from_json(inputs_json)
 
-    df_standard = input_collection.to_df()
-    df_with_defaults = input_collection.to_df(columns=["user", "default"])
+    df_standard = input_collection.to_dataframe()
+    df_with_defaults = input_collection.to_dataframe(columns=["user", "default"])
 
     assert "user" in df_standard.columns
     assert "user" in df_with_defaults.columns
@@ -23,7 +23,7 @@ def test_to_df(inputs_json):
     assert "default" not in df_standard.columns
     assert "default" in df_with_defaults.columns
 
-    df_with_non_existing = input_collection.to_df(columns="foo")
+    df_with_non_existing = input_collection.to_dataframe(columns="foo")
 
     assert df_with_non_existing["foo"].isnull().all()
 
