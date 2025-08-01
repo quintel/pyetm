@@ -2,7 +2,7 @@
 # and name it 'config.yml'. This way your personal tokens will be safe.
 # Store the config.yml file in the root of the directory (pyetm/config.yml).
 
-# Paste your personal ETM in this field. Never push this to GitHub!
+# Paste your personal ETM API Token in this field. Never push this to GitHub!
 # will be overridden by $ETM_API_TOKEN if you set that in env.
 # The same token will work for beta and pro environments, but if you are interacting with beta or local,
 # you will need the correct token for that environment.
