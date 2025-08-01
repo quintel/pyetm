@@ -133,6 +133,24 @@ class Scenario(Base):
             columns=[self.id],
         )
 
+    @property
+    def title(self):
+        if not self.metadata is None:
+            return self.metadata.get('title', None)
+        return None
+
+    @title.setter
+    def title(self, title: str):
+        if not self.metadata is None:
+            self.metadata['title'] = title
+        else:
+            self.metadata = {'title': title}
+
+    def identifier(self):
+        if self.title: return self.title
+
+        return self.id
+
     def user_values(self) -> Dict[str, Any]:
         """
         Returns the values set by the user for inputs

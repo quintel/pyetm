@@ -1,4 +1,5 @@
 import pandas as pd
+from os import PathLike
 from pydantic import BaseModel
 from typing import Optional, Dict, List, Any, Set, Literal, ClassVar
 from xlsxwriter import Workbook
@@ -33,20 +34,38 @@ class Packable(BaseModel):
 
         return self._to_dataframe(columns=columns)
 
+    def from_dataframe(self, df):
+        """Should parse the df and call correct setters on identified scenarios"""
+
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         """Base implementation - kids should implement this"""
         return pd.DataFrame()
+
+    def _find_by_identifier(self, identifier: str):
+        return next((s for s in self.scenarios if s.identifier() == identifier), None)
 
 
 class InputsPack(Packable):
     key: ClassVar[str] = "inputs"
 
     def _to_dataframe(self, columns="user", **kwargs):
+        # TODO: index on title if avaliable
         return pd.concat(
             [scenario.inputs.to_dataframe(columns=columns) for scenario in self.scenarios],
             axis=1,
-            keys=[scenario.id for scenario in self.scenarios],
+            keys=[scenario.identifier() for scenario in self.scenarios],
         )
+
+    def from_dataframe(self, df):
+        """
+        Sets the inputs on the scenarios from the packed df (comes from excel)
+        In case came it came from a df containing defaults etc, lets drop them
+        """
+        user_values = df.xs('user', level=1, axis=1, drop_level=False)
+        for identifier, _ in user_values:
+            breakpoint()
+            scenario = self._find_by_identifier(identifier)
+            scenario.set_user_values_from_dataframe(user_values[identifier])
 
 
 class QueryPack(Packable):
@@ -61,7 +80,7 @@ class QueryPack(Packable):
         return pd.concat(
             [scenario.results(columns=columns) for scenario in self.scenarios],
             axis=1,
-            keys=[scenario.id for scenario in self.scenarios],
+            keys=[scenario.identifier() for scenario in self.scenarios],
             copy=False,
         )
 
@@ -114,6 +133,7 @@ class ScenarioPacker(BaseModel):
     _inputs: "InputsPack" = InputsPack()
     _sortables: "SortablePack" = SortablePack()
     _output_curves: "OutputCurvesPack" = OutputCurvesPack()
+
 
     # Setting up a packer
 
@@ -169,6 +189,8 @@ class ScenarioPacker(BaseModel):
 
         workbook = Workbook(path)
 
+        # TODO: this should come from the packs, they should know their sheet names
+        # Like this they can pack and unpack
         sheet_configs = [
             ("MAIN", self.main_info),
             ("PARAMETERS", self.inputs),
@@ -220,3 +242,61 @@ class ScenarioPacker(BaseModel):
         summary["scenario_ids"] = sorted([s.id for s in self._scenarios()])
 
         return summary
+
+    #  Create stuff
+
+    @classmethod
+    def from_excel(cls, filepath: str | PathLike):
+        # TODO: Make the sheet name an attr on the packs,
+        # which user can customize if needed, from args in this method!!
+        packer = cls()
+
+        with pd.ExcelFile(filepath) as xlsx:
+            # Open main tab - create scenarios from there
+            scenarios = packer.scenarios_from_df(packer.read_sheet(xlsx, "MAIN", index_col=0))
+
+            # TODO: add some kind of IF, is the inputs sheet available?
+            packer._inputs.add(*scenarios)
+            packer._inputs.from_dataframe(packer.read_sheet(xlsx, "PARAMETERS", header=[0,1], index_col=[0,1]))
+
+            # TODO: continue for sortables, curves and gqueries
+
+
+    @staticmethod
+    def scenarios_from_df(df: pd.DataFrame) -> list["Scenario"]:
+        """Converts one df into a list of scenarios"""
+        return [ScenarioPacker.setup_scenario(title, data) for title, data in df.to_dict().items()]
+
+    @staticmethod
+    def setup_scenario(title, data):
+        """Returns a scenario from data dict"""
+        # TODO: take care of NaN values in data(frame)! Make sure they'll be None!
+        # TODO: when there is no id in the data, we should call 'new'
+        # else 'load' + 'update_metadata'
+        scenario = Scenario.load(data['id'])
+        # TODO: update metadata with the rest of the stuff in data!!
+        scenario.title = title
+        return scenario
+
+    # NOTE: Move to utils?
+    # Straight from Rob
+    @staticmethod
+    def read_sheet(
+        xlsx: pd.ExcelFile,
+        sheet_name: str,
+        required: bool = True,
+        **kwargs
+    ) -> pd.Series:
+        """read list items"""
+
+        if not sheet_name in xlsx.sheet_names:
+            if required:
+                raise ValueError(f"Could not load required sheet '{sheet_name}' from {xlsx.io}")
+            logger.warning("Could not load optional sheet '%s' from '%s'", sheet_name, xlsx.io)
+            return pd.Series(name=sheet_name, dtype=str)
+
+        values = pd.read_excel(xlsx, sheet_name, **kwargs).squeeze(axis=1)
+        # if not isinstance(values, pd.Series):
+        #     raise TypeError("Unexpected Outcome")
+
+        return values#.rename(sheet_name)

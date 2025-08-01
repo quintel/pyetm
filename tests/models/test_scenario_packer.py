@@ -188,13 +188,14 @@ class TestInputs:
     def test_inputs_single_scenario(self, scenario_with_inputs):
         """Test inputs with single scenario"""
         mock_df = pd.DataFrame(
-            {"value": [1000, 2000], "unit": ["MW", "MW"], "default": [500, 800]},
+            {"user": [1000, 2000], "unit": ["MW", "MW"], "default": [500, 800]},
             index=["wind_capacity", "solar_capacity"],
         )
         mock_df.index.name = "input"
         final_df = mock_df.set_index("unit", append=True)
 
         scenario_with_inputs.inputs.to_dataframe = Mock(return_value=final_df)
+        scenario_with_inputs.identifier = Mock(return_value=scenario_with_inputs.id)
 
         packer = ScenarioPacker()
         packer.add_inputs(scenario_with_inputs)
@@ -203,7 +204,7 @@ class TestInputs:
 
         assert not result.empty
         assert "input" in result.index.names
-        assert (scenario_with_inputs.id, "value") in result.columns
+        assert (scenario_with_inputs.id, "user") in result.columns
         assert (scenario_with_inputs.id, "default") in result.columns
 
     def test_inputs_multiple_scenarios(self, multiple_scenarios):
@@ -269,6 +270,7 @@ class TestGqueryResults:
 
     def test_gquery_results_single_scenario(self, scenario_with_queries):
         """Test gquery_results with single scenario"""
+        scenario_with_queries.identifier = Mock(return_value=scenario_with_queries.id)
         packer = ScenarioPacker()
         packer.add(scenario_with_queries)
 
@@ -288,6 +290,7 @@ class TestGqueryResults:
             scenario.area_code = "nl2015"
             scenario.end_year = 2050
             scenario.start_year = 2019
+            scenario.identifier = Mock(return_value=scenario.id)
 
             mock_results = pd.DataFrame(
                 {"future": [100 + i * 10, 200 + i * 20], "unit": ["MW", "GWh"]},
@@ -446,6 +449,7 @@ class TestExcelExport:
         scenario.area_code = "nl2015"
         scenario.end_year = 2050
         scenario.start_year = 2019
+        scenario.identifier = Mock(return_value=scenario.id)
 
         # Mock all data methods to return non-empty DataFrames
         scenario.to_dataframe = Mock(
@@ -567,3 +571,9 @@ class TestUtilityMethods:
         assert summary["output_curves"]["scenario_count"] == 1  # scenario 2 only
         assert len(summary["scenario_ids"]) == 3
         assert all(s.id in summary["scenario_ids"] for s in multiple_scenarios)
+
+class TestFromExcel:
+    def test_from_excel(self):
+        ScenarioPacker.from_excel('tests/fixtures/my_input_excel.xlsx')
+
+
