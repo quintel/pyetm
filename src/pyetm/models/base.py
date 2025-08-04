@@ -92,15 +92,8 @@ class Base(BaseModel):
     def warnings(self) -> Union[WarningCollector, Dict[str, List[str]]]:
         """
         Return warnings.
-
-        For backward compatibility, this can return either the new WarningCollector
-        or the legacy dict format. The implementation can be switched based on needs.
         """
-        # Return the new collector (recommended)
         return self._warning_collector
-
-        # OR return legacy format for backward compatibility:
-        # return self._warning_collector.to_legacy_dict()
 
     def show_warnings(self) -> None:
         """Print all warnings to the console."""
