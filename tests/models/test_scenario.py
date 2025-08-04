@@ -1,6 +1,5 @@
 from unittest.mock import Mock
 import pytest
-from pyetm.clients.base_client import BaseClient
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.scenario import Scenario, ScenarioError
@@ -40,7 +39,7 @@ def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050
     assert scenario.private is False
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
@@ -74,7 +73,7 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
     assert scenario.private is True
     assert scenario.start_year == 2019
     assert scenario.source == "pyetm"
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
@@ -90,7 +89,9 @@ def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
 
     scenario = Scenario.new("nl", 2050, invalid_field="should_be_ignored")
     assert scenario.id == 12347
-    assert scenario.warnings["base"] == warnings
+    base_warnings = scenario.warnings.get_by_field("base")
+    assert len(base_warnings) == 1
+    assert base_warnings[0].message == warnings[0]
 
 
 def test_new_scenario_failure(monkeypatch, fail_service_result):
@@ -121,7 +122,7 @@ def test_update_metadata_success(monkeypatch, scenario, ok_service_result):
     result = scenario.update_metadata(end_year=2050, private=True, custom_field="value")
 
     assert result == updated_data
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result):
@@ -138,7 +139,9 @@ def test_update_metadata_with_warnings(monkeypatch, scenario, ok_service_result)
     result = scenario.update_metadata(private=True, id=999)
 
     assert result == updated_data
-    assert scenario.warnings["metadata"] == warnings
+    metadata_warnings = scenario.warnings.get_by_field("metadata")
+    assert len(metadata_warnings) == 1
+    assert metadata_warnings[0].message == warnings[0]
 
 
 def test_update_metadata_failure(monkeypatch, scenario, fail_service_result):
@@ -165,7 +168,7 @@ def test_update_metadata_empty_kwargs(monkeypatch, scenario, ok_service_result):
 
     result = scenario.update_metadata()
     assert result == updated_data
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 # ------ Load ------ #
@@ -182,7 +185,7 @@ def test_load_success(monkeypatch, full_scenario_metadata, ok_service_result):
     scenario = Scenario.load(1)
     for key, val in full_scenario_metadata.items():
         assert getattr(scenario, key) == val
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_result):
@@ -199,7 +202,9 @@ def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_r
     assert scenario.id == 2
     assert scenario.end_year == 2040
     assert scenario.area_code == "NL"
-    assert scenario.warnings["metadata"] == warns
+    metadata_warnings = scenario.warnings.get_by_field("metadata")
+    assert len(metadata_warnings) == 1
+    assert metadata_warnings[0].message == warns[0]
 
 
 def test_load_failure(monkeypatch, fail_service_result):
@@ -223,8 +228,11 @@ def test_load_missing_required_field(monkeypatch, ok_service_result):
         "run",
         lambda client, stub: ok_service_result(incomplete_data),
     )
-    print(Scenario.load(4).warnings)
-    assert "Field required" in Scenario.load(4).warnings["end_year"]
+
+    scenario = Scenario.load(4)
+    end_year_warnings = scenario.warnings.get_by_field("end_year")
+    assert len(end_year_warnings) > 0
+    assert any("Field required" in w.message for w in end_year_warnings)
 
 
 # ------ version ------- #
@@ -236,7 +244,10 @@ def test_version_when_no_url_set(scenario):
 
 def test_version_when_url_stable():
     scenario = Scenario(
-        id=4, url="https://2025-01.engine.energytransitionmodel.com/api/v3/scenarios/4"
+        id=4,
+        area_code="nl",
+        end_year=2050,
+        url="https://2025-01.engine.energytransitionmodel.com/api/v3/scenarios/4",
     )
 
     assert scenario.version == "2025-01"
@@ -244,7 +255,10 @@ def test_version_when_url_stable():
 
 def test_version_when_url_latest():
     scenario = Scenario(
-        id=4, url="https://engine.energytransitionmodel.com/api/v3/scenarios/4"
+        id=4,
+        area_code="nl",
+        end_year=2050,
+        url="https://engine.energytransitionmodel.com/api/v3/scenarios/4",
     )
 
     assert scenario.version == "latest"
@@ -260,7 +274,7 @@ def test_inputs_success(monkeypatch, scenario, inputs_json, ok_service_result):
 
     coll = scenario.inputs
     assert scenario._inputs is coll
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_inputs_with_warnings(monkeypatch, inputs_json, scenario, ok_service_result):
@@ -275,7 +289,9 @@ def test_inputs_with_warnings(monkeypatch, inputs_json, scenario, ok_service_res
     coll = scenario.inputs
     assert coll
     assert next(iter(coll)).key in inputs_json.keys()
-    assert scenario.warnings["inputs"] == warns
+    inputs_warnings = scenario.warnings.get_by_field("inputs")
+    assert len(inputs_warnings) == 1
+    assert inputs_warnings[0].message == warns[0]
 
 
 def test_inputs_failure(monkeypatch, scenario, fail_service_result):
@@ -317,8 +333,7 @@ def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_re
 
     # Should not return anything (returns None)
     assert result is None
-    # No warnings
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
     # Inputs were updated
     assert targeted_input.user == 42.5
 
@@ -351,7 +366,7 @@ def test_update_inputs_single_input(
 
     # Cache should be invalidated
     assert targeted_input.user == new_value
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_update_inputs_with_warnings(
@@ -372,7 +387,7 @@ def test_update_inputs_with_warnings(
 
     scenario.update_user_values({"investment_costs_co2_ccs": 42.5})
     # This is not likely to occur so we don't log them
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
     assert scenario._inputs
 
 
@@ -405,7 +420,7 @@ def test_update_inputs_empty_dict(
     )
 
     scenario.update_user_values({})
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
     assert not scenario.user_values()
 
 
@@ -435,13 +450,14 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
     try:
         scenario.update_user_values({"investment_costs_co2_ccs": 42})
 
-        # Should have both existing and new warnings [for now we ignore new warnings]
-        expected_warnings = [
-            "Existing warning 1",
-            "Existing warning 2",
-            # "New warning from update",
-        ]
-        assert scenario.warnings["queries"] == expected_warnings
+        queries_warnings = scenario.warnings.get_by_field("queries")
+        expected_messages = ["Existing warning 1", "Existing warning 2"]
+
+        assert len(queries_warnings) == 2
+        warning_messages = [w.message for w in queries_warnings]
+        for expected_msg in expected_messages:
+            assert expected_msg in warning_messages
+
     finally:
         # Restore original method
         pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = (
@@ -471,7 +487,7 @@ def test_sortables_success(
     coll = scenario.sortables
     assert coll is patch_sortables_from_json
     assert scenario._sortables is coll
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_sortables_with_warnings(
@@ -542,10 +558,15 @@ def test_update_sortables(monkeypatch, scenario, ok_service_result):
 
 
 def test_update_sortables_validation_error(scenario):
+    from pyetm.models.warnings import WarningCollector
+
     updates = {"nonexistent": [1, 2, 3]}
 
     mock_sortables = Mock()
-    mock_sortables.is_valid_update.return_value = {"nonexistent": ["error"]}
+    error_collector = WarningCollector.with_warning(
+        "nonexistent", "Sortable does not exist"
+    )
+    mock_sortables.is_valid_update.return_value = {"nonexistent": error_collector}
     scenario._sortables = mock_sortables
 
     with pytest.raises(ScenarioError):
@@ -597,7 +618,7 @@ def test_custom_curves_success(
     coll = scenario.custom_curves
     assert coll is patch_custom_curves_from_json
     assert scenario._custom_curves is coll
-    assert scenario.warnings == {}
+    assert len(scenario.warnings) == 0
 
 
 def test_custom_curves_with_warnings(
@@ -614,7 +635,9 @@ def test_custom_curves_with_warnings(
 
     coll = scenario.custom_curves
     assert coll is patch_custom_curves_from_json
-    assert scenario.warnings["custom_curves"] == warns
+    custom_curves_warnings = scenario.warnings.get_by_field("custom_curves")
+    assert len(custom_curves_warnings) == 1
+    assert custom_curves_warnings[0].message == warns[0]
 
 
 def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
@@ -633,3 +656,38 @@ def test_to_df(scenario):
     dataframe = scenario.to_df()
 
     assert dataframe[scenario.id]["end_year"] == 2050
+
+
+# ------ Warnings tests ------ #
+
+
+def test_scenario_warning_system_integration(scenario):
+    """Test that the scenario properly integrates with the new warning system"""
+    # Add some warnings
+    scenario.add_warning("test_field", "Test warning message")
+    scenario.add_warning("test_field", "Another warning")
+    scenario.add_warning("other_field", "Different field warning", "error")
+
+    # Check warning collector functionality
+    assert len(scenario.warnings) == 3
+    assert scenario.warnings.has_warnings("test_field")
+    assert scenario.warnings.has_warnings("other_field")
+
+    test_warnings = scenario.warnings.get_by_field("test_field")
+    assert len(test_warnings) == 2
+
+    other_warnings = scenario.warnings.get_by_field("other_field")
+    assert len(other_warnings) == 1
+    assert other_warnings[0].severity == "error"
+
+
+def test_scenario_show_all_warnings(scenario, capsys):
+    """Test the show_all_warnings method"""
+    scenario.add_warning("test_field", "Test warning")
+
+    scenario.show_all_warnings()
+
+    captured = capsys.readouterr()
+    assert f"Warnings for Scenario {scenario.id}" in captured.out
+    assert "Scenario warnings:" in captured.out
+    assert "Test warning" in captured.out

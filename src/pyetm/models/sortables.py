@@ -3,6 +3,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import pandas as pd
 from pydantic import field_validator, model_validator
+from pyetm.models.warnings import WarningCollector
 
 from pyetm.models.base import Base
 
@@ -31,9 +32,9 @@ class Sortable(Base):
         else:
             return self.type
 
-    def is_valid_update(self, new_order: list[Any]) -> dict[str, list[str]]:
+    def is_valid_update(self, new_order: list[Any]) -> WarningCollector:
         """
-        Returns a dict of validation warnings without updating the current object
+        Returns a WarningCollector with validation warnings without updating the current object
         """
         new_obj_dict = self.model_dump()
         new_obj_dict["order"] = new_order
@@ -143,12 +144,14 @@ class Sortables(Base):
         """Get all sortable names (including subtype suffixes)"""
         return [s.name() for s in self.sortables]
 
-    def is_valid_update(self, updates: Dict[str, list[Any]]) -> Dict[str, list[str]]:
+    def is_valid_update(
+        self, updates: Dict[str, list[Any]]
+    ) -> Dict[str, WarningCollector]:
         """
-        Returns a dict of sortable names and their validation warnings
+        Returns a dict mapping sortable names to their WarningCollectors when errors were found
 
         :param updates: Dict mapping sortable names to new orders
-        :return: Dict mapping sortable names to list of validation warnings
+        :return: Dict mapping sortable names to WarningCollectors
         """
         warnings = {}
 
@@ -159,16 +162,20 @@ class Sortables(Base):
             if name in sortable_by_name:
                 sortable = sortable_by_name[name]
                 sortable_warnings = sortable.is_valid_update(new_order)
-                if sortable_warnings:
+                if len(sortable_warnings) > 0:
                     warnings[name] = sortable_warnings
             else:
-                warnings[name] = ["Sortable does not exist"]
+                warnings[name] = WarningCollector.with_warning(
+                    name, "Sortable does not exist"
+                )
 
         # Check for non-existent sortables
         non_existent_names = set(updates.keys()) - set(self.names())
         for name in non_existent_names:
             if name not in warnings:  # Don't overwrite existing warnings
-                warnings[name] = ["Sortable does not exist"]
+                warnings[name] = WarningCollector.with_warning(
+                    name, "Sortable does not exist"
+                )
 
         return warnings
 
@@ -231,12 +238,7 @@ class Sortables(Base):
         # Use Base class constructor that handles validation gracefully
         collection = cls(sortables=items)
 
-        # Merge any warnings from individual sortables
-        for sortable in items:
-            if hasattr(sortable, "warnings") and sortable.warnings:
-                for warning_key, warning_list in sortable.warnings.items():
-                    for warning in warning_list:
-                        collection.add_warning(f"Sortable.{warning_key}", warning)
+        collection._merge_submodel_warnings(*items, key_attr="type")
 
         return collection
 

@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
-from pydantic import Field, PrivateAttr, model_validator
+from pydantic import Field, PrivateAttr
 from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
@@ -165,7 +165,7 @@ class Scenario(Base):
         # merge runner warnings and any item‐level warnings
         for w in result.errors:
             self.add_warning("inputs", w)
-        self._merge_submodel_warnings(coll)
+        self._merge_submodel_warnings(coll, key_attr="inputs")
 
         self._inputs = coll
         return coll
@@ -187,7 +187,11 @@ class Scenario(Base):
         # Update them in the Inputs object, and check validation
         validity_errors = self.inputs.is_valid_update(update_inputs)
         if validity_errors:
-            raise ScenarioError(f"Could not update user values: {validity_errors}")
+            error_summary = []
+            for key, warning_collector in validity_errors.items():
+                warnings_list = [w.message for w in warning_collector]
+                error_summary.append(f"{key}: {warnings_list}")
+            raise ScenarioError(f"Could not update user values: {error_summary}")
 
         result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
 
@@ -224,7 +228,7 @@ class Scenario(Base):
         coll = Sortables.from_json(result.data)
         for w in result.errors:
             self.add_warning("sortables", w)
-        self._merge_submodel_warnings(coll)
+        self._merge_submodel_warnings(coll, key_attr="sortables")
 
         self._sortables = coll
         return coll
@@ -257,7 +261,11 @@ class Scenario(Base):
         # Validate the updates first
         validity_errors = self.sortables.is_valid_update(update_sortables)
         if validity_errors:
-            raise ScenarioError(f"Could not update sortables: {validity_errors}")
+            error_summary = []
+            for key, warning_collector in validity_errors.items():
+                warnings_list = [w.message for w in warning_collector]
+                error_summary.append(f"{key}: {warnings_list}")
+            raise ScenarioError(f"Could not update sortables: {error_summary}")
 
         # Make individual API calls for each sortable as there is no bulk endpoint
         for name, order in update_sortables.items():
@@ -314,7 +322,7 @@ class Scenario(Base):
         coll = CustomCurves.from_json(result.data)
         for w in result.errors:
             self.add_warning("custom_curves", w)
-        self._merge_submodel_warnings(coll)
+        self._merge_submodel_warnings(coll, key_attr="custom_curves")
 
         self._custom_curves = coll
         return coll
@@ -358,6 +366,7 @@ class Scenario(Base):
         ready collecting all of them
         """
         self._queries.execute(BaseClient(), self)
+        self._merge_submodel_warnings(self._queries, key_attr="queries")
 
     def results(self, columns="future") -> pd.DataFrame:
         """
@@ -380,3 +389,28 @@ class Scenario(Base):
             return False
 
         return len(self._queries.query_keys()) > 0
+
+    def show_all_warnings(self) -> None:
+        """
+        Display all warnings from the scenario and its submodels in a organized way.
+        """
+        print(f"=== Warnings for Scenario {self.id} ===")
+
+        # Show scenario-level warnings
+        if len(self.warnings) > 0:
+            print("\nScenario warnings:")
+            self.show_warnings()
+
+        # Show submodel warnings if they exist and are loaded
+        submodels = [
+            ("Inputs", self._inputs),
+            ("Sortables", self._sortables),
+            ("Custom Curves", self._custom_curves),
+            ("Output Curves", self._output_curves),
+            ("Queries", self._queries),
+        ]
+
+        for name, submodel in submodels:
+            if submodel is not None and len(submodel.warnings) > 0:
+                print(f"\n{name} warnings:")
+                submodel.show_warnings()

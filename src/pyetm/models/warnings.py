@@ -35,6 +35,18 @@ class WarningCollector:
     def __init__(self):
         self._warnings: List[ModelWarning] = []
 
+    @classmethod
+    def with_warning(
+        cls, field: str, message: str, severity: str = "warning"
+    ) -> "WarningCollector":
+        """
+        Convenience method to create a WarningCollector with a single warning.
+        E.g: WarningCollector.with_warning("field", "message")
+        """
+        collector = cls()
+        collector.add(field, message, severity)
+        return collector
+
     def add(
         self,
         field: str,
