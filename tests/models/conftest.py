@@ -155,7 +155,7 @@ def multiple_scenarios():
     return scenarios
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def patch_sortables_from_json(monkeypatch):
     dummy = object()
     monkeypatch.setattr(Sortables, "from_json", staticmethod(lambda data: dummy))

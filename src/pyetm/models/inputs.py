@@ -45,7 +45,6 @@ class Input(Base):
         except Exception as e:
             # Create a basic Input with warning attached
             basic_input = cls.model_construct(**payload)  # Bypass validation
-            basic_input._warning_collector = WarningCollector()
             basic_input.add_warning(key, f"Failed to create specialized input: {e}")
             return basic_input
 
@@ -180,10 +179,7 @@ class Inputs(Base):
         # Check for non-existent keys
         non_existent_keys = set(key_vals.keys()) - set(self.keys())
         for key in non_existent_keys:
-            # Create a warning collector for non-existent keys
-            warning_collector = WarningCollector()
-            warning_collector.add(key, "Key does not exist")
-            warnings[key] = warning_collector
+            warnings[key] = WarningCollector.with_warning(key, "Key does not exist")
 
         return warnings
 

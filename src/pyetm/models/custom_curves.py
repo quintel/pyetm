@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
+from pyetm.models.warnings import WarningCollector
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     DownloadCustomCurveRunner,
 )
@@ -59,10 +60,7 @@ class CustomCurve(Base):
                     return curve.rename(self.key)
                 except Exception as e:
                     # File processing error - add warning and return None
-                    self.add_warning(
-                        self.key,
-                        f"Failed to process curve data: {e}"
-                    )
+                    self.add_warning(self.key, f"Failed to process curve data: {e}")
                     return None
             else:
                 # API call failed - add warning for each error
@@ -119,8 +117,8 @@ class CustomCurve(Base):
                 "key": data.get("key", "unknown"),
                 "type": data.get("type", "unknown"),
             }
-            curve = cls.model_validate(basic_data)
-            curve.add_warning(basic_data["key"], f"Failed to create curve from data: {e}")
+            curve = cls.model_construct(**basic_data)
+            curve.add_warning("base", f"Failed to create curve from data: {e}")
             return curve
 
 
@@ -147,19 +145,17 @@ class CustomCurves(Base):
         curve = self._find(curve_name)
 
         if not curve:
-            self.add_warning('curves', f"Curve {curve_name} not found in collection")
+            self.add_warning("curves", f"Curve {curve_name} not found in collection")
             return None
 
         if not curve.available():
             # Try to retrieve it
             result = curve.retrieve(BaseClient(), scenario)
-            # Merge any warnings from the curve retrieval
-            self._merge_submodel_warnings(curve)
+            self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
             contents = curve.contents()
-            # Merge any warnings from reading contents
-            self._merge_submodel_warnings(curve)
+            self._merge_submodel_warnings(curve, key_attr="key")
             return contents
 
     def _find(self, curve_name: str) -> Optional[CustomCurve]:
@@ -171,24 +167,23 @@ class CustomCurves(Base):
         Initialize CustomCurves collection from JSON data
         """
         curves = []
-        collection_warnings = {}
 
         for curve_data in data:
             try:
-                key = curve_data['key']
                 curve = CustomCurve.from_json(curve_data)
                 curves.append(curve)
             except Exception as e:
-                # Log the problematic curve but continue processing
-                collection_warnings[f"CustomCurve(key={key})"] = f"Skipped invalid curve data: {e}"
+                # Create a basic curve and continue processing
+                key = curve_data.get("key", "unknown")
+                basic_curve = CustomCurve.model_construct(key=key, type="unknown")
+                basic_curve.add_warning(key, f"Skipped invalid curve data: {e}")
+                curves.append(basic_curve)
 
         collection = cls.model_validate({"curves": curves})
 
-        # Add any collection-level warnings
-        for loc, msg in collection_warnings.items():
-            collection.add_warning(loc, msg)
-
-        # Merge warnings from individual curves
-        collection._merge_submodel_warnings(*curves, key_attr='key')
+        # Merge warnings from individual curves using new system
+        collection._merge_submodel_warnings(*curves, key_attr="key")
 
         return collection
+
+    # TODO: _to_dataframe

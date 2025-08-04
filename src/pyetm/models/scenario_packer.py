@@ -102,7 +102,11 @@ class OutputCurvesPack(Packable):
 
 
 class ScenarioPacker(BaseModel):
-    """Packs one or multiple scenarios for export to dataframes or excel"""
+    """
+    Packs one or multiple scenarios for export to dataframes or excel
+
+    TODO: This class doesn't inherit from Base so it doesn't use the warning system yet - consider this further.
+    """
 
     # To avoid keeping all in memory, the packer only remembers which scenarios
     # to pack what info for later
