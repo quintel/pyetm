@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import Any, Optional, Union
-from pydantic import field_validator, model_validator, ValidationInfo
+from typing import Optional, Union
+from pydantic import field_validator, model_validator
 import pandas as pd
+from pyetm.models.warnings import WarningCollector
 from pyetm.models.base import Base
 
 
@@ -19,9 +20,9 @@ class Input(Base):
     coupling_groups: Optional[list[str]] = []
     disabled_by: Optional[str] = None
 
-    def is_valid_update(self, value) -> list[str]:
+    def is_valid_update(self, value) -> WarningCollector:
         """
-        Returns a list of validation warnings without updating the current object
+        Returns a WarningCollector with validation warnings without updating the current object.
         """
         new_obj_dict = self.model_dump()
         new_obj_dict["user"] = value
@@ -30,7 +31,7 @@ class Input(Base):
         return warnings_obj.warnings
 
     @classmethod
-    def from_json(cls, data: tuple[str, dict]) -> Input:
+    def from_json(cls, data: tuple[str, dict]) -> "Input":
         """
         Initialize an Input from a JSON-like tuple coming from .items()
         """
@@ -43,7 +44,8 @@ class Input(Base):
             return input_instance
         except Exception as e:
             # Create a basic Input with warning attached
-            basic_input = cls.model_validate(payload)
+            basic_input = cls.model_construct(**payload)  # Bypass validation
+            basic_input._warning_collector = WarningCollector()
             basic_input.add_warning(key, f"Failed to create specialized input: {e}")
             return basic_input
 
@@ -78,7 +80,7 @@ class BoolInput(Input):
 
     @field_validator("user", mode="after")
     @classmethod
-    def is_bool_float(cls, value: float) -> float:
+    def is_bool_float(cls, value: Optional[float]) -> Optional[float]:
         if value == 1.0 or value == 0.0 or value is None:
             return value
         raise ValueError(
@@ -161,30 +163,39 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def is_valid_update(self, key_vals: dict) -> dict:
+    # TODO: Check the efficiency of doing this in a loop
+    def is_valid_update(self, key_vals: dict) -> dict[str, WarningCollector]:
         """
-        Returns a dict of input keys and errors when errors were found
+        Returns a dict mapping input keys to their WarningCollectors when errors were found.
         """
         warnings = {}
-        for input in self.inputs:
-            if input.key in key_vals:
-                input_warn = input.is_valid_update(key_vals[input.key])
-                if len(input_warn) > 0:
-                    warnings[input.key] = input_warn
 
+        # Check each input that has an update
+        for input_obj in self.inputs:
+            if input_obj.key in key_vals:
+                input_warnings = input_obj.is_valid_update(key_vals[input_obj.key])
+                if len(input_warnings) > 0:
+                    warnings[input_obj.key] = input_warnings
+
+        # Check for non-existent keys
         non_existent_keys = set(key_vals.keys()) - set(self.keys())
         for key in non_existent_keys:
-            warnings[key] = "Key does not exist"
+            # Create a warning collector for non-existent keys
+            warning_collector = WarningCollector()
+            warning_collector.add(key, "Key does not exist")
+            warnings[key] = warning_collector
 
         return warnings
 
     def update(self, key_vals: dict):
         """
-        Update the values of certain inputs
+        Update the values of certain inputs.
+        Uses the new warning system for validation.
         """
-        for input in self.inputs:
-            if input.key in key_vals:
-                input.user = key_vals[input.key]
+        for input_obj in self.inputs:
+            if input_obj.key in key_vals:
+                # Use assignment which goes through __setattr__ validation
+                input_obj.user = key_vals[input_obj.key]
 
     def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
         """
