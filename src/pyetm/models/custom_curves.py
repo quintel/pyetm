@@ -2,6 +2,7 @@ from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 from typing import Optional
+from pyetm.models.warnings import WarningCollector
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.services.scenario_runners.fetch_custom_curves import (
@@ -315,3 +316,48 @@ class CustomCurves(Base):
         collection._merge_submodel_warnings(*curves, key_attr="key")
 
         return collection
+
+    def validate_for_upload(self) -> dict[str, WarningCollector]:
+        """
+        Validate all curves for upload
+        """
+        validation_errors = {}
+
+        for curve in self.curves:
+            curve_warnings = WarningCollector()
+
+            if not curve.available():
+                curve_warnings.add_warning(curve.key, "Curve has no data available")
+                validation_errors[curve.key] = curve_warnings
+                continue
+
+            # Get curve data and validate
+            try:
+                curve_data = curve.contents()
+
+                if curve_data is None or curve_data.empty:
+                    curve_warnings.add_warning(curve.key, "Curve contains no data")
+                elif len(curve_data) != 8760:
+                    curve_warnings.add_warning(
+                        curve.key,
+                        f"Curve must contain exactly 8,760 values, found {len(curve_data)}",
+                    )
+                else:
+                    # Check for non-numeric values
+                    try:
+                        curve_data.astype(float)
+                    except (ValueError, TypeError):
+                        curve_warnings.add_warning(
+                            curve.key, "Curve contains non-numeric values"
+                        )
+
+            except Exception as e:
+                curve_warnings.add_warning(
+                    curve.key, f"Error reading curve data: {str(e)}"
+                )
+
+            # Only add to validation_errors if there are actual warnings
+            if len(curve_warnings) > 0:
+                validation_errors[curve.key] = curve_warnings
+
+        return validation_errors
