@@ -327,32 +327,48 @@ class CustomCurves(Base):
             curve_warnings = WarningCollector()
 
             if not curve.available():
-                curve_warnings.add_warning(curve.key, "Curve has no data available")
+                curve_warnings.add(curve.key, "Curve has no data available")
                 validation_errors[curve.key] = curve_warnings
                 continue
 
             # Get curve data and validate
             try:
-                curve_data = curve.contents()
-
-                if curve_data is None or curve_data.empty:
-                    curve_warnings.add_warning(curve.key, "Curve contains no data")
-                elif len(curve_data) != 8760:
-                    curve_warnings.add_warning(
-                        curve.key,
-                        f"Curve must contain exactly 8,760 values, found {len(curve_data)}",
-                    )
-                else:
-                    # Check for non-numeric values
-                    try:
-                        curve_data.astype(float)
-                    except (ValueError, TypeError):
-                        curve_warnings.add_warning(
-                            curve.key, "Curve contains non-numeric values"
+                # First, try to read the file without forcing dtype to check for non-numeric values
+                try:
+                    # Read without dtype conversion to preserve non-numeric values
+                    raw_data = pd.read_csv(curve.file_path, header=None, index_col=False)
+                    if raw_data.empty:
+                        curve_warnings.add(curve.key, "Curve contains no data")
+                        validation_errors[curve.key] = curve_warnings
+                        continue
+                        
+                    # Check length first
+                    if len(raw_data) != 8760:
+                        curve_warnings.add(
+                            curve.key,
+                            f"Curve must contain exactly 8,760 values, found {len(raw_data)}",
                         )
+                    else:
+                        # Now check if all values can be converted to float
+                        try:
+                            # Try to convert to numeric, this will raise if there are non-numeric values
+                            pd.to_numeric(raw_data.iloc[:, 0], errors='raise')
+                        except (ValueError, TypeError):
+                            curve_warnings.add(
+                                curve.key, "Curve contains non-numeric values"
+                            )
+                            
+                except pd.errors.EmptyDataError:
+                    curve_warnings.add(curve.key, "Curve contains no data")
+                except Exception as e:
+                    # This catches file not found, permission errors, etc.
+                    curve_warnings.add(
+                        curve.key, f"Error reading curve data: {str(e)}"
+                    )
 
             except Exception as e:
-                curve_warnings.add_warning(
+                # Catch any other unexpected errors
+                curve_warnings.add(
                     curve.key, f"Error reading curve data: {str(e)}"
                 )
 

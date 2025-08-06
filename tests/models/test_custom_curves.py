@@ -421,3 +421,246 @@ def test_custom_curves_from_dataframe_preserves_warnings():
     restored = CustomCurves.from_dataframe(df)
 
     assert len(restored.curves) == 2
+
+
+# --- Validate for Upload Tests --- #
+
+
+def test_validate_for_upload_valid_curves():
+    """Test validate_for_upload with valid curves (8760 numeric values)"""
+    import numpy as np
+    from pathlib import Path
+    import shutil
+
+    # Create temporary files with valid data
+    temp_dir = Path("/tmp/test_curves")
+    temp_dir.mkdir(exist_ok=True)
+
+    try:
+        # Valid curve data (8760 values)
+        valid_data = np.random.uniform(0, 100, 8760)
+        valid_file = temp_dir / "valid_curve.csv"
+        pd.Series(valid_data).to_csv(valid_file, header=False, index=False)
+
+        curves = CustomCurves(
+            curves=[
+                CustomCurve(key="valid_curve", type="profile", file_path=valid_file)
+            ]
+        )
+
+        validation_errors = curves.validate_for_upload()
+
+        # Should have no errors
+        assert len(validation_errors) == 0
+
+    finally:
+        # Cleanup - remove entire directory tree
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+
+def test_validate_for_upload_curve_no_data():
+    """Test validate_for_upload with curve that has no data available"""
+    curves = CustomCurves(
+        curves=[CustomCurve(key="no_data_curve", type="profile")]  # No file_path set
+    )
+
+    validation_errors = curves.validate_for_upload()
+
+    assert len(validation_errors) == 1
+    assert "no_data_curve" in validation_errors
+    warnings_collector = validation_errors["no_data_curve"]
+    assert len(warnings_collector) == 1
+    warnings_list = list(warnings_collector)
+    assert "Curve has no data available" in warnings_list[0].message
+
+
+def test_validate_for_upload_wrong_length():
+    """Test validate_for_upload with curve that has wrong number of values"""
+    import numpy as np
+    from pathlib import Path
+    import shutil
+
+    temp_dir = Path("/tmp/test_curves")
+    temp_dir.mkdir(exist_ok=True)
+
+    try:
+        # Wrong length data
+        short_data = np.random.uniform(0, 100, 100)
+        short_file = temp_dir / "short_curve.csv"
+        pd.Series(short_data).to_csv(short_file, header=False, index=False)
+
+        curves = CustomCurves(
+            curves=[
+                CustomCurve(key="short_curve", type="profile", file_path=short_file)
+            ]
+        )
+
+        validation_errors = curves.validate_for_upload()
+
+        assert len(validation_errors) == 1
+        assert "short_curve" in validation_errors
+        warnings_collector = validation_errors["short_curve"]
+        assert len(warnings_collector) == 1
+        warnings_list = list(warnings_collector)
+        assert (
+            "Curve must contain exactly 8,760 values, found 100"
+            in warnings_list[0].message
+        )
+
+    finally:
+        # Cleanup - remove entire directory tree
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+
+def test_validate_for_upload_non_numeric_values():
+    """Test validate_for_upload with curve that has non-numeric values"""
+    from pathlib import Path
+    import shutil
+
+    temp_dir = Path("/tmp/test_curves")
+    temp_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create file with non-numeric data
+        non_numeric_file = temp_dir / "non_numeric_curve.csv"
+        with open(non_numeric_file, "w") as f:
+            # Mix of numeric and non-numeric values
+            for i in range(8760):
+                if i % 100 == 0:
+                    f.write("not_a_number\n")
+                else:
+                    f.write(f"{i * 0.5}\n")
+
+        curves = CustomCurves(
+            curves=[
+                CustomCurve(
+                    key="non_numeric_curve", type="profile", file_path=non_numeric_file
+                )
+            ]
+        )
+
+        validation_errors = curves.validate_for_upload()
+
+        assert len(validation_errors) == 1
+        assert "non_numeric_curve" in validation_errors
+        warnings_collector = validation_errors["non_numeric_curve"]
+        assert len(warnings_collector) == 1
+        warnings_list = list(warnings_collector)
+        assert "Curve contains non-numeric values" in warnings_list[0].message
+
+    finally:
+        # Cleanup - remove entire directory tree
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+
+def test_validate_for_upload_empty_curve():
+    """Test validate_for_upload with curve that has empty data"""
+    from pathlib import Path
+    import shutil
+
+    temp_dir = Path("/tmp/test_curves")
+    temp_dir.mkdir(exist_ok=True)
+
+    try:
+        empty_file = temp_dir / "empty_curve.csv"
+        empty_file.touch()
+
+        curves = CustomCurves(
+            curves=[
+                CustomCurve(key="empty_curve", type="profile", file_path=empty_file)
+            ]
+        )
+
+        validation_errors = curves.validate_for_upload()
+
+        assert len(validation_errors) == 1
+        assert "empty_curve" in validation_errors
+        warnings_collector = validation_errors["empty_curve"]
+        assert len(warnings_collector) == 1
+        warnings_list = list(warnings_collector)
+        assert "Curve contains no data" in warnings_list[0].message
+
+    finally:
+        # Cleanup - remove entire directory tree
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+
+def test_validate_for_upload_file_read_error():
+    """Test validate_for_upload with curve file that cannot be read"""
+    from pathlib import Path
+
+    non_existent_file = Path("/tmp/non_existent_curve.csv")
+
+    curves = CustomCurves(
+        curves=[
+            CustomCurve(
+                key="unreadable_curve", type="profile", file_path=non_existent_file
+            )
+        ]
+    )
+
+    validation_errors = curves.validate_for_upload()
+
+    assert len(validation_errors) == 1
+    assert "unreadable_curve" in validation_errors
+    warnings_collector = validation_errors["unreadable_curve"]
+    assert len(warnings_collector) == 1
+    warnings_list = list(warnings_collector)  # Convert to list to access by index
+    assert "Error reading curve data:" in warnings_list[0].message
+
+
+def test_validate_for_upload_multiple_curves_mixed_validity():
+    """Test validate_for_upload with mix of valid and invalid curves"""
+    import numpy as np
+    from pathlib import Path
+    import shutil
+
+    temp_dir = Path("/tmp/test_curves")
+    temp_dir.mkdir(exist_ok=True)
+
+    try:
+        # Valid curve
+        valid_data = np.random.uniform(0, 100, 8760)
+        valid_file = temp_dir / "valid_curve.csv"
+        pd.Series(valid_data).to_csv(valid_file, header=False, index=False)
+
+        # Invalid curve (wrong length)
+        invalid_data = np.random.uniform(0, 100, 100)
+        invalid_file = temp_dir / "invalid_curve.csv"
+        pd.Series(invalid_data).to_csv(invalid_file, header=False, index=False)
+
+        curves = CustomCurves(
+            curves=[
+                CustomCurve(key="valid_curve", type="profile", file_path=valid_file),
+                CustomCurve(
+                    key="invalid_curve", type="profile", file_path=invalid_file
+                ),
+                CustomCurve(key="no_data_curve", type="profile"),  # No file path
+            ]
+        )
+
+        validation_errors = curves.validate_for_upload()
+
+        # Should have errors for 2 curves, but not the valid one
+        assert len(validation_errors) == 2
+        assert "valid_curve" not in validation_errors
+        assert "invalid_curve" in validation_errors
+        assert "no_data_curve" in validation_errors
+
+        # Check specific error messages
+        invalid_warnings = list(validation_errors["invalid_curve"])
+        no_data_warnings = list(validation_errors["no_data_curve"])
+        assert (
+            "Curve must contain exactly 8,760 values, found 100"
+            in invalid_warnings[0].message
+        )
+        assert "Curve has no data available" in no_data_warnings[0].message
+
+    finally:
+        # Cleanup - remove entire directory tree
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)

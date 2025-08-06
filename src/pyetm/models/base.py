@@ -51,9 +51,15 @@ class Base(BaseModel):
         Handle assignment with validation error capture.
         Simplified from the original complex implementation.
         """
-        # Skip validation for private attributes
-        if name.startswith("_") or name not in self.__class__.model_fields:
-            super().__setattr__(name, value)
+        # Skip validation for private attributes, methods/functions, or existing methods
+        if (
+            name.startswith("_")
+            or name not in self.__class__.model_fields
+            or callable(value)
+            or hasattr(self.__class__, name)
+        ):
+            # Use object.__setattr__ to bypass Pydantic for these cases
+            object.__setattr__(self, name, value)
             return
 
         # Clear existing warnings for this field
