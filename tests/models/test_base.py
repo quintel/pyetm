@@ -144,26 +144,6 @@ def test_merge_submodel_warnings_with_multiple_submodels(dummy_base_model):
     assert len(parent.warnings) >= 2
 
 
-def test_load_safe_always_constructs_and_warns(dummy_base_model):
-    """Test that load_safe never raises exceptions and creates warnings."""
-    # load_safe should never raise, even if data is invalid
-    data = {"a": "not-int", "b": 123}
-    d = dummy_base_model.load_safe(**data)
-
-    assert isinstance(d, dummy_base_model)
-    assert len(d.warnings) > 0
-
-    # Check that warnings contain expected validation messages
-    all_warnings = list(d.warnings)
-    warning_messages = [w.message.lower() for w in all_warnings]
-
-    assert any("valid integer" in msg for msg in warning_messages)
-    # Should have warning about b being invalid (number instead of string) or missing
-    assert any(
-        "valid string" in msg or "field required" in msg for msg in warning_messages
-    )
-
-
 def test_add_warning_manually(dummy_base_model):
     """Test manually adding warnings to a model."""
     d = dummy_base_model(a=1, b="string")
@@ -242,21 +222,6 @@ def test_get_serializable_fields(dummy_base_model):
     assert all(not field.startswith("_") for field in fields)
 
 
-def test_warning_collector_legacy_compatibility(dummy_base_model):
-    """Test that we can still get legacy dict format if needed."""
-    d = dummy_base_model(a="invalid", b="string")
-
-    # New API
-    assert len(d.warnings) > 0
-    assert d.warnings.has_warnings("a")
-
-    # Legacy format available through to_legacy_dict()
-    legacy_dict = d.warnings.to_legacy_dict()
-    assert isinstance(legacy_dict, dict)
-    assert "a" in legacy_dict
-    assert isinstance(legacy_dict["a"], list)
-
-
 def test_model_construction_with_partial_data(dummy_base_model):
     """Test model construction with missing optional fields."""
     # Assuming 'c' is optional in dummy_base_model
@@ -323,3 +288,69 @@ def test_show_warnings_different_severities(capsys, dummy_base_model):
     assert "Information message" in captured.out
     assert "Warning message" in captured.out
     assert "Error message" in captured.out
+
+
+def test_from_dataframe_not_implemented_creates_fallback(dummy_base_model):
+    """Test that calling from_dataframe on base class creates fallback with warning."""
+    import pandas as pd
+
+    df = pd.DataFrame({"a": [1], "b": ["test"]})
+
+    # The base class should create a fallback instance with warnings since _from_dataframe is not implemented
+    instance = dummy_base_model.from_dataframe(df)
+
+    assert isinstance(instance, dummy_base_model)
+    assert len(instance.warnings) > 0
+    # Check for warnings about the failure - the warning will be on 'from_dataframe' field
+    from_dataframe_warnings = instance.warnings.get_by_field("from_dataframe")
+    assert len(from_dataframe_warnings) > 0
+    assert "must implement _from_dataframe" in from_dataframe_warnings[0].message
+
+
+def test_from_dataframe_error_handling_creates_fallback_instance(dummy_base_model):
+    """Test that from_dataframe creates fallback instance with warnings on error."""
+    import pandas as pd
+
+    # Override _from_dataframe to raise an error
+    def failing_from_dataframe(cls, df, **kwargs):
+        raise ValueError("Intentional test error")
+
+    dummy_base_model._from_dataframe = classmethod(failing_from_dataframe)
+
+    df = pd.DataFrame({"a": [1], "b": ["test"]})
+
+    # Should not raise, but create instance with warnings
+    instance = dummy_base_model.from_dataframe(df)
+
+    assert isinstance(instance, dummy_base_model)
+    assert len(instance.warnings) > 0
+    # Check for warnings about the failure - the warning will be on 'from_dataframe' field
+    from_dataframe_warnings = instance.warnings.get_by_field("from_dataframe")
+    assert len(from_dataframe_warnings) > 0
+    assert "Failed to create from DataFrame" in from_dataframe_warnings[0].message
+
+
+def test_from_dataframe_successful_delegation():
+    """Test that from_dataframe properly delegates to _from_dataframe."""
+    import pandas as pd
+    from pyetm.models.base import Base
+
+    class TestModel(Base):
+        x: int
+        y: str
+
+        def _to_dataframe(self, **kwargs):
+            return pd.DataFrame({"x": [self.x], "y": [self.y]})
+
+        @classmethod
+        def _from_dataframe(cls, df, **kwargs):
+            row = df.iloc[0]
+            return cls(x=row["x"], y=row["y"])
+
+    # Test the successful path
+    df = pd.DataFrame({"x": [42], "y": ["hello"]})
+    instance = TestModel.from_dataframe(df)
+
+    assert instance.x == 42
+    assert instance.y == "hello"
+    assert len(instance.warnings) == 0

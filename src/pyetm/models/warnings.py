@@ -111,18 +111,6 @@ class WarningCollector:
             result[warning.field].append(warning.to_dict())
         return result
 
-    def to_legacy_dict(self) -> Dict[str, List[str]]:
-        """
-        Convert to the old warning format for backward compatibility.
-        Groups warnings by field and returns just the messages.
-        """
-        result = {}
-        for warning in self._warnings:
-            if warning.field not in result:
-                result[warning.field] = []
-            result[warning.field].append(warning.message)
-        return result
-
     def merge_from(self, other: "WarningCollector", prefix: str = "") -> None:
         """
         Merge warnings from another collector, optionally with a field prefix.
@@ -144,7 +132,6 @@ class WarningCollector:
     ) -> None:
         """
         Merge warnings from Base model instances.
-        Maintains compatibility with the original _merge_submodel_warnings method.
         """
         for submodel in submodels:
             if hasattr(submodel, "_warning_collector"):
