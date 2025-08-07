@@ -3,12 +3,12 @@ import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
-from pydantic import Field, PrivateAttr, model_validator
+from pydantic import Field, PrivateAttr
 from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
-from pyetm.models.custom_curves import CustomCurves
+from pyetm.models.custom_curves import CustomCurve, CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
@@ -18,8 +18,12 @@ from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
+from pyetm.services.scenario_runners.update_custom_curves import (
+    UpdateCustomCurvesRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -71,7 +75,7 @@ class Scenario(Base):
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for warning in result.errors:
-            scenario.add_warning('base', warning)
+            scenario.add_warning("base", warning)
 
         return scenario
 
@@ -91,7 +95,7 @@ class Scenario(Base):
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for w in result.errors:
-            scenario.add_warning('metadata', w)
+            scenario.add_warning("metadata", w)
         return scenario
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
@@ -105,7 +109,7 @@ class Scenario(Base):
 
         # Add any warnings from the update
         for w in result.errors:
-            self.add_warning('metadata', w)
+            self.add_warning("metadata", w)
 
         # Update the current scenario object with the server response
         if result.data and "scenario" in result.data:
@@ -163,8 +167,8 @@ class Scenario(Base):
         coll = Inputs.from_json(result.data)
         # merge runner warnings and any item‐level warnings
         for w in result.errors:
-            self.add_warning('inputs', w)
-        self._merge_submodel_warnings(coll)
+            self.add_warning("inputs", w)
+        self._merge_submodel_warnings(coll, key_attr="inputs")
 
         self._inputs = coll
         return coll
@@ -173,9 +177,10 @@ class Scenario(Base):
         """
         Extract df to dict, set None/NaN sliders to reset, and call update_inputs.
         This ensures the dataframe exactly represents the inputs.
+        # TODO: Add validation for the dataframe structure
         """
         self.update_user_values(
-            dataframe['user'].droplevel('unit').fillna("reset").to_dict()
+            dataframe["user"].droplevel("unit").fillna("reset").to_dict()
         )
 
     def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
@@ -186,7 +191,11 @@ class Scenario(Base):
         # Update them in the Inputs object, and check validation
         validity_errors = self.inputs.is_valid_update(update_inputs)
         if validity_errors:
-            raise ScenarioError(f"Could not update user values: {validity_errors}")
+            error_summary = []
+            for key, warning_collector in validity_errors.items():
+                warnings_list = [w.message for w in warning_collector]
+                error_summary.append(f"{key}: {warnings_list}")
+            raise ScenarioError(f"Could not update user values: {error_summary}")
 
         result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
 
@@ -194,7 +203,6 @@ class Scenario(Base):
             raise ScenarioError(f"Could not update user values: {result.errors}")
 
         self.inputs.update(update_inputs)
-
 
     def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
         """
@@ -212,7 +220,6 @@ class Scenario(Base):
         # Update them in the Inputs object
         self.inputs.update(reset_inputs)
 
-
     @property
     def sortables(self) -> Sortables:
         if self._sortables is not None:
@@ -224,11 +231,88 @@ class Scenario(Base):
 
         coll = Sortables.from_json(result.data)
         for w in result.errors:
-            self.add_warning('sortables', w)
-        self._merge_submodel_warnings(coll)
+            self.add_warning("sortables", w)
+        self._merge_submodel_warnings(coll, key_attr="sortables")
 
         self._sortables = coll
         return coll
+
+    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+        """
+        Extract sortables from dataframe and update them.
+        The dataframe should have sortable names as columns and orders as rows.
+
+        Args:
+            dataframe: DataFrame with sortable names as columns and order values as rows
+        """
+        # Convert DataFrame to dict of lists, handling NaN/None values
+        sortables_dict = {}
+        for column in dataframe.columns:
+            # Filter out NaN/None values and convert to list
+            order_values = dataframe[column].dropna().tolist()
+            if order_values:  # Only include if there are actual values
+                sortables_dict[column] = order_values
+
+        self.update_sortables(sortables_dict)
+
+    def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
+        """
+        Update the order of specified sortables.
+
+        Args:
+            update_sortables: Dictionary mapping sortable names to their new orders
+        """
+        # Validate the updates first
+        validity_errors = self.sortables.is_valid_update(update_sortables)
+        if validity_errors:
+            error_summary = []
+            for key, warning_collector in validity_errors.items():
+                warnings_list = [w.message for w in warning_collector]
+                error_summary.append(f"{key}: {warnings_list}")
+            raise ScenarioError(f"Could not update sortables: {error_summary}")
+
+        # Make individual API calls for each sortable as there is no bulk endpoint
+        for name, order in update_sortables.items():
+            if name.startswith("heat_network_"):
+                subtype = name.replace("heat_network_", "")
+                result = UpdateSortablesRunner.run(
+                    BaseClient(), self, "heat_network", order, subtype=subtype
+                )
+            else:
+                result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
+
+            if not result.success:
+                raise ScenarioError(
+                    f"Could not update sortable '{name}': {result.errors}"
+                )
+
+        self.sortables.update(update_sortables)
+
+    def remove_sortables(self, sortable_names: Union[List[str], Set[str]]) -> None:
+        """
+        Reset specified sortables to their default/empty orders.
+
+        Args:
+            sortable_names: List or set of sortable names to reset
+        """
+        # Make individual API calls to reset each sortable
+        for name in sortable_names:
+            if name.startswith("heat_network_"):
+                # Handle heat_network with subtype
+                subtype = name.replace("heat_network_", "")
+                result = UpdateSortablesRunner.run(
+                    BaseClient(), self, "heat_network", [], subtype=subtype
+                )
+            else:
+                result = UpdateSortablesRunner.run(BaseClient(), self, name, [])
+
+            if not result.success:
+                raise ScenarioError(
+                    f"Could not remove sortable '{name}': {result.errors}"
+                )
+
+        reset_sortables = {name: [] for name in sortable_names}
+        self.sortables.update(reset_sortables)
 
     @property
     def custom_curves(self) -> CustomCurves:
@@ -241,8 +325,8 @@ class Scenario(Base):
 
         coll = CustomCurves.from_json(result.data)
         for w in result.errors:
-            self.add_warning('custom_curves', w)
-        self._merge_submodel_warnings(coll)
+            self.add_warning("custom_curves", w)
+        self._merge_submodel_warnings(coll, key_attr="custom_curves")
 
         self._custom_curves = coll
         return coll
@@ -254,6 +338,38 @@ class Scenario(Base):
         """Yield all Series"""
         for key in self.custom_curves.attached_keys():
             yield self.custom_curve_series(key)
+
+    def update_custom_curves(self, custom_curves) -> None:
+        """
+        Upload/update custom curves for this scenario.
+
+        Args:
+            custom_curves: CustomCurves object containing curves to upload
+        TODO: Update after the from_excel is implemented
+        """
+
+        # Validate curves before uploading
+        validity_errors = custom_curves.validate_for_upload()
+        # TODO: Extract all these validity_errors thingys to a single util or something, lots of repetition at the moment
+        if validity_errors:
+            error_summary = []
+            for key, warning_collector in validity_errors.items():
+                warnings_list = [w.message for w in warning_collector]
+                error_summary.append(f"{key}: {warnings_list}")
+            raise ScenarioError(f"Could not update custom curves: {error_summary}")
+
+        # Upload curves
+        result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
+        if not result.success:
+            raise ScenarioError(f"Could not update custom curves: {result.errors}")
+
+        # Update the scenario's custom curves object
+        for new_curve in custom_curves.curves:
+            existing_curve = self.custom_curves._find(new_curve.key)
+            if existing_curve:
+                existing_curve.file_path = new_curve.file_path
+            else:
+                self.custom_curves.curves.append(new_curve)
 
     @property
     def output_curves(self) -> OutputCurves:
@@ -286,6 +402,7 @@ class Scenario(Base):
         ready collecting all of them
         """
         self._queries.execute(BaseClient(), self)
+        self._merge_submodel_warnings(self._queries, key_attr="queries")
 
     def results(self, columns="future") -> pd.DataFrame:
         """
@@ -308,3 +425,28 @@ class Scenario(Base):
             return False
 
         return len(self._queries.query_keys()) > 0
+
+    def show_all_warnings(self) -> None:
+        """
+        Display all warnings from the scenario and its submodels in a organized way.
+        """
+        print(f"=== Warnings for Scenario {self.id} ===")
+
+        # Show scenario-level warnings
+        if len(self.warnings) > 0:
+            print("\nScenario warnings:")
+            self.show_warnings()
+
+        # Show submodel warnings if they exist and are loaded
+        submodels = [
+            ("Inputs", self._inputs),
+            ("Sortables", self._sortables),
+            ("Custom Curves", self._custom_curves),
+            ("Output Curves", self._output_curves),
+            ("Queries", self._queries),
+        ]
+
+        for name, submodel in submodels:
+            if submodel is not None and len(submodel.warnings) > 0:
+                print(f"\n{name} warnings:")
+                submodel.show_warnings()
