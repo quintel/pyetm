@@ -1,4 +1,5 @@
 from pyetm.models.base import Base
+import pandas as pd
 
 
 def test_valid_initialization_has_no_warnings(dummy_base_model):
@@ -8,8 +9,8 @@ def test_valid_initialization_has_no_warnings(dummy_base_model):
     assert d.a == 10
     assert d.b == "string"
     assert d.c == 3.14
-    assert len(d.warnings) == 0  # New: check length instead of empty dict
-    assert not d.warnings.has_warnings()  # New: use has_warnings method
+    assert len(d.warnings) == 0
+    assert not d.warnings.has_warnings()
 
 
 def test_invalid_initialization_becomes_warning_not_exception(dummy_base_model):
@@ -17,10 +18,9 @@ def test_invalid_initialization_becomes_warning_not_exception(dummy_base_model):
     d = dummy_base_model(a="not-an-int", b="hi")
 
     assert isinstance(d, dummy_base_model)
-    assert len(d.warnings) > 0  # New: check that warnings exist
+    assert len(d.warnings) > 0
 
-    # Check warning content using new API
-    all_warnings = list(d.warnings)  # Get all ModelWarning objects
+    all_warnings = list(d.warnings)
     warning_messages = [w.message.lower() for w in all_warnings]
     assert any("valid integer" in msg for msg in warning_messages)
 
@@ -41,7 +41,7 @@ def test_missing_required_field_becomes_warning(dummy_base_model):
 def test_assignment_validation_generates_warning_and_skips_assignment(dummy_base_model):
     """Test that invalid assignments generate warnings and don't change the value."""
     d = dummy_base_model(a=1, b="foo")
-    d.warnings.clear()  # Clear any initialization warnings
+    d.warnings.clear()
 
     # Good assignment should work
     d.a = 42
@@ -50,9 +50,9 @@ def test_assignment_validation_generates_warning_and_skips_assignment(dummy_base
 
     # Bad assignment should generate warning and not change value
     original_b = d.b
-    d.b = 123  # Invalid: should be string
+    d.b = 123
 
-    assert d.b == original_b  # Value should not change
+    assert d.b == original_b
     assert len(d.warnings) == 1
 
     # Check warning content
@@ -68,11 +68,10 @@ def test_merge_submodel_warnings_brings_them_up(dummy_base_model):
         x: int
 
         def _to_dataframe(self, **kwargs):
-            import pandas as pd
 
             return pd.DataFrame({"x": [self.x]})
 
-    child = Child(x="warning")  # Invalid value will create warnings
+    child = Child(x="warning")
     assert len(child.warnings) > 0, "child should have at least one warning"
 
     parent = dummy_base_model(a=0, b="string")
@@ -91,10 +90,9 @@ def test_merge_submodel_warnings_brings_them_up(dummy_base_model):
 def test_show_warnings_no_warnings_prints_no_warnings(capsys, dummy_base_model):
     """Test show_warnings output when no warnings exist."""
     d = dummy_base_model(a=3, b="string")
-    d.warnings.clear()  # Ensure no warnings
+    d.warnings.clear()
 
     d.show_warnings()
-
     captured = capsys.readouterr()
     assert "No warnings." in captured.out.strip()
 
@@ -119,7 +117,6 @@ def test_merge_submodel_warnings_with_multiple_submodels(dummy_base_model):
         x: int
 
         def _to_dataframe(self, **kwargs):
-            import pandas as pd
 
             return pd.DataFrame({"x": [self.x]})
 
@@ -142,26 +139,6 @@ def test_merge_submodel_warnings_with_multiple_submodels(dummy_base_model):
 
     # Should have warnings from both children
     assert len(parent.warnings) >= 2
-
-
-def test_load_safe_always_constructs_and_warns(dummy_base_model):
-    """Test that load_safe never raises exceptions and creates warnings."""
-    # load_safe should never raise, even if data is invalid
-    data = {"a": "not-int", "b": 123}
-    d = dummy_base_model.load_safe(**data)
-
-    assert isinstance(d, dummy_base_model)
-    assert len(d.warnings) > 0
-
-    # Check that warnings contain expected validation messages
-    all_warnings = list(d.warnings)
-    warning_messages = [w.message.lower() for w in all_warnings]
-
-    assert any("valid integer" in msg for msg in warning_messages)
-    # Should have warning about b being invalid (number instead of string) or missing
-    assert any(
-        "valid string" in msg or "field required" in msg for msg in warning_messages
-    )
 
 
 def test_add_warning_manually(dummy_base_model):
@@ -194,7 +171,7 @@ def test_add_warning_with_severity(dummy_base_model):
 
 def test_clear_warnings_for_specific_field(dummy_base_model):
     """Test clearing warnings for a specific field."""
-    d = dummy_base_model(a="invalid", b=123)  # Both invalid
+    d = dummy_base_model(a="invalid", b=123)
 
     # Should have warnings for both fields
     assert d.warnings.has_warnings("a")
@@ -221,7 +198,7 @@ def test_assignment_clears_previous_warnings(dummy_base_model):
     d = dummy_base_model(a=1, b="string")
 
     # Make invalid assignment to create warning
-    d.a = "invalid"  # Should create warning
+    d.a = "invalid"
     assert d.warnings.has_warnings("a")
 
     # Make valid assignment - should clear warnings
@@ -242,40 +219,14 @@ def test_get_serializable_fields(dummy_base_model):
     assert all(not field.startswith("_") for field in fields)
 
 
-def test_warning_collector_legacy_compatibility(dummy_base_model):
-    """Test that we can still get legacy dict format if needed."""
-    d = dummy_base_model(a="invalid", b="string")
-
-    # New API
-    assert len(d.warnings) > 0
-    assert d.warnings.has_warnings("a")
-
-    # Legacy format available through to_legacy_dict()
-    legacy_dict = d.warnings.to_legacy_dict()
-    assert isinstance(legacy_dict, dict)
-    assert "a" in legacy_dict
-    assert isinstance(legacy_dict["a"], list)
-
-
-def test_model_construction_with_partial_data(dummy_base_model):
-    """Test model construction with missing optional fields."""
-    # Assuming 'c' is optional in dummy_base_model
-    d = dummy_base_model(a=1, b="string")
-
-    assert d.a == 1
-    assert d.b == "string"
-    # Optional field 'c' should have default or None
-
-
 def test_multiple_validation_errors_all_become_warnings(dummy_base_model):
     """Test that multiple validation errors all become warnings."""
     # Create model with multiple invalid fields
-    d = dummy_base_model(a="not-int", b=123)  # Both invalid
+    d = dummy_base_model(a="not-int", b=123)
 
     assert isinstance(d, dummy_base_model)
-    assert len(d.warnings) >= 2  # Should have at least 2 warnings
+    assert len(d.warnings) >= 2
 
-    # Should have warnings for both fields
     assert d.warnings.has_warnings("a")
     assert d.warnings.has_warnings("b")
 
@@ -286,7 +237,6 @@ def test_nested_warning_merging_preserves_structure(dummy_base_model):
     d = dummy_base_model(a=1, b="string")
     d.warnings.clear()
 
-    # Add complex nested warning structure (simulating legacy behavior)
     complex_warnings = {"sub1": ["Warning 1", "Warning 2"], "sub2": ["Warning 3"]}
     d.add_warning("parent", complex_warnings)
 
@@ -323,3 +273,65 @@ def test_show_warnings_different_severities(capsys, dummy_base_model):
     assert "Information message" in captured.out
     assert "Warning message" in captured.out
     assert "Error message" in captured.out
+
+
+def test_from_dataframe_not_implemented_creates_fallback(dummy_base_model):
+    """Test that calling from_dataframe on base class creates fallback with warning."""
+
+    df = pd.DataFrame({"a": [1], "b": ["test"]})
+
+    # The base class should create a fallback instance with warnings since _from_dataframe is not implemented
+    instance = dummy_base_model.from_dataframe(df)
+
+    assert isinstance(instance, dummy_base_model)
+    assert len(instance.warnings) > 0
+
+    from_dataframe_warnings = instance.warnings.get_by_field("from_dataframe")
+    assert len(from_dataframe_warnings) > 0
+    assert "must implement _from_dataframe" in from_dataframe_warnings[0].message
+
+
+def test_from_dataframe_error_handling_creates_fallback_instance(dummy_base_model):
+    """Test that from_dataframe creates fallback instance with warnings on error."""
+
+    # Override _from_dataframe to raise an error
+    def failing_from_dataframe(cls, df, **kwargs):
+        raise ValueError("Intentional test error")
+
+    dummy_base_model._from_dataframe = classmethod(failing_from_dataframe)
+
+    df = pd.DataFrame({"a": [1], "b": ["test"]})
+
+    # Should not raise, but create instance with warnings
+    instance = dummy_base_model.from_dataframe(df)
+
+    assert isinstance(instance, dummy_base_model)
+    assert len(instance.warnings) > 0
+
+    from_dataframe_warnings = instance.warnings.get_by_field("from_dataframe")
+    assert len(from_dataframe_warnings) > 0
+    assert "Failed to create from DataFrame" in from_dataframe_warnings[0].message
+
+
+def test_from_dataframe_successful_delegation():
+    """Test that from_dataframe properly delegates to _from_dataframe."""
+
+    class TestModel(Base):
+        x: int
+        y: str
+
+        def _to_dataframe(self, **kwargs):
+            return pd.DataFrame({"x": [self.x], "y": [self.y]})
+
+        @classmethod
+        def _from_dataframe(cls, df, **kwargs):
+            row = df.iloc[0]
+            return cls(x=row["x"], y=row["y"])
+
+    # Test the successful path
+    df = pd.DataFrame({"x": [42], "y": ["hello"]})
+    instance = TestModel.from_dataframe(df)
+
+    assert instance.x == 42
+    assert instance.y == "hello"
+    assert len(instance.warnings) == 0

@@ -8,7 +8,7 @@ from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
-from pyetm.models.custom_curves import CustomCurves
+from pyetm.models.custom_curves import CustomCurve, CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
@@ -21,6 +21,9 @@ from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
+from pyetm.services.scenario_runners.update_custom_curves import (
+    UpdateCustomCurvesRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -335,6 +338,38 @@ class Scenario(Base):
         """Yield all Series"""
         for key in self.custom_curves.attached_keys():
             yield self.custom_curve_series(key)
+
+    def update_custom_curves(self, custom_curves) -> None:
+        """
+        Upload/update custom curves for this scenario.
+
+        Args:
+            custom_curves: CustomCurves object containing curves to upload
+        TODO: Update after the from_excel is implemented
+        """
+
+        # Validate curves before uploading
+        validity_errors = custom_curves.validate_for_upload()
+        # TODO: Extract all these validity_errors thingys to a single util or something, lots of repetition at the moment
+        if validity_errors:
+            error_summary = []
+            for key, warning_collector in validity_errors.items():
+                warnings_list = [w.message for w in warning_collector]
+                error_summary.append(f"{key}: {warnings_list}")
+            raise ScenarioError(f"Could not update custom curves: {error_summary}")
+
+        # Upload curves
+        result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
+        if not result.success:
+            raise ScenarioError(f"Could not update custom curves: {result.errors}")
+
+        # Update the scenario's custom curves object
+        for new_curve in custom_curves.curves:
+            existing_curve = self.custom_curves._find(new_curve.key)
+            if existing_curve:
+                existing_curve.file_path = new_curve.file_path
+            else:
+                self.custom_curves.curves.append(new_curve)
 
     @property
     def output_curves(self) -> OutputCurves:

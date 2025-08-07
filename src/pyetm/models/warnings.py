@@ -55,11 +55,6 @@ class WarningCollector:
     ) -> None:
         """
         Add warning(s) to the collection.
-
-        Handles the complex legacy patterns from the original system:
-        - Single string messages
-        - Lists of messages
-        - Nested dictionaries of warnings
         """
         if isinstance(message, str):
             self._warnings.append(ModelWarning(field, message, severity))
@@ -69,7 +64,6 @@ class WarningCollector:
                 if isinstance(msg, str):
                     self._warnings.append(ModelWarning(field, msg, severity))
                 else:
-                    # Handle nested structures
                     self._warnings.append(ModelWarning(field, str(msg), severity))
 
         elif isinstance(message, dict):
@@ -111,22 +105,9 @@ class WarningCollector:
             result[warning.field].append(warning.to_dict())
         return result
 
-    def to_legacy_dict(self) -> Dict[str, List[str]]:
-        """
-        Convert to the old warning format for backward compatibility.
-        Groups warnings by field and returns just the messages.
-        """
-        result = {}
-        for warning in self._warnings:
-            if warning.field not in result:
-                result[warning.field] = []
-            result[warning.field].append(warning.message)
-        return result
-
     def merge_from(self, other: "WarningCollector", prefix: str = "") -> None:
         """
         Merge warnings from another collector, optionally with a field prefix.
-        This replaces the complex _merge_submodel_warnings logic.
         """
         for warning in other._warnings:
             field = f"{prefix}.{warning.field}" if prefix else warning.field
@@ -144,7 +125,6 @@ class WarningCollector:
     ) -> None:
         """
         Merge warnings from Base model instances.
-        Maintains compatibility with the original _merge_submodel_warnings method.
         """
         for submodel in submodels:
             if hasattr(submodel, "_warning_collector"):

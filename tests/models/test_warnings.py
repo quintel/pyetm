@@ -193,19 +193,6 @@ def test_get_fields_with_warnings():
     assert "field2" in fields
 
 
-def test_to_legacy_dict():
-    """Test conversion to legacy dictionary format."""
-    collector = WarningCollector()
-    collector.add("field1", "Warning 1")
-    collector.add("field1", "Warning 2")
-    collector.add("field2", "Warning 3")
-
-    legacy_dict = collector.to_legacy_dict()
-
-    expected = {"field1": ["Warning 1", "Warning 2"], "field2": ["Warning 3"]}
-    assert legacy_dict == expected
-
-
 def test_to_dict():
     """Test conversion to detailed dictionary format."""
     collector = WarningCollector()
