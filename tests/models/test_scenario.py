@@ -468,7 +468,7 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
 # ------ sortables ------ #
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def patch_sortables_from_json(monkeypatch):
     dummy = object()
     monkeypatch.setattr(Sortables, "from_json", staticmethod(lambda data: dummy))
@@ -691,3 +691,229 @@ def test_scenario_show_all_warnings(scenario, capsys):
     assert f"Warnings for Scenario {scenario.id}" in captured.out
     assert "Scenario warnings:" in captured.out
     assert "Test warning" in captured.out
+
+
+# ------ Update Custom Curves Tests ------ #
+
+
+def test_scenario_update_custom_curves_success(monkeypatch, ok_service_result):
+    """Test successful custom curves update"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.update_custom_curves import UpdateCustomCurvesRunner
+    from pyetm.models.warnings import WarningCollector
+    import pandas as pd
+    import numpy as np
+    
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario._custom_curves = CustomCurves(curves=[])
+    
+    # Create valid custom curves (mock file data)
+    curve = CustomCurve(key="test_curve", type="profile")
+    custom_curves = CustomCurves(curves=[curve])
+    
+    # Mock validate_for_upload to return no errors
+    def mock_validate():
+        return {}
+    
+    # Mock UpdateCustomCurvesRunner to succeed
+    def mock_runner(client, scenario, curves):
+        return ok_service_result({
+            "uploaded_curves": ["test_curve"],
+            "total_curves": 1,
+            "successful_uploads": 1
+        })
+    
+    monkeypatch.setattr(custom_curves, "validate_for_upload", mock_validate)
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner)
+    
+    # Should succeed without raising exception
+    scenario.update_custom_curves(custom_curves)
+    
+    # Verify curve was added to scenario's curves
+    assert len(scenario.custom_curves.curves) == 1
+    assert scenario.custom_curves.curves[0].key == "test_curve"
+
+
+def test_scenario_update_custom_curves_validation_error():
+    """Test custom curves update with validation errors"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.models.warnings import WarningCollector
+    
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    
+    # Create custom curves
+    curve = CustomCurve(key="invalid_curve", type="profile")
+    custom_curves = CustomCurves(curves=[curve])
+    
+    # Mock validate_for_upload to return validation errors
+    def mock_validate():
+        warning_collector = WarningCollector()
+        warning_collector.add("invalid_curve", "Curve contains non-numeric values")
+        return {"invalid_curve": warning_collector}
+    
+    custom_curves.validate_for_upload = mock_validate
+    
+    # Should raise ScenarioError due to validation failure
+    with pytest.raises(ScenarioError) as exc_info:
+        scenario.update_custom_curves(custom_curves)
+    
+    assert "Could not update custom curves" in str(exc_info.value)
+    assert "invalid_curve" in str(exc_info.value)
+    assert "Curve contains non-numeric values" in str(exc_info.value)
+
+
+def test_scenario_update_custom_curves_runner_failure(monkeypatch, fail_service_result):
+    """Test custom curves update with runner failure"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.update_custom_curves import UpdateCustomCurvesRunner
+    
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    
+    # Create valid custom curves
+    curve = CustomCurve(key="test_curve", type="profile")
+    custom_curves = CustomCurves(curves=[curve])
+    
+    # Mock validate_for_upload to return no errors
+    def mock_validate():
+        return {}
+    
+    # Mock UpdateCustomCurvesRunner to fail
+    def mock_runner(client, scenario, curves):
+        return fail_service_result(["HTTP 500: Internal server error"])
+    
+    monkeypatch.setattr(custom_curves, "validate_for_upload", mock_validate)
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner)
+    
+    # Should raise ScenarioError due to runner failure
+    with pytest.raises(ScenarioError) as exc_info:
+        scenario.update_custom_curves(custom_curves)
+    
+    assert "Could not update custom curves" in str(exc_info.value)
+    assert "HTTP 500: Internal server error" in str(exc_info.value)
+
+
+def test_scenario_update_custom_curves_updates_existing_curve(monkeypatch, ok_service_result):
+    """Test that updating existing curves replaces file_path"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.update_custom_curves import UpdateCustomCurvesRunner
+    from pathlib import Path
+    
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    
+    # Set up scenario with existing curve
+    existing_curve = CustomCurve(key="existing_curve", type="profile", file_path=Path("/old/path.csv"))
+    scenario._custom_curves = CustomCurves(curves=[existing_curve])
+    
+    # Create new curves with same key but different file path
+    new_curve = CustomCurve(key="existing_curve", type="profile", file_path=Path("/new/path.csv"))
+    custom_curves = CustomCurves(curves=[new_curve])
+    
+    # Mock validate_for_upload to return no errors
+    def mock_validate():
+        return {}
+    
+    # Mock UpdateCustomCurvesRunner to succeed
+    def mock_runner(client, scenario, curves):
+        return ok_service_result({
+            "uploaded_curves": ["existing_curve"],
+            "total_curves": 1,
+            "successful_uploads": 1
+        })
+    
+    monkeypatch.setattr(custom_curves, "validate_for_upload", mock_validate)
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner)
+    
+    # Update curves
+    scenario.update_custom_curves(custom_curves)
+    
+    # Verify existing curve was updated with new file path
+    assert len(scenario.custom_curves.curves) == 1
+    updated_curve = scenario.custom_curves.curves[0]
+    assert updated_curve.key == "existing_curve"
+    assert updated_curve.file_path == Path("/new/path.csv")
+
+
+def test_scenario_update_custom_curves_adds_new_curve(monkeypatch, ok_service_result):
+    """Test that new curves are added to scenario's curves collection"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.update_custom_curves import UpdateCustomCurvesRunner
+    from pathlib import Path
+    
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    
+    # Set up scenario with one existing curve
+    existing_curve = CustomCurve(key="existing_curve", type="profile", file_path=Path("/old/path.csv"))
+    scenario._custom_curves = CustomCurves(curves=[existing_curve])
+    
+    # Create new curve with different key
+    new_curve = CustomCurve(key="new_curve", type="availability", file_path=Path("/new/path.csv"))
+    custom_curves = CustomCurves(curves=[new_curve])
+    
+    # Mock validate_for_upload to return no errors
+    def mock_validate():
+        return {}
+    
+    # Mock UpdateCustomCurvesRunner to succeed
+    def mock_runner(client, scenario, curves):
+        return ok_service_result({
+            "uploaded_curves": ["new_curve"],
+            "total_curves": 1,
+            "successful_uploads": 1
+        })
+    
+    monkeypatch.setattr(custom_curves, "validate_for_upload", mock_validate)
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner)
+    
+    # Update curves
+    scenario.update_custom_curves(custom_curves)
+    
+    # Verify both curves exist
+    assert len(scenario.custom_curves.curves) == 2
+    curve_keys = {curve.key for curve in scenario.custom_curves.curves}
+    assert curve_keys == {"existing_curve", "new_curve"}
+
+
+def test_scenario_update_custom_curves_multiple_validation_errors():
+    """Test custom curves update with multiple validation errors"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.models.warnings import WarningCollector
+    
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    
+    # Create custom curves
+    curves = [
+        CustomCurve(key="curve1", type="profile"),
+        CustomCurve(key="curve2", type="availability")
+    ]
+    custom_curves = CustomCurves(curves=curves)
+    
+    # Mock validate_for_upload to return multiple validation errors
+    def mock_validate():
+        errors = {}
+        
+        # Curve1 errors
+        curve1_warnings = WarningCollector()
+        curve1_warnings.add("curve1", "Wrong length")
+        curve1_warnings.add("curve1", "Non-numeric values")
+        errors["curve1"] = curve1_warnings
+
+        # Curve2 errors
+        curve2_warnings = WarningCollector()
+        curve2_warnings.add("curve2", "No data available")
+        errors["curve2"] = curve2_warnings
+
+        return errors
+    
+    custom_curves.validate_for_upload = mock_validate
+    
+    # Should raise ScenarioError with all validation errors
+    with pytest.raises(ScenarioError) as exc_info:
+        scenario.update_custom_curves(custom_curves)
+    
+    error_message = str(exc_info.value)
+    assert "Could not update custom curves" in error_message
+    assert "curve1" in error_message
+    assert "curve2" in error_message
+    assert "Wrong length" in error_message
+    assert "Non-numeric values" in error_message
+    assert "No data available" in error_message

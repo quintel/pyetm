@@ -20,7 +20,6 @@ class Base(BaseModel):
 
     # Enable assignment validation
     model_config = ConfigDict(validate_assignment=True)
-
     _warning_collector: WarningCollector = PrivateAttr(default_factory=WarningCollector)
 
     def __init__(self, **data: Any) -> None:
@@ -52,9 +51,15 @@ class Base(BaseModel):
         Handle assignment with validation error capture.
         Simplified from the original complex implementation.
         """
-        # Skip validation for private attributes
-        if name.startswith("_") or name not in self.__class__.model_fields:
-            super().__setattr__(name, value)
+        # Skip validation for private attributes, methods/functions, or existing methods
+        if (
+            name.startswith("_")
+            or name not in self.__class__.model_fields
+            or callable(value)
+            or hasattr(self.__class__, name)
+        ):
+            # Use object.__setattr__ to bypass Pydantic for these cases
+            object.__setattr__(self, name, value)
             return
 
         # Clear existing warnings for this field
@@ -106,17 +111,32 @@ class Base(BaseModel):
     def _merge_submodel_warnings(self, *submodels: Base, key_attr: str = None) -> None:
         """
         Merge warnings from nested Base models.
-        Maintains compatibility with existing code while using the new system.
         """
         self._warning_collector.merge_submodel_warnings(*submodels, key_attr=key_attr)
 
     @classmethod
-    def load_safe(cls: Type[T], **data: Any) -> T:
+    def from_dataframe(cls: Type[T], df: pd.DataFrame, **kwargs) -> T:
         """
-        Alternate constructor that always returns an instance,
-        converting all validation errors into warnings.
+        Create an instance from a pandas DataFrame.
         """
-        return cls(**data)
+        try:
+            return cls._from_dataframe(df, **kwargs)
+        except Exception as e:
+            # Create a fallback instance with warnings
+            instance = cls.model_construct()
+            instance.add_warning(
+                "from_dataframe", f"Failed to create from DataFrame: {e}"
+            )
+            return instance
+
+    @classmethod
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs):
+        """
+        Private method to be implemented by each subclass for specific deserialization logic.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} must implement _from_dataframe() class method"
+        )
 
     def _get_serializable_fields(self) -> List[str]:
         """
