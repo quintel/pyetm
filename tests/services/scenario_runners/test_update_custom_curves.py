@@ -7,6 +7,7 @@ from pyetm.models.custom_curves import CustomCurve, CustomCurves
 from pyetm.services.scenario_runners.update_custom_curves import (
     UpdateCustomCurvesRunner,
 )
+from pyetm.services.service_result import ServiceResult
 
 
 @pytest.fixture
@@ -39,9 +40,8 @@ def temp_curve_files():
 
 def test_update_custom_curves_success_single_curve(temp_curve_files):
     """Test successful upload of a single custom curve"""
-    # Mock client with successful response
+    # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
@@ -54,11 +54,12 @@ def test_update_custom_curves_success_single_curve(temp_curve_files):
     )
     custom_curves = CustomCurves(curves=[curve])
 
-    # Mock successful HTTP response
-    with patch("requests.put") as mock_put:
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_put.return_value = mock_response
+    # Mock successful _make_request response
+    with patch.object(
+        UpdateCustomCurvesRunner,
+        "_make_request",
+        return_value=ServiceResult.ok(data={"status": "uploaded"}),
+    ) as mock_make_request:
 
         result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
@@ -69,19 +70,20 @@ def test_update_custom_curves_success_single_curve(temp_curve_files):
         assert "test_curve" in result.data["uploaded_curves"]
         assert len(result.errors) == 0
 
-        # Verify API call was made correctly
-        mock_put.assert_called_once()
-        call_args = mock_put.call_args
-        assert "scenarios/12345/custom_curves/test_curve" in call_args[0][0]
-        assert call_args[1]["headers"]["Authorization"] == "Bearer test_token"
+        # Verify _make_request was called correctly
+        mock_make_request.assert_called_once()
+        call_args = mock_make_request.call_args
+        assert call_args[1]["client"] == mock_client
+        assert call_args[1]["method"] == "put"
+        assert "/scenarios/12345/custom_curves/test_curve" in call_args[1]["path"]
         assert "files" in call_args[1]
+        assert call_args[1]["headers"]["Content-Type"] is None
 
 
 def test_update_custom_curves_success_multiple_curves(temp_curve_files):
     """Test successful upload of multiple custom curves"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
@@ -97,11 +99,12 @@ def test_update_custom_curves_success_multiple_curves(temp_curve_files):
     ]
     custom_curves = CustomCurves(curves=curves)
 
-    # Mock successful HTTP responses
-    with patch("requests.put") as mock_put:
-        mock_response = Mock()
-        mock_response.status_code = 201
-        mock_put.return_value = mock_response
+    # Mock successful _make_request responses
+    with patch.object(
+        UpdateCustomCurvesRunner,
+        "_make_request",
+        return_value=ServiceResult.ok(data={"status": "uploaded"}),
+    ) as mock_make_request:
 
         result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
@@ -112,15 +115,14 @@ def test_update_custom_curves_success_multiple_curves(temp_curve_files):
         assert set(result.data["uploaded_curves"]) == {"curve_1", "curve_2"}
         assert len(result.errors) == 0
 
-        # Verify API calls were made
-        assert mock_put.call_count == 2
+        # Verify _make_request was called twice
+        assert mock_make_request.call_count == 2
 
 
 def test_update_custom_curves_curve_without_file():
     """Test upload of curve without file (uses contents() method)"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
@@ -138,11 +140,12 @@ def test_update_custom_curves_curve_without_file():
     ):
         custom_curves = CustomCurves(curves=[curve])
 
-        # Mock successful HTTP response
-        with patch("requests.put") as mock_put:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_put.return_value = mock_response
+        # Mock successful _make_request response
+        with patch.object(
+            UpdateCustomCurvesRunner,
+            "_make_request",
+            return_value=ServiceResult.ok(data={"status": "uploaded"}),
+        ) as mock_make_request:
 
             result = UpdateCustomCurvesRunner.run(
                 mock_client, mock_scenario, custom_curves
@@ -153,9 +156,9 @@ def test_update_custom_curves_curve_without_file():
             assert result.data["successful_uploads"] == 1
             assert "no_file_curve" in result.data["uploaded_curves"]
 
-            # Verify the file content was created from series data
-            mock_put.assert_called_once()
-            call_args = mock_put.call_args
+            # Verify _make_request was called with file content
+            mock_make_request.assert_called_once()
+            call_args = mock_make_request.call_args
             assert "files" in call_args[1]
 
 
@@ -163,7 +166,6 @@ def test_update_custom_curves_http_error():
     """Test handling of HTTP errors during upload"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
@@ -179,12 +181,12 @@ def test_update_custom_curves_http_error():
     ):
         custom_curves = CustomCurves(curves=[curve])
 
-        # Mock HTTP error response
-        with patch("requests.put") as mock_put:
-            mock_response = Mock()
-            mock_response.status_code = 422
-            mock_response.json.return_value = {"errors": ["Validation failed"]}
-            mock_put.return_value = mock_response
+        # Mock _make_request failure response
+        with patch.object(
+            UpdateCustomCurvesRunner,
+            "_make_request",
+            return_value=ServiceResult.fail(["422: Validation failed"]),
+        ) as mock_make_request:
 
             result = UpdateCustomCurvesRunner.run(
                 mock_client, mock_scenario, custom_curves
@@ -194,15 +196,13 @@ def test_update_custom_curves_http_error():
             assert result.success is False
             assert result.data["successful_uploads"] == 0
             assert len(result.errors) == 1
-            assert "Failed to upload error_curve: HTTP 422" in result.errors[0]
-            assert "Validation failed" in result.errors[0]
+            assert "422: Validation failed" in result.errors[0]
 
 
 def test_update_custom_curves_network_exception():
     """Test handling of network exceptions during upload"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
@@ -218,8 +218,12 @@ def test_update_custom_curves_network_exception():
     ):
         custom_curves = CustomCurves(curves=[curve])
 
-        # Mock network exception
-        with patch("requests.put", side_effect=ConnectionError("Network unreachable")):
+        # Mock _make_request raising exception
+        with patch.object(
+            UpdateCustomCurvesRunner,
+            "_make_request",
+            side_effect=ConnectionError("Network unreachable"),
+        ):
             result = UpdateCustomCurvesRunner.run(
                 mock_client, mock_scenario, custom_curves
             )
@@ -238,7 +242,6 @@ def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     """Test upload with mix of successful and failed curves"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
@@ -257,16 +260,14 @@ def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     custom_curves = CustomCurves(curves=curves)
 
     # Mock mixed responses (first succeeds, second fails)
-    with patch("requests.put") as mock_put:
-        success_response = Mock()
-        success_response.status_code = 200
+    success_result = ServiceResult.ok(data={"status": "uploaded"})
+    fail_result = ServiceResult.fail(["500: Internal server error"])
 
-        fail_response = Mock()
-        fail_response.status_code = 500
-        fail_response.text = "Internal server error"
-        fail_response.json.side_effect = ValueError("No JSON")
-
-        mock_put.side_effect = [success_response, fail_response]
+    with patch.object(
+        UpdateCustomCurvesRunner,
+        "_make_request",
+        side_effect=[success_result, fail_result],
+    ) as mock_make_request:
 
         result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
@@ -276,14 +277,13 @@ def test_update_custom_curves_mixed_success_failure(temp_curve_files):
         assert result.data["successful_uploads"] == 1
         assert result.data["uploaded_curves"] == ["success_curve"]
         assert len(result.errors) == 1
-        assert "Failed to upload fail_curve: HTTP 500" in result.errors[0]
+        assert "500: Internal server error" in result.errors[0]
 
 
 def test_update_custom_curves_empty_curves_list():
     """Test upload with empty curves list"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.headers.get.return_value = "Bearer test_token"
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario

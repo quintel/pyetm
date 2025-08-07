@@ -1,4 +1,3 @@
-import requests
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -8,14 +7,13 @@ from pyetm.clients.base_client import BaseClient
 class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for uploading custom curves to a scenario.
-    Uses raw requests to match the successful manual upload approach.
     """
 
     @staticmethod
     def run(
         client: BaseClient,
         scenario: Any,
-        custom_curves: Any,  # CustomCurves object
+        custom_curves: Any,
         **kwargs,
     ) -> ServiceResult[Dict[str, Any]]:
         """Upload all curves in the CustomCurves object."""
@@ -23,28 +21,28 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
         all_errors = []
         successful_uploads = []
 
-        auth_header = client.session.headers.get("Authorization")
-        base_url = str(client.session.base_url).rstrip("/")
-        if base_url.endswith("/api/v3"):
-            base_url = base_url[:-7]
-
         for curve in custom_curves.curves:
             try:
-                # Upload the curve using raw requests (required for file uploads)
-                url = f"{base_url}/api/v3/scenarios/{scenario.id}/custom_curves/{curve.key}"
-                headers = {"Authorization": auth_header}
-
                 if curve.file_path and curve.file_path.exists():
-                    # Use actual file
-                    with open(curve.file_path, "rb") as f:
+                    # Use file
+                    with open(curve.file_path, "r") as f:
                         files = {
                             "file": (f"{curve.key}.csv", f, "application/octet-stream")
                         }
-                        response = requests.put(url, files=files, headers=headers)
+                        # Override Content-Type header so multipart/form-data is used
+                        headers = {"Content-Type": None}
+
+                        result = UpdateCustomCurvesRunner._make_request(
+                            client=client,
+                            method="put",
+                            path=f"/scenarios/{scenario.id}/custom_curves/{curve.key}",
+                            files=files,
+                            headers=headers,
+                        )
                 else:
                     # Create file content from curve data
                     curve_data = curve.contents()
-                    file_content = "\n".join(str(value) for value in curve_data.values)
+                    file_content = "\n".join(str(value) for value in curve_data)
                     files = {
                         "file": (
                             f"{curve.key}.csv",
@@ -52,27 +50,27 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
                             "application/octet-stream",
                         )
                     }
-                    response = requests.put(url, files=files, headers=headers)
+                    # Override Content-Type header so multipart/form-data is used
+                    headers = {"Content-Type": None}
 
-                # Check response
-                if response.status_code in [200, 201, 204]:
+                    result = UpdateCustomCurvesRunner._make_request(
+                        client=client,
+                        method="put",
+                        path=f"/scenarios/{scenario.id}/custom_curves/{curve.key}",
+                        files=files,
+                        headers=headers,
+                    )
+
+                # Check if the request was successful
+                if result.success:
                     successful_uploads.append(curve.key)
                 else:
-                    error_msg = (
-                        f"Failed to upload {curve.key}: HTTP {response.status_code}"
-                    )
-                    try:
-                        error_data = response.json()
-                        if "errors" in error_data:
-                            error_msg += f" - {error_data['errors']}"
-                    except:
-                        if response.text:
-                            error_msg += f" - {response.text}"
-                    all_errors.append(error_msg)
+                    all_errors.extend(result.errors)
 
             except Exception as e:
                 all_errors.append(f"Error uploading {curve.key}: {str(e)}")
 
+        # TODO: This provides some aggregated results, because we actually get multiple ServiceResults - one for each curve upload. Explore further.
         return ServiceResult(
             success=len(all_errors) == 0,
             data={

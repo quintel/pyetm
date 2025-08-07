@@ -55,11 +55,6 @@ class WarningCollector:
     ) -> None:
         """
         Add warning(s) to the collection.
-
-        Handles the complex legacy patterns from the original system:
-        - Single string messages
-        - Lists of messages
-        - Nested dictionaries of warnings
         """
         if isinstance(message, str):
             self._warnings.append(ModelWarning(field, message, severity))
@@ -69,7 +64,6 @@ class WarningCollector:
                 if isinstance(msg, str):
                     self._warnings.append(ModelWarning(field, msg, severity))
                 else:
-                    # Handle nested structures
                     self._warnings.append(ModelWarning(field, str(msg), severity))
 
         elif isinstance(message, dict):
@@ -114,7 +108,6 @@ class WarningCollector:
     def merge_from(self, other: "WarningCollector", prefix: str = "") -> None:
         """
         Merge warnings from another collector, optionally with a field prefix.
-        This replaces the complex _merge_submodel_warnings logic.
         """
         for warning in other._warnings:
             field = f"{prefix}.{warning.field}" if prefix else warning.field
