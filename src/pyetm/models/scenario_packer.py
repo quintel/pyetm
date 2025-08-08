@@ -57,7 +57,6 @@ class InputsPack(Packable):
     sheet_name: ClassVar[str] = "PARAMETERS"
 
     def _to_dataframe(self, columns="user", **kwargs):
-        # TODO: index on title if avaliable
         return pd.concat(
             [
                 scenario.inputs.to_dataframe(columns=columns)
@@ -616,6 +615,73 @@ class ScenarioPacker(BaseModel):
 
     #  Create stuff
 
+    def _read_global_options(
+        self, xlsx: pd.ExcelFile, sheet_name: str
+    ) -> Dict[str, bool]:
+        """Read global OPTIONS from the MAIN sheet."""
+        try:
+            raw = xlsx.parse(sheet_name=sheet_name, header=None)
+        except Exception:
+            return {
+                "repeat_parameters": False,
+                "repeat_gqueries": False,
+                "repeat_sortables": False,
+                "repeat_custom_curves": False,
+            }
+
+        def _as_bool(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            if isinstance(v, bool):
+                return v
+            try:
+                if isinstance(v, (int, float)) and not pd.isna(v):
+                    return bool(int(v))
+            except Exception:
+                pass
+            if isinstance(v, str):
+                s = v.strip().lower()
+                if s in {"true", "yes", "1", "y", "t"}:
+                    return True
+                if s in {"false", "no", "0", "n", "f"}:
+                    return False
+            return None
+
+        # Find the 'OPTIONS' row in column A (index 0)
+        opts_idx = None
+        col0 = raw.iloc[:, 0]
+        for i, val in enumerate(col0):
+            if isinstance(val, str) and val.strip().lower() == "options":
+                opts_idx = i
+                break
+
+        defaults = {
+            "repeat_parameters": False,
+            "repeat_gqueries": False,
+            "repeat_sortables": False,
+            "repeat_custom_curves": False,
+        }
+        if opts_idx is None:
+            return defaults
+
+        # Scan following rows for key/value pairs in col0/col1 until blank key
+        result = defaults.copy()
+        for i in range(opts_idx + 1, len(raw)):
+            key = raw.iat[i, 0] if 0 < raw.shape[1] else None
+            if key is None or (isinstance(key, float) and pd.isna(key)):
+                # stop at first completely blank key
+                break
+            if not isinstance(key, str):
+                continue
+            k = key.strip()
+            if k not in result:
+                continue
+            val = raw.iat[i, 1] if raw.shape[1] > 1 else None
+            b = _as_bool(val)
+            result[k] = bool(b) if b is not None else False
+
+        return result
+
     @classmethod
     def from_excel(
         cls,
@@ -636,6 +702,9 @@ class ScenarioPacker(BaseModel):
             main_df = packer.read_sheet(xlsx, main_sheet, index_col=0)
             scenarios = packer.scenarios_from_df(main_df)
 
+            # Read global OPTIONS from MAIN
+            options = packer._read_global_options(xlsx, main_sheet)
+
             # Inputs (optional): only process when the sheet exists
             inputs_sheet = sheet_names.get("inputs", packer._inputs.sheet_name)
             packer._inputs.add(*scenarios)
@@ -647,7 +716,36 @@ class ScenarioPacker(BaseModel):
                 header=None,
             )
             if isinstance(inputs_df, pd.DataFrame) and not inputs_df.empty:
-                packer._inputs.from_dataframe(inputs_df)
+                if options.get("repeat_parameters", False):
+                    try:
+                        norm = packer._inputs._normalize_inputs_dataframe(inputs_df)
+                        if isinstance(norm, pd.DataFrame) and not norm.empty:
+                            first_id = norm.columns.get_level_values(0)[0]
+                            block = norm[first_id]
+                            if isinstance(block, pd.Series):
+                                block = block.to_frame(name="user")
+                            else:
+                                if list(block.columns) != ["user"]:
+                                    block = block.copy()
+                                    first_col = block.columns[0]
+                                    block = block.rename(columns={first_col: "user"})
+                            for s in scenarios:
+                                try:
+                                    s.set_user_values_from_dataframe(block)
+                                except Exception as e:
+                                    logger.warning(
+                                        "Failed to apply repeated inputs to '%s': %s",
+                                        (
+                                            s.identifier()
+                                            if hasattr(s, "identifier")
+                                            else s.id
+                                        ),
+                                        e,
+                                    )
+                    except Exception as e:
+                        logger.warning("Failed to process repeated inputs: %s", e)
+                else:
+                    packer._inputs.from_dataframe(inputs_df)
 
             # Sortables (optional)
             sortables_sheet = (
@@ -659,8 +757,38 @@ class ScenarioPacker(BaseModel):
                 xlsx, sortables_sheet, required=False, header=None
             )
             if isinstance(sortables_df, pd.DataFrame) and not sortables_df.empty:
-                packer._sortables.add(*scenarios)
-                packer._sortables.from_dataframe(sortables_df)
+                if options.get("repeat_sortables", False):
+                    # Ensure scenarios are included in the pack for downstream DataFrame exports
+                    packer._sortables.add(*scenarios)
+                    try:
+                        norm = packer._sortables._normalize_sortables_dataframe(
+                            sortables_df
+                        )
+                        if (
+                            isinstance(norm, pd.DataFrame)
+                            and not norm.empty
+                            and isinstance(norm.columns, pd.MultiIndex)
+                        ):
+                            first_id = norm.columns.get_level_values(0)[0]
+                            block = norm[first_id]
+                            for s in scenarios:
+                                try:
+                                    s.set_sortables_from_dataframe(block)
+                                except Exception as e:
+                                    logger.warning(
+                                        "Failed to apply repeated sortables to '%s': %s",
+                                        (
+                                            s.identifier()
+                                            if hasattr(s, "identifier")
+                                            else s.id
+                                        ),
+                                        e,
+                                    )
+                    except Exception as e:
+                        logger.warning("Failed to process repeated sortables: %s", e)
+                else:
+                    packer._sortables.add(*scenarios)
+                    packer._sortables.from_dataframe(sortables_df)
 
             # Custom curves (optional)
             curves_sheet = (
@@ -672,10 +800,54 @@ class ScenarioPacker(BaseModel):
                 xlsx, curves_sheet, required=False, header=None
             )
             if isinstance(curves_df, pd.DataFrame) and not curves_df.empty:
-                packer._custom_curves.add(*scenarios)
-                packer._custom_curves.from_dataframe(curves_df)
+                if options.get("repeat_custom_curves", False):
+                    # Ensure scenarios are included in the pack for downstream DataFrame exports
+                    packer._custom_curves.add(*scenarios)
+                    try:
+                        norm = packer._custom_curves._normalize_curves_dataframe(
+                            curves_df
+                        )
+                        if (
+                            isinstance(norm, pd.DataFrame)
+                            and not norm.empty
+                            and isinstance(norm.columns, pd.MultiIndex)
+                        ):
+                            first_id = norm.columns.get_level_values(0)[0]
+                            block = norm[first_id]
+                            try:
+                                curves = CustomCurves._from_dataframe(block)
+                            except Exception as e:
+                                logger.warning(
+                                    "Failed to build repeated custom curves: %s", e
+                                )
+                                curves = None
+                            if curves is not None:
+                                for s in scenarios:
+                                    try:
+                                        s.update_custom_curves(curves)
+                                    except Exception as e:
+                                        logger.warning(
+                                            "Failed to apply repeated custom curves to '%s': %s",
+                                            (
+                                                s.identifier()
+                                                if hasattr(s, "identifier")
+                                                else s.id
+                                            ),
+                                            e,
+                                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to process repeated custom curves: %s", e
+                        )
+                else:
+                    packer._custom_curves.add(*scenarios)
+                    packer._custom_curves.from_dataframe(curves_df)
 
-            # TODO: gqueries unpack not supported (read-only)
+            # GQueries: unpack not supported; respect option but warn if set
+            if options.get("repeat_gqueries", False):
+                logger.warning(
+                    "repeat_gqueries is set but gqueries unpack is read-only and not supported"
+                )
 
         return packer
 
@@ -701,6 +873,7 @@ class ScenarioPacker(BaseModel):
     def setup_scenario(identifier, data):
         """Returns a scenario from data dict.
         If the identifier is an int (or str-int), load; otherwise create new.
+        # TODO: Set up create from template?
         """
         # Normalize NA values to None
         data = {k: (None if pd.isna(v) else v) for k, v in data.items()}
@@ -709,6 +882,41 @@ class ScenarioPacker(BaseModel):
         scenario_title: Optional[str] = (
             identifier if isinstance(identifier, str) and identifier != "" else None
         )
+
+        # Extract optional MAIN fields
+        explicit_title = data.get("title")
+        description = data.get("description")
+        private_val = data.get("private")
+        template_val = data.get("template")
+
+        def _as_bool(v):
+            if v is None:
+                return None
+            if isinstance(v, bool):
+                return v
+            # Excel often gives numbers/floats or strings
+            try:
+                if isinstance(v, (int, float)) and not pd.isna(v):
+                    return bool(int(v))
+            except Exception:
+                pass
+            if isinstance(v, str):
+                s = v.strip().lower()
+                if s in {"true", "yes", "1", "y", "t"}:
+                    return True
+                if s in {"false", "no", "0", "n", "f"}:
+                    return False
+            return None
+
+        def _as_int(v):
+            try:
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    return None
+                return int(v)
+            except Exception:
+                return None
+
+        effective_title = explicit_title or scenario_title
 
         # Try to interpret identifier as an ID
         scenario_id: Optional[int] = None
@@ -726,21 +934,61 @@ class ScenarioPacker(BaseModel):
         if scenario_id is not None:
             # Load existing
             scenario = Scenario.load(scenario_id)
+
+            # Update metadata for existing scenarios based on MAIN sheet
+            update_fields: Dict[str, Any] = {}
+            private_bool = _as_bool(private_val)
+            if private_bool is not None:
+                update_fields["private"] = private_bool
+
+            meta: Dict[str, Any] = {}
+            if effective_title:
+                meta["title"] = effective_title
+            if description:
+                meta["description"] = description
+            if meta:
+                update_fields["metadata"] = meta
+            if update_fields:
+                try:
+                    scenario.update_metadata(**update_fields)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to update metadata for '%s': %s", identifier, e
+                    )
         else:
-            # Create new (requires end_year and area_code)
             area_code = data.get("area_code")
             end_year = data.get("end_year")
             if area_code is None or end_year is None:
                 raise ValueError(
                     "Cannot create a new Scenario without 'area_code' and 'end_year'"
                 )
-            scenario = Scenario.new(area_code=area_code, end_year=int(end_year))
+
+            create_kwargs: Dict[str, Any] = {}
+
+            private_bool = _as_bool(private_val)
+            if private_bool is not None:
+                create_kwargs["private"] = private_bool
+
+            template_int = _as_int(template_val)
+            if template_int is not None:
+                create_kwargs["template"] = template_int
+
+            meta: Dict[str, Any] = {}
+            if effective_title:
+                meta["title"] = effective_title
+            if description:
+                meta["description"] = description
+            if meta:
+                create_kwargs["metadata"] = meta
+
+            scenario = Scenario.new(
+                area_code=area_code, end_year=int(end_year), **create_kwargs
+            )
 
         # Set a title when a non-numeric identifier is provided
         if scenario_title is not None:
             scenario.title = scenario_title
 
-        # TODO: update metadata with the rest of the stuff in data!! (keep minimal for now)
         return scenario
 
     # NOTE: Move to utils?
