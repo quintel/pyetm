@@ -49,7 +49,11 @@ class Packable(BaseModel):
         return pd.DataFrame()
 
     def _find_by_identifier(self, identifier: str):
-        return next((s for s in self.scenarios if s.identifier() == identifier), None)
+        ident_str = str(identifier)
+        return next(
+            (s for s in self.scenarios if str(s.identifier()) == ident_str),
+            None,
+        )
 
 
 class InputsPack(Packable):
@@ -213,6 +217,136 @@ class QueryPack(Packable):
             keys=[scenario.identifier() for scenario in self.scenarios],
             copy=False,
         )
+
+    def _normalize_queries_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize a GQUERIES sheet into a simple shape:
+        - Drop leading completely blank rows and columns.
+        - Detect 1 or 2 header rows.
+        - Return a DataFrame with columns = scenario identifiers and rows listing gquery keys.
+        We ignore any leftmost index/helper columns whose header is empty or looks like a label.
+        """
+        if df is None:
+            return pd.DataFrame()
+
+        # Drop completely empty rows/cols
+        df = df.dropna(how="all")
+        if df.empty:
+            return df
+        df = df.dropna(axis=1, how="all")
+
+        # Find non-empty rows for potential headers
+        non_empty_rows = [
+            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
+        ]
+        if not non_empty_rows:
+            return pd.DataFrame()
+
+        # Heuristic: if the second non-empty row contains the word 'gquery'/'gqueries', use 2 header rows
+        header_rows = 1
+        if len(non_empty_rows) > 1:
+            second = (
+                df.iloc[non_empty_rows[1]].astype(str).str.strip().str.lower().tolist()
+            )
+            if any(val in {"gquery", "gqueries", "key", "queries"} for val in second):
+                header_rows = 2
+
+        header_start = non_empty_rows[0]
+        header_end = header_start + header_rows - 1
+        headers = df.iloc[header_start : header_end + 1].astype(str)
+        data = df.iloc[header_end + 1 :].copy()
+
+        # Assign columns: MultiIndex if 2 header rows else single level
+        if header_rows == 2:
+            cols = pd.MultiIndex.from_arrays(
+                [headers.iloc[0].values, headers.iloc[1].values]
+            )
+        else:
+            cols = pd.Index(headers.iloc[0].values)
+        data.columns = cols
+
+        def _is_empty(v):
+            return (
+                (not isinstance(v, str))
+                or (v.strip() == "")
+                or (v.strip().lower() == "nan")
+            )
+
+        def _is_helper_label(v):
+            return isinstance(v, str) and v.strip().lower() in {
+                "gquery",
+                "gqueries",
+                "queries",
+                "key",
+            }
+
+        # Build a simple DataFrame with columns = scenario identifiers
+        if isinstance(data.columns, pd.MultiIndex):
+            keep = [
+                c
+                for c in data.columns
+                if not _is_empty(c[0]) and not _is_helper_label(c[0])
+            ]
+            data = data[keep]
+            # Collapse to single level (identifier)
+            data.columns = [c[0] for c in data.columns]
+        else:
+            keep = [
+                c
+                for c in data.columns
+                if isinstance(c, str) and not _is_empty(c) and not _is_helper_label(c)
+            ]
+            data = data[keep]
+
+        # Ensure string values and drop rows that are completely blank across all kept columns
+        for c in data.columns:
+            data[c] = data[c].apply(lambda x: None if pd.isna(x) else (str(x).strip()))
+        data = data.dropna(how="all")
+
+        return data
+
+    def from_dataframe(self, df: pd.DataFrame):
+        """Collect gquery keys for each scenario from a GQUERIES sheet and attach them.
+        The sheet is expected to have one column per scenario (by identifier/title),
+        with each row containing a gquery key. Blank rows are ignored.
+        """
+        if df is None or getattr(df, "empty", False):
+            return
+
+        try:
+            df = self._normalize_queries_dataframe(df)
+        except Exception as e:
+            logger.warning("Failed to normalize gqueries sheet: %s", e)
+            return
+
+        if df is None or df.empty:
+            return
+
+        for identifier in df.columns:
+            scenario = self._find_by_identifier(identifier)
+            if scenario is None:
+                logger.warning(
+                    "Could not find scenario for identifier '%s'", identifier
+                )
+                continue
+
+            # Extract non-empty keys, preserve order, remove duplicates while preserving order
+            values = [
+                v
+                for v in df[identifier].tolist()
+                if isinstance(v, str) and v.strip() != ""
+            ]
+            seen = set()
+            keys = []
+            for v in values:
+                if v not in seen:
+                    seen.add(v)
+                    keys.append(v)
+
+            if keys:
+                try:
+                    scenario.add_queries(keys)
+                except Exception as e:
+                    logger.warning("Failed to add gqueries to '%s': %s", identifier, e)
 
 
 class SortablePack(Packable):
@@ -843,11 +977,46 @@ class ScenarioPacker(BaseModel):
                     packer._custom_curves.add(*scenarios)
                     packer._custom_curves.from_dataframe(curves_df)
 
-            # GQueries: unpack not supported; respect option but warn if set
-            if options.get("repeat_gqueries", False):
-                logger.warning(
-                    "repeat_gqueries is set but gqueries unpack is read-only and not supported"
-                )
+            # GQueries (optional)
+            gqueries_sheet = sheet_names.get("gqueries", "GQUERIES")
+            gq_df = packer.read_sheet(xlsx, gqueries_sheet, required=False, header=None)
+            if isinstance(gq_df, pd.DataFrame) and not gq_df.empty:
+                qp = QueryPack(scenarios=set(scenarios))
+                if options.get("repeat_gqueries", False):
+                    try:
+                        norm = qp._normalize_queries_dataframe(gq_df)
+                        if isinstance(norm, pd.DataFrame) and not norm.empty:
+                            # Take first available column and repeat its queries for all scenarios
+                            first_col = norm.columns[0]
+                            values = [
+                                v
+                                for v in norm[first_col].tolist()
+                                if isinstance(v, str) and v.strip() != ""
+                            ]
+                            # De-duplicate preserving order
+                            seen = set()
+                            keys = []
+                            for v in values:
+                                if v not in seen:
+                                    seen.add(v)
+                                    keys.append(v)
+                            for s in scenarios:
+                                try:
+                                    s.add_queries(keys)
+                                except Exception as e:
+                                    logger.warning(
+                                        "Failed to apply repeated gqueries to '%s': %s",
+                                        (
+                                            s.identifier()
+                                            if hasattr(s, "identifier")
+                                            else s.id
+                                        ),
+                                        e,
+                                    )
+                    except Exception as e:
+                        logger.warning("Failed to process repeated gqueries: %s", e)
+                else:
+                    qp.from_dataframe(gq_df)
 
         return packer
 
@@ -1010,6 +1179,6 @@ class ScenarioPacker(BaseModel):
             return pd.Series(name=sheet_name, dtype=str)
 
         # Use the ExcelFile.parse API directly to avoid pandas' engine guard
-        values = xlsx.parse(sheet_name=sheet_name, **kwargs).squeeze(axis=1)
+        values = xlsx.parse(sheet_name=sheet_name, **kwargs)
 
         return values  # .rename(sheet_name)
