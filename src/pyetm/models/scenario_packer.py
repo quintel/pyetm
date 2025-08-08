@@ -7,6 +7,7 @@ from xlsxwriter import Workbook
 
 from pyetm.models.base import Base
 from pyetm.models import Scenario
+from pyetm.models.custom_curves import CustomCurves
 from pyetm.utils.excel import add_frame_with_scenario_styling
 
 logger = logging.getLogger(__name__)
@@ -242,6 +243,105 @@ class SortablePack(Packable):
             keys=scenario_keys,
         )
 
+    def _normalize_sortables_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize various sortables sheet shapes.
+        Assumptions:
+        - Two header rows: first row = scenario identifier/title, second row = sortable name.
+        - Leading blank rows may exist and are ignored.
+        - Optional leftmost index column(s) are present with empty first header cell(s). They are dropped.
+        Returns a DataFrame with columns MultiIndex(identifier, sortable_name) and
+        simple Index rows with order positions.
+        """
+        # Drop completely empty rows
+        df = df.dropna(how="all")
+        if df.empty:
+            return df
+
+        # Find the first two non-empty rows -> headers
+        non_empty_idx = [
+            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
+        ]
+        if not non_empty_idx:
+            return pd.DataFrame()
+        header0_pos = non_empty_idx[0]
+        header1_pos = non_empty_idx[1] if len(non_empty_idx) > 1 else header0_pos + 1
+
+        headers = df.iloc[[header0_pos, header1_pos]].astype(str)
+        data = df.iloc[header1_pos + 1 :].copy()
+
+        # Build MultiIndex columns
+        col_level0 = headers.iloc[0].values
+        col_level1 = headers.iloc[1].values
+        columns = pd.MultiIndex.from_arrays([col_level0, col_level1])
+        data.columns = columns
+
+        # Drop columns where identifier (level 0) is missing/empty, and drop any
+        # column which is clearly the helper/index label (e.g. level1 == 'sortables').
+        def _is_empty(v):
+            return (
+                (not isinstance(v, str))
+                or (v.strip() == "")
+                or (v.strip().lower() == "nan")
+            )
+
+        def _is_helper_label(v):
+            return isinstance(v, str) and v.strip().lower() in {"sortables"}
+
+        keep_cols = [
+            c
+            for c in data.columns
+            if not _is_empty(c[0]) and not _is_helper_label(c[1])
+        ]
+        canonical = data[keep_cols].copy()
+
+        # Result: MultiIndex columns (identifier, sortable_name), index as row number
+        canonical.reset_index(drop=True, inplace=True)
+        return canonical
+
+    def from_dataframe(self, df: pd.DataFrame):
+        """Unpack and update sortables for each scenario from the sheet.
+        The sheet may contain optional leading blank rows and optional index columns.
+        """
+        if df is None or getattr(df, "empty", False):
+            return
+
+        try:
+            df = self._normalize_sortables_dataframe(df)
+        except Exception as e:
+            logger.warning("Failed to normalize sortables sheet: %s", e)
+            return
+
+        if df is None or df.empty or not isinstance(df.columns, pd.MultiIndex):
+            return
+
+        identifiers = df.columns.get_level_values(0).unique()
+        for identifier in identifiers:
+            scenario = self._find_by_identifier(identifier)
+            if scenario is None:
+                logger.warning(
+                    "Could not find scenario for identifier '%s'", identifier
+                )
+                continue
+
+            block = df[identifier]
+            updates: Dict[str, List[Any]] = {}
+            for sortable_name in block.columns:
+                # Build list order by dropping NaNs/empties
+                values = (
+                    block[sortable_name]
+                    .dropna()
+                    .astype(str)
+                    .map(lambda s: s.strip())
+                    .replace({"": pd.NA})
+                    .dropna()
+                    .tolist()
+                )
+                if values:
+                    updates[str(sortable_name)] = values
+
+            if updates:
+                scenario.update_sortables(updates)
+
 
 class CustomCurvesPack(Packable):
     key: ClassVar[str] = "custom_curves"
@@ -270,6 +370,103 @@ class CustomCurvesPack(Packable):
             axis=1,
             keys=scenario_keys,
         )
+
+    def _normalize_curves_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize custom curves sheet shapes.
+        Assumptions:
+        - Two header rows: first row = scenario identifier/title, second row = curve key.
+        - Leading blank rows may exist and are ignored.
+        - Optional leftmost index column(s) are present with empty first header cell(s); they are dropped.
+        - Rows are the hourly values (0..8759) or arbitrary length; we keep as-is.
+        Returns a DataFrame with columns MultiIndex(identifier, curve_key) and numeric rows.
+        """
+        df = df.dropna(how="all")
+        if df.empty:
+            return df
+
+        # Find header rows
+        non_empty_idx = [
+            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
+        ]
+        if not non_empty_idx:
+            return pd.DataFrame()
+        header0_pos = non_empty_idx[0]
+        header1_pos = non_empty_idx[1] if len(non_empty_idx) > 1 else header0_pos + 1
+
+        headers = df.iloc[[header0_pos, header1_pos]].astype(str)
+        data = df.iloc[header1_pos + 1 :].copy()
+
+        # Assign columns
+        columns = pd.MultiIndex.from_arrays(
+            [headers.iloc[0].values, headers.iloc[1].values]
+        )
+        data.columns = columns
+
+        # Drop non-scenario columns where identifier is empty and drop helper/index
+        # columns where level1 looks like a label (e.g., 'sortables')
+        def _is_empty(v):
+            return (
+                (not isinstance(v, str))
+                or (v.strip() == "")
+                or (v.strip().lower() == "nan")
+            )
+
+        def _is_helper_label(v):
+            return isinstance(v, str) and v.strip().lower() in {"sortables"}
+
+        keep_cols = [
+            c
+            for c in data.columns
+            if not _is_empty(c[0]) and not _is_helper_label(c[1])
+        ]
+        canonical = data[keep_cols].copy()
+
+        # Reset index to numeric starting at 0
+        canonical.reset_index(drop=True, inplace=True)
+        return canonical
+
+    def from_dataframe(self, df: pd.DataFrame):
+        """Unpack and update custom curves for each scenario.
+        Sheet may contain leading blank rows and optional index columns.
+        """
+        if df is None or getattr(df, "empty", False):
+            return
+
+        try:
+            df = self._normalize_curves_dataframe(df)
+        except Exception as e:
+            logger.warning("Failed to normalize custom curves sheet: %s", e)
+            return
+
+        if df is None or df.empty or not isinstance(df.columns, pd.MultiIndex):
+            return
+
+        identifiers = df.columns.get_level_values(0).unique()
+        for identifier in identifiers:
+            scenario = self._find_by_identifier(identifier)
+            if scenario is None:
+                logger.warning(
+                    "Could not find scenario for identifier '%s'", identifier
+                )
+                continue
+
+            block = df[identifier]
+            # Build a CustomCurves collection from the block columns
+            try:
+                curves = CustomCurves._from_dataframe(block)
+            except Exception as e:
+                logger.warning(
+                    "Failed to build custom curves for '%s': %s", identifier, e
+                )
+                continue
+
+            # Validate and upload
+            try:
+                scenario.update_custom_curves(curves)
+            except Exception as e:
+                logger.warning(
+                    "Failed to update custom curves for '%s': %s", identifier, e
+                )
 
 
 class OutputCurvesPack(Packable):
@@ -465,7 +662,33 @@ class ScenarioPacker(BaseModel):
             if isinstance(inputs_df, pd.DataFrame) and not inputs_df.empty:
                 packer._inputs.from_dataframe(inputs_df)
 
-            # TODO: continue for sortables, curves and gqueries
+            # Sortables (optional)
+            sortables_sheet = (
+                sheet_names.get("sortables", packer._sortables.sheet_name)
+                if sheet_names
+                else packer._sortables.sheet_name
+            )
+            sortables_df = packer.read_sheet(
+                xlsx, sortables_sheet, required=False, header=None
+            )
+            if isinstance(sortables_df, pd.DataFrame) and not sortables_df.empty:
+                packer._sortables.add(*scenarios)
+                packer._sortables.from_dataframe(sortables_df)
+
+            # Custom curves (optional)
+            curves_sheet = (
+                sheet_names.get("custom_curves", packer._custom_curves.sheet_name)
+                if sheet_names
+                else packer._custom_curves.sheet_name
+            )
+            curves_df = packer.read_sheet(
+                xlsx, curves_sheet, required=False, header=None
+            )
+            if isinstance(curves_df, pd.DataFrame) and not curves_df.empty:
+                packer._custom_curves.add(*scenarios)
+                packer._custom_curves.from_dataframe(curves_df)
+
+            # TODO: gqueries unpack not supported (read-only)
 
         return packer
 

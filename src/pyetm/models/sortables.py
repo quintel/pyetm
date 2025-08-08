@@ -83,13 +83,11 @@ class Sortable(Base):
     @model_validator(mode="after")
     def validate_sortable_consistency(self) -> "Sortable":
         """Additional validation for the entire sortable"""
-        # Example: validate that certain types require subtypes
         if self.type == "heat_network" and self.subtype is None:
             raise ValueError("heat_network type requires a subtype")
 
-        # TODO: check how long these actually ought to be
-        if len(self.order) > 10:
-            raise ValueError("Order cannot contain more than 10 items")
+        if len(self.order) > 17:
+            raise ValueError("Order cannot contain more than 17 items")
 
         return self
 
