@@ -324,23 +324,10 @@ class SortablePack(Packable):
                 continue
 
             block = df[identifier]
-            updates: Dict[str, List[Any]] = {}
-            for sortable_name in block.columns:
-                # Build list order by dropping NaNs/empties
-                values = (
-                    block[sortable_name]
-                    .dropna()
-                    .astype(str)
-                    .map(lambda s: s.strip())
-                    .replace({"": pd.NA})
-                    .dropna()
-                    .tolist()
-                )
-                if values:
-                    updates[str(sortable_name)] = values
-
-            if updates:
-                scenario.update_sortables(updates)
+            try:
+                scenario.set_sortables_from_dataframe(block)
+            except Exception as e:
+                logger.warning("Failed to update sortables for '%s': %s", identifier, e)
 
 
 class CustomCurvesPack(Packable):

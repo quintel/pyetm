@@ -259,3 +259,42 @@ class Sortables(Base):
         return pd.DataFrame.from_dict(
             {s.name(): s.order for s in self.sortables}, orient="index"
         ).T
+
+    @classmethod
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> "Sortables":
+        if df is None:
+            return cls(sortables=[])
+
+        # Ensure DataFrame
+        if isinstance(df, pd.Series):
+            df = df.to_frame(name=str(df.name))
+
+        def _extract_order(series: pd.Series) -> List[Any]:
+            return (
+                series.dropna()
+                .astype(str)
+                .map(lambda s: s.strip())
+                .replace({"": pd.NA})
+                .dropna()
+                .tolist()
+            )
+
+        items: List[Sortable] = []
+        for col in df.columns:
+            name = str(col)
+            order = _extract_order(df[col])
+            if not order:
+                continue
+
+            if name.startswith("heat_network_"):
+                subtype = name[len("heat_network_") :]
+                items.append(
+                    Sortable(type="heat_network", subtype=subtype, order=order)
+                )
+            else:
+                items.append(Sortable(type=name, order=order))
+
+        return cls(sortables=items)
+
+    def to_updates_dict(self) -> Dict[str, List[Any]]:
+        return {s.name(): s.order for s in self.sortables}

@@ -267,15 +267,10 @@ class Scenario(Base):
         Args:
             dataframe: DataFrame with sortable names as columns and order values as rows
         """
-        # Convert DataFrame to dict of lists, handling NaN/None values
-        sortables_dict = {}
-        for column in dataframe.columns:
-            # Filter out NaN/None values and convert to list
-            order_values = dataframe[column].dropna().tolist()
-            if order_values:  # Only include if there are actual values
-                sortables_dict[column] = order_values
-
-        self.update_sortables(sortables_dict)
+        coll = Sortables._from_dataframe(dataframe)
+        updates = coll.to_updates_dict()
+        if updates:
+            self.update_sortables(updates)
 
     def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
         """
