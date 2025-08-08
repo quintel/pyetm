@@ -136,18 +136,19 @@ class Scenario(Base):
     @property
     def title(self):
         if not self.metadata is None:
-            return self.metadata.get('title', None)
+            return self.metadata.get("title", None)
         return None
 
     @title.setter
     def title(self, title: str):
         if not self.metadata is None:
-            self.metadata['title'] = title
+            self.metadata["title"] = title
         else:
-            self.metadata = {'title': title}
+            self.metadata = {"title": title}
 
     def identifier(self):
-        if self.title: return self.title
+        if self.title:
+            return self.title
 
         return self.id
 
@@ -195,11 +196,14 @@ class Scenario(Base):
         """
         Extract df to dict, set None/NaN sliders to reset, and call update_inputs.
         This ensures the dataframe exactly represents the inputs.
-        # TODO: Add validation for the dataframe structure
         """
-        self.update_user_values(
-            dataframe["user"].droplevel("unit").fillna("reset").to_dict()
-        )
+        series = dataframe["user"]
+        # If MultiIndex with 'unit', drop it
+        if isinstance(series.index, pd.MultiIndex) and "unit" in (
+            series.index.names or []
+        ):
+            series = series.droplevel("unit")
+        self.update_user_values(series.fillna("reset").to_dict())
 
     def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
         """
