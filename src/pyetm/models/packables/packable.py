@@ -95,10 +95,10 @@ class Packable(BaseModel):
             return pd.DataFrame()
         return self._to_dataframe(columns=columns)
 
-    def from_dataframe(self, df):  # pragma: no cover - abstract hook
+    def from_dataframe(self, df):
         """Should parse the df and call correct setters on identified scenarios"""
 
-    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:  # pragma: no cover
+    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         """Base implementation - kids should implement this or use build_pack_dataframe"""
         return pd.DataFrame()
 
@@ -148,7 +148,7 @@ class Packable(BaseModel):
                     break
         return positions
 
-    def _log_fail(self, context: str, exc: Exception):  # pragma: no cover - helper
+    def _log_fail(self, context: str, exc: Exception):
         logger.warning("%s failed in %s: %s", context, self.__class__.__name__, exc)
 
     def apply_identifier_blocks(
@@ -177,7 +177,7 @@ class Packable(BaseModel):
             block = df[identifier]
             try:
                 apply_block(scenario, block)
-            except Exception as e:  # pragma: no cover
+            except Exception as e:
                 logger.warning(
                     "Failed applying block for scenario '%s' in %s: %s",
                     identifier,

@@ -369,11 +369,16 @@ class TestDataExtractionMethods:
 
         packer = ScenarioPacker()
         packer.add_custom_curves(sample_scenario)
-
         result = packer.custom_curves()
+
         assert not result.empty
-        assert "curve1" in result.columns
-        assert "curve2" in result.columns
+        if isinstance(result.columns, pd.MultiIndex):
+            level_1 = result.columns.get_level_values(1)
+            assert "curve1" in level_1
+            assert "curve2" in level_1
+        else:
+            assert "curve1" in result.columns
+            assert "curve2" in result.columns
 
     def test_output_curves_empty(self):
         """Test output_curves with no scenarios"""
@@ -391,8 +396,12 @@ class TestDataExtractionMethods:
         packer = ScenarioPacker()
         packer.add_output_curves(sample_scenario)
         result = packer.output_curves()
+
         assert not result.empty
-        assert "output_curve" in result.columns
+        if isinstance(result.columns, pd.MultiIndex):
+            assert "output_curve" in result.columns.get_level_values(1)
+        else:
+            assert "output_curve" in result.columns
 
 
 class TestExcelExport:
@@ -572,8 +581,7 @@ class TestUtilityMethods:
         assert len(summary["scenario_ids"]) == 3
         assert all(s.id in summary["scenario_ids"] for s in multiple_scenarios)
 
+
 class TestFromExcel:
     def test_from_excel(self):
-        ScenarioPacker.from_excel('tests/fixtures/my_input_excel.xlsx')
-
-
+        ScenarioPacker.from_excel("tests/fixtures/my_input_excel.xlsx")

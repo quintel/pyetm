@@ -32,13 +32,10 @@ class QueryPack(Packable):
             return
 
         first_col = df.iloc[:, 0].dropna().astype(str).str.strip()
-
-        # Filter out empty strings and literal "nan"
         filtered = [q for q in first_col if q and q.lower() != "nan"]
-
-        # Remove duplicates while preserving order
         unique_queries = list(dict.fromkeys(filtered))
 
+        # Apply unique queries to all scenarios
         if unique_queries:
             for scenario in self.scenarios:
                 scenario.add_queries(unique_queries)
