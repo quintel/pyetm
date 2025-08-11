@@ -31,25 +31,14 @@ class QueryPack(Packable):
         if df is None or df.empty:
             return
 
-        # Get the first column and extract non-empty query strings
-        first_col = df.iloc[:, 0]
-        queries = []
+        first_col = df.iloc[:, 0].dropna().astype(str).str.strip()
 
-        for value in first_col:
-            if pd.notna(value):
-                query = str(value).strip()
-                if query and query.lower() != "nan":
-                    queries.append(query)
+        # Filter out empty strings and literal "nan"
+        filtered = [q for q in first_col if q and q.lower() != "nan"]
 
         # Remove duplicates while preserving order
-        unique_queries = []
-        seen = set()
-        for query in queries:
-            if query not in seen:
-                seen.add(query)
-                unique_queries.append(query)
+        unique_queries = list(dict.fromkeys(filtered))
 
         if unique_queries:
-            # Apply the same queries to all scenarios in the pack
             for scenario in self.scenarios:
                 scenario.add_queries(unique_queries)
