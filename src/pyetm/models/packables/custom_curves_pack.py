@@ -13,10 +13,10 @@ class CustomCurvesPack(Packable):
     key: ClassVar[str] = "custom_curves"
     sheet_name: ClassVar[str] = "CUSTOM_CURVES"
 
-    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):  # type: ignore[override]
+    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
         try:
             series_list = list(scenario.custom_curves_series())
-        except Exception as e:  # pragma: no cover - defensive
+        except Exception as e:
             logger.warning(
                 "Failed extracting custom curves for %s: %s", scenario.identifier(), e
             )
@@ -25,7 +25,7 @@ class CustomCurvesPack(Packable):
             return None
         return pd.concat(series_list, axis=1)
 
-    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:  # type: ignore[override]
+    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     def _normalize_curves_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -38,7 +38,7 @@ class CustomCurvesPack(Packable):
         )
         return data
 
-    def from_dataframe(self, df: pd.DataFrame):  # type: ignore[override]
+    def from_dataframe(self, df: pd.DataFrame):
         if df is None or getattr(df, "empty", False):
             return
         try:

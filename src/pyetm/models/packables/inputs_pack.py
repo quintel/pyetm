@@ -24,12 +24,12 @@ class InputsPack(Packable):
         self._scenario_short_names = scenario_short_names or {}
 
     # --- Scenario key / resolution overrides ------------------------------------
-    def _key_for(self, scenario: "Any") -> Any:  # type: ignore[override]
+    def _key_for(self, scenario: "Any") -> Any:
         # Prefer short name if present (mapping stored by scenario.id)
         short = self._scenario_short_names.get(str(scenario.id))
         return short if short else scenario.identifier()
 
-    def resolve_scenario(self, label: Any):  # type: ignore[override]
+    def resolve_scenario(self, label: Any):
         if label is None:
             return None
         label_str = str(label).strip()
@@ -52,10 +52,10 @@ class InputsPack(Packable):
         return None
 
     # --- Per-scenario frame builder (used by generic template) ------------------
-    def _build_dataframe_for_scenario(self, scenario, columns: str = "user", **kwargs):  # type: ignore[override]
+    def _build_dataframe_for_scenario(self, scenario, columns: str = "user", **kwargs):
         try:
             df = scenario.inputs.to_dataframe(columns=columns)
-        except Exception as e:  # pragma: no cover - defensive
+        except Exception as e:
             logger.warning(
                 "Failed building inputs frame for scenario %s: %s",
                 scenario.identifier(),
@@ -64,7 +64,7 @@ class InputsPack(Packable):
             return None
         return df if df is not None and not df.empty else None
 
-    def _to_dataframe(self, columns="user", **kwargs):  # type: ignore[override]
+    def _to_dataframe(self, columns="user", **kwargs):
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     # --- Normalisation logic ----------------------------------------------------
@@ -187,7 +187,7 @@ class InputsPack(Packable):
         return canonical
 
     # --- Import (mutation) ------------------------------------------------------
-    def from_dataframe(self, df):  # type: ignore[override]
+    def from_dataframe(self, df):
         """
         Sets the inputs on the scenarios from the packed df (comes from excel)
         Tolerates optional unit column and leading blank rows.

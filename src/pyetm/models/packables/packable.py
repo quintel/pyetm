@@ -74,7 +74,7 @@ class Packable(BaseModel):
                 df = self._build_dataframe_for_scenario(
                     scenario, columns=columns, **kwargs
                 )
-            except Exception as e:  # pragma: no cover - defensive
+            except Exception as e:
                 logger.warning(
                     "Failed building frame for scenario %s in %s: %s",
                     scenario.identifier(),
