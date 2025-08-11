@@ -36,11 +36,9 @@ class Packable(BaseModel):
         self.scenarios.clear()
         self._scenario_id_cache = None
 
-    # --- Summary ----------------------------------------------------------------
     def summary(self) -> dict:
         return {self.key: {"scenario_count": len(self.scenarios)}}
 
-    # --- Template packing API (Opt-in for subclasses) ---------------------------
     def _key_for(self, scenario: "Scenario") -> Any:
         """Return the identifier used as the top-level column key when packing.
         Subclasses can override (e.g. to use short names)."""
@@ -56,17 +54,11 @@ class Packable(BaseModel):
     def _concat_frames(
         self, frames: list[pd.DataFrame], keys: list[Any]
     ) -> pd.DataFrame:
-        """Concatenate per-scenario frames along axis=1 with keys.
-        Separated for easier overriding/testing."""
         if not frames:
             return pd.DataFrame()
         return pd.concat(frames, axis=1, keys=keys)
 
     def build_pack_dataframe(self, columns: str = "", **kwargs) -> pd.DataFrame:
-        """Generic implementation collecting per-scenario frames using
-        _build_dataframe_for_scenario. Subclasses call this inside their
-        _to_dataframe implementation after overriding _build_dataframe_for_scenario.
-        (Not automatically invoked so existing subclasses remain unchanged)."""
         frames: list[pd.DataFrame] = []
         keys: list[Any] = []
         for scenario in self.scenarios:
@@ -88,7 +80,6 @@ class Packable(BaseModel):
             keys.append(self._key_for(scenario))
         return self._concat_frames(frames, keys)
 
-    # --- External API -----------------------------------------------------------
     def to_dataframe(self, columns="") -> pd.DataFrame:
         """Convert the pack into a dataframe"""
         if len(self.scenarios) == 0:
@@ -102,7 +93,6 @@ class Packable(BaseModel):
         """Base implementation - kids should implement this or use build_pack_dataframe"""
         return pd.DataFrame()
 
-    # --- Scenario resolution helpers -------------------------------------------
     def _refresh_cache(self):
         self._scenario_id_cache = {str(s.identifier()): s for s in self.scenarios}
 
@@ -115,13 +105,10 @@ class Packable(BaseModel):
         return self._scenario_id_cache.get(ident_str)
 
     def resolve_scenario(self, label: Any) -> Optional["Scenario"]:
-        """Generic resolution; subclasses can extend (e.g. InputsPack).
-        Default: direct identifier match."""
         if label is None:
             return None
         return self._find_by_identifier(label)
 
-    # --- Utility static methods (shared normalisation helpers) -----------------
     @staticmethod
     def is_blank(value: Any) -> bool:
         return (
@@ -157,9 +144,6 @@ class Packable(BaseModel):
         apply_block: Callable[["Scenario", pd.DataFrame], None],
         resolve: Optional[Callable[[Any], Optional["Scenario"]]] = None,
     ):
-        """Iterate over first-level column identifiers of a MultiIndex DataFrame and apply a block function.
-        resolve optionally overrides scenario resolution (defaults to direct identifier lookup).
-        """
         if df is None or not isinstance(df.columns, pd.MultiIndex):
             return
         identifiers = df.columns.get_level_values(0).unique()
@@ -185,53 +169,36 @@ class Packable(BaseModel):
                     e,
                 )
 
-    def _normalize_two_header_sheet(
+    def _normalize_single_header_sheet(
         self,
         df: pd.DataFrame,
         *,
-        helper_level0: Optional[set[str]] = None,
-        helper_level1: Optional[set[str]] = None,
-        drop_empty_level0: bool = True,
-        drop_empty_level1: bool = False,
-        collapse_level0: bool = False,
+        helper_columns: Optional[set[str]] = None,
+        drop_empty: bool = True,
         reset_index: bool = False,
     ) -> pd.DataFrame:
-        """Generic normalizer for a sheet with (potential) two header rows.
-        - Detect first two non-empty rows as headers (or fabricate second if missing).
-        - Build MultiIndex columns (level0, level1).
-        - Optionally drop columns whose level0/level1 are blank or in helper sets.
-        - Optionally collapse to single level (level0) after filtering.
-        - Optionally reset row index to a simple RangeIndex.
-        Returns canonical DataFrame or empty DataFrame on failure.
+        """Normalize a sheet that uses a single header row.
+        Rules:
+        - First non-empty row becomes header.
+        - Subsequent rows are data.
+        - Optionally drop columns whose header is blank or in helper_columns.
+        - Optionally reset the row index.
+        Returns a DataFrame with a single-level column index.
         """
-        helper_level0 = {h.lower() for h in (helper_level0 or set())}
-        helper_level1 = {h.lower() for h in (helper_level1 or set())}
-
+        helper_columns_lc = {h.lower() for h in (helper_columns or set())}
         if df is None:
             return pd.DataFrame()
         df = df.dropna(how="all")
         if df.empty:
             return df
 
-        positions = self.first_non_empty_row_positions(df, 2)
+        positions = self.first_non_empty_row_positions(df, 1)
         if not positions:
             return pd.DataFrame()
-        header0_pos = positions[0]
-        header1_pos = positions[1] if len(positions) > 1 else None
-
-        if header1_pos is None:
-            # Single header row -> fabricate second empty row
-            headers0 = df.iloc[header0_pos].astype(str).values
-            headers1 = ["" for _ in headers0]
-            data = df.iloc[header0_pos + 1 :].copy()
-        else:
-            headers = df.iloc[[header0_pos, header1_pos]].astype(str)
-            headers0 = headers.iloc[0].values
-            headers1 = headers.iloc[1].values
-            data = df.iloc[header1_pos + 1 :].copy()
-
-        columns = pd.MultiIndex.from_arrays([headers0, headers1])
-        data.columns = columns
+        header_pos = positions[0]
+        header_row = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
+        data = df.iloc[header_pos + 1 :].copy()
+        data.columns = header_row.values
 
         def _is_blank(v):
             return (
@@ -240,22 +207,16 @@ class Packable(BaseModel):
                 or (isinstance(v, str) and v.strip() == "")
             )
 
-        keep = []
-        for c in data.columns:
-            lv0, lv1 = c[0], c[1]
-            if drop_empty_level0 and _is_blank(lv0):
-                continue
-            if drop_empty_level1 and _is_blank(lv1):
-                continue
-            if isinstance(lv0, str) and lv0.strip().lower() in helper_level0:
-                continue
-            if isinstance(lv1, str) and lv1.strip().lower() in helper_level1:
-                continue
-            keep.append(c)
-        data = data[keep]
+        if drop_empty or helper_columns_lc:
+            keep = []
+            for c in data.columns:
+                if drop_empty and _is_blank(c):
+                    continue
+                if isinstance(c, str) and c.strip().lower() in helper_columns_lc:
+                    continue
+                keep.append(c)
+            data = data[keep]
 
-        if collapse_level0:
-            data.columns = [c[0] for c in data.columns]
         if reset_index:
             data.reset_index(drop=True, inplace=True)
         return data

@@ -24,16 +24,13 @@ class SortablePack(Packable):
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     def _normalize_sortables_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize various sortables sheet shapes"""
-        data = self._normalize_two_header_sheet(
+        """Normalize a sortables sheet expecting a single header row."""
+        return self._normalize_single_header_sheet(
             df,
-            helper_level0=set(),
-            helper_level1={"sortables"},
-            drop_empty_level0=True,
-            collapse_level0=False,
+            helper_columns={"sortables"},
+            drop_empty=True,
             reset_index=False,
         )
-        return data
 
     def from_dataframe(self, df: pd.DataFrame):
         """Unpack and update sortables for each scenario from the sheet."""
@@ -44,12 +41,14 @@ class SortablePack(Packable):
         except Exception as e:
             logger.warning("Failed to normalize sortables sheet: %s", e)
             return
-        if df is None or df.empty or not isinstance(df.columns, pd.MultiIndex):
+        if df is None or df.empty:
             return
 
         def _apply(scenario, block: pd.DataFrame):
-            if isinstance(block.columns, pd.MultiIndex):
-                block.columns = [c[1] for c in block.columns]
             scenario.set_sortables_from_dataframe(block)
 
-        self.apply_identifier_blocks(df, _apply)
+        if isinstance(df.columns, pd.MultiIndex):
+            self.apply_identifier_blocks(df, _apply)
+        else:
+            for scenario in self.scenarios:
+                _apply(scenario, df)

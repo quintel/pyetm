@@ -12,10 +12,10 @@ class OutputCurvesPack(Packable):
     key: ClassVar[str] = "output_curves"
     sheet_name: ClassVar[str] = "OUTPUT_CURVES"
 
-    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):  # type: ignore[override]
+    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
         try:
             series_list = list(scenario.all_output_curves())
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             logger.warning(
                 "Failed extracting output curves for %s: %s", scenario.identifier(), e
             )
@@ -24,5 +24,5 @@ class OutputCurvesPack(Packable):
             return None
         return pd.concat(series_list, axis=1)
 
-    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:  # type: ignore[override]
+    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs)

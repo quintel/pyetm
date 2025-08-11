@@ -205,52 +205,17 @@ def test_apply_identifier_blocks_logs(monkeypatch, caplog, packable):
         assert "Failed applying block" in caplog.text
 
 
-def test_normalize_two_header_sheet_basic(packable):
+def test_normalize_single_header_sheet(packable):
     df = pd.DataFrame(
         [
-            ["id1", "id2"],
-            ["curve1", "curve2"],
-            [1, 2],
-            [3, 4],
+            ["col1", "col2", "helper"],
+            [1, 2, 3],
+            [4, 5, 6],
         ]
     )
-    result = packable._normalize_two_header_sheet(df, reset_index=True)
-    assert isinstance(result.columns, pd.MultiIndex)
+    result = packable._normalize_single_header_sheet(
+        df, helper_columns={"helper"}, reset_index=True
+    )
+    assert list(result.columns) == ["col1", "col2"]
     assert result.shape == (2, 2)
     assert result.index.equals(pd.RangeIndex(0, 2))
-
-
-def test_normalize_two_header_sheet_single_header(packable):
-    df = pd.DataFrame(
-        [
-            ["id1", "id2"],
-            [1, 2],
-            [3, 4],
-        ]
-    )
-    result = packable._normalize_two_header_sheet(df)
-    assert isinstance(result.columns, pd.MultiIndex)
-    assert result.shape[0] == 1 or result.shape[0] == 2
-
-
-def test_normalize_two_header_sheet_with_helpers(packable):
-    df = pd.DataFrame(
-        [
-            ["helper", "id2"],
-            ["helpercurve", "curve2"],
-            [1, 2],
-            [3, 4],
-        ]
-    )
-    result = packable._normalize_two_header_sheet(
-        df,
-        helper_level0={"helper"},
-        helper_level1={"helpercurve"},
-        drop_empty_level0=True,
-        drop_empty_level1=True,
-    )
-    # "helper" and "helpercurve" columns should be removed
-    for lvl0 in result.columns.get_level_values(0):
-        assert lvl0.lower() != "helper"
-    for lvl1 in result.columns.get_level_values(1):
-        assert lvl1.lower() != "helpercurve"

@@ -18,12 +18,9 @@ class InputsPack(Packable):
             {}
         )  # scenario_id -> short_name mapping
 
-    # --- Public configuration ---------------------------------------------------
     def set_scenario_short_names(self, scenario_short_names: Dict[str, str]):
-        """Set the mapping of scenario identifiers to their short names."""
         self._scenario_short_names = scenario_short_names or {}
 
-    # --- Scenario key / resolution overrides ------------------------------------
     def _key_for(self, scenario: "Any") -> Any:
         # Prefer short name if present (mapping stored by scenario.id)
         short = self._scenario_short_names.get(str(scenario.id))
@@ -51,7 +48,6 @@ class InputsPack(Packable):
             pass
         return None
 
-    # --- Per-scenario frame builder (used by generic template) ------------------
     def _build_dataframe_for_scenario(self, scenario, columns: str = "user", **kwargs):
         try:
             df = scenario.inputs.to_dataframe(columns=columns)
@@ -67,91 +63,60 @@ class InputsPack(Packable):
     def _to_dataframe(self, columns="user", **kwargs):
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
-    # --- Normalisation logic ----------------------------------------------------
     def _normalize_inputs_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize various inputs sheet shapes into canonical shape:
-        - Drop leading completely blank rows.
-        - Accept either:
-          (a) Two header rows (short_name row above a row containing 'user'), or
-          (b) Single header row of scenario labels (no explicit 'user' row) -> we fabricate 'user'.
-        - Support 1- or 2-level row index (input[, unit]).
-        Returns DataFrame with columns MultiIndex(label, 'user').
+        """Normalize PARAMETERS sheet (single-header variant only).
+        Assumptions (new layout):
+        - First non-empty row contains scenario labels (short names / identifiers).
+        - First column below header lists input keys; optional second column lists units
+          (detected heuristically: treat second column as unit column if most
+          of its non-empty values are short (<=8 chars) and non-numeric while
+          third column has numeric values).
+        - All remaining columns are scenario value columns.
+        - Fabricate second header level with constant 'user'.
+        Returns DataFrame with MultiIndex columns (scenario_label, 'user').
         """
         df = df.dropna(how="all")
         if df.empty:
             return df
 
-        # Locate the row containing 'user' (case-insensitive)
-        user_row_pos = None
-        for pos, (_, row) in enumerate(df.iterrows()):
-            if any(isinstance(v, str) and v.strip().lower() == "user" for v in row):
-                user_row_pos = pos
-                break
+        # Determine header row (first non-empty)
+        header_pos_list = self.first_non_empty_row_positions(df, 1)
+        if not header_pos_list:
+            return pd.DataFrame()
+        header_pos = header_pos_list[0]
+        header = df.iloc[header_pos].astype(str)
+        data = df.iloc[header_pos + 1 :].copy()
+        data.columns = header.values
 
-        single_header = user_row_pos is None
-        if single_header:
-            header_start = 0
-            header_end = 0
-        else:
-            header_start = max(user_row_pos - 1, 0)
-            header_end = user_row_pos
+        if data.empty:
+            return pd.DataFrame()
 
-        headers = df.iloc[header_start : header_end + 1].astype(str)
-        data = df.iloc[header_end + 1 :].copy()
+        cols = list(data.columns)
+        if not cols:
+            return pd.DataFrame()
 
-        if single_header:
-            # Build columns from single header row; fabricate second level 'user'
-            col_level0 = headers.iloc[0].values
-            data.columns = col_level0
-            index_candidates = list(data.columns[:2])  # heuristic
-            second_is_numeric = False
-            if len(index_candidates) > 1:
-                sample = data[index_candidates[1]].dropna().head(5)
-                if not sample.empty and all(
-                    pd.to_numeric(sample, errors="coerce").notna()
-                ):
-                    second_is_numeric = True
-            if second_is_numeric:
-                idx_cols = [index_candidates[0]]
-            else:
-                idx_cols = index_candidates
-            input_col = idx_cols[0]
-            unit_col = idx_cols[1] if len(idx_cols) > 1 else None
-            scenario_cols = [
-                c for c in data.columns if c not in idx_cols and str(c).strip() != ""
-            ]
-            input_series = data[input_col].astype(str)
-            if unit_col is not None:
-                unit_series = data[unit_col].astype(str)
-                index = pd.MultiIndex.from_arrays(
-                    [input_series.values, unit_series.values], names=["input", "unit"]
+        # Heuristic to detect unit column
+        input_col = cols[0]
+        unit_col = None
+        if len(cols) > 2:
+            candidate_unit = cols[1]
+            third_col = cols[2]
+            sample_candidate = data[candidate_unit].dropna().astype(str).head(25)
+            sample_third = data[third_col].dropna().head(25)
+            if not sample_candidate.empty:
+                short_tokens = sum(len(s.strip()) <= 8 for s in sample_candidate)
+                numeric_third = (
+                    not sample_third.empty
+                    and pd.to_numeric(sample_third, errors="coerce").notna().mean()
+                    > 0.5
                 )
-            else:
-                index = pd.Index(input_series.values, name="input")
-            canonical = data[scenario_cols].copy()
-            canonical.index = index
-            canonical.columns = pd.MultiIndex.from_arrays(
-                [canonical.columns, ["user"] * len(canonical.columns)]
-            )
-            return canonical
-
-        # Two-row header path (original logic)
-        data.columns = pd.MultiIndex.from_arrays(
-            [headers.iloc[0].values, headers.iloc[1].values]
-        )
-
-        idx_cols = [
-            col
-            for col in data.columns
-            if not (isinstance(col[1], str) and col[1].strip().lower() == "user")
-        ]
-        if len(idx_cols) == 0:
-            input_col = data.columns[0]
+                if short_tokens / len(sample_candidate) > 0.6 and numeric_third:
+                    unit_col = candidate_unit
+        elif len(cols) == 2:
+            # If only two columns treat second as scenario column (no unit)
             unit_col = None
-        else:
-            input_col = idx_cols[0]
-            unit_col = idx_cols[1] if len(idx_cols) > 1 else None
 
+        scenario_cols = [c for c in cols if c not in {input_col} and c != unit_col]
         input_series = data[input_col].astype(str)
         if unit_col is not None:
             unit_series = data[unit_col].astype(str)
@@ -160,30 +125,11 @@ class InputsPack(Packable):
             )
         else:
             index = pd.Index(input_series.values, name="input")
-
-        keep_cols = [
-            c
-            for c in data.columns
-            if c not in {input_col} and (unit_col is None or c != unit_col)
-        ]
-        canonical = data[keep_cols]
+        canonical = data[scenario_cols].copy()
         canonical.index = index
-
-        if isinstance(canonical.columns, pd.MultiIndex):
-            lvl1 = canonical.columns.get_level_values(1)
-            if not all(
-                isinstance(v, str) and v.strip().lower() == "user" for v in lvl1
-            ):
-                canonical.columns = pd.MultiIndex.from_arrays(
-                    [
-                        canonical.columns.get_level_values(0),
-                        ["user"] * len(canonical.columns),
-                    ]
-                )
-        else:
-            canonical.columns = pd.MultiIndex.from_arrays(
-                [canonical.columns, ["user"] * len(canonical.columns)]
-            )
+        canonical.columns = pd.MultiIndex.from_arrays(
+            [canonical.columns, ["user"] * len(canonical.columns)]
+        )
         return canonical
 
     # --- Import (mutation) ------------------------------------------------------

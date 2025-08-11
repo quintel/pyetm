@@ -61,25 +61,6 @@ def test_build_dataframe_for_scenario_returns_none_if_empty(monkeypatch):
     assert result is None
 
 
-def test_normalize_curves_dataframe_calls_helper(monkeypatch):
-    pack = CustomCurvesPack()
-
-    called_with = {}
-
-    def fake_normalize(df, **kwargs):
-        called_with.update(kwargs)
-        return df
-
-    monkeypatch.setattr(pack, "_normalize_two_header_sheet", fake_normalize)
-
-    df = pd.DataFrame({"a": [1, 2]})
-    result = pack._normalize_curves_dataframe(df)
-
-    assert result.equals(df)
-    assert called_with["drop_empty_level0"]
-    assert called_with["reset_index"]
-
-
 def test_from_dataframe_applies_to_scenarios(monkeypatch):
     pack = CustomCurvesPack()
     scenario = MockScenario("sc1")

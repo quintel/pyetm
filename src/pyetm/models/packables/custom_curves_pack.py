@@ -29,14 +29,13 @@ class CustomCurvesPack(Packable):
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     def _normalize_curves_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        data = self._normalize_two_header_sheet(
+        # New simplified logic: single header expected, drop helper columns
+        return self._normalize_single_header_sheet(
             df,
-            helper_level1={"sortables"},
-            drop_empty_level0=True,
-            collapse_level0=False,
-            reset_index=True,  # values rows should be reindexed 0..n
+            helper_columns={"sortables"},
+            drop_empty=True,
+            reset_index=True,
         )
-        return data
 
     def from_dataframe(self, df: pd.DataFrame):
         if df is None or getattr(df, "empty", False):
@@ -46,16 +45,14 @@ class CustomCurvesPack(Packable):
         except Exception as e:
             logger.warning("Failed to normalize custom curves sheet: %s", e)
             return
-        if df is None or df.empty or not isinstance(df.columns, pd.MultiIndex):
+        if df is None or df.empty:
             return
 
         def _apply(scenario, block: pd.DataFrame):
-            # block has columns MultiIndex(identifier, curve_key); collapse to curve_key
-            if isinstance(block.columns, pd.MultiIndex):
-                block.columns = [c[1] for c in block.columns]
+            # block may already have single-level columns (preferred path)
             try:
                 curves = CustomCurves._from_dataframe(block, scenario_id=scenario.id)
-            except Exception as e:  # pragma: no cover
+            except Exception as e:
                 logger.warning(
                     "Failed to build custom curves for '%s': %s",
                     scenario.identifier(),
@@ -64,4 +61,10 @@ class CustomCurvesPack(Packable):
                 return
             scenario.update_custom_curves(curves)
 
-        self.apply_identifier_blocks(df, _apply)
+        # If multi-scenario (legacy exported) DataFrame with MultiIndex, apply per identifier
+        if isinstance(df.columns, pd.MultiIndex):
+            self.apply_identifier_blocks(df, _apply)
+        else:
+            # Single-scenario style: apply to all scenarios in this pack
+            for scenario in self.scenarios:
+                _apply(scenario, df)
