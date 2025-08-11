@@ -2,10 +2,9 @@ import pandas as pd
 import logging
 from os import PathLike
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Any, Set, Literal, ClassVar
+from typing import Optional, Dict, Any, Set, ClassVar
 from xlsxwriter import Workbook
 
-from pyetm.models.base import Base
 from pyetm.models import Scenario
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.utils.excel import add_frame_with_scenario_styling
@@ -62,7 +61,9 @@ class InputsPack(Packable):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self._scenario_short_names: Dict[str, str] = {}  # scenario_id -> short_name mapping
+        self._scenario_short_names: Dict[str, str] = (
+            {}
+        )  # scenario_id -> short_name mapping
 
     def set_scenario_short_names(self, scenario_short_names: Dict[str, str]):
         """Set the mapping of scenario identifiers to their short names."""
@@ -73,8 +74,35 @@ class InputsPack(Packable):
         short_name_str = str(short_name)
         for scenario in self.scenarios:
             scenario_id = str(scenario.identifier())
-            if self._scenario_short_names.get(scenario_id) == short_name_str:
+            if self._scenario_short_names.get(str(scenario.id)) == short_name_str:
                 return scenario
+        return None
+
+    def _find_by_any(self, label: str):
+        """Attempt to resolve a label to a scenario by (in order):
+        1. short_name mapping
+        2. scenario.identifier() (title or id)
+        3. numeric id match
+        """
+        if label is None:
+            return None
+        label_str = str(label).strip()
+        # 1. short name
+        s = self._find_by_short_name(label_str)
+        if s is not None:
+            return s
+        # 2. identifier (title or id)
+        for scenario in self.scenarios:
+            if str(scenario.identifier()) == label_str:
+                return scenario
+        # 3. numeric id
+        try:
+            num = int(float(label_str))
+            for scenario in self.scenarios:
+                if scenario.id == num:
+                    return scenario
+        except Exception:
+            pass
         return None
 
     def _to_dataframe(self, columns="user", **kwargs):
@@ -84,20 +112,23 @@ class InputsPack(Packable):
                 for scenario in self.scenarios
             ],
             axis=1,
-            keys=[self._scenario_short_names.get(str(scenario.identifier()), str(scenario.identifier())) 
-                  for scenario in self.scenarios],
+            keys=[
+                self._scenario_short_names.get(
+                    str(scenario.identifier()), str(scenario.identifier())
+                )
+                for scenario in self.scenarios
+            ],
         )
 
     def _normalize_inputs_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize various inputs sheet shapes into canonical shape:
         - Drop leading completely blank rows.
-        - Detect two header rows (short_name row above a row containing 'user').
+        - Accept either:
+          (a) Two header rows (short_name row above a row containing 'user'), or
+          (b) Single header row of scenario labels (no explicit 'user' row) -> we fabricate 'user'.
         - Support 1- or 2-level row index (input[, unit]).
-        Returns a DataFrame with:
-          index -> Index or MultiIndex (input[, unit])
-          columns -> MultiIndex (short_name, 'user')
+        Returns DataFrame with columns MultiIndex(label, 'user').
         """
-        # Drop completely empty rows
         df = df.dropna(how="all")
         if df.empty:
             return df
@@ -108,38 +139,76 @@ class InputsPack(Packable):
             if any(isinstance(v, str) and v.strip().lower() == "user" for v in row):
                 user_row_pos = pos
                 break
-        if user_row_pos is None:
-            # Fallback: assume row 1 is the 'user' row
-            user_row_pos = 1 if len(df) > 1 else 0
 
-        header_start = max(user_row_pos - 1, 0)
-        header_end = user_row_pos  # inclusive
+        single_header = user_row_pos is None
+        if single_header:
+            header_start = 0
+            header_end = 0
+        else:
+            header_start = max(user_row_pos - 1, 0)
+            header_end = user_row_pos
 
         headers = df.iloc[header_start : header_end + 1].astype(str)
         data = df.iloc[header_end + 1 :].copy()
 
-        # Build MultiIndex columns from the two header rows
+        if single_header:
+            # Build columns from single header row; fabricate second level 'user'
+            col_level0 = headers.iloc[0].values
+            # First one (index col) often blank -> keep for alignment
+            data.columns = col_level0
+            # Identify index columns: left-most non-scenario columns (we take first (and optional second) column as index parts)
+            index_candidates = list(data.columns[:2])  # heuristic
+            # If second column values are all numeric -> treat as scenario column, so only first column is index
+            second_is_numeric = False
+            if len(index_candidates) > 1:
+                sample = data[index_candidates[1]].dropna().head(5)
+                if not sample.empty and all(
+                    pd.to_numeric(sample, errors="coerce").notna()
+                ):
+                    second_is_numeric = True
+            if second_is_numeric:
+                idx_cols = [index_candidates[0]]
+            else:
+                idx_cols = index_candidates
+            input_col = idx_cols[0]
+            unit_col = idx_cols[1] if len(idx_cols) > 1 else None
+            scenario_cols = [
+                c for c in data.columns if c not in idx_cols and str(c).strip() != ""
+            ]
+            # Build index
+            input_series = data[input_col].astype(str)
+            if unit_col is not None:
+                unit_series = data[unit_col].astype(str)
+                index = pd.MultiIndex.from_arrays(
+                    [input_series.values, unit_series.values], names=["input", "unit"]
+                )
+            else:
+                index = pd.Index(input_series.values, name="input")
+            canonical = data[scenario_cols].copy()
+            canonical.index = index
+            # Fabricate second level
+            canonical.columns = pd.MultiIndex.from_arrays(
+                [canonical.columns, ["user"] * len(canonical.columns)]
+            )
+            return canonical
+
+        # Two-row header path (original logic)
         data.columns = pd.MultiIndex.from_arrays(
             [headers.iloc[0].values, headers.iloc[1].values]
         )
 
-        # Identify index columns as those whose second-level header is not 'user'
         idx_cols = [
             col
             for col in data.columns
             if not (isinstance(col[1], str) and col[1].strip().lower() == "user")
         ]
-
-        # Choose input and optional unit columns
         if len(idx_cols) == 0:
-            # No explicit index columns: assume first column is inputs
             input_col = data.columns[0]
             unit_col = None
         else:
             input_col = idx_cols[0]
             unit_col = idx_cols[1] if len(idx_cols) > 1 else None
 
-        # Construct index
         input_series = data[input_col].astype(str)
         if unit_col is not None:
             unit_series = data[unit_col].astype(str)
@@ -149,7 +218,6 @@ class InputsPack(Packable):
         else:
             index = pd.Index(input_series.values, name="input")
 
-        # Drop index columns and keep only scenario columns
         keep_cols = [
             c
             for c in data.columns
@@ -158,7 +226,7 @@ class InputsPack(Packable):
         canonical = data[keep_cols]
         canonical.index = index
 
-        # Ensure second level equals 'user'; if not, set it
+        # Ensure second level equals 'user'
         if isinstance(canonical.columns, pd.MultiIndex):
             lvl1 = canonical.columns.get_level_values(1)
             if not all(
@@ -172,16 +240,18 @@ class InputsPack(Packable):
                 )
         else:
             canonical.columns = pd.MultiIndex.from_arrays(
-                [canonical.columns, ["user"] * len(canonical.columns)]
+                [
+                    canonical.columns,
+                    ["user"] * len(canonical.columns),
+                ]
             )
-
         return canonical
 
     def from_dataframe(self, df):
         """
         Sets the inputs on the scenarios from the packed df (comes from excel)
         Tolerates optional unit column and leading blank rows.
-        Uses short_name for scenario identification.
+        Uses short_name for scenario identification; falls back to identifier/title or id.
         """
         if df is None or getattr(df, "empty", False):
             return
@@ -195,18 +265,19 @@ class InputsPack(Packable):
         if df is None or df.empty:
             return
 
-        # Now df has columns MultiIndex (short_name, 'user') and index input or (input, unit)
-        short_names = df.columns.get_level_values(0).unique()
+        # Now df has columns MultiIndex (label, 'user') where label may be short_name, title, or id
+        labels = df.columns.get_level_values(0).unique()
 
-        for short_name in short_names:
-            scenario = self._find_by_short_name(short_name)
+        for label in labels:
+            scenario = self._find_by_any(label)
             if scenario is None:
                 logger.warning(
-                    "Could not find scenario for short_name '%s'", short_name
+                    "Could not find scenario for parameters column label '%s' (not a short_name/title/id)",
+                    label,
                 )
                 continue
 
-            scenario_df = df[short_name]
+            scenario_df = df[label]
             # Ensure DataFrame with a 'user' column
             if isinstance(scenario_df, pd.Series):
                 scenario_df = scenario_df.to_frame(name="user")
@@ -216,7 +287,15 @@ class InputsPack(Packable):
                     first_col = scenario_df.columns[0]
                     scenario_df = scenario_df.rename(columns={first_col: "user"})
 
-            scenario.set_user_values_from_dataframe(scenario_df)
+            try:
+                scenario.set_user_values_from_dataframe(scenario_df)
+            except Exception as e:
+                logger.warning(
+                    "Failed setting inputs for scenario '%s' from column label '%s': %s",
+                    scenario.identifier(),
+                    label,
+                    e,
+                )
 
 
 class QueryPack(Packable):
@@ -441,13 +520,18 @@ class SortablePack(Packable):
         keep_cols = [
             c
             for c in data.columns
-            if not _is_empty(c[0]) and not _is_helper_label(c[1])
+            if not _is_empty(c[0]) and not _is_helper_label(c[0])
         ]
-        canonical = data[keep_cols].copy()
+        data = data[keep_cols]
+        # Collapse to single level (identifier)
+        data.columns = [c[0] for c in data.columns]
 
-        # Result: MultiIndex columns (identifier, sortable_name), index as row number
-        canonical.reset_index(drop=True, inplace=True)
-        return canonical
+        # Ensure string values and drop rows that are completely blank across all kept columns
+        for c in data.columns:
+            data[c] = data[c].apply(lambda x: None if pd.isna(x) else (str(x).strip()))
+        data = data.dropna(how="all")
+
+        return data
 
     def from_dataframe(self, df: pd.DataFrame):
         """Unpack and update sortables for each scenario from the sheet.
@@ -591,7 +675,7 @@ class CustomCurvesPack(Packable):
             block = df[identifier]
             # Build a CustomCurves collection from the block columns
             try:
-                curves = CustomCurves._from_dataframe(block)
+                curves = CustomCurves._from_dataframe(block, scenario_id=scenario.id)
             except Exception as e:
                 logger.warning(
                     "Failed to build custom curves for '%s': %s", identifier, e
@@ -767,7 +851,9 @@ class ScenarioPacker(BaseModel):
 
     #  Create stuff
 
-    def _extract_scenario_sheet_info(self, main_df: pd.DataFrame) -> Dict[str, Dict[str, str]]:
+    def _extract_scenario_sheet_info(
+        self, main_df: pd.DataFrame
+    ) -> Dict[str, Dict[str, str]]:
         """Extract sortables and custom_curves sheet names for each scenario from MAIN sheet.
         Also extracts short_name mapping for parameter sheet identification.
         Returns dict with scenario identifier as key and info dict containing:
@@ -776,36 +862,44 @@ class ScenarioPacker(BaseModel):
         - 'custom_curves': custom curves sheet name
         """
         scenario_sheets = {}
-        
+
         if isinstance(main_df, pd.Series):
             # Single scenario
             identifier = str(main_df.name)
-            short_name = main_df.get('short_name')
-            sortables_sheet = main_df.get('sortables')
-            custom_curves_sheet = main_df.get('custom_curves')
-            
+            short_name = main_df.get("short_name")
+            sortables_sheet = main_df.get("sortables")
+            custom_curves_sheet = main_df.get("custom_curves")
+
             scenario_sheets[identifier] = {
-                'short_name': short_name if pd.notna(short_name) else identifier,
-                'sortables': sortables_sheet if pd.notna(sortables_sheet) else None,
-                'custom_curves': custom_curves_sheet if pd.notna(custom_curves_sheet) else None
+                "short_name": short_name if pd.notna(short_name) else identifier,
+                "sortables": sortables_sheet if pd.notna(sortables_sheet) else None,
+                "custom_curves": (
+                    custom_curves_sheet if pd.notna(custom_curves_sheet) else None
+                ),
             }
         else:
             # Multiple scenarios
             for identifier in main_df.columns:
                 col_data = main_df[identifier]
-                short_name = col_data.get('short_name')
-                sortables_sheet = col_data.get('sortables')
-                custom_curves_sheet = col_data.get('custom_curves')
-                
+                short_name = col_data.get("short_name")
+                sortables_sheet = col_data.get("sortables")
+                custom_curves_sheet = col_data.get("custom_curves")
+
                 scenario_sheets[str(identifier)] = {
-                    'short_name': short_name if pd.notna(short_name) else str(identifier),
-                    'sortables': sortables_sheet if pd.notna(sortables_sheet) else None,
-                    'custom_curves': custom_curves_sheet if pd.notna(custom_curves_sheet) else None
+                    "short_name": (
+                        short_name if pd.notna(short_name) else str(identifier)
+                    ),
+                    "sortables": sortables_sheet if pd.notna(sortables_sheet) else None,
+                    "custom_curves": (
+                        custom_curves_sheet if pd.notna(custom_curves_sheet) else None
+                    ),
                 }
-        
+
         return scenario_sheets
 
-    def _process_single_scenario_sortables(self, scenario: "Scenario", df: pd.DataFrame):
+    def _process_single_scenario_sortables(
+        self, scenario: "Scenario", df: pd.DataFrame
+    ):
         """Process sortables for a single scenario from its dedicated sheet.
         Simplified parsing since there's only one scenario per sheet.
         Tolerates a leading index column (e.g. 'hour' or blank), and maps
@@ -817,7 +911,9 @@ class ScenarioPacker(BaseModel):
             return
 
         # Find the first non-empty row -> header with sortable names
-        non_empty_idx = [i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()]
+        non_empty_idx = [
+            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
+        ]
         if not non_empty_idx:
             return
 
@@ -860,7 +956,9 @@ class ScenarioPacker(BaseModel):
             return
 
         # Find the first non-empty row -> header with curve keys
-        non_empty_idx = [i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()]
+        non_empty_idx = [
+            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
+        ]
         if not non_empty_idx:
             return
 
@@ -890,10 +988,12 @@ class ScenarioPacker(BaseModel):
 
         # Build CustomCurves collection and apply
         try:
-            curves = CustomCurves._from_dataframe(data)
+            curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
             scenario.update_custom_curves(curves)
         except Exception as e:
-            logger.warning("Failed processing custom curves for '%s': %s", scenario.identifier(), e)
+            logger.warning(
+                "Failed processing custom curves for '%s': %s", scenario.identifier(), e
+            )
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
@@ -929,7 +1029,9 @@ class ScenarioPacker(BaseModel):
         scenarios_by_col: Dict[str, Scenario] = {}
         for col in main_df.columns:
             try:
-                scenario = packer._setup_scenario_from_main_column(str(col), main_df[col])
+                scenario = packer._setup_scenario_from_main_column(
+                    str(col), main_df[col]
+                )
             except Exception as e:
                 logger.warning("Failed to set up scenario for column '%s': %s", col, e)
                 continue
@@ -977,7 +1079,89 @@ class ScenarioPacker(BaseModel):
                     gq_df = None
         if gq_df is not None and not gq_df.empty:
             try:
-                QueryPack(scenarios=packer._scenarios()).from_dataframe(gq_df)
+                qp = QueryPack(scenarios=packer._scenarios())
+                norm_gq = qp._normalize_queries_dataframe(gq_df)
+                if norm_gq is not None and not norm_gq.empty:
+                    # Case 1: single column (global queries for all scenarios)
+                    if len(norm_gq.columns) == 1:
+                        col = norm_gq.columns[0]
+                        values = [
+                            v
+                            for v in norm_gq[col].tolist()
+                            if isinstance(v, str) and v.strip()
+                        ]
+                        seen = set()
+                        keys = []
+                        for v in values:
+                            if v not in seen:
+                                seen.add(v)
+                                keys.append(v)
+                        if keys:
+                            for s in packer._scenarios():
+                                try:
+                                    s.add_queries(keys)
+                                except Exception as e:
+                                    logger.warning(
+                                        "Failed adding global gqueries to '%s': %s",
+                                        s.identifier(),
+                                        e,
+                                    )
+                    else:
+                        # Multiple columns: attempt identifier match, fallback to short_name
+                        for col in norm_gq.columns:
+                            scenario = next(
+                                (
+                                    s
+                                    for s in packer._scenarios()
+                                    if str(s.identifier()) == str(col)
+                                ),
+                                None,
+                            )
+                            if scenario is None:
+                                # fallback: short_name mapping
+                                match_id = next(
+                                    (
+                                        sid
+                                        for sid, sn in short_name_map.items()
+                                        if str(sn) == str(col)
+                                    ),
+                                    None,
+                                )
+                                if match_id is not None:
+                                    scenario = next(
+                                        (
+                                            s
+                                            for s in packer._scenarios()
+                                            if str(s.id) == str(match_id)
+                                        ),
+                                        None,
+                                    )
+                            if scenario is None:
+                                logger.warning(
+                                    "Could not find scenario for gqueries column '%s' (identifier or short_name)",
+                                    col,
+                                )
+                                continue
+                            values = [
+                                v
+                                for v in norm_gq[col].tolist()
+                                if isinstance(v, str) and v.strip()
+                            ]
+                            seen = set()
+                            keys = []
+                            for v in values:
+                                if v not in seen:
+                                    seen.add(v)
+                                    keys.append(v)
+                            if keys:
+                                try:
+                                    scenario.add_queries(keys)
+                                except Exception as e:
+                                    logger.warning(
+                                        "Failed adding gqueries to '%s': %s",
+                                        scenario.identifier(),
+                                        e,
+                                    )
             except Exception as e:
                 logger.warning("Failed to import GQUERIES: %s", e)
 
@@ -1015,10 +1199,13 @@ class ScenarioPacker(BaseModel):
 
         return packer
 
-    def _setup_scenario_from_main_column(self, col_name: str, col_data: pd.Series) -> Optional[Scenario]:
+    def _setup_scenario_from_main_column(
+        self, col_name: str, col_data: pd.Series
+    ) -> Optional[Scenario]:
         """Create or load a Scenario from a MAIN sheet column and apply metadata.
         Preference: if 'scenario_id' present -> load; otherwise create with area_code/end_year.
         """
+
         # Helper conversions
         def _to_bool(v: Any) -> Optional[bool]:
             if v is None or (isinstance(v, float) and pd.isna(v)):
@@ -1043,11 +1230,27 @@ class ScenarioPacker(BaseModel):
             except Exception:
                 return None
 
-        scenario_id = col_data.get("scenario_id") if isinstance(col_data, pd.Series) else None
-        area_code = col_data.get("area_code") if isinstance(col_data, pd.Series) else None
-        end_year = _to_int(col_data.get("end_year")) if isinstance(col_data, pd.Series) else None
-        private = _to_bool(col_data.get("private")) if isinstance(col_data, pd.Series) else None
-        template = _to_int(col_data.get("template")) if isinstance(col_data, pd.Series) else None
+        scenario_id = (
+            col_data.get("scenario_id") if isinstance(col_data, pd.Series) else None
+        )
+        area_code = (
+            col_data.get("area_code") if isinstance(col_data, pd.Series) else None
+        )
+        end_year = (
+            _to_int(col_data.get("end_year"))
+            if isinstance(col_data, pd.Series)
+            else None
+        )
+        private = (
+            _to_bool(col_data.get("private"))
+            if isinstance(col_data, pd.Series)
+            else None
+        )
+        template = (
+            _to_int(col_data.get("template"))
+            if isinstance(col_data, pd.Series)
+            else None
+        )
         title = col_data.get("title") if isinstance(col_data, pd.Series) else None
 
         scenario: Optional[Scenario] = None
@@ -1058,7 +1261,9 @@ class ScenarioPacker(BaseModel):
             try:
                 scenario = Scenario.load(sid)
             except Exception as e:
-                logger.warning("Failed to load scenario %s for column '%s': %s", sid, col_name, e)
+                logger.warning(
+                    "Failed to load scenario %s for column '%s': %s", sid, col_name, e
+                )
                 scenario = None
         else:
             if area_code and end_year is not None:
@@ -1096,6 +1301,8 @@ class ScenarioPacker(BaseModel):
             try:
                 scenario.update_metadata(**meta_updates)
             except Exception as e:
-                logger.warning("Failed to update metadata for '%s': %s", scenario.identifier(), e)
+                logger.warning(
+                    "Failed to update metadata for '%s': %s", scenario.identifier(), e
+                )
 
         return scenario
