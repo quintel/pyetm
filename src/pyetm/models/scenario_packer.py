@@ -146,18 +146,150 @@ class ScenarioPacker(BaseModel):
 
         return summary
 
-    #  Create stuff
+    def _first_non_empty_row_index(self, df: pd.DataFrame) -> Optional[int]:
+        if df is None:
+            return None
+        for idx, (_, row) in enumerate(df.iterrows()):
+            if not row.isna().all():
+                return idx
+        return None
+
+    def _is_empty_or_helper(self, col_name: Any, helper_names: set[str]) -> bool:
+        if not isinstance(col_name, str):
+            return True
+        name = col_name.strip().lower()
+        return name in (helper_names or set()) or name in {"", "nan"}
+
+    def _normalize_sheet(
+        self,
+        df: pd.DataFrame,
+        *,
+        helper_names: set[str],
+        reset_index: bool = True,
+        rename_map: Optional[Dict[str, str]] = None,
+    ) -> pd.DataFrame:
+        if df is None:
+            return pd.DataFrame()
+        df = df.dropna(how="all")
+        if df.empty:
+            return df
+
+        header_pos = self._first_non_empty_row_index(df)
+        if header_pos is None:
+            return pd.DataFrame()
+
+        header = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
+        data = df.iloc[header_pos + 1 :].copy()
+        data.columns = header.values
+
+        keep_cols = [
+            col
+            for col in data.columns
+            if not self._is_empty_or_helper(col, helper_names)
+        ]
+        data = data[keep_cols]
+
+        if rename_map:
+            data = data.rename(columns=rename_map)
+
+        if reset_index:
+            data.reset_index(drop=True, inplace=True)
+
+        return data
+
+    def _coerce_bool(self, v: Any) -> Optional[bool]:
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return None
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(int(v))
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"true", "yes", "y", "1"}:
+                return True
+            if s in {"false", "no", "n", "0"}:
+                return False
+        return None
+
+    def _coerce_int(self, v: Any) -> Optional[int]:
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return None
+        try:
+            return int(float(v))
+        except (ValueError, TypeError):
+            return None
+
+    def _load_or_create_scenario(
+        self,
+        sid: Optional[int],
+        area_code: Any,
+        end_year: Optional[int],
+        col_name: str,
+    ) -> Optional["Scenario"]:
+        scenario: Optional[Scenario] = None
+        if sid is not None:
+            try:
+                scenario = Scenario.load(sid)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load scenario %s for column '%s': %s", sid, col_name, e
+                )
+                scenario = None
+        else:
+            if area_code and end_year is not None:
+                try:
+                    scenario = Scenario.new(str(area_code), int(end_year))
+                except Exception as e:
+                    logger.warning(
+                        "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
+                        col_name,
+                        area_code,
+                        end_year,
+                        e,
+                    )
+                    scenario = None
+            else:
+                logger.warning(
+                    "MAIN column '%s' missing required fields for creation (area_code/end_year)",
+                    col_name,
+                )
+                scenario = None
+        return scenario
+
+    def _collect_meta_updates(
+        self,
+        private: Optional[bool],
+        template: Optional[int],
+        source: Any,
+        title: Any,
+    ) -> Dict[str, Any]:
+        meta_updates: Dict[str, Any] = {}
+        if private is not None:
+            meta_updates["private"] = private
+        if template is not None:
+            meta_updates["template"] = template
+        if isinstance(source, str) and source.strip() != "":
+            meta_updates["source"] = source.strip()
+        if isinstance(title, str) and title.strip() != "":
+            meta_updates["title"] = title.strip()
+        return meta_updates
+
+    def _apply_metadata(
+        self, scenario: "Scenario", meta_updates: Dict[str, Any]
+    ) -> None:
+        if not meta_updates:
+            return
+        try:
+            scenario.update_metadata(**meta_updates)
+        except Exception as e:
+            logger.warning(
+                "Failed to update metadata for '%s': %s", scenario.identifier(), e
+            )
 
     def _extract_scenario_sheet_info(
         self, main_df: pd.DataFrame
     ) -> Dict[str, Dict[str, str]]:
-        """Extract sortables and custom_curves sheet names for each scenario from MAIN sheet.
-        Also extracts short_name mapping for parameter sheet identification.
-        Returns dict with scenario identifier as key and info dict containing:
-        - 'short_name': short name for parameter sheet identification
-        - 'sortables': sortables sheet name
-        - 'custom_curves': custom curves sheet name
-        """
         scenario_sheets = {}
 
         if isinstance(main_df, pd.Series):
@@ -197,92 +329,24 @@ class ScenarioPacker(BaseModel):
     def _process_single_scenario_sortables(
         self, scenario: "Scenario", df: pd.DataFrame
     ):
-        """Process sortables for a single scenario from its dedicated sheet.
-        Simplified parsing since there's only one scenario per sheet.
-        Tolerates a leading index column (e.g. 'hour' or blank), and maps
-        'heat_network' → 'heat_network_lt' for convenience.
-        """
-        # Drop completely empty rows
-        df = df.dropna(how="all")
-        if df.empty:
+        data = self._normalize_sheet(
+            df,
+            helper_names={"sortables", "hour", "index"},
+            reset_index=True,
+            rename_map={"heat_network": "heat_network_lt"},
+        )
+        if data is None or data.empty:
             return
-
-        # Find the first non-empty row -> header with sortable names
-        non_empty_idx = [
-            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
-        ]
-        if not non_empty_idx:
-            return
-
-        header_pos = non_empty_idx[0]
-        header = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
-        data = df.iloc[header_pos + 1 :].copy()
-
-        # Set column names from header
-        data.columns = header.values
-
-        # Helper to detect columns to drop
-        def _is_empty_or_helper(col_name: Any) -> bool:
-            if not isinstance(col_name, str):
-                return True
-            name = col_name.strip().lower()
-            return name in {"", "nan", "sortables", "hour", "index"}
-
-        # Drop empty/helper columns
-        keep_cols = [col for col in data.columns if not _is_empty_or_helper(col)]
-        data = data[keep_cols]
-
-        # Map bare 'heat_network' to 'heat_network_lt' if present
-        if "heat_network" in data.columns and "heat_network_lt" not in data.columns:
-            data = data.rename(columns={"heat_network": "heat_network_lt"})
-
-        # Reset index to numeric starting at 0
-        data.reset_index(drop=True, inplace=True)
-
-        # Apply to scenario
         scenario.set_sortables_from_dataframe(data)
 
     def _process_single_scenario_curves(self, scenario: "Scenario", df: pd.DataFrame):
-        """Process custom curves for a single scenario from its dedicated sheet.
-        Simplified parsing since there's only one scenario per sheet.
-        Tolerates a leading index column (e.g. 'hour' or blank).
-        """
-        # Drop completely empty rows
-        df = df.dropna(how="all")
-        if df.empty:
+        data = self._normalize_sheet(
+            df,
+            helper_names={"curves", "custom_curves", "hour", "index"},
+            reset_index=True,
+        )
+        if data is None or data.empty:
             return
-
-        # Find the first non-empty row -> header with curve keys
-        non_empty_idx = [
-            i for i, (_, r) in enumerate(df.iterrows()) if not r.isna().all()
-        ]
-        if not non_empty_idx:
-            return
-
-        header_pos = non_empty_idx[0]
-        header = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
-        data = df.iloc[header_pos + 1 :].copy()
-
-        # Set column names from header
-        data.columns = header.values
-
-        # Helper to detect columns to drop
-        def _is_empty_or_helper(col_name: Any) -> bool:
-            if not isinstance(col_name, str):
-                return True
-            name = col_name.strip().lower()
-            return name in {"", "nan", "curves", "custom_curves", "hour", "index"}
-
-        # Drop empty/helper columns
-        keep_cols = [col for col in data.columns if not _is_empty_or_helper(col)]
-        data = data[keep_cols]
-
-        # Reset index to numeric starting at 0
-        data.reset_index(drop=True, inplace=True)
-
-        if data.empty:
-            return
-
         # Build CustomCurves collection and apply
         try:
             curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
@@ -294,18 +358,8 @@ class ScenarioPacker(BaseModel):
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
-        """Create/load scenarios and apply updates from an Excel workbook.
-        Behavior (new layout):
-        - MAIN sheet contains one column per scenario; rows may include: scenario_id, short_name,
-          area_code, end_year, private, template, title, sortables, custom_curves.
-        - PARAMETERS uses short_name headers above a 'user' header; values never repeat across scenarios.
-        - GQUERIES always repeat (same keys applied to each scenario column present).
-        - Sortables and custom curves are read from per-scenario sheets named in MAIN.
-        Returns a ScenarioPacker containing all touched scenarios.
-        """
         packer = cls()
 
-        # Try to open the workbook; if missing, return empty packer (keeps tests tolerant)
         try:
             xls = pd.ExcelFile(xlsx_path)
         except Exception as e:
@@ -353,7 +407,6 @@ class ScenarioPacker(BaseModel):
         # PARAMETERS (inputs) sheet
         params_df = None
         try:
-            # Read raw to allow our normalization to detect header rows
             params_df = xls.parse(InputsPack.sheet_name, header=None)
         except Exception:
             params_df = None
@@ -381,7 +434,7 @@ class ScenarioPacker(BaseModel):
             except Exception as e:
                 logger.warning("Failed to import GQUERIES: %s", e)
 
-        # Per-scenario Sortables and Custom Curves
+        # Sortables and Custom Curves
         for col_name, scenario in scenarios_by_col.items():
             info = sheet_info.get(col_name, {}) if isinstance(sheet_info, dict) else {}
 
@@ -418,34 +471,6 @@ class ScenarioPacker(BaseModel):
     def _setup_scenario_from_main_column(
         self, col_name: str, col_data: pd.Series
     ) -> Optional[Scenario]:
-        """Create or load a Scenario from a MAIN sheet column and apply metadata.
-        Preference: if 'scenario_id' present -> load; otherwise create with area_code/end_year.
-        """
-
-        # Helper conversions
-        def _to_bool(v: Any) -> Optional[bool]:
-            if v is None or (isinstance(v, float) and pd.isna(v)):
-                return None
-            if isinstance(v, bool):
-                return v
-            if isinstance(v, (int, float)):
-                return bool(int(v))
-            if isinstance(v, str):
-                s = v.strip().lower()
-                if s in {"true", "yes", "y", "1"}:
-                    return True
-                if s in {"false", "no", "n", "0"}:
-                    return False
-            return None
-
-        def _to_int(v: Any) -> Optional[int]:
-            try:
-                if v is None or (isinstance(v, float) and pd.isna(v)):
-                    return None
-                return int(float(v))
-            except Exception:
-                return None
-
         scenario_id = (
             col_data.get("scenario_id") if isinstance(col_data, pd.Series) else None
         )
@@ -453,72 +478,28 @@ class ScenarioPacker(BaseModel):
             col_data.get("area_code") if isinstance(col_data, pd.Series) else None
         )
         end_year = (
-            _to_int(col_data.get("end_year"))
+            self._coerce_int(col_data.get("end_year"))
             if isinstance(col_data, pd.Series)
             else None
         )
         private = (
-            _to_bool(col_data.get("private"))
+            self._coerce_bool(col_data.get("private"))
             if isinstance(col_data, pd.Series)
             else None
         )
         template = (
-            _to_int(col_data.get("template"))
+            self._coerce_int(col_data.get("template"))
             if isinstance(col_data, pd.Series)
             else None
         )
+        source = col_data.get("source") if isinstance(col_data, pd.Series) else None
         title = col_data.get("title") if isinstance(col_data, pd.Series) else None
-
-        scenario: Optional[Scenario] = None
-
-        # Load or create
-        sid = _to_int(scenario_id)
-        if sid is not None:
-            try:
-                scenario = Scenario.load(sid)
-            except Exception as e:
-                logger.warning(
-                    "Failed to load scenario %s for column '%s': %s", sid, col_name, e
-                )
-                scenario = None
-        else:
-            if area_code and end_year is not None:
-                try:
-                    scenario = Scenario.new(str(area_code), int(end_year))
-                except Exception as e:
-                    logger.warning(
-                        "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
-                        col_name,
-                        area_code,
-                        end_year,
-                        e,
-                    )
-                    scenario = None
-            else:
-                logger.warning(
-                    "MAIN column '%s' missing required fields for creation (area_code/end_year)",
-                    col_name,
-                )
-                scenario = None
+        sid = self._coerce_int(scenario_id)
+        scenario = self._load_or_create_scenario(sid, area_code, end_year, col_name)
 
         if scenario is None:
             return None
-
-        # Apply metadata updates if provided
-        meta_updates: Dict[str, Any] = {}
-        if private is not None:
-            meta_updates["private"] = private
-        if template is not None:
-            meta_updates["template"] = template
-        if isinstance(title, str) and title.strip() != "":
-            meta_updates["title"] = title.strip()
-
-        if meta_updates:
-            try:
-                scenario.update_metadata(**meta_updates)
-            except Exception as e:
-                logger.warning(
-                    "Failed to update metadata for '%s': %s", scenario.identifier(), e
-                )
+        meta_updates = self._collect_meta_updates(private, template, source, title)
+        self._apply_metadata(scenario, meta_updates)
 
         return scenario

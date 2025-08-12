@@ -1,8 +1,6 @@
 import logging
 from typing import ClassVar, Dict, Any
-
 import pandas as pd
-
 from pyetm.models.packables.packable import Packable
 
 logger = logging.getLogger(__name__)
@@ -14,31 +12,39 @@ class InputsPack(Packable):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self._scenario_short_names: Dict[str, str] = (
-            {}
-        )  # scenario_id -> short_name mapping
+        self._scenario_short_names: Dict[str, str] = {}
 
     def set_scenario_short_names(self, scenario_short_names: Dict[str, str]):
         self._scenario_short_names = scenario_short_names or {}
 
     def _key_for(self, scenario: "Any") -> Any:
-        # Prefer short name if present (mapping stored by scenario.id)
         short = self._scenario_short_names.get(str(scenario.id))
-        return short if short else scenario.identifier()
+        if short:
+            return short
+
+        label = None
+        try:
+            label = scenario.identifier()
+        except Exception:
+            label = None
+
+        if not isinstance(label, (str, int)):
+            return scenario.id
+        return label
 
     def resolve_scenario(self, label: Any):
         if label is None:
             return None
         label_str = str(label).strip()
-        # 1. short name
+        # Match short name first
         for scenario in self.scenarios:
             if self._scenario_short_names.get(str(scenario.id)) == label_str:
                 return scenario
-        # 2. identifier (title or id as string)
-        s = super().resolve_scenario(label_str)
-        if s is not None:
-            return s
-        # 3. numeric id
+        # Fallback to identifier/title
+        found = super().resolve_scenario(label_str)
+        if found is not None:
+            return found
+        # Fallback to numeric id
         try:
             num = int(float(label_str))
             for scenario in self.scenarios:
@@ -48,130 +54,123 @@ class InputsPack(Packable):
             pass
         return None
 
-    def _build_dataframe_for_scenario(self, scenario, columns: str = "user", **kwargs):
-        try:
-            df = scenario.inputs.to_dataframe(columns=columns)
-        except Exception as e:
-            logger.warning(
-                "Failed building inputs frame for scenario %s: %s",
-                scenario.identifier(),
-                e,
-            )
-            return None
-        return df if df is not None and not df.empty else None
-
-    def _to_dataframe(self, columns="user", **kwargs):
-        return self.build_pack_dataframe(columns=columns, **kwargs)
-
-    def _normalize_inputs_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize PARAMETERS sheet (single-header variant only).
-        Assumptions (new layout):
-        - First non-empty row contains scenario labels (short names / identifiers).
-        - First column below header lists input keys; optional second column lists units
-          (detected heuristically: treat second column as unit column if most
-          of its non-empty values are short (<=8 chars) and non-numeric while
-          third column has numeric values).
-        - All remaining columns are scenario value columns.
-        - Fabricate second header level with constant 'user'.
-        Returns DataFrame with MultiIndex columns (scenario_label, 'user').
-        """
-        df = df.dropna(how="all")
-        if df.empty:
-            return df
-
-        # Determine header row (first non-empty)
-        header_pos_list = self.first_non_empty_row_positions(df, 1)
-        if not header_pos_list:
-            return pd.DataFrame()
-        header_pos = header_pos_list[0]
-        header = df.iloc[header_pos].astype(str)
-        data = df.iloc[header_pos + 1 :].copy()
-        data.columns = header.values
-
-        if data.empty:
+    def _to_dataframe(self, columns: str = "user", **kwargs):
+        if not self.scenarios:
             return pd.DataFrame()
 
-        cols = list(data.columns)
-        if not cols:
+        def extract_user_map_from_inputs_obj(scen) -> dict[str, Any] | None:
+            try:
+                it = iter(scen.inputs)
+                values = {}
+                for inp in it:
+                    key = getattr(inp, "key", None)
+                    if key is None:
+                        continue
+                    values[str(key)] = getattr(inp, "user", None)
+                if values:
+                    return values
+            except Exception:
+                pass
+
+            try:
+                df = scen.inputs.to_dataframe(columns="user")
+            except Exception:
+                df = None
+            if df is None or getattr(df, "empty", False):
+                return None
+
+            if isinstance(df.index, pd.MultiIndex) and "unit" in (df.index.names or []):
+                df = df.copy()
+                df.index = df.index.droplevel("unit")
+            if isinstance(df, pd.Series):
+                series = df
+            else:
+                cols_lc = [str(c).lower() for c in df.columns]
+                chosen = None
+                for candidate in ("user", "value"):
+                    if candidate in cols_lc:
+                        chosen = df.columns[cols_lc.index(candidate)]
+                        break
+                if chosen is None:
+                    chosen = df.columns[0]
+                series = df[chosen]
+            series.index = series.index.map(lambda k: str(k))
+            return series.to_dict()
+
+        all_keys: set[str] = set()
+        per_label_values: dict[Any, dict[str, Any]] = {}
+        for scen in self.scenarios:
+            label = self._key_for(scen)
+            user_map = extract_user_map_from_inputs_obj(scen)
+            if not user_map:
+                continue
+            per_label_values[label] = user_map
+            all_keys.update(user_map.keys())
+
+        if not all_keys:
             return pd.DataFrame()
 
-        # Heuristic to detect unit column
-        input_col = cols[0]
-        unit_col = None
-        if len(cols) > 2:
-            candidate_unit = cols[1]
-            third_col = cols[2]
-            sample_candidate = data[candidate_unit].dropna().astype(str).head(25)
-            sample_third = data[third_col].dropna().head(25)
-            if not sample_candidate.empty:
-                short_tokens = sum(len(s.strip()) <= 8 for s in sample_candidate)
-                numeric_third = (
-                    not sample_third.empty
-                    and pd.to_numeric(sample_third, errors="coerce").notna().mean()
-                    > 0.5
-                )
-                if short_tokens / len(sample_candidate) > 0.6 and numeric_third:
-                    unit_col = candidate_unit
-        elif len(cols) == 2:
-            # If only two columns treat second as scenario column (no unit)
-            unit_col = None
+        sorted_keys = sorted(all_keys)
+        data: dict[Any, list[Any]] = {}
+        for label, value_map in per_label_values.items():
+            data[label] = [value_map.get(k) for k in sorted_keys]
 
-        scenario_cols = [c for c in cols if c not in {input_col} and c != unit_col]
-        input_series = data[input_col].astype(str)
-        if unit_col is not None:
-            unit_series = data[unit_col].astype(str)
-            index = pd.MultiIndex.from_arrays(
-                [input_series.values, unit_series.values], names=["input", "unit"]
-            )
-        else:
-            index = pd.Index(input_series.values, name="input")
-        canonical = data[scenario_cols].copy()
-        canonical.index = index
-        canonical.columns = pd.MultiIndex.from_arrays(
-            [canonical.columns, ["user"] * len(canonical.columns)]
-        )
-        return canonical
+        df = pd.DataFrame(data, index=sorted_keys)
+        df.index.name = "input"
+        return df
 
-    # --- Import (mutation) ------------------------------------------------------
     def from_dataframe(self, df):
-        """
-        Sets the inputs on the scenarios from the packed df (comes from excel)
-        Tolerates optional unit column and leading blank rows.
-        Uses short_name for scenario identification; falls back to identifier/title or id.
-        """
         if df is None or getattr(df, "empty", False):
             return
         try:
-            df = self._normalize_inputs_dataframe(df)
-        except Exception as e:
-            logger.warning("Failed to normalize inputs sheet: %s", e)
-            return
-        if df is None or df.empty:
-            return
+            df = df.dropna(how="all")
+            if df.empty:
+                return
+            header_pos_list = self.first_non_empty_row_positions(df, 1)
+            if not header_pos_list:
+                return
+            header_pos = header_pos_list[0]
+            header_row = df.iloc[header_pos].astype(str)
+            data = df.iloc[header_pos + 1 :].copy()
+            data.columns = header_row.values
+            if data.empty or len(data.columns) < 2:
+                return
+            input_col = data.columns[0]
+            inputs_series = data[input_col].astype(str).str.strip()
+            mask = inputs_series != ""
+            data = data.loc[mask]
+            inputs_series = inputs_series.loc[mask]
+            data.index = inputs_series
+            scenario_cols = [c for c in data.columns if c != input_col]
+            for col in scenario_cols:
+                scenario = self.resolve_scenario(col)
+                if scenario is None:
+                    logger.warning(
+                        "Could not find scenario for PARAMETERS column label '%s'", col
+                    )
+                    continue
+                series = data[col]
 
-        labels = df.columns.get_level_values(0).unique()
-        for label in labels:
-            scenario = self.resolve_scenario(label)
-            if scenario is None:
-                logger.warning(
-                    "Could not find scenario for parameters column label '%s' (not a short_name/title/id)",
-                    label,
-                )
-                continue
-            scenario_df = df[label]
-            if isinstance(scenario_df, pd.Series):
-                scenario_df = scenario_df.to_frame(name="user")
-            else:
-                if list(scenario_df.columns) != ["user"]:
-                    scenario_df = scenario_df.copy()
-                    first_col = scenario_df.columns[0]
-                    scenario_df = scenario_df.rename(columns={first_col: "user"})
-            try:
-                scenario.set_user_values_from_dataframe(scenario_df)
-            except Exception as e:
-                logger.warning(
-                    "Failed setting inputs for scenario '%s' from column label '%s': %s",
-                    scenario.identifier(),
-                    label,
-                    e,
-                )
+                def _is_blank_val(v: Any) -> bool:
+                    if v is None:
+                        return True
+                    if isinstance(v, float) and pd.isna(v):
+                        return True
+                    if isinstance(v, str) and v.strip().lower() in {"", "nan"}:
+                        return True
+                    return False
+
+                updates = {k: v for k, v in series.items() if not _is_blank_val(v)}
+                if not updates:
+                    continue
+                try:
+                    scenario.update_user_values(updates)
+                except Exception as e:
+                    logger.warning(
+                        "Failed updating inputs for scenario '%s' from column '%s': %s",
+                        scenario.identifier(),
+                        col,
+                        e,
+                    )
+        except Exception as e:
+            logger.warning("Failed to parse simplified PARAMETERS sheet: %s", e)

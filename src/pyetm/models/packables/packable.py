@@ -9,21 +9,17 @@ logger = logging.getLogger(__name__)
 
 
 class Packable(BaseModel):
-    # Use a proper default set and keep the type consistent
     scenarios: Set["Scenario"] = Field(default_factory=set)
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"
 
-    # Internal cache for fast identifier lookup
     _scenario_id_cache: Dict[str, "Scenario"] | None = None
 
-    # --- Public collection API -------------------------------------------------
     def add(self, *scenarios):
         "Adds one or more scenarios to the packable"
         if not scenarios:
             return
         self.scenarios.update(scenarios)
-        # Invalidate cache
         self._scenario_id_cache = None
 
     def discard(self, scenario):
@@ -32,7 +28,6 @@ class Packable(BaseModel):
         self._scenario_id_cache = None
 
     def clear(self):
-        # Reset to an empty set
         self.scenarios.clear()
         self._scenario_id_cache = None
 
@@ -47,8 +42,6 @@ class Packable(BaseModel):
     def _build_dataframe_for_scenario(
         self, scenario: "Scenario", columns: str = "", **kwargs
     ) -> Optional[pd.DataFrame]:
-        """Return a DataFrame for a single scenario or None/empty if not applicable.
-        Subclasses may override to opt-in to generic build_pack_dataframe helper."""
         return None
 
     def _concat_frames(
@@ -88,6 +81,7 @@ class Packable(BaseModel):
 
     def from_dataframe(self, df):
         """Should parse the df and call correct setters on identified scenarios"""
+        raise NotImplementedError
 
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         """Base implementation - kids should implement this or use build_pack_dataframe"""
@@ -178,7 +172,6 @@ class Packable(BaseModel):
         reset_index: bool = False,
     ) -> pd.DataFrame:
         """Normalize a sheet that uses a single header row.
-        Rules:
         - First non-empty row becomes header.
         - Subsequent rows are data.
         - Optionally drop columns whose header is blank or in helper_columns.

@@ -270,14 +270,10 @@ class Sortables(Base):
             df = df.to_frame(name=str(df.name))
 
         def _extract_order(series: pd.Series) -> List[Any]:
-            return (
-                series.dropna()
-                .astype(str)
-                .map(lambda s: s.strip())
-                .replace({"": pd.NA})
-                .dropna()
-                .tolist()
-            )
+            s = series.dropna()
+            if s.dtype == object:
+                s = s.astype(str).map(lambda v: v.strip()).replace({"": pd.NA}).dropna()
+            return s.tolist()
 
         items: List[Sortable] = []
         for col in df.columns:

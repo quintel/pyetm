@@ -1,8 +1,6 @@
 import logging
 from typing import ClassVar, Any
-
 import pandas as pd
-
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.packables.packable import Packable
 
@@ -29,7 +27,6 @@ class CustomCurvesPack(Packable):
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     def _normalize_curves_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        # New simplified logic: single header expected, drop helper columns
         return self._normalize_single_header_sheet(
             df,
             helper_columns={"sortables"},
@@ -49,7 +46,6 @@ class CustomCurvesPack(Packable):
             return
 
         def _apply(scenario, block: pd.DataFrame):
-            # block may already have single-level columns (preferred path)
             try:
                 curves = CustomCurves._from_dataframe(block, scenario_id=scenario.id)
             except Exception as e:
@@ -61,10 +57,5 @@ class CustomCurvesPack(Packable):
                 return
             scenario.update_custom_curves(curves)
 
-        # If multi-scenario (legacy exported) DataFrame with MultiIndex, apply per identifier
-        if isinstance(df.columns, pd.MultiIndex):
-            self.apply_identifier_blocks(df, _apply)
-        else:
-            # Single-scenario style: apply to all scenarios in this pack
-            for scenario in self.scenarios:
-                _apply(scenario, df)
+        for scenario in self.scenarios:
+            _apply(scenario, df)

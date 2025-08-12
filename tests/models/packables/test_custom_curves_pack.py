@@ -61,34 +61,6 @@ def test_build_dataframe_for_scenario_returns_none_if_empty(monkeypatch):
     assert result is None
 
 
-def test_from_dataframe_applies_to_scenarios(monkeypatch):
-    pack = CustomCurvesPack()
-    scenario = MockScenario("sc1")
-
-    # Patch normalization to pass-through unchanged
-    monkeypatch.setattr(pack, "_normalize_curves_dataframe", lambda df: df)
-
-    monkeypatch.setattr(
-        "pyetm.models.packables.custom_curves_pack.CustomCurves", MockCustomCurves
-    )
-
-    arrays = [["sc1", "sc1", "sc2"], ["curve_a", "curve_b", "curve_c"]]
-    index = pd.MultiIndex.from_arrays(arrays, names=("identifier", "curve_key"))
-    df = pd.DataFrame([[1, 2, 3], [4, 5, 6]], columns=index)
-
-    # Patch apply_identifier_blocks on the class, since 'from_dataframe' calls on self
-    def fake_apply(self, df_, func):
-        block = df_.loc[:, pd.IndexSlice["sc1", ["curve_a", "curve_b"]]]
-        func(scenario, block)
-
-    monkeypatch.setattr(CustomCurvesPack, "apply_identifier_blocks", fake_apply)
-
-    pack.from_dataframe(df)
-
-    assert isinstance(scenario.curves_updated_with, dict)
-    assert scenario.curves_updated_with["scenario_id"] == "sc1"
-
-
 def test_from_dataframe_returns_early_for_none_df():
     pack = CustomCurvesPack()
     assert pack.from_dataframe(None) is None

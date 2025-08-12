@@ -204,8 +204,6 @@ class TestInputs:
 
         assert not result.empty
         assert "input" in result.index.names
-        assert (scenario_with_inputs.id, "user") in result.columns
-        assert (scenario_with_inputs.id, "default") in result.columns
 
     def test_inputs_multiple_scenarios(self, multiple_scenarios):
         """Test inputs with multiple scenarios"""
@@ -229,22 +227,19 @@ class TestInputs:
 
         result = packer.inputs()
 
-        # Should have unit column plus value/default for each scenario
-        expected_columns = (
-            [("unit", "")]
-            + [(s.id, "value") for s in multiple_scenarios]
-            + [(s.id, "default") for s in multiple_scenarios]
-        )
-        assert len(result.columns) >= len(multiple_scenarios) * 2
+        assert set(result.columns) == {s.id for s in multiple_scenarios}
 
-        # Should have all unique input keys
-        all_keys = {
-            ("wind_capacity", "MW"),
-            ("unique_input_0", "GW"),
-            ("unique_input_1", "GW"),
-            ("unique_input_2", "GW"),
+        expected_keys = {
+            "wind_capacity",
+            "unique_input_0",
+            "unique_input_1",
+            "unique_input_2",
         }
-        assert set(result.index) == all_keys
+        assert set(result.index) == expected_keys
+
+        for i, s in enumerate(multiple_scenarios):
+            assert result.loc["wind_capacity", s.id] == 1000 + i * 100
+            assert result.loc[f"unique_input_{i}", s.id] == i * 10
 
 
 class TestGqueryResults:
