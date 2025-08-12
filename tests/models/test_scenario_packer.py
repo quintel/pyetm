@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import numpy as np
 import tempfile
 import os
 from unittest.mock import Mock, patch
@@ -11,6 +10,9 @@ from pyetm.models.scenario_packer import (
     SortablePack,
 )
 from pyetm.models import ScenarioPacker, Scenario
+from pyetm.models.packables.inputs_pack import InputsPack
+from pyetm.models.packables.query_pack import QueryPack
+from pyetm.models.custom_curves import CustomCurves
 
 
 class TestScenarioPackerInit:
@@ -580,3 +582,603 @@ class TestUtilityMethods:
 class TestFromExcel:
     def test_from_excel(self):
         ScenarioPacker.from_excel("tests/fixtures/my_input_excel.xlsx")
+
+
+class TestScenarioPackerHelpers:
+
+    def test_first_non_empty_row_index(self):
+        packer = ScenarioPacker()
+
+        assert packer._first_non_empty_row_index(None) is None
+
+        empty = pd.DataFrame([[float("nan")], [float("nan")]])
+        assert packer._first_non_empty_row_index(empty) is None
+
+    def test_is_empty_or_helper(self):
+        packer = ScenarioPacker()
+        helpers = {"sortables", "hour", "index"}
+
+        assert packer._is_empty_or_helper(123, helpers) is True
+        assert packer._is_empty_or_helper(" ", helpers) is True
+        assert packer._is_empty_or_helper("NaN", helpers) is True
+        assert packer._is_empty_or_helper("hour", helpers) is True
+        assert packer._is_empty_or_helper("value", helpers) is False
+
+    def test_normalize_sheet(self):
+        packer = ScenarioPacker()
+
+        # None -> empty
+        assert packer._normalize_sheet(None, helper_names=set()).empty
+
+        # Build a frame with header at row 1 (0-based)
+        raw = pd.DataFrame(
+            [
+                [None, None, None],
+                ["index", "heat_network", "value"],  # header
+                [1, "hn", 10],
+                [2, "hn", 20],
+            ]
+        )
+
+        norm = packer._normalize_sheet(
+            raw,
+            helper_names={"index"},
+            reset_index=False,
+            rename_map={"heat_network": "heat_network_lt"},
+        )
+
+        # index column removed, rename applied, index preserved
+        assert list(norm.columns) == ["heat_network_lt", "value"]
+        assert norm.index.tolist() == [2, 3]  # original DataFrame indices kept
+
+    def test_coerce_bool(self):
+        packer = ScenarioPacker()
+        na = float("nan")
+        assert packer._coerce_bool(None) is None
+        assert packer._coerce_bool(na) is None
+        assert packer._coerce_bool(True) is True
+        assert packer._coerce_bool(False) is False
+        assert packer._coerce_bool(1) is True
+        assert packer._coerce_bool(0.0) is False
+        assert packer._coerce_bool("yes") is True
+        assert packer._coerce_bool("No") is False
+        assert packer._coerce_bool("1") is True
+        assert packer._coerce_bool("maybe") is None
+
+    def test_coerce_int(self):
+        packer = ScenarioPacker()
+        na = float("nan")
+        assert packer._coerce_int(None) is None
+        assert packer._coerce_int(na) is None
+        assert packer._coerce_int(5) == 5
+        assert packer._coerce_int(5.9) == 5
+        assert packer._coerce_int("7") == 7
+        assert packer._coerce_int("abc") is None
+
+    def test_load_or_create_scenario_load_new_and_failures(self, monkeypatch):
+        packer = ScenarioPacker()
+
+        loaded = Mock(spec=Scenario)
+        created = Mock(spec=Scenario)
+
+        # Successful load
+        monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: loaded))
+        out = packer._load_or_create_scenario(42, "nl2015", 2050, "COL")
+        assert out is loaded
+
+        # Failing load -> None
+        def boom(_):
+            raise RuntimeError("bad")
+
+        monkeypatch.setattr(Scenario, "load", staticmethod(boom))
+        assert packer._load_or_create_scenario(42, "nl2015", 2050, "COL") is None
+
+        # Successful new
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: created))
+        out = packer._load_or_create_scenario(None, "de", 2030, "COL2")
+        assert out is created
+
+        # Failing new -> None
+        def boom2(_, __):
+            raise ValueError("bad")
+
+        monkeypatch.setattr(Scenario, "new", staticmethod(boom2))
+        assert packer._load_or_create_scenario(None, "nl", 2050, "C") is None
+
+        # Missing fields -> None
+        assert packer._load_or_create_scenario(None, None, None, "C") is None
+
+    def test_collect_and_apply_metadata(self):
+        packer = ScenarioPacker()
+        meta = packer._collect_meta_updates(True, 7, " src ", "  title  ")
+        assert meta == {
+            "private": True,
+            "template": 7,
+            "source": "src",
+            "title": "title",
+        }
+
+        # empty strings trimmed out
+        meta = packer._collect_meta_updates(None, None, " ", "")
+        assert meta == {}
+
+        # apply updates
+        scenario = Mock(spec=Scenario)
+        packer._apply_metadata(scenario, {"private": False})
+        scenario.update_metadata.assert_called_once_with(private=False)
+
+        # swallow exceptions
+        scenario.update_metadata.side_effect = RuntimeError("boom")
+        packer._apply_metadata(scenario, {"private": True})  # should not raise
+
+        # no updates does nothing
+        scenario.update_metadata.reset_mock()
+        packer._apply_metadata(scenario, {})
+        scenario.update_metadata.assert_not_called()
+
+    def test_extract_scenario_sheet_info_series_and_df(self):
+        packer = ScenarioPacker()
+
+        ser = pd.Series(
+            {
+                "short_name": "S",
+                "sortables": "SORT1",
+                "custom_curves": "CUR1",
+            },
+            name="COL1",
+        )
+        out = packer._extract_scenario_sheet_info(ser)
+        assert out == {
+            "COL1": {"short_name": "S", "sortables": "SORT1", "custom_curves": "CUR1"}
+        }
+
+        df = pd.DataFrame(
+            {
+                "A": {"short_name": None, "sortables": "S_A", "custom_curves": None},
+                "B": {"short_name": "B_S", "sortables": None, "custom_curves": "C_B"},
+            }
+        )
+        out2 = packer._extract_scenario_sheet_info(df)
+        assert out2["A"]["short_name"] == "A"
+        assert out2["A"]["sortables"] == "S_A"
+        assert out2["A"]["custom_curves"] is None
+        assert out2["B"]["short_name"] == "B_S"
+        assert out2["B"]["custom_curves"] == "C_B"
+
+    def test_process_single_scenario_sortables(self):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+
+        # Build a sheet where header row contains helpers + target column to be renamed
+        raw = pd.DataFrame(
+            [
+                [None, None, None],
+                ["sortables", "heat_network", "hour"],
+                [None, "lt", 1],
+                [None, "mt", 2],
+            ]
+        )
+
+        packer._process_single_scenario_sortables(scenario, raw)
+        assert scenario.set_sortables_from_dataframe.called
+        df_arg = scenario.set_sortables_from_dataframe.call_args[0][0]
+        assert "heat_network_lt" in df_arg.columns
+        assert "hour" not in df_arg.columns
+
+    def test_process_single_scenario_sortables_empty_after_normalize(self):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+
+        raw = pd.DataFrame(
+            [
+                [None, None],
+                ["sortables", "hour"],
+                [None, 1],
+            ]
+        )
+
+        packer._process_single_scenario_sortables(scenario, raw)
+        scenario.set_sortables_from_dataframe.assert_not_called()
+
+    def test_process_single_scenario_curves_success_and_error(self, monkeypatch):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+        scenario.id = 999
+
+        raw = pd.DataFrame(
+            [
+                [None, None],
+                ["custom_curves", "value"],
+                ["curve_1", 1.0],
+                ["curve_2", 2.0],
+            ]
+        )
+
+        dummy_curves = Mock(spec=CustomCurves)
+        monkeypatch.setattr(
+            CustomCurves,
+            "_from_dataframe",
+            staticmethod(lambda df, scenario_id: dummy_curves),
+        )
+        packer._process_single_scenario_curves(scenario, raw)
+        scenario.update_custom_curves.assert_called_once_with(dummy_curves)
+        scenario.update_custom_curves.reset_mock()
+
+        def boom(_df, scenario_id):
+            raise RuntimeError("bad curves")
+
+        monkeypatch.setattr(CustomCurves, "_from_dataframe", staticmethod(boom))
+        packer._process_single_scenario_curves(scenario, raw)
+        scenario.update_custom_curves.assert_not_called()
+
+    def test_process_single_scenario_curves_empty_after_normalize(self):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+        scenario.id = 1
+
+        raw = pd.DataFrame(
+            [
+                [None],
+                ["custom_curves"],
+                [None],
+            ]
+        )
+        packer._process_single_scenario_curves(scenario, raw)
+        scenario.update_custom_curves.assert_not_called()
+
+
+class TestSetupScenarioFromMainColumn:
+
+    def test_setup_scenario_from_main_column_loads_and_updates(self, monkeypatch):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+        scenario.identifier = Mock(return_value="SID")
+        monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: scenario))
+
+        ser = pd.Series(
+            {
+                "scenario_id": "101",
+                "area_code": "nl2015",
+                "end_year": 2050,
+                "private": "yes",
+                "template": "7",
+                "source": " src ",
+                "title": " title ",
+            }
+        )
+
+        out = packer._setup_scenario_from_main_column("COL", ser)
+        assert out is scenario
+        scenario.update_metadata.assert_called_once()
+
+    def test_setup_scenario_from_main_column_creates(self, monkeypatch):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+        scenario.identifier = Mock(return_value="NEW")
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: scenario))
+
+        ser = pd.Series(
+            {
+                "scenario_id": None,
+                "area_code": "de",
+                "end_year": 2030,
+                "private": 0,
+                "template": None,
+            }
+        )
+
+        out = packer._setup_scenario_from_main_column("COL", ser)
+        assert out is scenario
+
+    def test_setup_scenario_from_main_column_returns_none_on_fail(self, monkeypatch):
+        packer = ScenarioPacker()
+        monkeypatch.setattr(
+            ScenarioPacker, "_load_or_create_scenario", lambda self, *a, **k: None
+        )
+        ser = pd.Series({"scenario_id": None, "area_code": None, "end_year": None})
+        assert packer._setup_scenario_from_main_column("COL", ser) is None
+
+
+class TestFromExcelDetailed:
+
+    def test_from_excel_full_flow(self, tmp_path, monkeypatch):
+        # Prepare MAIN with two scenarios: one load, one create
+        main = pd.DataFrame(
+            {
+                "S1": {
+                    "scenario_id": 101,
+                    "area_code": "nl2015",
+                    "end_year": 2050,
+                    "private": "yes",
+                    "template": 3,
+                    "source": "source1",
+                    "title": "Title 1",
+                    "short_name": "Short1",
+                    "sortables": "S1_SORT",
+                    "custom_curves": "S1_CURVES",
+                },
+                "S2": {
+                    "scenario_id": None,
+                    "area_code": "de",
+                    "end_year": 2030,
+                    "private": 0,
+                    "template": None,
+                    "source": "",
+                    "title": "",
+                    "short_name": None,
+                    "sortables": "S2_SORT",
+                    "custom_curves": None,
+                },
+            }
+        )
+
+        # Other sheets
+        params = pd.DataFrame([["helper", "value"], ["input_key", 1]])
+        gqueries = pd.DataFrame([["gquery", "future"], ["co2_emissions", 100]])
+        s1_sort = pd.DataFrame([[None, None], ["sortables", "value"], ["a", 1]])
+        s2_sort = pd.DataFrame([[None, None], ["sortables", "value"], ["b", 2]])
+        s1_curves = pd.DataFrame([[None, None], ["custom_curves", "value"], ["x", 1]])
+
+        path = tmp_path / "import.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+            params.to_excel(writer, sheet_name="PARAMETERS", header=False, index=False)
+            gqueries.to_excel(writer, sheet_name="GQUERIES", header=False, index=False)
+            s1_sort.to_excel(writer, sheet_name="S1_SORT", header=False, index=False)
+            s2_sort.to_excel(writer, sheet_name="S2_SORT", header=False, index=False)
+            s1_curves.to_excel(
+                writer, sheet_name="S1_CURVES", header=False, index=False
+            )
+
+        # Patch loading/creating and pack interactions
+        s_loaded = Mock(spec=Scenario)
+        s_loaded.id = "101"
+        s_loaded.identifier = Mock(return_value="101")
+        s_created = Mock(spec=Scenario)
+        s_created.id = "created"
+        s_created.identifier = Mock(return_value="created")
+
+        monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: s_loaded))
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+
+        # Spy on inputs and queries imports
+        with (
+            patch.object(InputsPack, "set_scenario_short_names") as set_sn,
+            patch.object(InputsPack, "from_dataframe") as from_df,
+            patch.object(QueryPack, "from_dataframe") as gq_from_df,
+            patch.object(
+                ScenarioPacker, "_process_single_scenario_sortables"
+            ) as proc_sort,
+            patch.object(
+                ScenarioPacker, "_process_single_scenario_curves"
+            ) as proc_curves,
+        ):
+            packer = ScenarioPacker.from_excel(str(path))
+
+            assert isinstance(packer, ScenarioPacker)
+            assert s_loaded in packer._scenarios()
+            assert s_created in packer._scenarios()
+
+            set_sn.assert_called_once()
+            from_df.assert_called_once()
+            gq_from_df.assert_called_once()
+
+            # Called once for each scenario with a sortables sheet
+            assert proc_sort.call_count == 2
+            proc_curves.assert_called_once()
+
+    def test_from_excel_missing_or_bad_main(self, tmp_path):
+        packer = ScenarioPacker.from_excel(str(tmp_path / "bad.xlsx"))
+        assert isinstance(packer, ScenarioPacker)
+        assert len(packer._scenarios()) == 0
+
+        # File with no MAIN sheet
+        path = tmp_path / "no_main.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            pd.DataFrame([[1]]).to_excel(writer, sheet_name="OTHER")
+        packer2 = ScenarioPacker.from_excel(str(path))
+        assert isinstance(packer2, ScenarioPacker)
+        assert len(packer2._scenarios()) == 0
+
+        # File with empty MAIN sheet
+        path2 = tmp_path / "empty_main.xlsx"
+        with pd.ExcelWriter(path2, engine="xlsxwriter") as writer:
+            pd.DataFrame().to_excel(writer, sheet_name="MAIN")
+        packer3 = ScenarioPacker.from_excel(str(path2))
+        assert isinstance(packer3, ScenarioPacker)
+        assert len(packer3._scenarios()) == 0
+
+    def test_from_excel_parameters_and_gqueries_errors(self, tmp_path, monkeypatch):
+        # Prepare a minimal MAIN and both PARAMETERS and GQUERIES sheets
+        main = pd.DataFrame(
+            {
+                "S": {
+                    "scenario_id": None,
+                    "area_code": "nl2015",
+                    "end_year": 2050,
+                    "sortables": None,
+                    "custom_curves": None,
+                }
+            }
+        )
+        params = pd.DataFrame([["helper", "value"], ["input_key", 1]])
+        gqueries = pd.DataFrame([["gquery", "future"], ["co2_emissions", 100]])
+
+        path = tmp_path / "errs.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+            params.to_excel(writer, sheet_name="PARAMETERS", header=False, index=False)
+            gqueries.to_excel(writer, sheet_name="GQUERIES", header=False, index=False)
+
+        # Create returns a simple scenario
+        s_created = Mock(spec=Scenario)
+        s_created.id = "created"
+        s_created.identifier = Mock(return_value="created")
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+
+        with (
+            patch.object(InputsPack, "set_scenario_short_names") as set_sn,
+            patch.object(
+                InputsPack, "from_dataframe", side_effect=RuntimeError("bad params")
+            ),
+            patch.object(
+                QueryPack, "from_dataframe", side_effect=RuntimeError("bad gq")
+            ),
+        ):
+            packer = ScenarioPacker.from_excel(str(path))
+
+            assert isinstance(packer, ScenarioPacker)
+            # Scenario was still created even if imports failed
+            assert s_created in packer._scenarios()
+            set_sn.assert_called_once()
+
+    def test_from_excel_gqueries_sheet_name_fallback(self, tmp_path, monkeypatch):
+        main = pd.DataFrame(
+            {"S": {"scenario_id": None, "area_code": "nl2015", "end_year": 2050}}
+        )
+
+        path = tmp_path / "gq_fallback.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+            pd.DataFrame([["gquery"], ["total_costs"]]).to_excel(
+                writer, sheet_name="GQ2", header=False, index=False
+            )
+
+        s_created = Mock(spec=Scenario)
+        s_created.id = "created"
+        s_created.identifier = Mock(return_value="created")
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+
+        with patch.object(QueryPack, "sheet_name", "GQ2"):
+            with patch.object(QueryPack, "from_dataframe") as gq_from_df:
+                packer = ScenarioPacker.from_excel(str(path))
+                assert s_created in packer._scenarios()
+                gq_from_df.assert_called_once()
+
+    def test_from_excel_processing_sortables_and_curves_errors(
+        self, tmp_path, monkeypatch
+    ):
+        main = pd.DataFrame(
+            {
+                "S": {
+                    "scenario_id": None,
+                    "area_code": "nl2015",
+                    "end_year": 2050,
+                    "sortables": "S_SORT",
+                    "custom_curves": "S_CURVES",
+                }
+            }
+        )
+
+        path = tmp_path / "proc_errs.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+            pd.DataFrame([[None], ["sortables"], ["a"]]).to_excel(
+                writer, sheet_name="S_SORT", header=False, index=False
+            )
+            pd.DataFrame([[None], ["custom_curves"], ["x"]]).to_excel(
+                writer, sheet_name="S_CURVES", header=False, index=False
+            )
+
+        s_created = Mock(spec=Scenario)
+        s_created.id = "created"
+        s_created.identifier = Mock(return_value="created")
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+
+        with (
+            patch.object(
+                ScenarioPacker,
+                "_process_single_scenario_sortables",
+                side_effect=RuntimeError("bad sort"),
+            ),
+            patch.object(
+                ScenarioPacker,
+                "_process_single_scenario_curves",
+                side_effect=RuntimeError("bad cur"),
+            ),
+        ):
+            packer = ScenarioPacker.from_excel(str(path))
+            assert isinstance(packer, ScenarioPacker)
+            assert s_created in packer._scenarios()
+
+    def test_from_excel_setup_column_exception_and_all_fail(
+        self, tmp_path, monkeypatch
+    ):
+        # Two columns: first raises, second returns scenario
+        main = pd.DataFrame(
+            {
+                "A": {"scenario_id": None, "area_code": "nl2015", "end_year": 2050},
+                "B": {"scenario_id": None, "area_code": "de", "end_year": 2030},
+            }
+        )
+        path = tmp_path / "columns_mix.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+
+        # Patch method to raise for A and create for B
+        def setup(col_name, col_ser):
+            if col_name == "A":
+                raise RuntimeError("boom")
+            s = Mock(spec=Scenario)
+            s.id = "BID"
+            s.identifier = Mock(return_value="BID")
+            return s
+
+        with patch.object(
+            ScenarioPacker, "_setup_scenario_from_main_column", side_effect=setup
+        ):
+            packer = ScenarioPacker.from_excel(str(path))
+            assert any(s.id == "BID" for s in packer._scenarios())
+
+        # All columns fail -> 0 scenarios, early return
+        with patch.object(
+            ScenarioPacker,
+            "_setup_scenario_from_main_column",
+            side_effect=RuntimeError("e"),
+        ):
+            packer2 = ScenarioPacker.from_excel(str(path))
+            assert len(packer2._scenarios()) == 0
+
+    def test_from_excel_missing_parameters_sheet_parse_error(
+        self, tmp_path, monkeypatch
+    ):
+        main = pd.DataFrame(
+            {"S": {"scenario_id": None, "area_code": "nl2015", "end_year": 2050}}
+        )
+        path = tmp_path / "no_params.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+
+        s_created = Mock(spec=Scenario)
+        s_created.id = "created"
+        s_created.identifier = Mock(return_value="created")
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+        packer = ScenarioPacker.from_excel(str(path))
+        assert s_created in packer._scenarios()
+
+    def test_from_excel_gqueries_parse_raises(self, tmp_path, monkeypatch):
+        main = pd.DataFrame(
+            {"S": {"scenario_id": None, "area_code": "nl2015", "end_year": 2050}}
+        )
+        path = tmp_path / "gq_parse_err.xlsx"
+        with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+            main.to_excel(writer, sheet_name="MAIN")
+            pd.DataFrame([["gquery"], ["total_costs"]]).to_excel(
+                writer, sheet_name="GQUERIES", header=False, index=False
+            )
+
+        s_created = Mock(spec=Scenario)
+        s_created.id = "created"
+        s_created.identifier = Mock(return_value="created")
+        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+
+        original_parse = pd.ExcelFile.parse
+
+        def parse_proxy(self, sheet_name, *a, **k):
+            if sheet_name == "GQUERIES":
+                raise ValueError("bad parse")
+            return original_parse(self, sheet_name, *a, **k)
+
+        with patch.object(pd.ExcelFile, "parse", parse_proxy):
+            packer = ScenarioPacker.from_excel(str(path))
+            assert s_created in packer._scenarios()
