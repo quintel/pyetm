@@ -56,7 +56,7 @@ class ScenarioPacker(BaseModel):
     # DataFrame outputs
 
     def main_info(self) -> pd.DataFrame:
-        """Create main info DataFrame"""
+        """Create main info DataFrame by concatenating scenario dataframes."""
         if len(self._scenarios()) == 0:
             return pd.DataFrame()
 
@@ -92,13 +92,13 @@ class ScenarioPacker(BaseModel):
 
         workbook = Workbook(path)
 
-        # Main info sheet (handled separately as it doesn't use a pack)
-        df = self.main_info()
-        if not df.empty:
-            df_filled = df.fillna("").infer_objects(copy=False)
+        # Main info sheet: enrich with metadata and friendly headers for Excel only
+        df_main = self._build_excel_main_dataframe()
+        if not df_main.empty:
+            df_main = self._sanitize_dataframe_for_excel(df_main)
             add_frame(
                 name="MAIN",
-                frame=df_filled,
+                frame=df_main,
                 workbook=workbook,
                 column_width=18,
                 scenario_styling=True,
@@ -539,3 +539,115 @@ class ScenarioPacker(BaseModel):
         self._apply_metadata(scenario, meta_updates)
 
         return scenario
+
+    def _build_excel_main_dataframe(self) -> pd.DataFrame:
+        """Build a MAIN sheet DataFrame with rich metadata for Excel export only."""
+        scenarios = list(self._scenarios())
+        if not scenarios:
+            return pd.DataFrame()
+
+        def id_or_title(s):
+            try:
+                return s.identifier()
+            except Exception:
+                return getattr(s, "id", None)
+
+        columns: dict[Any, dict[str, Any]] = {}
+        all_keys: list[str] = []
+
+        def add_key(k: str):
+            if k not in all_keys:
+                all_keys.append(k)
+
+        for s in scenarios:
+            info: dict[str, Any] = {}
+
+            # Core identifiers and common fields
+            info["scenario_id"] = getattr(s, "id", None)
+            info["area_code"] = getattr(s, "area_code", None)
+            info["end_year"] = getattr(s, "end_year", None)
+            info["start_year"] = getattr(s, "start_year", None)
+            info["keep_compatible"] = getattr(s, "keep_compatible", None)
+            info["private"] = getattr(s, "private", None)
+            info["template"] = getattr(s, "template", None)
+            info["source"] = getattr(s, "source", None)
+            try:
+                info["title"] = s.title
+            except Exception:
+                info["title"] = None
+            meta = getattr(s, "metadata", None)
+            if isinstance(meta, dict):
+                desc = meta.get("description")
+                if desc is not None:
+                    info["description"] = desc
+            info["url"] = getattr(s, "url", None)
+            try:
+                info["version"] = s.version
+            except Exception:
+                info["version"] = None
+            info["created_at"] = getattr(s, "created_at", None)
+            info["updated_at"] = getattr(s, "updated_at", None)
+
+            # Flatten all other metadata keys
+            if isinstance(meta, dict):
+                for k, v in meta.items():
+                    if k in ("title", "description"):
+                        continue
+                    info[f"metadata.{k}"] = v
+
+            label = id_or_title(s)
+            columns[label] = info
+            for k in info.keys():
+                add_key(k)
+
+        # Preferred key order at top
+        preferred = [
+            "title",
+            "description",
+            "scenario_id",
+            "template",
+            "area_code",
+            "start_year",
+            "end_year",
+            "keep_compatible",
+            "private",
+            "source",
+            "url",
+            "version",
+            "created_at",
+            "updated_at",
+        ]
+        remaining = [k for k in all_keys if k not in preferred]
+        index_order = preferred + remaining
+
+        df = pd.DataFrame(
+            {col: {k: columns[col].get(k) for k in index_order} for col in columns}
+        )
+        df.index.name = "scenario"
+        return df
+
+    def _sanitize_dataframe_for_excel(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert DataFrame values into Excel-safe primitives (str/number/bool/None)."""
+        import datetime as _dt
+
+        def _safe(v: Any):
+            if v is None:
+                return ""
+            if isinstance(v, (str, int, float, bool)):
+                return v
+            # Pandas Timestamp / datetime
+            if isinstance(v, (pd.Timestamp, _dt.datetime, _dt.date)):
+                try:
+                    return str(v)
+                except Exception:
+                    return ""
+            # Convert everything else to string
+            try:
+                return str(v)
+            except Exception:
+                return ""
+
+        out = df.copy()
+        out.index = out.index.map(lambda x: str(x) if x is not None else "")
+        out.columns = [str(c) if c is not None else "" for c in out.columns]
+        return out.map(_safe)
