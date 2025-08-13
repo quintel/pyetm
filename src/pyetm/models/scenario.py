@@ -4,11 +4,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr
+from os import PathLike
 from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
-from pyetm.models.custom_curves import CustomCurve, CustomCurves
+from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
@@ -98,6 +99,28 @@ class Scenario(Base):
             scenario.add_warning("metadata", w)
         return scenario
 
+    @classmethod
+    def from_excel(cls, xlsx_path: PathLike | str) -> List["Scenario"]:
+        """
+        Load or create one or more scenarios from an Excel workbook.
+        """
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker.from_excel(xlsx_path)
+        scenarios = list(packer._scenarios())
+        scenarios.sort(key=lambda s: s.id)
+        return scenarios
+
+    def to_excel(self, path: PathLike | str, *others: "Scenario") -> None:
+        """
+        Export this scenario – and optionally additional scenarios – to an Excel file.
+        """
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker()
+        packer.add(self, *others)
+        packer.to_excel(str(path))
+
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """
         Update metadata for this scenario.
@@ -132,6 +155,25 @@ class Scenario(Base):
             orient="index",
             columns=[self.id],
         )
+
+    @property
+    def title(self):
+        if not self.metadata is None:
+            return self.metadata.get("title", None)
+        return None
+
+    @title.setter
+    def title(self, title: str):
+        if not self.metadata is None:
+            self.metadata["title"] = title
+        else:
+            self.metadata = {"title": title}
+
+    def identifier(self):
+        if self.title:
+            return self.title
+
+        return self.id
 
     def user_values(self) -> Dict[str, Any]:
         """
@@ -177,11 +219,14 @@ class Scenario(Base):
         """
         Extract df to dict, set None/NaN sliders to reset, and call update_inputs.
         This ensures the dataframe exactly represents the inputs.
-        # TODO: Add validation for the dataframe structure
         """
-        self.update_user_values(
-            dataframe["user"].droplevel("unit").fillna("reset").to_dict()
-        )
+        series = dataframe["user"]
+        # If MultiIndex with 'unit', drop it
+        if isinstance(series.index, pd.MultiIndex) and "unit" in (
+            series.index.names or []
+        ):
+            series = series.droplevel("unit")
+        self.update_user_values(series.fillna("reset").to_dict())
 
     def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
         """
@@ -245,15 +290,10 @@ class Scenario(Base):
         Args:
             dataframe: DataFrame with sortable names as columns and order values as rows
         """
-        # Convert DataFrame to dict of lists, handling NaN/None values
-        sortables_dict = {}
-        for column in dataframe.columns:
-            # Filter out NaN/None values and convert to list
-            order_values = dataframe[column].dropna().tolist()
-            if order_values:  # Only include if there are actual values
-                sortables_dict[column] = order_values
-
-        self.update_sortables(sortables_dict)
+        coll = Sortables._from_dataframe(dataframe)
+        updates = coll.to_updates_dict()
+        if updates:
+            self.update_sortables(updates)
 
     def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
         """
@@ -345,7 +385,6 @@ class Scenario(Base):
 
         Args:
             custom_curves: CustomCurves object containing curves to upload
-        TODO: Update after the from_excel is implemented
         """
 
         # Validate curves before uploading

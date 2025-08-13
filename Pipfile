@@ -12,6 +12,7 @@ pyyaml = "*"
 pydantic-settings = "*"
 pyetm = {file = ".", editable = true}
 xlsxwriter = "*"
+openpyxl = "*"
 
 [dev-packages]
 pytest = "*"

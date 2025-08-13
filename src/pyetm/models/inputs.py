@@ -186,7 +186,6 @@ class Inputs(Base):
     def update(self, key_vals: dict):
         """
         Update the values of certain inputs.
-        Uses the new warning system for validation.
         """
         for input_obj in self.inputs:
             if input_obj.key in key_vals:

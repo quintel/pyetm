@@ -141,7 +141,9 @@ class CustomCurve(Base):
         return df
 
     @classmethod
-    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> "CustomCurve":
+    def _from_dataframe(
+        cls, df: pd.DataFrame, scenario_id: str | int | None = None, **kwargs
+    ) -> "CustomCurve":
         """
         Create CustomCurve from DataFrame containing time series data.
         """
@@ -150,30 +152,23 @@ class CustomCurve(Base):
                 f"DataFrame must contain exactly 1 column, got {len(df.columns)}"
             )
 
-        # Get the curve key from column name
         curve_key = df.columns[0]
-
         curve_data_dict = {
             "key": curve_key,
-            "type": "custom",  # Default type for curves created from DataFrame
+            "type": "custom",
         }
-
         curve = cls.model_validate(curve_data_dict)
 
-        # Only save data if DataFrame has actual data rows
         if not df.empty:
             curve_data = df.iloc[:, 0].dropna()
-
             if not curve_data.empty:
-                # Save the data to a temporary file and set file_path
+                safe_key = str(curve_key).replace("/", "-")
+                prefix = f"{scenario_id}_" if scenario_id is not None else ""
                 file_path = (
                     get_settings().path_to_tmp("dataframe_import")
-                    / f"{curve_key.replace('/', '-')}.csv"
+                    / f"{prefix}{safe_key}.csv"
                 )
-
-                # Ensure directory exists
                 file_path.parent.mkdir(parents=True, exist_ok=True)
-
                 try:
                     curve_data.to_csv(file_path, index=False, header=False)
                     curve.file_path = file_path
@@ -181,7 +176,6 @@ class CustomCurve(Base):
                     curve.add_warning(
                         curve_key, f"Failed to save curve data to file: {e}"
                     )
-
         return curve
 
 
@@ -244,7 +238,7 @@ class CustomCurves(Base):
 
         collection = cls.model_validate({"curves": curves})
 
-        # Merge warnings from individual curves using new system
+        # Merge warnings from individual curves
         collection._merge_submodel_warnings(*curves, key_attr="key")
 
         return collection
@@ -284,23 +278,22 @@ class CustomCurves(Base):
             return pd.DataFrame(index=pd.Index([], name="hour"))
 
     @classmethod
-    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> "CustomCurves":
+    def _from_dataframe(
+        cls, df: pd.DataFrame, scenario_id: str | int | None = None, **kwargs
+    ) -> "CustomCurves":
         """
         Create CustomCurves collection from DataFrame with time series data.
         """
         curves = []
-
         if len(df.columns) == 0:
             return cls.model_validate({"curves": curves})
-
         for column_name in df.columns:
             try:
-                # Extract single column as DataFrame for individual curve
                 curve_df = df[[column_name]]
-
-                curve = CustomCurve._from_dataframe(curve_df, **kwargs)
+                curve = CustomCurve._from_dataframe(
+                    curve_df, scenario_id=scenario_id, **kwargs
+                )
                 curves.append(curve)
-
             except Exception as e:
                 basic_curve = CustomCurve.model_construct(
                     key=column_name, type="custom"
@@ -309,12 +302,8 @@ class CustomCurves(Base):
                     "base", f"Failed to create curve from column {column_name}: {e}"
                 )
                 curves.append(basic_curve)
-
         collection = cls.model_validate({"curves": curves})
-
-        # Merge warnings from individual curves
         collection._merge_submodel_warnings(*curves, key_attr="key")
-
         return collection
 
     def validate_for_upload(self) -> dict[str, WarningCollector]:
@@ -336,12 +325,14 @@ class CustomCurves(Base):
                 # First, try to read the file without forcing dtype to check for non-numeric values
                 try:
                     # Read without dtype conversion to preserve non-numeric values
-                    raw_data = pd.read_csv(curve.file_path, header=None, index_col=False)
+                    raw_data = pd.read_csv(
+                        curve.file_path, header=None, index_col=False
+                    )
                     if raw_data.empty:
                         curve_warnings.add(curve.key, "Curve contains no data")
                         validation_errors[curve.key] = curve_warnings
                         continue
-                        
+
                     # Check length first
                     if len(raw_data) != 8760:
                         curve_warnings.add(
@@ -352,25 +343,21 @@ class CustomCurves(Base):
                         # Now check if all values can be converted to float
                         try:
                             # Try to convert to numeric, this will raise if there are non-numeric values
-                            pd.to_numeric(raw_data.iloc[:, 0], errors='raise')
+                            pd.to_numeric(raw_data.iloc[:, 0], errors="raise")
                         except (ValueError, TypeError):
                             curve_warnings.add(
                                 curve.key, "Curve contains non-numeric values"
                             )
-                            
+
                 except pd.errors.EmptyDataError:
                     curve_warnings.add(curve.key, "Curve contains no data")
                 except Exception as e:
                     # This catches file not found, permission errors, etc.
-                    curve_warnings.add(
-                        curve.key, f"Error reading curve data: {str(e)}"
-                    )
+                    curve_warnings.add(curve.key, f"Error reading curve data: {str(e)}")
 
             except Exception as e:
                 # Catch any other unexpected errors
-                curve_warnings.add(
-                    curve.key, f"Error reading curve data: {str(e)}"
-                )
+                curve_warnings.add(curve.key, f"Error reading curve data: {str(e)}")
 
             # Only add to validation_errors if there are actual warnings
             if len(curve_warnings) > 0:
