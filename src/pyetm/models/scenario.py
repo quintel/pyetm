@@ -111,15 +111,43 @@ class Scenario(Base):
         scenarios.sort(key=lambda s: s.id)
         return scenarios
 
-    def to_excel(self, path: PathLike | str, *others: "Scenario") -> None:
+    def to_excel(
+        self,
+        path: PathLike | str,
+        *others: "Scenario",
+        export_output_curves: bool = True,
+        output_curves_path: str | None = None,
+        carriers: list[str] | None = None,
+    ) -> None:
         """
         Export this scenario – and optionally additional scenarios – to an Excel file.
+        Output curves are exported to a separate workbook by default, with one sheet
+        per carrier. Use carriers to filter which carriers to include.
         """
-        from pyetm.models.scenario_packer import ScenarioPacker
+        from pyetm.models.scenarios import Scenarios
 
-        packer = ScenarioPacker()
-        packer.add(self, *others)
-        packer.to_excel(str(path))
+        Scenarios(items=[self, *others]).to_excel(
+            path,
+            export_output_curves=export_output_curves,
+            output_curves_path=output_curves_path,
+            carriers=carriers,
+        )
+
+    # Deprecated helper retained for backwards compatibility: route to main to_excel
+    def to_output_curves_excel(
+        self,
+        path: PathLike | str,
+        *others: "Scenario",
+        carriers: list[str] | None = None,
+    ) -> None:
+        from pyetm.models.scenarios import Scenarios
+
+        Scenarios(items=[self, *others]).to_excel(
+            path,
+            export_output_curves=True,
+            output_curves_path=str(path),
+            carriers=carriers,
+        )
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """

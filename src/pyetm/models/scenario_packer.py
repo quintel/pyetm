@@ -1,8 +1,9 @@
 import pandas as pd
 import logging
+from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Sequence
 from xlsxwriter import Workbook
 
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
@@ -78,7 +79,14 @@ class ScenarioPacker(BaseModel):
     def output_curves(self) -> pd.DataFrame:
         return self._output_curves.to_dataframe()
 
-    def to_excel(self, path: str):
+    def to_excel(
+        self,
+        path: str,
+        *,
+        export_output_curves: bool = True,
+        output_curves_path: Optional[str] = None,
+        carriers: Optional[Sequence[str]] = None,
+    ):
         if len(self._scenarios()) == 0:
             raise ValueError("Packer was empty, nothing to export")
 
@@ -97,6 +105,9 @@ class ScenarioPacker(BaseModel):
             )
 
         for pack in self.all_pack_data():
+            # Skip output curves in the main workbook; exported separately
+            if getattr(pack, "key", None) == OutputCurvesPack.key:
+                continue
             df = pack.to_dataframe()
             if not df.empty:
                 df_filled = df.fillna("").infer_objects(copy=False)
@@ -110,12 +121,37 @@ class ScenarioPacker(BaseModel):
 
         workbook.close()
 
+        # Export output curves to a separate workbook with one sheet per carrier
+        if export_output_curves:
+            oc_path = output_curves_path
+            if oc_path is None:
+                base = Path(path)
+                oc_path = str(base.with_name(f"{base.stem}_output_curves{base.suffix}"))
+            try:
+                self._output_curves.to_excel_per_carrier(oc_path, carriers)
+            except Exception as e:
+                logger.warning("Failed exporting output curves workbook: %s", e)
+
     def _scenarios(self) -> set["Scenario"]:
         """
-        All scenarios we are packing info for: for these we need to insert
-        their metadata
+        All scenarios we are packing info for across all packs.
         """
-        return set.union(*map(set, (pack.scenarios for pack in self.all_pack_data())))
+        all_scenarios: set["Scenario"] = set()
+        for pack in self.all_pack_data():
+            try:
+                items = getattr(pack, "scenarios", None)
+                if not items:
+                    continue
+                if isinstance(items, set):
+                    all_scenarios.update(items)
+                else:
+                    try:
+                        all_scenarios.update(list(items))
+                    except TypeError:
+                        continue
+            except Exception:
+                continue
+        return all_scenarios
 
     def all_pack_data(self):
         """Yields each subpack"""

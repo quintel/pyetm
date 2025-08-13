@@ -2,13 +2,13 @@
 
 This package provides a set of tools for interaction with the Energy Transition Model's API. Learn more
 about the Energy Transition Model [here](https://energytransitionmodel.com/). The
-package is designed to be a modular tool that advanced users can incorporate into their workflows. The
+package is designed to be a modular tool that advanced users can incorporate into their scenario workflows. The
 complete documentation is available [via the ETM documentation page](https://docs.energytransitionmodel.com/main/pyetm/introduction).
 
 ## Installation
 
-You can clone the pyetm from [our Github](https://github.com/quintel/pyetm). The package is also
-available via pip like any other python package - install it and use it in your project!
+You can clone pyetm from [our Github](https://github.com/quintel/pyetm). The package is also
+available via pip - install it and use it in your project!
 ```
 pip install pyetm
 ```
@@ -20,7 +20,7 @@ in VS Code, follow the beginner friendly guide at [Running notebooks](running_no
 ## Getting started
 Make sure you have [Python 3](https://www.python.org/downloads/) installed. Then, install all required
 libraries by opening a terminal/command-prompt window in the `pyetm` folder (or navigate to this folder
-in the terminal using `cd "path/to/scenario-tools-folder"`). All following examples of running the tool
+in the terminal using `cd "path/to/pytem-folder"`). All following examples of running the tool
 expect you to be in this folder.
 
 #### Using pipenv
