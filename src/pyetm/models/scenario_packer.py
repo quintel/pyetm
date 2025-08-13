@@ -373,7 +373,21 @@ class ScenarioPacker(BaseModel):
         )
         if data is None or data.empty:
             return
-        scenario.set_sortables_from_dataframe(data)
+        try:
+            scenario.set_sortables_from_dataframe(data)
+        except Exception as e:
+            logger.warning(
+                "Failed processing sortables for '%s': %s", scenario.identifier(), e
+            )
+        else:
+            try:
+                if hasattr(scenario, "_sortables") and scenario._sortables is not None:
+                    scenario._sortables.log_warnings(
+                        logger,
+                        prefix=f"Sortables warning for '{scenario.identifier()}'",
+                    )
+            except Exception:
+                pass
 
     def _process_single_scenario_curves(self, scenario: "Scenario", df: pd.DataFrame):
         data = self._normalize_sheet(
@@ -386,8 +400,34 @@ class ScenarioPacker(BaseModel):
         # Build CustomCurves collection and apply
         try:
             curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
+            curves.log_warnings(
+                logger,
+                prefix=f"Custom curves warning for '{scenario.identifier()}'",
+            )
+            try:
+                validation = curves.validate_for_upload()
+                for key, collector in (validation or {}).items():
+                    for w in collector:
+                        logger.warning(
+                            "Custom curve validation for '%s' in '%s' [%s]: %s",
+                            key,
+                            scenario.identifier(),
+                            getattr(w, "field", key),
+                            getattr(w, "message", str(w)),
+                        )
+            except Exception:
+                pass
+
             scenario.update_custom_curves(curves)
         except Exception as e:
+            try:
+                if "curves" in locals():
+                    curves.log_warnings(
+                        logger,
+                        prefix=f"Custom curves warning for '{scenario.identifier()}'",
+                    )
+            except Exception:
+                pass
             logger.warning(
                 "Failed processing custom curves for '%s': %s", scenario.identifier(), e
             )

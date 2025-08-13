@@ -172,5 +172,17 @@ class InputsPack(Packable):
                         col,
                         e,
                     )
+                finally:
+                    try:
+                        if (
+                            hasattr(scenario, "_inputs")
+                            and scenario._inputs is not None
+                        ):
+                            scenario._inputs.log_warnings(
+                                logger,
+                                prefix=f"Inputs warning for '{scenario.identifier()}'",
+                            )
+                    except Exception:
+                        pass
         except Exception as e:
             logger.warning("Failed to parse simplified PARAMETERS sheet: %s", e)
