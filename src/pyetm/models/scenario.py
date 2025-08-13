@@ -46,6 +46,7 @@ class Scenario(Base):
     private: Optional[bool] = None
     area_code: str = Field(..., description="Area code")
     source: Optional[str] = None
+    title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     start_year: Optional[int] = None
     scaling: Optional[Any] = None
@@ -169,6 +170,10 @@ class Scenario(Base):
                 if hasattr(self, field):
                     setattr(self, field, value)
 
+            for field, value in kwargs.items():
+                if hasattr(self, field) and field not in scenario_data:
+                    setattr(self, field, value)
+
         return result.data
 
     def __eq__(self, other: "Scenario"):
@@ -183,19 +188,6 @@ class Scenario(Base):
             orient="index",
             columns=[self.id],
         )
-
-    @property
-    def title(self):
-        if not self.metadata is None:
-            return self.metadata.get("title", None)
-        return None
-
-    @title.setter
-    def title(self, title: str):
-        if not self.metadata is None:
-            self.metadata["title"] = title
-        else:
-            self.metadata = {"title": title}
 
     def identifier(self):
         if self.title:
