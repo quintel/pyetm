@@ -10,13 +10,19 @@
 #
 etm_api_token: your.token.here
 
+# Select the environment; base_url will be inferred automatically if set.
+# Supported: pro (default), beta, local, or a stable tag like 2025-01
+environment: pro
+
+
 # Override the API base URL - here you can set which environment of the ETM you want to interact with.
 # Options include the default (pro), https://2025-01.engine.energytransitionmodel.com/api/v3 (a stable version) or
 # https://beta.engine.energytransitionmodel.com/api/v3	(the staging environment), or http://localhost:3000/api/v3
 # (your local environment).
 # For more information, see: https://docs.energytransitionmodel.com/api/intro#environments
 #
-BASE_URL: https://engine.energytransitionmodel.com/api/v3
+# Optional override: specify base_url directly instead of using 'environment'. E.g.
+# base_url: https://engine.energytransitionmodel.com/api/v3
 
 #TODO: Setup so the below is actually used
 # URLs of your proxy server addresses (replace the examples below by your own settings)

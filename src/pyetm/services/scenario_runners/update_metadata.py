@@ -17,20 +17,19 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         **kwargs: Additional arguments passed to the request
     """
 
-    # TODO: Investigate why end_year is not setting correctly
     META_KEYS = [
         "keep_compatible",
         "private",
         "source",
         "metadata",
         "end_year",
+        "title",
     ]
     UNSETTABLE_META_KEYS = [
         "id",
         "created_at",
         "updated_at",
         "area_code",
-        "title",
         "start_year",
         "scaling",
         "template",

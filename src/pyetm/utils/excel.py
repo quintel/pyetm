@@ -78,8 +78,12 @@ def create_scenario_formats(workbook: Workbook) -> dict:
         "grey_header": workbook.add_format(
             {"bold": True, "bg_color": "#D9D9D9", "border": 1, "align": "center"}
         ),
-        "white_data": workbook.add_format({"bg_color": "#FFFFFF", "border": 1}),
-        "grey_data": workbook.add_format({"bg_color": "#D9D9D9", "border": 1}),
+        "white_data": workbook.add_format(
+            {"bg_color": "#FFFFFF", "border": 1, "align": "left"}
+        ),
+        "grey_data": workbook.add_format(
+            {"bg_color": "#D9D9D9", "border": 1, "align": "left"}
+        ),
         "bold": workbook.add_format({"bold": True}),
         "default": None,
     }
@@ -149,10 +153,6 @@ def add_frame(
     # Calculate offsets
     col_offset = frame.index.nlevels if index else 0
     row_offset = frame.columns.nlevels
-
-    # Adjust row offset if index has names
-    if index and frame.index.names != [None] * frame.index.nlevels:
-        row_offset += 1
 
     # Handle multi-index columns with scenario styling
     if isinstance(frame.columns, pd.MultiIndex) and scenario_styling:
