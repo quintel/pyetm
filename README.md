@@ -99,18 +99,18 @@ You can either:
 
 ## Configuring Your Settings
 
-You can configure your API token and base URL either with a **config.yml** file or environment variables.
+You can configure your API token and base URL either with a **config.yml** file or environment variables. You can now simply set an `environment` and the base URL will be inferred for you.
 
 ### Option 1: `config.yml`
-1. Duplicate the example file (`examples/config.example.yml`) and rename it to `config.yml`.
+1. Duplicate the example file (`examples/example.config.yml`) and rename it to `config.yml`.
 2. Edit `config.yml`:
    - **etm_api_token**: Your ETM API token (overridden by `$ETM_API_TOKEN` if set).
-   - **base_url**: API base URL (overridden by `$BASE_URL` if set).
-     Examples:
-       - Production: `https://engine.energytransitionmodel.com/api/v3`
-       - Beta: `https://beta.engine.energytransitionmodel.com/api/v3`
-       - Stable engine snapshot: `https://2025-01.engine.energytransitionmodel.com/api/v3`
-   - **local_engine_url**, **local_model_url**: URLs for a local ETM instance.
+   - **environment**: pro (default), beta, local, or a stable tag like `2025-01`. When set, `base_url` is inferred automatically.
+   - (optional) **base_url**: API base URL (overridden by `$BASE_URL` if set). If both `environment` and `base_url` are set, `base_url` wins.
+     Examples if you need a direct override:
+       - `https://engine.energytransitionmodel.com/api/v3` (pro)
+       - `https://beta.engine.energytransitionmodel.com/api/v3` (beta)
+       - `https://2025-01.engine.energytransitionmodel.com/api/v3` (stable tag)
    - **proxy_servers**: (Optional) HTTP/HTTPS proxy URLs.
    - **csv_separator** and **decimal_separator**: Defaults are `,` and `.`.
 
@@ -120,9 +120,9 @@ Place `config.yml` in the project root (`pyetm/` folder).
 If you prefer, set these environment variables:
 ```bash
 ETM_API_TOKEN=<your token>
+ENVIRONMENT=<pro|beta|local|YYYY-MM>
+# or provide a direct override instead of ENVIRONMENT
 BASE_URL=<api url>
-LOCAL_ENGINE_URL=<optional local engine url>
-LOCAL_MODEL_URL=<optional local model url>
 ```
 
 ---
@@ -139,4 +139,5 @@ LOCAL_MODEL_URL=<optional local model url>
   - Set environment variables with:
     ```bash
     export ETM_API_TOKEN="your-token"
+  export ENVIRONMENT=beta   # or pro/local/2025-01
     ```

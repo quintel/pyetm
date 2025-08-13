@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import yaml, os
 from typing import Optional, ClassVar, List, Annotated
 from pydantic import Field, ValidationError, HttpUrl, field_validator
@@ -6,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_FILE = PROJECT_ROOT / "config.yml"
+
 
 class AppConfig(BaseSettings):
     """
@@ -23,6 +25,13 @@ class AppConfig(BaseSettings):
         "https://engine.energytransitionmodel.com/api/v3",
         description="Base URL for the ETM API",
     )
+    environment: Optional[str] = Field(
+        None,
+        description=(
+            "ETM environment to target. One of: 'pro' (default), 'beta', 'local', or a stable tag 'YYYY-MM'. "
+            "When set and base_url is not provided, base_url will be inferred."
+        ),
+    )
     log_level: Optional[str] = Field(
         "INFO",
         description="App logging level",
@@ -32,7 +41,7 @@ class AppConfig(BaseSettings):
         env_file=None, extra="ignore", case_sensitive=False
     )
 
-    temp_folder: Optional[Path] = PROJECT_ROOT / 'tmp'
+    temp_folder: Optional[Path] = PROJECT_ROOT / "tmp"
 
     @field_validator("etm_api_token")
     @classmethod
@@ -84,9 +93,16 @@ class AppConfig(BaseSettings):
 
         data = {k.lower(): v for k, v in raw.items()}
 
-        for field in ("etm_api_token", "base_url", "log_level"):
+        # Collect environment variables overriding YAML
+        for field in ("etm_api_token", "base_url", "log_level", "environment"):
             if val := os.getenv(field.upper()):
                 data[field] = val
+
+        # If base_url wasn't explicitly provided, infer it from environment if present
+        if "base_url" not in data or not data["base_url"]:
+            env = (data.get("environment") or "").strip().lower()
+            if env:
+                data["base_url"] = _infer_base_url_from_env(env)
 
         return cls(**data)
 
@@ -111,3 +127,32 @@ def get_settings() -> AppConfig:
             f"{detail}\n\n"
             f"Please set them via environment variables or in `{CONFIG_FILE}`."
         ) from exc
+
+
+def _infer_base_url_from_env(environment: str) -> str:
+    """
+    Infers the ETM API base URL from an environment string.
+
+    Supported values (case-insensitive):
+      - 'pro'/'prod' (default): https://engine.energytransitionmodel.com/api/v3
+      - 'beta'/'staging':       https://beta.engine.energytransitionmodel.com/api/v3
+      - 'local'/'dev'/'development': http://localhost:3000/api/v3
+      - stable tags 'YYYY-MM':  https://{YYYY-MM}.engine.energytransitionmodel.com/api/v3
+
+    Falls back to the 'pro' URL if the input is empty or unrecognized.
+    """
+    env = (environment or "").strip().lower()
+
+    if env in ("", "pro", "prod"):  # default
+        return "https://engine.energytransitionmodel.com/api/v3"
+    if env in ("beta", "staging"):
+        return "https://beta.engine.energytransitionmodel.com/api/v3"
+    if env in ("local", "dev", "development"):
+        return "http://localhost:3000/api/v3"
+
+    # Stable tagged environments e.g., '2025-01'
+    if re.fullmatch(r"\d{4}-\d{2}", env):
+        return f"https://{env}.engine.energytransitionmodel.com/api/v3"
+
+    # Unrecognized: be conservative and return production
+    return "https://engine.energytransitionmodel.com/api/v3"

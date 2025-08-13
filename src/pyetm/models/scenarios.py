@@ -57,5 +57,5 @@ class Scenarios(BaseModel):
         """
         Load or create scenarios from an Excel workbook and wrap them in Scenarios.
         """
-        scenarios = Scenario.load_from_excel(xlsx_path)
+        scenarios = Scenario.from_excel(xlsx_path)
         return cls(items=scenarios)

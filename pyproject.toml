@@ -13,7 +13,7 @@ homepage = "https://github.com/quintel/pyetm"
 repository = "https://github.com/quintel/pyetm"
 documentation = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
 keywords = ["energy", "transition", "modeling", "api"]
-packages = [{ include = "pyetm" }]
+packages = [{ include = "pyetm", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
