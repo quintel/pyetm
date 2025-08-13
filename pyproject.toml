@@ -1,58 +1,50 @@
 [build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "pyetm"
-version = "2.0-beta"
-
-description = "Python-ETM Connector"
-authors = [] # TODO: add us!
+version = "2.0"
+description = "A Python package for energy transition modeling."
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.12"
-license = {file = "LICENSE"}
-dependencies = [
-    # 'requests>=2.26',
-    # 'pandas[parquet]>=2.2',
-    # 'openpyxl>=3.0',
-    # 'xlsxwriter>=3.0',
-]
-keywords = ["ETM", "Energy Transition Model"]
-classifiers = [
-    'Development Status :: 4 - Beta',
-    'Intended Audience :: Developers',
-    'Intended Audience :: Education',
-    'Intended Audience :: Science/Research',
-    # 'License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)',
-    'Natural Language :: English',
-    'Operating System :: OS Independent',
-    'Programming Language :: Python',
-    # 'Programming Language :: Python :: 3',
-    # 'Programming Language :: Python :: 3.10',
-    # 'Programming Language :: Python :: 3.11',
-    # 'Programming Language :: Python :: 3.12',
-]
+homepage = "https://github.com/quintel/pyetm"
+repository = "https://github.com/quintel/pyetm"
+documentation = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
+keywords = ["energy", "transition", "modeling", "api"]
+packages = [{ include = "pyetm" }]
 
-[project.urls]
-repository = "https://github.com/robcalon/pyetm"
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+pydantic = "*"
+pandas = "*"
+requests = "*"
+python-dotenv = "*"
+pyyaml = "*"
+pydantic-settings = "*"
+xlsxwriter = "*"
+openpyxl = "*"
 
-[project.optional-dependencies]
-async = ["aiohttp>=3.8"]
-dev = [
-    "pytest>=7.0",
-    "pylint>=3.0",
-    "requests-mock>=1.11"
-]
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pylint = "*"
+requests-mock = "*"
+ipykernel = "*"
+notebook = "*"
+pytest-cov = "*"
+pydeps = "*"
 
-[tool.setuptools.package-data]
-"pyetm.data" = ["*.csv"]
+[tool.poetry.scripts]
+pyetm = "pyetm.__main__:main"
 
-[tool.pylint]
-max-args = 15
-max-local = 20
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/quintel/pyetm/issues"
+"Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
 
 [tool.pytest.ini_options]
-minversion = "7.0"
-addopts = [
-    "--import-mode=importlib",
-]
+addopts = "--cov=pyetm --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.pylint.main]
+fail-under = 8.0
