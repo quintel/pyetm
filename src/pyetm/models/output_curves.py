@@ -147,14 +147,11 @@ class OutputCurves(Base):
             return None
 
         if not curve.available():
-            # Try to retrieve it
             result = curve.retrieve(BaseClient(), scenario)
-            # Merge any warnings from the curve retrieval using new system
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
             contents = curve.contents()
-            # Merge any warnings from reading contents using new system
             self._merge_submodel_warnings(curve, key_attr="key")
             return contents
 
@@ -247,7 +244,7 @@ class OutputCurves(Base):
 
         collection = cls.model_validate({"curves": curves})
 
-        # Merge warnings from individual curves using new system
+        # Merge warnings from individual curves
         collection._merge_submodel_warnings(*curves, key_attr="key")
 
         return collection
