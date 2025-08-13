@@ -77,6 +77,15 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         if hasattr(scenario, "metadata") and isinstance(scenario.metadata, dict):
             existing_metadata = scenario.metadata.copy()
 
+        legacy_title = None
+        if isinstance(existing_metadata, dict):
+            legacy_title = existing_metadata.pop("title", None)
+        if "metadata" in direct_fields and isinstance(direct_fields["metadata"], dict):
+            direct_fields["metadata"].pop("title", None)
+        nested_metadata.pop("title", None)
+        if legacy_title is not None and "title" not in direct_fields:
+            direct_fields["title"] = legacy_title
+
         final_metadata = existing_metadata.copy()
         if nested_metadata:
             final_metadata.update(nested_metadata)

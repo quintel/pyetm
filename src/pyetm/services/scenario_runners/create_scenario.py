@@ -27,6 +27,7 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
         "keep_compatible",
         "private",
         "source",
+        "title",
         "metadata",
         "start_year",
         "scaling",
