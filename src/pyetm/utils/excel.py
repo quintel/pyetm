@@ -76,10 +76,10 @@ def create_scenario_formats(workbook: Workbook) -> dict:
             {"bold": True, "bg_color": "#FFFFFF", "border": 1, "align": "center"}
         ),
         "grey_header": workbook.add_format(
-            {"bold": True, "bg_color": "#F2F2F2", "border": 1, "align": "center"}
+            {"bold": True, "bg_color": "#D9D9D9", "border": 1, "align": "center"}
         ),
         "white_data": workbook.add_format({"bg_color": "#FFFFFF", "border": 1}),
-        "grey_data": workbook.add_format({"bg_color": "#F2F2F2", "border": 1}),
+        "grey_data": workbook.add_format({"bg_color": "#D9D9D9", "border": 1}),
         "bold": workbook.add_format({"bold": True}),
         "default": None,
     }
@@ -111,7 +111,7 @@ def get_scenario_blocks(columns: pd.MultiIndex) -> List[tuple]:
     return blocks
 
 
-def add_frame_with_scenario_styling(
+def add_frame(
     name: str,
     frame: pd.DataFrame,
     workbook: Workbook,
@@ -124,7 +124,6 @@ def add_frame_with_scenario_styling(
     decimal_precision: int = 10,
     scenario_styling: bool = True,
 ) -> Worksheet:
-    """Enhanced add_frame with scenario block styling"""
 
     # Create worksheet
     worksheet = workbook.add_worksheet(str(name))
@@ -205,7 +204,7 @@ def add_frame_with_scenario_styling(
                 )
 
     else:
-        # Standard column handling (single-index or no scenario styling)
+        # Standard column handling or single-index scenario styling
         bold_format = formats.get("bold") if bold_headers else None
 
         if isinstance(frame.columns, pd.MultiIndex):
@@ -219,22 +218,53 @@ def add_frame_with_scenario_styling(
             for col_num, values in enumerate(frame.columns.values):
                 for row_num, value in enumerate(values):
                     worksheet.write(row_num, col_num + col_offset, value, bold_format)
-        else:
-            # Write simple column headers
-            for col_num, value in enumerate(frame.columns.values):
-                worksheet.write(
-                    row_offset - 1, col_num + col_offset, value, bold_format
-                )
 
-        # Write data without styling
-        for row_num, row_data in enumerate(frame.values):
-            for col_num, value in enumerate(row_data):
-                worksheet.write(row_num + row_offset, col_num + col_offset, value)
+            # Write data without styling
+            for row_num, row_data in enumerate(frame.values):
+                for col_num, value in enumerate(row_data):
+                    worksheet.write(row_num + row_offset, col_num + col_offset, value)
+        else:
+            # Single-level columns
+            if scenario_styling:
+                # Alternate header backgrounds by scenario column
+                for col_num, value in enumerate(frame.columns.values):
+                    is_grey = (col_num % 2) == 1
+                    header_format = (
+                        formats["grey_header"] if is_grey else formats["white_header"]
+                    )
+                    worksheet.write(
+                        row_offset - 1, col_num + col_offset, value, header_format
+                    )
+
+                # Alternate data backgrounds by scenario column
+                for row_num, row_data in enumerate(frame.values):
+                    for col_num, value in enumerate(row_data):
+                        is_grey = (col_num % 2) == 1
+                        data_format = (
+                            formats["grey_data"] if is_grey else formats["white_data"]
+                        )
+                        worksheet.write(
+                            row_num + row_offset,
+                            col_num + col_offset,
+                            value,
+                            data_format,
+                        )
+            else:
+                # No scenario styling: write simple headers and data
+                for col_num, value in enumerate(frame.columns.values):
+                    worksheet.write(
+                        row_offset - 1, col_num + col_offset, value, bold_format
+                    )
+
+                for row_num, row_data in enumerate(frame.values):
+                    for col_num, value in enumerate(row_data):
+                        worksheet.write(
+                            row_num + row_offset, col_num + col_offset, value
+                        )
 
     # Set column widths
     set_column_widths(worksheet, col_offset, len(frame.columns), column_width)
 
-    # Write index with proper styling for scenario sheets
     if index:
         set_column_widths(
             worksheet, 0, frame.index.nlevels, index_width or column_width
@@ -244,39 +274,10 @@ def add_frame_with_scenario_styling(
         index_format = formats.get("bold") if bold_headers else None
         write_index(worksheet, frame.index, row_offset, index_format)
 
-    # Freeze panes
     if freeze_panes:
         worksheet.freeze_panes(row_offset, col_offset)
 
     return worksheet
-
-
-def add_frame(
-    name: str,
-    frame: pd.DataFrame,
-    workbook: Workbook,
-    index: bool = True,
-    column_width: Union[int, List[int], None] = None,
-    index_width: Union[int, List[int], None] = None,
-    freeze_panes: bool = True,
-    bold_headers: bool = True,
-    nan_as_formula: bool = True,
-    decimal_precision: int = 10,
-) -> Worksheet:
-    """Original add_frame function for backward compatibility"""
-    return add_frame_with_scenario_styling(
-        name=name,
-        frame=frame,
-        workbook=workbook,
-        index=index,
-        column_width=column_width,
-        index_width=index_width,
-        freeze_panes=freeze_panes,
-        bold_headers=bold_headers,
-        nan_as_formula=nan_as_formula,
-        decimal_precision=decimal_precision,
-        scenario_styling=False,  # Default to old behavior
-    )
 
 
 def add_series(
@@ -291,7 +292,6 @@ def add_series(
     nan_as_formula: bool = True,
     decimal_precision: int = 10,
 ) -> Worksheet:
-    """Add Series to workbook as a new worksheet - unchanged"""
 
     # Create worksheet
     worksheet = workbook.add_worksheet(str(name))

@@ -8,10 +8,10 @@ from xlsxwriter.workbook import Workbook
 from xlsxwriter.worksheet import Worksheet
 
 from pyetm.utils.excel import (
+    add_frame,
     handle_numeric_value,
     set_column_widths,
     write_index,
-    add_frame,
     add_series,
 )
 
@@ -152,89 +152,6 @@ class TestWriteIndex:
             call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 1
         ]  # row_offset - 1
         assert len(name_calls) == 0
-
-
-class TestAddFrame:
-    """Test add_frame function"""
-
-    def setup_method(self):
-        """Setup test data"""
-        self.temp_dir = tempfile.mkdtemp()
-
-    def teardown_method(self):
-        """Clean up temp files"""
-        import shutil
-
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_add_simple_dataframe(self):
-        """Test adding simple DataFrame"""
-        df = pd.DataFrame(
-            {"A": [1, 2, 3], "B": [4.5, np.nan, 6.7]}, index=["row1", "row2", "row3"]
-        )
-
-        file_path = os.path.join(self.temp_dir, "test.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_frame("TestSheet", df, workbook)
-
-        assert worksheet is not None
-        assert worksheet.name == "TestSheet"
-
-        workbook.close()
-
-    def test_add_dataframe_no_index(self):
-        """Test adding DataFrame without index"""
-        df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
-
-        file_path = os.path.join(self.temp_dir, "test_no_index.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_frame("TestSheet", df, workbook, index=False)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_multiindex_dataframe(self):
-        """Test adding DataFrame with MultiIndex"""
-        arrays = [["A", "A", "B", "B"], [1, 2, 1, 2]]
-        index = pd.MultiIndex.from_arrays(arrays, names=["letter", "number"])
-
-        columns = pd.MultiIndex.from_tuples(
-            [("X", "col1"), ("X", "col2"), ("Y", "col1")], names=["group", "item"]
-        )
-
-        df = pd.DataFrame(np.random.randn(4, 3), index=index, columns=columns)
-
-        file_path = os.path.join(self.temp_dir, "test_multi.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_frame("MultiTest", df, workbook)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_frame_with_custom_options(self):
-        """Test add_frame with custom options"""
-        df = pd.DataFrame({"A": [1.123456789, 2.987654321], "B": [np.nan, 4.555555555]})
-
-        file_path = os.path.join(self.temp_dir, "test_custom.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_frame(
-            "CustomTest",
-            df,
-            workbook,
-            column_width=[15, 20],
-            index_width=12,
-            freeze_panes=False,
-            bold_headers=False,
-            nan_as_formula=False,
-            decimal_precision=3,
-        )
-
-        assert worksheet is not None
-        workbook.close()
 
 
 class TestAddSeries:

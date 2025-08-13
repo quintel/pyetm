@@ -146,7 +146,6 @@ class CustomCurve(Base):
     ) -> "CustomCurve":
         """
         Create CustomCurve from DataFrame containing time series data.
-        scenario_id: optional id used to disambiguate filenames when multiple scenarios import curves from excel.
         """
         if len(df.columns) != 1:
             raise ValueError(
@@ -163,7 +162,6 @@ class CustomCurve(Base):
         if not df.empty:
             curve_data = df.iloc[:, 0].dropna()
             if not curve_data.empty:
-                # Include scenario id in filename if provided to avoid collisions between scenarios.
                 safe_key = str(curve_key).replace("/", "-")
                 prefix = f"{scenario_id}_" if scenario_id is not None else ""
                 file_path = (
@@ -240,7 +238,7 @@ class CustomCurves(Base):
 
         collection = cls.model_validate({"curves": curves})
 
-        # Merge warnings from individual curves using new system
+        # Merge warnings from individual curves
         collection._merge_submodel_warnings(*curves, key_attr="key")
 
         return collection
@@ -285,7 +283,6 @@ class CustomCurves(Base):
     ) -> "CustomCurves":
         """
         Create CustomCurves collection from DataFrame with time series data.
-        scenario_id: optional id forwarded to individual curve creation to disambiguate filenames.
         """
         curves = []
         if len(df.columns) == 0:

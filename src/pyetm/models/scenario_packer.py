@@ -12,7 +12,7 @@ from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models import Scenario
 from pyetm.models.custom_curves import CustomCurves
-from pyetm.utils.excel import add_frame_with_scenario_styling
+from pyetm.utils.excel import add_frame
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class ScenarioPacker(BaseModel):
         df = self.main_info()
         if not df.empty:
             df_filled = df.fillna("").infer_objects(copy=False)
-            add_frame_with_scenario_styling(
+            add_frame(
                 name="MAIN",
                 frame=df_filled,
                 workbook=workbook,
@@ -100,7 +100,7 @@ class ScenarioPacker(BaseModel):
             df = pack.to_dataframe()
             if not df.empty:
                 df_filled = df.fillna("").infer_objects(copy=False)
-                add_frame_with_scenario_styling(
+                add_frame(
                     name=pack.sheet_name,
                     frame=df_filled,
                     workbook=workbook,

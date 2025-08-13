@@ -4,11 +4,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr
+from os import PathLike
 from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
-from pyetm.models.custom_curves import CustomCurve, CustomCurves
+from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
@@ -97,6 +98,28 @@ class Scenario(Base):
         for w in result.errors:
             scenario.add_warning("metadata", w)
         return scenario
+
+    @classmethod
+    def from_excel(cls, xlsx_path: PathLike | str) -> List["Scenario"]:
+        """
+        Load or create one or more scenarios from an Excel workbook.
+        """
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker.from_excel(xlsx_path)
+        scenarios = list(packer._scenarios())
+        scenarios.sort(key=lambda s: s.id)
+        return scenarios
+
+    def to_excel(self, path: PathLike | str, *others: "Scenario") -> None:
+        """
+        Export this scenario – and optionally additional scenarios – to an Excel file.
+        """
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker()
+        packer.add(self, *others)
+        packer.to_excel(str(path))
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """
@@ -362,7 +385,6 @@ class Scenario(Base):
 
         Args:
             custom_curves: CustomCurves object containing curves to upload
-        TODO: Update after the from_excel is implemented
         """
 
         # Validate curves before uploading
