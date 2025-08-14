@@ -581,7 +581,7 @@ class ScenarioPacker(BaseModel):
         return scenario
 
     def _build_excel_main_dataframe(self) -> pd.DataFrame:
-        """Build a MAIN sheet DataFrame with rich metadata for Excel export only."""
+        """Build a MAIN sheet DataFrame with metadata for Excel export."""
         scenarios = list(self._scenarios())
         if not scenarios:
             return pd.DataFrame()

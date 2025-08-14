@@ -134,22 +134,6 @@ class Scenario(Base):
             carriers=carriers,
         )
 
-    # Deprecated helper retained for backwards compatibility: route to main to_excel
-    def to_output_curves_excel(
-        self,
-        path: PathLike | str,
-        *others: "Scenario",
-        carriers: list[str] | None = None,
-    ) -> None:
-        from pyetm.models.scenarios import Scenarios
-
-        Scenarios(items=[self, *others]).to_excel(
-            path,
-            export_output_curves=True,
-            output_curves_path=str(path),
-            carriers=carriers,
-        )
-
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """
         Update metadata for this scenario.

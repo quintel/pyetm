@@ -112,7 +112,6 @@ class CustomCurve(Base):
             curve = cls.model_validate(data)
             return curve
         except Exception as e:
-            # Create basic curve with warning attached
             basic_data = {
                 "key": data.get("key", "unknown"),
                 "type": data.get("type", "unknown"),
@@ -130,14 +129,8 @@ class CustomCurve(Base):
         if curve_data is None or curve_data.empty:
             # Return empty DataFrame with proper structure
             return pd.DataFrame({self.key: pd.Series(dtype=float)})
-
-        # Create DataFrame with curve key as column name
         df = pd.DataFrame({self.key: curve_data.values})
-
-        # TODO: Do we want the hour index?
-        # Set index to represent hours (0-8759 for a full year)
         df.index.name = "hour"
-
         return df
 
     @classmethod
@@ -237,10 +230,7 @@ class CustomCurves(Base):
                 curves.append(basic_curve)
 
         collection = cls.model_validate({"curves": curves})
-
-        # Merge warnings from individual curves
         collection._merge_submodel_warnings(*curves, key_attr="key")
-
         return collection
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
@@ -320,9 +310,7 @@ class CustomCurves(Base):
                 validation_errors[curve.key] = curve_warnings
                 continue
 
-            # Get curve data and validate
             try:
-                # First, try to read the file without forcing dtype to check for non-numeric values
                 try:
                     # Read without dtype conversion to preserve non-numeric values
                     raw_data = pd.read_csv(
@@ -340,7 +328,6 @@ class CustomCurves(Base):
                             f"Curve must contain exactly 8,760 values, found {len(raw_data)}",
                         )
                     else:
-                        # Now check if all values can be converted to float
                         try:
                             # Try to convert to numeric, this will raise if there are non-numeric values
                             pd.to_numeric(raw_data.iloc[:, 0], errors="raise")
@@ -352,14 +339,11 @@ class CustomCurves(Base):
                 except pd.errors.EmptyDataError:
                     curve_warnings.add(curve.key, "Curve contains no data")
                 except Exception as e:
-                    # This catches file not found, permission errors, etc.
                     curve_warnings.add(curve.key, f"Error reading curve data: {str(e)}")
 
             except Exception as e:
-                # Catch any other unexpected errors
                 curve_warnings.add(curve.key, f"Error reading curve data: {str(e)}")
 
-            # Only add to validation_errors if there are actual warnings
             if len(curve_warnings) > 0:
                 validation_errors[curve.key] = curve_warnings
 
