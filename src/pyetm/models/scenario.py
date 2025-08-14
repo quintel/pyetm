@@ -12,6 +12,7 @@ from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
+from pyetm.models.export_config import ExportConfig
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
@@ -59,6 +60,7 @@ class Scenario(Base):
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
     _output_curves: Optional[OutputCurves] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
+    _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
 
     @classmethod
     def new(cls, area_code: str, end_year: int, **kwargs) -> "Scenario":
@@ -116,22 +118,29 @@ class Scenario(Base):
         self,
         path: PathLike | str,
         *others: "Scenario",
-        export_output_curves: bool = True,
-        output_curves_path: str | None = None,
         carriers: list[str] | None = None,
+        include_inputs: bool | None = None,
+        include_sortables: bool | None = None,
+        include_custom_curves: bool | None = None,
+        include_gqueries: bool | None = None,
+        include_output_curves: bool | None = None,
     ) -> None:
         """
         Export this scenario – and optionally additional scenarios – to an Excel file.
-        Output curves are exported to a separate workbook by default, with one sheet
-        per carrier. Use carriers to filter which carriers to include.
+        Output curves are exported to a separate workbook only when enabled, with one
+        sheet per carrier. Use carriers to filter which carriers to include when exporting.
+        #TODO: only apply filtering per-scenario
         """
         from pyetm.models.scenarios import Scenarios
 
         Scenarios(items=[self, *others]).to_excel(
             path,
-            export_output_curves=export_output_curves,
-            output_curves_path=output_curves_path,
             carriers=carriers,
+            include_inputs=include_inputs,
+            include_sortables=include_sortables,
+            include_custom_curves=include_custom_curves,
+            include_gqueries=include_gqueries,
+            include_output_curves=include_output_curves,
         )
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
@@ -432,6 +441,12 @@ class Scenario(Base):
 
     def get_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
         return self.output_curves.get_curves_by_carrier_type(self, carrier_type)
+
+    def set_export_config(self, config: ExportConfig | None) -> None:
+        self._export_config = config
+
+    def get_export_config(self) -> ExportConfig | None:
+        return self._export_config
 
     def add_queries(self, gquery_keys: list[str]):
         if self._queries is None:

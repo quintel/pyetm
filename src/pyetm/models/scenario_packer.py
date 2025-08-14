@@ -12,6 +12,7 @@ from pyetm.models.packables.output_curves_pack import OutputCurvesPack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models import Scenario
+from pyetm.models.export_config import ExportConfig
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.utils.excel import add_frame
 
@@ -83,9 +84,12 @@ class ScenarioPacker(BaseModel):
         self,
         path: str,
         *,
-        export_output_curves: bool = True,
-        output_curves_path: Optional[str] = None,
         carriers: Optional[Sequence[str]] = None,
+        include_inputs: bool | None = None,
+        include_sortables: bool | None = None,
+        include_custom_curves: bool | None = None,
+        include_gqueries: bool | None = None,
+        include_output_curves: bool | None = None,
     ):
         if len(self._scenarios()) == 0:
             raise ValueError("Packer was empty, nothing to export")
@@ -104,12 +108,96 @@ class ScenarioPacker(BaseModel):
                 scenario_styling=True,
             )
 
-        for pack in self.all_pack_data():
-            # Skip output curves in the main workbook; exported separately
-            if getattr(pack, "key", None) == OutputCurvesPack.key:
-                continue
-            df = pack.to_dataframe()
-            if not df.empty:
+        # Decide which packs to include using a single global config (applies to all scenarios)
+        packs: list[tuple[str, Any]] = [
+            ("inputs", self._inputs),
+            ("sortables", self._sortables),
+            ("custom_curves", self._custom_curves),
+        ]
+
+        # Determine a global ExportConfig from the first scenario (if any)
+        scen_list = list(self._scenarios())
+        global_cfg: ExportConfig | None = None
+        for s in scen_list:
+            cfg = getattr(s, "_export_config", None)
+            if cfg is not None:
+                global_cfg = cfg
+                break
+
+        def choose_bool(
+            opt_flag: Optional[bool], cfg_val: Optional[bool], default: bool
+        ) -> bool:
+            if opt_flag is not None:
+                return bool(opt_flag)
+            if cfg_val is not None:
+                return bool(cfg_val)
+            return default
+
+        include_inputs_final = choose_bool(
+            include_inputs,
+            getattr(global_cfg, "include_inputs", None) if global_cfg else None,
+            True,
+        )
+        include_sortables_final = choose_bool(
+            include_sortables,
+            getattr(global_cfg, "include_sortables", None) if global_cfg else None,
+            False,
+        )
+        include_custom_curves_final = choose_bool(
+            include_custom_curves,
+            getattr(global_cfg, "include_custom_curves", None) if global_cfg else None,
+            False,
+        )
+        include_gqueries_final = choose_bool(
+            include_gqueries,
+            getattr(global_cfg, "include_gqueries", None) if global_cfg else None,
+            False,
+        )
+
+        inputs_defaults_final = (
+            bool(getattr(global_cfg, "inputs_defaults", False)) if global_cfg else False
+        )
+        inputs_min_max_final = (
+            bool(getattr(global_cfg, "inputs_min_max", False)) if global_cfg else False
+        )
+
+        # Emit sheets based on global flags
+        for name, pack in packs:
+            if name == "inputs" and include_inputs_final:
+                try:
+                    # Decide fields for all scenarios
+                    fields: list[str] = ["user"]
+                    if inputs_defaults_final:
+                        fields.append("default")
+                    if inputs_min_max_final:
+                        fields.extend(["min", "max"])
+                    if fields == ["user"]:
+                        df = self._inputs.to_dataframe(columns="user")
+                    elif fields == ["min", "max"]:
+                        # Not a legal case because we always include 'user', keep fallback
+                        df = self._inputs.to_dataframe_min_max()
+                    elif fields == ["default"]:
+                        df = self._inputs.to_dataframe_defaults()
+                    elif fields == ["user", "default"]:
+                        fm = {s: fields for s in pack.scenarios}
+                        df = self._inputs.to_dataframe_per_scenario_fields(fm)
+                    elif fields == ["user", "min", "max"]:
+                        fm = {s: fields for s in pack.scenarios}
+                        df = self._inputs.to_dataframe_per_scenario_fields(fm)
+                    else:
+                        # user + default + min + max
+                        fm = {s: fields for s in pack.scenarios}
+                        df = self._inputs.to_dataframe_per_scenario_fields(fm)
+                except Exception:
+                    df = pack.to_dataframe()
+            elif name == "sortables" and include_sortables_final:
+                df = pack.to_dataframe()
+            elif name == "custom_curves" and include_custom_curves_final:
+                df = pack.to_dataframe()
+            else:
+                df = pd.DataFrame()
+
+            if df is not None and not df.empty:
                 df_filled = df.fillna("").infer_objects(copy=False)
                 add_frame(
                     name=pack.sheet_name,
@@ -119,16 +207,50 @@ class ScenarioPacker(BaseModel):
                     scenario_styling=True,
                 )
 
+        # Add GQUERY results if requested globally
+        if include_gqueries_final:
+            gq_pack = QueryPack(scenarios=self._scenarios())
+            df_gq = gq_pack.to_dataframe(columns="future")
+            if not df_gq.empty:
+                add_frame(
+                    name=gq_pack.output_sheet_name,
+                    frame=df_gq.fillna("").infer_objects(copy=False),
+                    workbook=workbook,
+                    column_width=18,
+                    scenario_styling=True,
+                )
+
         workbook.close()
 
         # Export output curves to a separate workbook with one sheet per carrier
-        if export_output_curves:
-            oc_path = output_curves_path
-            if oc_path is None:
-                base = Path(path)
-                oc_path = str(base.with_name(f"{base.stem}_output_curves{base.suffix}"))
+        # Determine output curves inclusion (global + per-scenario)
+        include_output_global = False
+        if include_output_curves is True:
+            include_output_global = True
+        elif include_output_curves is None:
+            # Use global export config if present
             try:
-                self._output_curves.to_excel_per_carrier(oc_path, carriers)
+                include_output_global = bool(
+                    getattr(global_cfg, "output_carriers", None)
+                )
+            except Exception:
+                include_output_global = False
+        if include_output_global:
+            base = Path(path)
+            oc_path = str(base.with_name(f"{base.stem}_exports{base.suffix}"))
+            # Carriers: prefer explicit carriers arg. If not provided, try union of per-scenario configs
+            chosen_carriers: Optional[Sequence[str]] = (
+                list(carriers) if carriers else None
+            )
+            if chosen_carriers is None and global_cfg is not None:
+                try:
+                    chosen_carriers = (
+                        list(getattr(global_cfg, "output_carriers", None) or []) or None
+                    )
+                except Exception:
+                    chosen_carriers = None
+            try:
+                self._output_curves.to_excel_per_carrier(oc_path, chosen_carriers)
             except Exception as e:
                 logger.warning("Failed exporting output curves workbook: %s", e)
 
@@ -328,12 +450,22 @@ class ScenarioPacker(BaseModel):
     ) -> Dict[str, Dict[str, str]]:
         scenario_sheets = {}
 
+        def _value_before_output(series: pd.Series, key: str):
+            seen_output = False
+            for label, val in zip(series.index, series.values):
+                lab = str(label).strip().lower()
+                if lab == "output":
+                    seen_output = True
+                if lab == key and not seen_output:
+                    return val
+            return None
+
         if isinstance(main_df, pd.Series):
             # Single scenario
             identifier = str(main_df.name)
             short_name = main_df.get("short_name")
-            sortables_sheet = main_df.get("sortables")
-            custom_curves_sheet = main_df.get("custom_curves")
+            sortables_sheet = _value_before_output(main_df, "sortables")
+            custom_curves_sheet = _value_before_output(main_df, "custom_curves")
 
             scenario_sheets[identifier] = {
                 "short_name": short_name if pd.notna(short_name) else identifier,
@@ -347,8 +479,8 @@ class ScenarioPacker(BaseModel):
             for identifier in main_df.columns:
                 col_data = main_df[identifier]
                 short_name = col_data.get("short_name")
-                sortables_sheet = col_data.get("sortables")
-                custom_curves_sheet = col_data.get("custom_curves")
+                sortables_sheet = _value_before_output(col_data, "sortables")
+                custom_curves_sheet = _value_before_output(col_data, "custom_curves")
 
                 scenario_sheets[str(identifier)] = {
                     "short_name": (
@@ -452,12 +584,15 @@ class ScenarioPacker(BaseModel):
         if main_df is None or getattr(main_df, "empty", False):
             return packer
 
-        # Build scenarios per MAIN column
+        # Build scenarios per MAIN column (ignore helper/description columns)
         scenarios_by_col: Dict[str, Scenario] = {}
         for col in main_df.columns:
+            col_str = str(col) if col is not None else ""
+            if col_str.strip().lower() in {"description", "helper", "notes"}:
+                continue
             try:
                 scenario = packer._setup_scenario_from_main_column(
-                    str(col), main_df[col]
+                    str(col_str), main_df[col]
                 )
             except Exception as e:
                 logger.warning("Failed to set up scenario for column '%s': %s", col, e)
@@ -465,7 +600,110 @@ class ScenarioPacker(BaseModel):
 
             if scenario is not None:
                 packer.add(scenario)
-                scenarios_by_col[str(col)] = scenario
+                scenarios_by_col[str(col_str)] = scenario
+
+        # Apply OUTPUT settings globally from the first scenario column, if present
+        try:
+            first_col_name: Optional[str] = next(iter(scenarios_by_col.keys()), None)
+            if first_col_name is not None:
+                col_data = main_df[first_col_name]
+                # case-insensitive row access
+                idx_map = {str(i).strip().lower(): i for i in col_data.index}
+
+                def _cell_ci(name: str):
+                    key = name.strip().lower()
+                    src_key = idx_map.get(key)
+                    if src_key is None:
+                        return None
+                    return col_data.get(src_key)
+
+                def _bool(v) -> Optional[bool]:
+                    if v is None:
+                        return None
+                    if isinstance(v, bool):
+                        return v
+                    try:
+                        if isinstance(v, (int, float)) and not pd.isna(v):
+                            return bool(int(v))
+                    except Exception:
+                        pass
+                    if isinstance(v, str):
+                        s = v.strip().lower()
+                        if s in {"true", "yes", "y", "1"}:
+                            return True
+                        if s in {"false", "no", "n", "0"}:
+                            return False
+                    return None
+
+                # New format rows under OUTPUT
+                inc_inputs = _bool(_cell_ci("inputs"))
+                inc_gq = _bool(_cell_ci("gquery_results")) or _bool(
+                    _cell_ci("gqueries")
+                )
+                inc_sortables = _bool(_cell_ci("sortables"))
+                inc_curves = _bool(_cell_ci("custom_curves"))
+                inputs_defaults = _bool(_cell_ci("defaults"))
+                inputs_min_max = _bool(_cell_ci("min_max"))
+                carriers_raw = _cell_ci("exports") or _cell_ci("output_carriers")
+                carriers_list = None
+                if isinstance(carriers_raw, str) and carriers_raw.strip():
+                    carriers_list = [
+                        p.strip() for p in carriers_raw.split(",") if p.strip()
+                    ]
+
+                # Legacy column-based include_* support
+                legacy_inc_inputs = _cell_ci("include_inputs")
+                legacy_inc_sortables = _cell_ci("include_sortables")
+                legacy_inc_curves = _cell_ci("include_custom_curves")
+                legacy_inc_gq = _cell_ci("include_gqueries")
+
+                cfg = ExportConfig(
+                    include_inputs=(
+                        _bool(legacy_inc_inputs)
+                        if legacy_inc_inputs is not None
+                        else inc_inputs
+                    ),
+                    include_sortables=(
+                        _bool(legacy_inc_sortables)
+                        if legacy_inc_sortables is not None
+                        else inc_sortables
+                    ),
+                    include_custom_curves=(
+                        _bool(legacy_inc_curves)
+                        if legacy_inc_curves is not None
+                        else inc_curves
+                    ),
+                    include_gqueries=(
+                        _bool(legacy_inc_gq) if legacy_inc_gq is not None else inc_gq
+                    ),
+                    inputs_defaults=inputs_defaults,
+                    inputs_min_max=inputs_min_max,
+                    output_carriers=carriers_list,
+                )
+
+                if any(
+                    getattr(cfg, f) is not None
+                    for f in (
+                        "include_inputs",
+                        "include_sortables",
+                        "include_custom_curves",
+                        "include_gqueries",
+                        "inputs_defaults",
+                        "inputs_min_max",
+                        "output_carriers",
+                    )
+                ):
+                    for scenario in scenarios_by_col.values():
+                        try:
+                            if hasattr(scenario, "set_export_config"):
+                                scenario.set_export_config(cfg)
+                            else:
+                                setattr(scenario, "_export_config", cfg)
+                        except Exception:
+                            pass
+        except Exception:
+            # Do not fail the import due to config parsing
+            pass
 
         if len(scenarios_by_col) == 0:
             return packer
@@ -628,6 +866,21 @@ class ScenarioPacker(BaseModel):
             info["created_at"] = getattr(s, "created_at", None)
             info["updated_at"] = getattr(s, "updated_at", None)
 
+            # Export config flags (optional)
+            cfg: ExportConfig | None = getattr(s, "_export_config", None)
+            if cfg is not None:
+                info["include_inputs"] = cfg.include_inputs
+                info["include_sortables"] = cfg.include_sortables
+                info["include_custom_curves"] = cfg.include_custom_curves
+                info["include_gqueries"] = cfg.include_gqueries
+                info["defaults"] = cfg.inputs_defaults
+                info["min_max"] = cfg.inputs_min_max
+                if cfg.output_carriers is not None:
+                    try:
+                        info["output_carriers"] = ", ".join(cfg.output_carriers)
+                    except Exception:
+                        info["output_carriers"] = None
+
             # Flatten all other metadata keys
             if isinstance(meta, dict):
                 for k, v in meta.items():
@@ -656,6 +909,14 @@ class ScenarioPacker(BaseModel):
             "version",
             "created_at",
             "updated_at",
+            # Config flags after core meta
+            "include_inputs",
+            "include_sortables",
+            "include_custom_curves",
+            "include_gqueries",
+            "defaults",
+            "min_max",
+            "output_carriers",
         ]
         remaining = [k for k in all_keys if k not in preferred]
         index_order = preferred + remaining

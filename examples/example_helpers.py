@@ -39,31 +39,35 @@ def setup_notebook():
         except Exception:
             pass
 
-        # Provide a convenient 'show' helper that HTML-renders DataFrames with optional hidden index
         def show(obj, *, index=False):
             """Pretty-display DataFrames/Series (HTML) or fall back to normal display."""
 
             if isinstance(obj, (pd.DataFrame, pd.Series)):
                 try:
-                    # If empty, show a clear hint instead of a blank table with only headers
                     if getattr(obj, "empty", False):
                         from html import escape
+
                         if isinstance(obj, pd.DataFrame):
                             cols = [str(c) for c in obj.columns]
-                            preview = ", ".join(cols[:8]) + ("…" if len(cols) > 8 else "")
+                            preview = ", ".join(cols[:8]) + (
+                                "…" if len(cols) > 8 else ""
+                            )
                             meta = f" — 0 rows, {obj.shape[1]} columns"
                             extra = f" (columns: {escape(preview)})" if cols else ""
                             msg = f"Empty DataFrame{meta}{extra}"
                         else:
                             msg = "Empty Series — 0 rows"
-                        display(HTML(
-                            "<div style='font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #374151; margin: 4px 0;'>"
-                            + escape(msg)
-                            + "</div>"
-                        ))
+                        display(
+                            HTML(
+                                "<div style='font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #374151; margin: 4px 0;'>"
+                                + escape(msg)
+                                + "</div>"
+                            )
+                        )
                         return
 
                     styler = obj.style
+                    styler = styler.format(precision=3)
                     if not index and isinstance(obj, pd.DataFrame):
                         try:
                             styler = styler.hide(axis="index")
