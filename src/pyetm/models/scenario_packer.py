@@ -718,7 +718,7 @@ class ScenarioPacker(BaseModel):
                 short = str(scenario.identifier())
             short_name_map[str(scenario.id)] = str(short)
 
-        # PARAMETERS (inputs) sheet
+        # SLIDER_SETTINGS (inputs) sheet
         params_df = None
         try:
             params_df = xls.parse(InputsPack.sheet_name, header=None)
@@ -730,7 +730,7 @@ class ScenarioPacker(BaseModel):
                 packer._inputs.set_scenario_short_names(short_name_map)
                 packer._inputs.from_dataframe(params_df)
             except Exception as e:
-                logger.warning("Failed to import PARAMETERS: %s", e)
+                logger.warning("Failed to import SLIDER_SETTINGS: %s", e)
 
         # GQUERIES sheet (keys to attach to scenarios)
         gq_df = None

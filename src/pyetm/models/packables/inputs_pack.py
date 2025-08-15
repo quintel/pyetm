@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class InputsPack(Packable):
     key: ClassVar[str] = "inputs"
-    sheet_name: ClassVar[str] = "PARAMETERS"
+    sheet_name: ClassVar[str] = "SLIDER_SETTINGS"
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -277,7 +277,8 @@ class InputsPack(Packable):
                 scenario = self.resolve_scenario(col)
                 if scenario is None:
                     logger.warning(
-                        "Could not find scenario for PARAMETERS column label '%s'", col
+                        "Could not find scenario for SLIDER_SETTINGS column label '%s'",
+                        col,
                     )
                     continue
                 series = data[col]
@@ -316,4 +317,4 @@ class InputsPack(Packable):
                     except Exception:
                         pass
         except Exception as e:
-            logger.warning("Failed to parse simplified PARAMETERS sheet: %s", e)
+            logger.warning("Failed to parse simplified SLIDER_SETTINGS sheet: %s", e)
