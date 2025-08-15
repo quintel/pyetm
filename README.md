@@ -68,7 +68,6 @@ poetry --version
 
 Navigate to the `pyetm` folder and install all dependencies:
 ```bash
-cd pyetm
 poetry install
 ```
 
@@ -79,7 +78,7 @@ If you want development dependencies (testing, linting, etc.) then append the
 "--with dev" flag to the install command.
 
 
-#### Activating the Environment
+#### How to use the environment:
 You can either:
 - Run commands inside Poetry’s environment:
   ```bash
@@ -90,10 +89,9 @@ You can either:
   ```bash
   eval $(poetry env activate)
   ```
-  Then run commands normally:
+  Then run you can commands normally (e.g.):
   ```bash
   pytest
-  pyetm
   ```
 
 
@@ -127,7 +125,7 @@ BASE_URL=<api url>
 
 ---
 
-## Cross-Platform Notes
+### Notes
 - **Windows**:
   - Use `py` instead of `python3` if `python3` is not recognized.
   - In PowerShell, set environment variables with:
@@ -139,5 +137,5 @@ BASE_URL=<api url>
   - Set environment variables with:
     ```bash
     export ETM_API_TOKEN="your-token"
-  export ENVIRONMENT=beta   # or pro/local/2025-01
+    export ENVIRONMENT=beta
     ```

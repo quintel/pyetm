@@ -16,6 +16,17 @@ class OutputCurvesPack(Packable):
     def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
         try:
             series_list = list(scenario.all_output_curves())
+            try:
+                if (
+                    hasattr(scenario, "_output_curves")
+                    and scenario._output_curves is not None
+                ):
+                    scenario._output_curves.log_warnings(
+                        logger,
+                        prefix=f"Output curves warning for '{scenario.identifier()}'",
+                    )
+            except Exception:
+                pass
         except Exception as e:
             logger.warning(
                 "Failed extracting output curves for %s: %s", scenario.identifier(), e

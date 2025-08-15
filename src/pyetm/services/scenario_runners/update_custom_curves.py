@@ -65,7 +65,8 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
                 if result.success:
                     successful_uploads.append(curve.key)
                 else:
-                    all_errors.extend(result.errors)
+                    for err in result.errors:
+                        all_errors.append(f"{curve.key}: {err}")
 
             except Exception as e:
                 all_errors.append(f"Error uploading {curve.key}: {str(e)}")

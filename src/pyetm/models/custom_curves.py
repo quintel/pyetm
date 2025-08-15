@@ -1,10 +1,11 @@
 from __future__ import annotations
 import pandas as pd
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from pyetm.models.warnings import WarningCollector
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
+from pydantic import PrivateAttr
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     DownloadCustomCurveRunner,
 )
@@ -30,7 +31,7 @@ class CustomCurve(Base):
     def available(self) -> bool:
         return bool(self.file_path)
 
-    def retrieve(self, client, scenario) -> Optional[pd.DataFrame]:
+    def retrieve(self, client, scenario) -> Optional[pd.Series]:
         """Process curve from client, save to file, set file_path"""
         file_path = (
             get_settings().path_to_tmp(str(scenario.id))
@@ -54,9 +55,14 @@ class CustomCurve(Base):
                         .squeeze("columns")
                         .dropna(how="all")
                     )
+                    if len(curve) != 8760:
+                        self.add_warning(
+                            self.key,
+                            f"Curve length should be 8760, got {len(curve)}; proceeding with current data",
+                        )
 
                     self.file_path = file_path
-                    curve.to_csv(self.file_path, index=False)
+                    curve.to_csv(self.file_path, index=False, header=False)
                     return curve.rename(self.key)
                 except Exception as e:
                     # File processing error - add warning and return None
@@ -80,12 +86,17 @@ class CustomCurve(Base):
             return None
 
         try:
-            return (
+            series = (
                 pd.read_csv(self.file_path, header=None, index_col=False, dtype=float)
                 .squeeze("columns")
                 .dropna(how="all")
-                .rename(self.key)
             )
+            if len(series) != 8760:
+                self.add_warning(
+                    self.key,
+                    f"Curve length should be 8760, got {len(series)}; using available data",
+                )
+            return series.rename(self.key)
         except Exception as e:
             self.add_warning(self.key, f"Failed to read curve file: {e}")
             return None
@@ -112,7 +123,6 @@ class CustomCurve(Base):
             curve = cls.model_validate(data)
             return curve
         except Exception as e:
-            # Create basic curve with warning attached
             basic_data = {
                 "key": data.get("key", "unknown"),
                 "type": data.get("type", "unknown"),
@@ -130,14 +140,8 @@ class CustomCurve(Base):
         if curve_data is None or curve_data.empty:
             # Return empty DataFrame with proper structure
             return pd.DataFrame({self.key: pd.Series(dtype=float)})
-
-        # Create DataFrame with curve key as column name
         df = pd.DataFrame({self.key: curve_data.values})
-
-        # TODO: Do we want the hour index?
-        # Set index to represent hours (0-8759 for a full year)
         df.index.name = "hour"
-
         return df
 
     @classmethod
@@ -163,10 +167,8 @@ class CustomCurve(Base):
             curve_data = df.iloc[:, 0].dropna()
             if not curve_data.empty:
                 safe_key = str(curve_key).replace("/", "-")
-                prefix = f"{scenario_id}_" if scenario_id is not None else ""
                 file_path = (
-                    get_settings().path_to_tmp("dataframe_import")
-                    / f"{prefix}{safe_key}.csv"
+                    get_settings().path_to_tmp(str(scenario_id)) / f"{safe_key}.csv"
                 )
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 try:
@@ -181,6 +183,7 @@ class CustomCurve(Base):
 
 class CustomCurves(Base):
     curves: list[CustomCurve]
+    _scenario: Any = PrivateAttr(default=None)
 
     def __len__(self) -> int:
         return len(self.curves)
@@ -237,10 +240,7 @@ class CustomCurves(Base):
                 curves.append(basic_curve)
 
         collection = cls.model_validate({"curves": curves})
-
-        # Merge warnings from individual curves
         collection._merge_submodel_warnings(*curves, key_attr="key")
-
         return collection
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
@@ -254,6 +254,14 @@ class CustomCurves(Base):
 
         for curve in self.curves:
             try:
+                if (
+                    not curve.available()
+                    and getattr(self, "_scenario", None) is not None
+                ):
+                    try:
+                        curve.retrieve(BaseClient(), self._scenario)
+                    except Exception:
+                        pass
                 curve_df = curve._to_dataframe(**kwargs)
                 if not curve_df.empty:
                     # Get the curve data as a Series
@@ -320,9 +328,7 @@ class CustomCurves(Base):
                 validation_errors[curve.key] = curve_warnings
                 continue
 
-            # Get curve data and validate
             try:
-                # First, try to read the file without forcing dtype to check for non-numeric values
                 try:
                     # Read without dtype conversion to preserve non-numeric values
                     raw_data = pd.read_csv(
@@ -340,7 +346,6 @@ class CustomCurves(Base):
                             f"Curve must contain exactly 8,760 values, found {len(raw_data)}",
                         )
                     else:
-                        # Now check if all values can be converted to float
                         try:
                             # Try to convert to numeric, this will raise if there are non-numeric values
                             pd.to_numeric(raw_data.iloc[:, 0], errors="raise")
@@ -352,14 +357,11 @@ class CustomCurves(Base):
                 except pd.errors.EmptyDataError:
                     curve_warnings.add(curve.key, "Curve contains no data")
                 except Exception as e:
-                    # This catches file not found, permission errors, etc.
                     curve_warnings.add(curve.key, f"Error reading curve data: {str(e)}")
 
             except Exception as e:
-                # Catch any other unexpected errors
                 curve_warnings.add(curve.key, f"Error reading curve data: {str(e)}")
 
-            # Only add to validation_errors if there are actual warnings
             if len(curve_warnings) > 0:
                 validation_errors[curve.key] = curve_warnings
 

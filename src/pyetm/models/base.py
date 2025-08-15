@@ -104,6 +104,29 @@ class Base(BaseModel):
         """Print all warnings to the console."""
         self._warning_collector.show_warnings()
 
+    def log_warnings(
+        self, logger, level: str = "warning", prefix: str | None = None
+    ) -> None:
+        """
+        Log all collected warnings using the provided logger.
+        """
+        try:
+            collector = getattr(self, "warnings", None)
+            if collector is None or len(collector) == 0:
+                return
+            log_fn = getattr(logger, level, getattr(logger, "warning", None))
+            if log_fn is None:
+                return
+            for w in collector:
+                field = getattr(w, "field", "")
+                msg = getattr(w, "message", str(w))
+                if prefix:
+                    log_fn(f"{prefix} [{field}]: {msg}")
+                else:
+                    log_fn(f"[{field}]: {msg}")
+        except Exception:
+            pass
+
     def _clear_warnings_for_attr(self, field: str) -> None:
         """Remove warnings for a specific field."""
         self._warning_collector.clear(field)
@@ -145,7 +168,7 @@ class Base(BaseModel):
         """
         return [
             field_name
-            for field_name in self.model_fields.keys()
+            for field_name in self.__class__.model_fields.keys()
             if not field_name.startswith("_")
         ]
 

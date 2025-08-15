@@ -32,14 +32,13 @@ class Scenarios(BaseModel):
         self,
         path: PathLike | str,
         *,
-        export_output_curves: bool = True,
-        output_curves_path: Optional[str] = None,
         carriers: Optional[Sequence[str]] = None,
+        include_inputs: bool | None = None,
+        include_sortables: bool | None = None,
+        include_custom_curves: bool | None = None,
+        include_gqueries: bool | None = None,
+        include_output_curves: bool | None = None,
     ) -> None:
-        """
-        Export all scenarios in this collection to an Excel workbook.
-        Output curves are written to a separate workbook by default (one sheet per carrier).
-        """
         from .scenario_packer import ScenarioPacker
 
         packer = ScenarioPacker()
@@ -47,9 +46,12 @@ class Scenarios(BaseModel):
             packer.add(*self.items)
         packer.to_excel(
             str(path),
-            export_output_curves=export_output_curves,
-            output_curves_path=output_curves_path,
             carriers=carriers,
+            include_inputs=include_inputs,
+            include_sortables=include_sortables,
+            include_custom_curves=include_custom_curves,
+            include_gqueries=include_gqueries,
+            include_output_curves=include_output_curves,
         )
 
     @classmethod
