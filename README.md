@@ -80,7 +80,7 @@ If you want development dependencies (testing, linting, etc.) then append the
 
 #### How to use the environment:
 You can either:
-- Run commands inside Poetry’s environment:
+- Run commands inside Poetry's environment:
   ```bash
   poetry run pytest
   poetry run pyetm
@@ -97,25 +97,40 @@ You can either:
 
 ## Configuring Your Settings
 
-You can configure your API token and base URL either with a **config.yml** file or environment variables. You can now simply set an `environment` and the base URL will be inferred for you.
+You can configure your API token and base URL either with a **config.env** file or environment variables. You can simply set an `environment` and the base URL will be inferred for you.
 
-### Option 1: `config.yml`
-1. Duplicate the example file (`examples/example.config.yml`) and rename it to `config.yml`.
-2. Edit `config.yml`:
-   - **etm_api_token**: Your ETM API token (overridden by `$ETM_API_TOKEN` if set).
-   - **environment**: pro (default), beta, local, or a stable tag like `2025-01`. When set, `base_url` is inferred automatically.
-   - (optional) **base_url**: API base URL (overridden by `$BASE_URL` if set). If both `environment` and `base_url` are set, `base_url` wins.
-     Examples if you need a direct override:
-       - `https://engine.energytransitionmodel.com/api/v3` (pro)
-       - `https://beta.engine.energytransitionmodel.com/api/v3` (beta)
-       - `https://2025-01.engine.energytransitionmodel.com/api/v3` (stable tag)
-   - **proxy_servers**: (Optional) HTTP/HTTPS proxy URLs.
-   - **csv_separator** and **decimal_separator**: Defaults are `,` and `.`.
+### Option 1: `config.env` (Recommended)
+1. Copy the example file (`example.config.env`) and rename it to `config.env`.
+2. Edit `config.env`:
+   ```bash
+   # Your ETM API token (required)
+   ETM_API_TOKEN=your.token.here
 
-Place `config.yml` in the project root (`pyetm/` folder).
+   # Environment (default: pro)
+   ENVIRONMENT=pro
+
+   # Optional: Override base URL directly
+   # BASE_URL=https://engine.energytransitionmodel.com/api/v3
+
+   # Optional: Proxy settings
+   # PROXY_SERVERS_HTTP=http://user:pass@proxy.example.com:8080
+   # PROXY_SERVERS_HTTPS=http://user:pass@secureproxy.example.com:8080
+
+   # CSV settings (optional)
+   CSV_SEPARATOR=,
+   DECIMAL_SEPARATOR=.
+   ```
+
+Place `config.env` in the project root (`pyetm/` folder).
+
+**Environment Options:**
+- `pro` (default): Production environment
+- `beta`: Staging environment
+- `local`: Local development environment
+- `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
 
 ### Option 2: Environment Variables
-If you prefer, set these environment variables:
+If you prefer, set these environment variables directly:
 ```bash
 ETM_API_TOKEN=<your token>
 ENVIRONMENT=<pro|beta|local|YYYY-MM>

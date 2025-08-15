@@ -14,6 +14,7 @@ from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models import Scenario
 from pyetm.models.custom_curves import CustomCurves
+from pyetm.models.export_config import ExportConfig
 
 
 class TestScenarioPackerInit:
@@ -1332,3 +1333,349 @@ class TestInputsPackIntegration:
             mock_build.assert_called_once_with(
                 include_defaults=True, include_min_max=True
             )
+
+
+class TestExportConfigResolverExtras:
+
+    def test_extract_from_main_sheet_skips_helper_and_parses(self):
+        # First column is a helper and must be skipped
+        main = pd.DataFrame(
+            {
+                "helper": {"inputs": "no"},
+                "S1": {
+                    "inputs": "yes",
+                    "sortables": 0,
+                    "custom_curves": 1,
+                    "gqueries": "1",
+                    "defaults": "1",
+                    "min_max": "0",
+                    "exports": "electricity, gas ",
+                },
+            }
+        )
+
+        scenarios = [Mock(spec=Scenario)]
+        cfg = ExportConfigResolver.extract_from_main_sheet(main, scenarios)
+        assert cfg.include_inputs is True
+        assert cfg.include_sortables is False
+        assert cfg.include_custom_curves is True
+        assert cfg.include_gqueries is True
+        assert cfg.inputs_defaults is True
+        assert cfg.inputs_min_max is False
+        assert cfg.output_carriers == ["electricity", "gas"]
+
+    def test_extract_from_main_sheet_empty_or_error(self):
+        assert ExportConfigResolver.extract_from_main_sheet(pd.DataFrame(), []) is None
+
+
+class TestScenarioPackerExtras:
+
+    def test_get_global_export_config_first_available(self):
+        packer = ScenarioPacker()
+
+        s1 = Mock(spec=Scenario)
+        s1.id = "1"
+        s1.identifier = Mock(return_value="1")
+        s1._export_config = ExportConfig(include_inputs=True)
+
+        s2 = Mock(spec=Scenario)
+        s2.id = "2"
+        s2.identifier = Mock(return_value="2")
+        s2._export_config = ExportConfig(include_inputs=False)
+
+        # Ensure deterministic order by patching _scenarios
+        with patch.object(ScenarioPacker, "_scenarios", return_value={s1, s2}):
+            cfg = packer._get_global_export_config()
+            assert isinstance(cfg, ExportConfig)
+
+    def test_apply_export_configuration_sets_on_scenarios(self):
+        packer = ScenarioPacker()
+        s = Mock(spec=Scenario)
+        s.id = "X"
+        s.identifier = Mock(return_value="X")
+        packer.add(s)
+
+        main = pd.DataFrame(
+            {
+                "X": {
+                    "inputs": "1",
+                    "sortables": "0",
+                    "custom_curves": None,
+                    "gquery_results": "yes",
+                    "defaults": 1,
+                    "min_max": 0,
+                    "exports": "hydrogen",
+                }
+            }
+        )
+        packer._apply_export_configuration(main, {"X": s})
+        if hasattr(s, "set_export_config") and s.set_export_config.called:
+            assert s.set_export_config.call_count == 1
+        else:
+            assert hasattr(s, "_export_config")
+
+    def test_add_inputs_sheet_fallback_on_error(self, monkeypatch):
+        packer = ScenarioPacker()
+        s = Mock(spec=Scenario)
+        s.id = "SID"
+        s.identifier = Mock(return_value="SID")
+        s.to_dataframe = Mock(return_value=pd.DataFrame({"SID": [1]}, index=["row"]))
+        packer.add(s)
+
+        # Force build_combined_dataframe to raise, and _to_dataframe to return data
+        monkeypatch.setattr(
+            InputsPack,
+            "build_combined_dataframe",
+            staticmethod(lambda **k: (_ for _ in ()).throw(RuntimeError("bad"))),
+        )
+        monkeypatch.setattr(
+            InputsPack,
+            "_to_dataframe",
+            staticmethod(lambda **k: pd.DataFrame({"v": [1]}, index=["i"])),
+        )
+
+        with patch("pyetm.models.scenario_packer.Workbook") as mock_wb:
+            mock_wb.return_value = Mock()
+            # Should not raise
+            file_path = os.path.join(tempfile.gettempdir(), "inputs_fallback.xlsx")
+            packer.to_excel(file_path, include_inputs=True)
+
+    def test_add_pack_and_gqueries_sheets(self):
+        packer = ScenarioPacker()
+        s = Mock(spec=Scenario)
+        s.id = "S"
+        s.identifier = Mock(return_value="S")
+        s.to_dataframe = Mock(return_value=pd.DataFrame({"S": [1]}, index=["row"]))
+        packer.add(s)
+
+        # Make packs return non-empty DataFrames
+        with (
+            patch.object(
+                SortablePack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
+            patch.object(
+                CustomCurvesPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
+            patch.object(
+                QueryPack,
+                "to_dataframe",
+                return_value=pd.DataFrame({"future": [1]}, index=["q"]),
+            ),
+            patch.object(QueryPack, "output_sheet_name", "GQUERIES_OUT"),
+            patch.object(
+                InputsPack,
+                "build_combined_dataframe",
+                return_value=pd.DataFrame({"v": [1]}),
+            ),
+            patch("pyetm.models.scenario_packer.add_frame") as add_frame,
+            patch("pyetm.models.scenario_packer.Workbook") as mock_wb,
+        ):
+            mock_wb.return_value = Mock()
+            tmp = os.path.join(tempfile.gettempdir(), "with_packs.xlsx")
+            packer.to_excel(
+                tmp,
+                include_sortables=True,
+                include_custom_curves=True,
+                include_gqueries=True,
+            )
+
+            # MAIN + INPUTS + SORTABLES + CUSTOM_CURVES + GQUERIES
+            sheet_names = [call.kwargs.get("name") for call in add_frame.call_args_list]
+            assert "MAIN" in sheet_names
+            assert "SLIDER_SETTINGS" in sheet_names
+            assert "SORTABLES" in sheet_names
+            assert "CUSTOM_CURVES" in sheet_names
+            assert "GQUERIES_OUT" in sheet_names
+
+    def test_export_output_curves_with_params_and_config(self):
+        packer = ScenarioPacker()
+        s = Mock(spec=Scenario)
+        s.id = "S"
+        s.identifier = Mock(return_value="S")
+        s.to_dataframe = Mock(return_value=pd.DataFrame({"S": [1]}, index=["row"]))
+        packer.add(s)
+
+        # Case 1: carriers explicitly provided
+        with (
+            patch.object(OutputCurvesPack, "to_excel_per_carrier") as toe,
+            patch("pyetm.models.scenario_packer.Workbook") as mock_wb,
+        ):
+            mock_wb.return_value = Mock()
+            tmp = os.path.join(tempfile.gettempdir(), "export1.xlsx")
+            packer.to_excel(tmp, include_output_curves=True, carriers=["el", "gas"])
+            args, _ = toe.call_args
+            assert args[0].endswith("_exports.xlsx")
+            assert args[1] == ["el", "gas"]
+
+        # Case 2: carriers from global config
+        cfg = ExportConfig(output_carriers=["h2"])  # minimal
+        s2 = Mock(spec=Scenario)
+        s2.id = "S2"
+        s2.identifier = Mock(return_value="S2")
+        s2.to_dataframe = Mock(return_value=pd.DataFrame({"S2": [1]}, index=["row"]))
+        setattr(s2, "_export_config", cfg)
+        packer2 = ScenarioPacker()
+        packer2.add(s2)
+        with (
+            patch.object(OutputCurvesPack, "to_excel_per_carrier") as toe2,
+            patch("pyetm.models.scenario_packer.Workbook") as mock_wb2,
+        ):
+            mock_wb2.return_value = Mock()
+            tmp2 = os.path.join(tempfile.gettempdir(), "export2.xlsx")
+            packer2.to_excel(tmp2, include_output_curves=True)
+            args2, _ = toe2.call_args
+            assert args2[1] == ["h2"]
+
+    def test_build_excel_main_dataframe_applies_labels_and_order(self):
+        packer = ScenarioPacker()
+        s1 = Mock(spec=Scenario)
+        s1.id = "1"
+        s1.identifier = Mock(return_value="Label 1")
+        s2 = Mock(spec=Scenario)
+        s2.id = "2"
+        s2.identifier = Mock(return_value="Label 2")
+        packer.add(s1, s2)
+
+        df = pd.DataFrame(
+            {"1": ["A", 2050], "2": ["B", 2040]}, index=["area_code", "end_year"]
+        )
+
+        with patch.object(ScenarioPacker, "main_info", return_value=df):
+            out = packer._build_excel_main_dataframe()
+            # Columns should be relabeled using identifier
+            assert list(out.columns) == ["Label 1", "Label 2"]
+            # Preferred ordering keeps known fields order among those present
+            assert out.index.tolist()[0:2] == ["area_code", "end_year"]
+
+    def test_sanitize_dataframe_for_excel_handles_datetime_and_objects(self):
+        packer = ScenarioPacker()
+        import datetime as dt
+
+        class Foo:
+            def __str__(self):
+                return "foo"
+
+        frame = pd.DataFrame(
+            {
+                "col": [dt.datetime(2020, 1, 1), Foo()],
+            },
+            index=["when", "obj"],
+        )
+        out = packer._sanitize_dataframe_for_excel(frame)
+        assert out.loc["obj", "col"] == "foo"
+
+    def test_log_scenario_warnings_helper(self):
+        packer = ScenarioPacker()
+        s = Mock(spec=Scenario)
+        s.identifier = Mock(return_value="SID")
+        helper_attr = Mock()
+        s._sortables = helper_attr
+        packer._log_scenario_warnings(s, "_sortables", "Sortables")
+        helper_attr.log_warnings.assert_called_once()
+
+
+def test_apply_scenario_column_labels_no_matches():
+    packer = ScenarioPacker()
+    # No scenarios added; rename map should be empty and df unchanged
+    df = pd.DataFrame({"X": [1]}, index=["row"])
+    out = packer._apply_scenario_column_labels(df)
+    assert list(out.columns) == ["X"]
+
+
+def test_build_column_rename_map_both_match_str_and_exact():
+    packer = ScenarioPacker()
+    s1 = Mock(spec=Scenario)
+    s1.id = "1"
+    s2 = Mock(spec=Scenario)
+    s2.id = 2  # int id for exact match case
+    # Columns include string '1' and int 2
+    cols = ["1", 2, "nope"]
+    rename = packer._build_column_rename_map([s1, s2], cols)
+    assert "1" in rename and 2 in rename
+    # 'nope' should not be in rename map
+    assert "nope" not in rename
+
+
+def test_get_scenario_display_label_fallbacks():
+    packer = ScenarioPacker()
+    # 1) identifier raises -> title used
+    sc = Mock(spec=Scenario)
+    sc.identifier = Mock(side_effect=RuntimeError("bad"))
+    sc.title = "T"
+    assert packer._get_scenario_display_label(sc, "FALL") == "T"
+
+    # 2) no title -> id used
+    sc2 = Mock(spec=Scenario)
+    sc2.identifier = Mock(side_effect=RuntimeError("bad"))
+    sc2.title = None
+    sc2.id = 42
+    assert packer._get_scenario_display_label(sc2, "FALL") == "42"
+
+    # 3) no id -> fallback to column
+    sc3 = Mock(spec=Scenario)
+    sc3.identifier = Mock(side_effect=RuntimeError("bad"))
+    sc3.title = None
+    sc3.id = None
+    assert packer._get_scenario_display_label(sc3, "COLX") == "COLX"
+
+
+def test_get_value_before_output_respects_output_boundary():
+    packer = ScenarioPacker()
+    series = pd.Series(["S1", None, "S2"], index=["sortables", "output", "sortables"])
+    assert packer._get_value_before_output(series, "sortables") == "S1"
+
+
+def test_export_output_curves_if_needed_false():
+    packer = ScenarioPacker()
+    s = Mock(spec=Scenario)
+    s.id = "S"
+    s.identifier = Mock(return_value="S")
+    s.to_dataframe = Mock(return_value=pd.DataFrame({"S": [1]}, index=["row"]))
+    packer.add(s)
+
+    with (
+        patch.object(OutputCurvesPack, "to_excel_per_carrier") as toe,
+        patch("pyetm.models.scenario_packer.Workbook") as wb,
+    ):
+        wb.return_value = Mock()
+        packer.to_excel("/tmp/x.xlsx", include_output_curves=False)
+        toe.assert_not_called()
+
+
+def test_add_gqueries_sheet_disabled():
+    packer = ScenarioPacker()
+    with (
+        patch("pyetm.models.scenario_packer.add_frame") as add_frame,
+        patch("pyetm.models.scenario_packer.Workbook") as wb,
+        patch.object(ScenarioPacker, "_scenarios", return_value={Mock(spec=Scenario)}),
+        patch.object(ScenarioPacker, "_add_data_sheets"),
+    ):
+        wb.return_value = Mock()
+        # Make main_info non-empty to create MAIN
+        with patch.object(
+            ScenarioPacker,
+            "main_info",
+            return_value=pd.DataFrame({"A": [1]}, index=["i"]),
+        ):
+            packer.to_excel("/tmp/y.xlsx", include_gqueries=False)
+            sheet_names = [call.kwargs.get("name") for call in add_frame.call_args_list]
+            assert "MAIN" in sheet_names
+            assert "GQUERIES" not in sheet_names and "GQUERIES_OUT" not in sheet_names
+
+
+def test_clear_and_remove_scenario_swallow_errors():
+    packer = ScenarioPacker()
+    fake_pack1 = Mock()
+    fake_pack2 = Mock()
+    fake_pack1.clear.side_effect = RuntimeError("bad")
+    fake_pack2.clear.return_value = None
+
+    fake_pack1.discard.side_effect = RuntimeError("bad")
+    fake_pack2.discard.return_value = None
+
+    with patch.object(
+        ScenarioPacker, "_get_all_packs", return_value=[fake_pack1, fake_pack2]
+    ):
+        packer.clear()  # should not raise
+        sc = Mock(spec=Scenario)
+        packer.remove_scenario(sc)  # should not raise

@@ -120,7 +120,14 @@ class CustomCurve(Base):
         Initialize a CustomCurve from JSON data
         """
         try:
-            curve = cls.model_validate(data)
+            curve = cls(**data)
+            missing = [k for k in ("key", "type") if k not in data]
+            if missing:
+                curve.add_warning(
+                    "base",
+                    f"Failed to create curve from data: missing required fields: {', '.join(missing)}",
+                )
+
             return curve
         except Exception as e:
             basic_data = {

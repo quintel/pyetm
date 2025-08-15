@@ -159,6 +159,21 @@ def test_custom_curve_remove_file_error():
         assert "Failed to remove curve file" in key_warnings[0].message
 
 
+def test_custom_curve_remove_success(tmp_path):
+    """Remove should delete file and clear file_path when available."""
+    temp_file = tmp_path / "curve.csv"
+    temp_file.write_text("1\n2\n3\n")
+
+    curve = CustomCurve(key="test_curve", type="custom", file_path=temp_file)
+    assert curve.available() is True
+
+    result = curve.remove()
+
+    assert result is True
+    assert curve.file_path is None
+    assert not temp_file.exists()
+
+
 def test_custom_curves_from_json_with_invalid_curve():
     """Test from_json with some invalid curve data"""
     data = [{"key": "valid_curve", "type": "custom"}, {"invalid": "data"}]
@@ -182,6 +197,27 @@ def test_custom_curves_from_json_with_invalid_curve():
         fallback_curve_warnings = curves.warnings.get_by_field(fallback_curve_key)
         assert len(fallback_curve_warnings) > 0
         assert "Skipped invalid curve data" in fallback_curve_warnings[0].message
+
+
+def test_custom_curve_from_json_success():
+    data = {"key": "abc", "type": "custom"}
+    curve = CustomCurve.from_json(data)
+    assert curve.key == "abc"
+    assert curve.type == "custom"
+    # No warnings on success
+    assert len(curve.warnings) == 0
+
+
+def test_custom_curve_from_json_failure_adds_warning():
+    """Missing required fields should fall back and add a warning."""
+    # Missing both key and type triggers ValidationError path
+    curve = CustomCurve.from_json({"unexpected": 123})
+    # Fallback returns a constructed model; ensure a warning was recorded
+    assert len(curve.warnings) > 0
+    base_warnings = curve.warnings.get_by_field("base")
+    assert (
+        base_warnings and "Failed to create curve from data" in base_warnings[0].message
+    )
 
 
 def test_custom_curve_from_dataframe_basic_roundtrip():
@@ -267,6 +303,27 @@ def test_custom_curve_from_dataframe_alternative_structure():
     # Clean up
     if restored.file_path and restored.file_path.exists():
         restored.file_path.unlink()
+
+
+def test_custom_curve_from_dataframe_save_error(tmp_path):
+    """Saving data during from_dataframe should warn on failure."""
+    import numpy as np
+
+    df = pd.DataFrame({"foo": np.array([1.0, 2.0, 3.0])})
+
+    with (
+        patch("pyetm.models.custom_curves.get_settings") as mock_settings,
+        patch("pandas.Series.to_csv", side_effect=OSError("disk full")),
+    ):
+        mock_settings.return_value.path_to_tmp.return_value = tmp_path
+        curve = CustomCurve.from_dataframe(df)
+        assert isinstance(curve, CustomCurve)
+        assert curve.key == "foo"
+        # Save failed so file_path not set
+        assert curve.file_path is None
+        # Warning recorded on curve
+        warnings = curve.warnings.get_by_field("foo")
+        assert warnings and "Failed to save curve data to file" in warnings[0].message
 
 
 def test_custom_curve_from_dataframe_invalid_multiple_rows():
@@ -421,6 +478,113 @@ def test_custom_curves_from_dataframe_preserves_warnings():
     restored = CustomCurves.from_dataframe(df)
 
     assert len(restored.curves) == 2
+
+
+def test_custom_curves_len_iter_and_attachment_helpers():
+    """Covers __len__, __iter__, is_attached, attached_keys."""
+    c1 = CustomCurve(key="a", type="custom")
+    c2 = CustomCurve(key="b", type="custom")
+    col = CustomCurves(curves=[c1, c2])
+
+    assert len(col) == 2
+    assert [c.key for c in iter(col)] == ["a", "b"]
+    assert col.is_attached("a") is True
+    assert col.is_attached("z") is False
+    assert list(col.attached_keys()) == ["a", "b"]
+
+
+def test_custom_curves_get_contents_not_found_adds_warning():
+    col = CustomCurves(curves=[])
+    mock_scenario = Mock()
+    res = col.get_contents(mock_scenario, "nope")
+    assert res is None
+    warnings = col.warnings.get_by_field("curves")
+    assert warnings and "not found in collection" in warnings[0].message
+
+
+def test_custom_curves_get_contents_available_reads_file(tmp_path):
+    key = "my_curve"
+    data_file = tmp_path / f"{key}.csv"
+    data_file.write_text("1\n2\n3\n")
+    curve = CustomCurve(key=key, type="custom", file_path=data_file)
+    col = CustomCurves(curves=[curve])
+    mock_scenario = Mock()
+
+    res = col.get_contents(mock_scenario, key)
+    assert isinstance(res, pd.Series)
+    assert res.name == key
+    # Curve warned about non-8760 values, and warnings merged into collection
+    # Warnings are merged with a prefixed field name; just check the message exists
+    any_msg = any("Curve length should be 8760" in w.message for w in col.warnings)
+    assert any_msg
+
+
+def test_custom_curves_get_contents_retrieves_when_unavailable(tmp_path):
+    key = "remote_curve"
+    curve = CustomCurve(key=key, type="custom")
+    col = CustomCurves(curves=[curve])
+    mock_scenario = Mock()
+    mock_scenario.id = 999
+
+    csv_data = io.StringIO("10\n20\n30\n")
+    with (
+        patch(
+            "pyetm.models.custom_curves.DownloadCustomCurveRunner.run",
+            return_value=ServiceResult.ok(data=csv_data),
+        ),
+        patch("pyetm.models.custom_curves.get_settings") as mock_settings,
+        patch("pandas.Series.to_csv") as mock_to_csv,
+    ):
+        mock_settings.return_value.path_to_tmp.return_value = tmp_path / "999"
+        res = col.get_contents(mock_scenario, key)
+        assert isinstance(res, pd.Series)
+        assert res.name == key
+        assert curve.file_path is not None
+
+
+def test_custom_curves_to_dataframe_attempts_retrieve_and_suppresses_errors():
+    """Hit branch where retrieve raises but is suppressed when _scenario is set."""
+    curve = CustomCurve(key="x", type="custom")
+    col = CustomCurves(curves=[curve])
+    # Setting the private attr is fine here
+    col._scenario = object()
+    with patch.object(curve, "retrieve", side_effect=RuntimeError("boom")):
+        df = col.to_dataframe()
+        # Column exists, index named 'hour'
+        assert df.index.name == "hour"
+        assert "x" in df.columns
+
+
+def test_custom_curves_to_dataframe_curve_to_dataframe_raises_adds_warning():
+    curve = CustomCurve(key="y", type="custom")
+    col = CustomCurves(curves=[curve])
+    with patch.object(CustomCurve, "_to_dataframe", side_effect=ValueError("bad")):
+        df = col.to_dataframe()
+        # Column created as empty series
+        assert "y" in df.columns
+        warnings = col.warnings.get_by_field("curves")
+        assert warnings and "Failed to serialize curve y" in warnings[0].message
+
+
+def test_custom_curves_from_dataframe_handles_per_column_error():
+    import numpy as np
+
+    df = pd.DataFrame({"ok": np.array([1.0, 2.0]), "bad": np.array([3.0, 4.0])})
+
+    def fake_from_df(inner_df, **kwargs):
+        name = inner_df.columns[0]
+        if name == "bad":
+            raise ValueError("oops")
+        return CustomCurve(key=name, type="custom")
+
+    with patch.object(CustomCurve, "_from_dataframe", side_effect=fake_from_df):
+        col = CustomCurves.from_dataframe(df)
+        assert len(col.curves) == 2
+        # Warning for the bad column on collection
+        # Field names are prefixed; check presence by message
+        assert any(
+            "Failed to create curve from column bad" in w.message for w in col.warnings
+        )
 
 
 # --- Validate for Upload Tests --- #
@@ -611,6 +775,66 @@ def test_validate_for_upload_file_read_error():
     assert len(warnings_collector) == 1
     warnings_list = list(warnings_collector)  # Convert to list to access by index
     assert "Error reading curve data:" in warnings_list[0].message
+
+
+def test_validate_for_upload_empty_dataframe_branch(tmp_path):
+    """Force pd.read_csv to return an empty DataFrame to hit raw_data.empty path."""
+    f = tmp_path / "empty_data.csv"
+    f.write_text("\n\n")
+    curves = CustomCurves(curves=[CustomCurve(key="k", type="profile", file_path=f)])
+
+    def fake_read_csv(path, header=None, index_col=False):
+        return pd.DataFrame()
+
+    with patch("pyetm.models.custom_curves.pd.read_csv", side_effect=fake_read_csv):
+        validation_errors = curves.validate_for_upload()
+        assert "k" in validation_errors
+        warnings = list(validation_errors["k"])
+        assert warnings and "Curve contains no data" in warnings[0].message
+
+
+def test_validate_for_upload_outer_except_path(tmp_path):
+    """Trigger outer exception handler by failing once inside inner except block."""
+    f = tmp_path / "raise_once.csv"
+    f.write_text("")
+    curves = CustomCurves(curves=[CustomCurve(key="zz", type="profile", file_path=f)])
+
+    # Make read_csv raise EmptyDataError to go into that except branch
+    def raise_empty(*args, **kwargs):
+        raise pd.errors.EmptyDataError("no data")
+
+    class AddOnceFailCollector:
+        def __init__(self):
+            self._count = 0
+            self._records = []
+
+        def add(self, field, message, severity="warning"):
+            if self._count == 0:
+                self._count += 1
+                raise RuntimeError("collector add failed once")
+            self._records.append((field, str(message), severity))
+
+        def __len__(self):
+            return len(self._records)
+
+        def __iter__(self):
+            class W:
+                def __init__(self, field, message, severity):
+                    self.field = field
+                    self.message = message
+                    self.severity = severity
+
+            return (W(f, m, s) for (f, m, s) in self._records)
+
+    with (
+        patch("pyetm.models.custom_curves.pd.read_csv", side_effect=raise_empty),
+        patch("pyetm.models.custom_curves.WarningCollector", AddOnceFailCollector),
+    ):
+        errors = curves.validate_for_upload()
+        # Should have captured via outer except and still recorded a warning
+        assert "zz" in errors
+        items = list(errors["zz"])  # iter must work
+        assert items and "Error reading curve data:" in items[0].message
 
 
 def test_validate_for_upload_multiple_curves_mixed_validity():

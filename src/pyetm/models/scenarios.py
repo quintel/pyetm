@@ -1,11 +1,13 @@
 from __future__ import annotations
 from os import PathLike
+from pathlib import Path
 from typing import Iterable, Iterator, List, Optional, Sequence
-from pydantic import BaseModel, Field
+from pydantic import Field
+from pyetm.models.base import Base
 from .scenario import Scenario
 
 
-class Scenarios(BaseModel):
+class Scenarios(Base):
     """
     A simple collection of Scenario objects with convenience utilities.
     #TODO: Make a nice repr or stats functions
@@ -40,12 +42,17 @@ class Scenarios(BaseModel):
         include_output_curves: bool | None = None,
     ) -> None:
         from .scenario_packer import ScenarioPacker
+        from pyetm.utils.paths import PyetmPaths
 
         packer = ScenarioPacker()
         if self.items:
             packer.add(*self.items)
+
+        resolver = PyetmPaths()
+        out_path = resolver.resolve_for_write(path, default_dir="outputs")
+
         packer.to_excel(
-            str(path),
+            str(out_path),
             carriers=carriers,
             include_inputs=include_inputs,
             include_sortables=include_sortables,

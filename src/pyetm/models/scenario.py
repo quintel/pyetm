@@ -1,6 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr
@@ -108,8 +109,12 @@ class Scenario(Base):
         Load or create one or more scenarios from an Excel workbook.
         """
         from pyetm.models.scenario_packer import ScenarioPacker
+        from pyetm.utils.paths import PyetmPaths
 
-        packer = ScenarioPacker.from_excel(xlsx_path)
+        resolver = PyetmPaths()
+        path = resolver.resolve_for_read(xlsx_path, default_dir="inputs")
+
+        packer = ScenarioPacker.from_excel(str(path))
         scenarios = list(packer._scenarios())
         scenarios.sort(key=lambda s: s.id)
         return scenarios
@@ -130,10 +135,15 @@ class Scenario(Base):
         Output curves are exported to a separate workbook only when enabled, with one
         sheet per carrier. Use carriers to filter which carriers to include when exporting.
         """
+
         from pyetm.models.scenarios import Scenarios
+        from pyetm.utils.paths import PyetmPaths
+
+        resolver = PyetmPaths()
+        out_path = resolver.resolve_for_write(path, default_dir="outputs")
 
         Scenarios(items=[self, *others]).to_excel(
-            path,
+            str(out_path),
             carriers=carriers,
             include_inputs=include_inputs,
             include_sortables=include_sortables,
