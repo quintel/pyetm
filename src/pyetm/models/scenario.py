@@ -129,7 +129,6 @@ class Scenario(Base):
         Export this scenario – and optionally additional scenarios – to an Excel file.
         Output curves are exported to a separate workbook only when enabled, with one
         sheet per carrier. Use carriers to filter which carriers to include when exporting.
-        #TODO: only apply filtering per-scenario
         """
         from pyetm.models.scenarios import Scenarios
 

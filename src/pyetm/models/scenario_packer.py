@@ -165,12 +165,10 @@ class ScenarioPacker(BaseModel):
         for name, pack in packs:
             if name == "inputs" and include_inputs_final:
                 try:
-                    # Decide fields for all scenarios
                     fields: list[str] = ["user"]
                     if inputs_defaults_final:
                         fields.append("default")
                     if inputs_min_max_final:
-                        # Append a single bounds block (min/max once for all scenarios)
                         fields.append("__bounds__")
                     if fields == ["user"]:
                         df = self._inputs.to_dataframe(columns="user")
@@ -182,7 +180,6 @@ class ScenarioPacker(BaseModel):
                         fm = {s: fields for s in pack.scenarios}
                         df = self._inputs.to_dataframe_per_scenario_fields(fm)
                     elif fields == ["user", "min", "max"]:
-                        # Export one bounds block first, then 'user' per scenario
                         fm = {s: ["user"] for s in pack.scenarios}
                         df_user = self._inputs.to_dataframe_per_scenario_fields(fm)
                         df_bounds = self._inputs.to_dataframe_min_max()
@@ -221,7 +218,6 @@ class ScenarioPacker(BaseModel):
                     scenario_styling=True,
                 )
 
-        # Add GQUERY results if requested globally
         if include_gqueries_final:
             gq_pack = QueryPack(scenarios=self._scenarios())
             df_gq = gq_pack.to_dataframe(columns="future")
@@ -237,12 +233,10 @@ class ScenarioPacker(BaseModel):
         workbook.close()
 
         # Export output curves to a separate workbook with one sheet per carrier
-        # Determine output curves inclusion (global + per-scenario)
         include_output_global = False
         if include_output_curves is True:
             include_output_global = True
         elif include_output_curves is None:
-            # Use global export config if present
             try:
                 include_output_global = bool(
                     getattr(global_cfg, "output_carriers", None)
@@ -252,7 +246,6 @@ class ScenarioPacker(BaseModel):
         if include_output_global:
             base = Path(path)
             oc_path = str(base.with_name(f"{base.stem}_exports{base.suffix}"))
-            # Carriers: prefer explicit carriers arg. If not provided, try union of per-scenario configs
             chosen_carriers: Optional[Sequence[str]] = (
                 list(carriers) if carriers else None
             )
@@ -482,7 +475,7 @@ class ScenarioPacker(BaseModel):
         if main_df is None or getattr(main_df, "empty", False):
             return packer
 
-        # Build scenarios per MAIN column (ignore helper/description columns)
+        # Build scenarios per MAIN column
         scenarios_by_col: Dict[str, Scenario] = {}
         for col in main_df.columns:
             col_str = str(col) if col is not None else ""
@@ -533,7 +526,6 @@ class ScenarioPacker(BaseModel):
                             return False
                     return None
 
-                # New format rows under OUTPUT
                 inc_inputs = _bool(_cell_ci("inputs"))
                 inc_gq = _bool(_cell_ci("gquery_results")) or _bool(
                     _cell_ci("gqueries")
@@ -600,7 +592,6 @@ class ScenarioPacker(BaseModel):
                         except Exception:
                             pass
         except Exception:
-            # Do not fail the import due to config parsing
             pass
 
         if len(scenarios_by_col) == 0:
@@ -616,7 +607,7 @@ class ScenarioPacker(BaseModel):
                 short = str(scenario.identifier())
             short_name_map[str(scenario.id)] = str(short)
 
-        # SLIDER_SETTINGS (inputs) sheet
+        # SLIDER_SETTINGS sheet
         params_df = None
         try:
             params_df = xls.parse(InputsPack.sheet_name, header=None)
@@ -630,7 +621,7 @@ class ScenarioPacker(BaseModel):
             except Exception as e:
                 logger.warning("Failed to import SLIDER_SETTINGS: %s", e)
 
-        # GQUERIES sheet (keys to attach to scenarios)
+        # GQUERIES sheet
         gq_df = None
         for sheet in ("GQUERIES", QueryPack.sheet_name):
             if sheet in xls.sheet_names:
@@ -722,7 +713,6 @@ class ScenarioPacker(BaseModel):
         if df is None or df.empty:
             return pd.DataFrame()
 
-        # Preferred key order at top; only keep those present, then append remaining
         preferred = [
             "title",
             "description",

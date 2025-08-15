@@ -31,7 +31,7 @@ class CustomCurve(Base):
     def available(self) -> bool:
         return bool(self.file_path)
 
-    def retrieve(self, client, scenario) -> Optional[pd.DataFrame]:
+    def retrieve(self, client, scenario) -> Optional[pd.Series]:
         """Process curve from client, save to file, set file_path"""
         file_path = (
             get_settings().path_to_tmp(str(scenario.id))
@@ -55,9 +55,14 @@ class CustomCurve(Base):
                         .squeeze("columns")
                         .dropna(how="all")
                     )
+                    if len(curve) != 8760:
+                        self.add_warning(
+                            self.key,
+                            f"Curve length should be 8760, got {len(curve)}; proceeding with current data",
+                        )
 
                     self.file_path = file_path
-                    curve.to_csv(self.file_path, index=False)
+                    curve.to_csv(self.file_path, index=False, header=False)
                     return curve.rename(self.key)
                 except Exception as e:
                     # File processing error - add warning and return None
@@ -81,12 +86,17 @@ class CustomCurve(Base):
             return None
 
         try:
-            return (
+            series = (
                 pd.read_csv(self.file_path, header=None, index_col=False, dtype=float)
                 .squeeze("columns")
                 .dropna(how="all")
-                .rename(self.key)
             )
+            if len(series) != 8760:
+                self.add_warning(
+                    self.key,
+                    f"Curve length should be 8760, got {len(series)}; using available data",
+                )
+            return series.rename(self.key)
         except Exception as e:
             self.add_warning(self.key, f"Failed to read curve file: {e}")
             return None
@@ -157,10 +167,8 @@ class CustomCurve(Base):
             curve_data = df.iloc[:, 0].dropna()
             if not curve_data.empty:
                 safe_key = str(curve_key).replace("/", "-")
-                prefix = f"{scenario_id}_" if scenario_id is not None else ""
                 file_path = (
-                    get_settings().path_to_tmp("dataframe_import")
-                    / f"{prefix}{safe_key}.csv"
+                    get_settings().path_to_tmp(str(scenario_id)) / f"{safe_key}.csv"
                 )
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 try:

@@ -55,10 +55,7 @@ class InputsPack(Packable):
         return None
 
     def _extract_map(self, scen, attr: str) -> dict[str, Any] | None:
-        """Extract a mapping of input key -> attribute value for a scenario's inputs.
-
-        Special attr 'min_max' resolves to 'min' (fallback to 'max').
-        """
+        """Extract a mapping of input key -> attribute value for a scenario's inputs."""
         iter_attr_primary = attr
         iter_attr_fallback = None
         if attr == "min_max":

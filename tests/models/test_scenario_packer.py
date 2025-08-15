@@ -1000,7 +1000,6 @@ class TestFromExcelDetailed:
     def test_from_excel_slider_settings_and_gqueries_errors(
         self, tmp_path, monkeypatch
     ):
-        # Prepare a minimal MAIN and both SLIDER_SETTINGS and GQUERIES sheets
         main = pd.DataFrame(
             {
                 "S": {
