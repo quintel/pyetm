@@ -377,6 +377,10 @@ class Scenario(Base):
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
         coll = CustomCurves.from_json(result.data)
+        try:
+            coll._scenario = self
+        except Exception:
+            pass
         for w in result.errors:
             self.add_warning("custom_curves", w)
         self._merge_submodel_warnings(coll, key_attr="custom_curves")
@@ -422,6 +426,10 @@ class Scenario(Base):
                 existing_curve.file_path = new_curve.file_path
             else:
                 self.custom_curves.curves.append(new_curve)
+        try:
+            self.custom_curves._scenario = self
+        except Exception:
+            pass
 
     @property
     def output_curves(self) -> OutputCurves:

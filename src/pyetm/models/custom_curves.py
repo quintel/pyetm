@@ -1,10 +1,11 @@
 from __future__ import annotations
 import pandas as pd
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from pyetm.models.warnings import WarningCollector
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
+from pydantic import PrivateAttr
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     DownloadCustomCurveRunner,
 )
@@ -174,6 +175,7 @@ class CustomCurve(Base):
 
 class CustomCurves(Base):
     curves: list[CustomCurve]
+    _scenario: Any = PrivateAttr(default=None)
 
     def __len__(self) -> int:
         return len(self.curves)
@@ -244,6 +246,14 @@ class CustomCurves(Base):
 
         for curve in self.curves:
             try:
+                if (
+                    not curve.available()
+                    and getattr(self, "_scenario", None) is not None
+                ):
+                    try:
+                        curve.retrieve(BaseClient(), self._scenario)
+                    except Exception:
+                        pass
                 curve_df = curve._to_dataframe(**kwargs)
                 if not curve_df.empty:
                     # Get the curve data as a Series
