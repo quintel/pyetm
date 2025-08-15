@@ -213,7 +213,6 @@ class Sortables(Base):
     @model_validator(mode="after")
     def validate_sortables_consistency(self) -> "Sortables":
         """Additional validation for the entire sortables collection"""
-        # Example: Ensure we don't have conflicting heat_network configurations
         heat_network_types = [s for s in self.sortables if s.type == "heat_network"]
         if len(heat_network_types) > 0:
             # All heat_network sortables should have subtypes

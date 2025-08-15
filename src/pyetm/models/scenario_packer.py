@@ -188,6 +188,12 @@ class ScenarioPacker(BaseModel):
             include_output_curves,
         )
 
+        # Ensure destination directory exists
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
         # Create and populate workbook
         workbook = Workbook(path)
         try:
@@ -356,7 +362,7 @@ class ScenarioPacker(BaseModel):
         if not include_output_curves:
             return
 
-        # Determine output file path
+        # Determine output file path (next to the main workbook)
         base_path = Path(main_path)
         output_path = str(
             base_path.with_name(f"{base_path.stem}_exports{base_path.suffix}")
@@ -391,8 +397,31 @@ class ScenarioPacker(BaseModel):
         """Import scenarios from Excel file."""
         packer = cls()
 
+        # Resolve default location: if a relative path/filename is provided and the
+        # file does not exist at that location, look for it in the project /inputs dir.
+        path = Path(xlsx_path)
+        if not path.is_absolute() and not path.exists():
+
+            def _find_root_with(dir_name: str) -> Path:
+                for base in [
+                    Path.cwd(),
+                    *Path.cwd().parents,
+                    Path(__file__).resolve().parent,
+                    *Path(__file__).resolve().parents,
+                ]:
+                    candidate = base / dir_name
+                    if candidate.exists() and candidate.is_dir():
+                        return base
+                return Path.cwd()
+
+            root = _find_root_with("inputs")
+            relative = path if str(path.parent) != "." else Path(path.name)
+            candidate = root / "inputs" / relative
+            if candidate.exists():
+                path = candidate
+
         try:
-            excel_file = pd.ExcelFile(xlsx_path)
+            excel_file = pd.ExcelFile(str(path))
         except Exception as e:
             logger.warning("Could not open Excel file '%s': %s", xlsx_path, e)
             return packer
@@ -836,7 +865,7 @@ class ScenarioPacker(BaseModel):
         if scenario_id:
             return str(scenario_id)
 
-        # Final fallback to original column
+        # Final fallback
         return str(fallback_column)
 
     def _sanitize_dataframe_for_excel(self, df: pd.DataFrame) -> pd.DataFrame:

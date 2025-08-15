@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from pyetm.models.sortables import Sortables
 from pyetm.models.scenario import Scenario
+from pyetm.models.output_curves import OutputCurves
 
 
 # --- Scenario Fixtures --- #
@@ -369,3 +370,38 @@ def fixture_path():
 def interconnector_csv_path(fixture_path):
     """Path to the interconnector CSV fixture file"""
     return fixture_path / "interconnector_2_export_availability.csv"
+
+
+@pytest.fixture
+def carrier_mappings(monkeypatch):
+    mapping = {"electricity": {}, "gas": {}}
+    monkeypatch.setattr(
+        OutputCurves,
+        "_load_carrier_mappings",
+        staticmethod(lambda: mapping),
+        raising=True,
+    )
+    return mapping
+
+
+@pytest.fixture
+def mock_workbook(monkeypatch):
+    instance = Mock()
+    cls = Mock(return_value=instance)
+    monkeypatch.setattr(
+        "pyetm.models.packables.output_curves_pack.Workbook",
+        cls,
+        raising=True,
+    )
+    return {"cls": cls, "instance": instance}
+
+
+@pytest.fixture
+def patch_add_frame(monkeypatch):
+    m = Mock()
+    monkeypatch.setattr(
+        "pyetm.models.packables.output_curves_pack.add_frame",
+        m,
+        raising=True,
+    )
+    return m
