@@ -18,5 +18,6 @@ import_graph.svg
 tmp/
 
 *.xlsx
-# Keep the example input
+# Keep the examples
 !examples/example_input_excel.xlsx
+!examples/example.config.env

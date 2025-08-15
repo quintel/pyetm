@@ -1,32 +1,31 @@
 from pathlib import Path
 import re
-import yaml, os
 from typing import Optional, ClassVar, List, Annotated
 from pydantic import Field, ValidationError, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-CONFIG_FILE = PROJECT_ROOT / "config.yml"
+ENV_FILE = PROJECT_ROOT / "config.env"
 
 
 class AppConfig(BaseSettings):
     """
-    Application configuration loaded from YAML.
+    Application configuration loaded from .env file and environment variables.
     """
 
     etm_api_token: Annotated[
         str,
         Field(
             ...,
-            description="Your ETM API token: must be either `etm_<JWT>` or `etm_beta_<JWT>`. If not set please set $ETM_API_TOKEN or config.yml:etm_api_token",
+            description="Your ETM API token: must be either `etm_<JWT>` or `etm_beta_<JWT>`",
         ),
     ]
-    base_url: HttpUrl = Field(
-        "https://engine.energytransitionmodel.com/api/v3",
-        description="Base URL for the ETM API",
+    base_url: Optional[HttpUrl] = Field(
+        None,
+        description="Base URL for the ETM API (will be inferred from environment if not provided)",
     )
     environment: Optional[str] = Field(
-        None,
+        "pro",
         description=(
             "ETM environment to target. One of: 'pro' (default), 'beta', 'local', or a stable tag 'YYYY-MM'. "
             "When set and base_url is not provided, base_url will be inferred."
@@ -37,8 +36,28 @@ class AppConfig(BaseSettings):
         description="App logging level",
     )
 
+    proxy_servers_http: Optional[str] = Field(
+        None,
+        description="HTTP proxy server URL",
+    )
+    proxy_servers_https: Optional[str] = Field(
+        None,
+        description="HTTPS proxy server URL",
+    )
+    csv_separator: str = Field(
+        ",",
+        description="CSV file separator character",
+    )
+    decimal_separator: str = Field(
+        ".",
+        description="Decimal separator character",
+    )
+
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
-        env_file=None, extra="ignore", case_sensitive=False
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
     )
 
     temp_folder: Optional[Path] = PROJECT_ROOT / "tmp"
@@ -77,43 +96,33 @@ class AppConfig(BaseSettings):
 
         return v
 
+    def model_post_init(self, __context) -> None:
+        """Post-initialization to handle base_url inference."""
+        if not self.base_url:
+            self.base_url = HttpUrl(_infer_base_url_from_env(self.environment))
+
     def path_to_tmp(self, subfolder: str):
         folder = self.temp_folder / subfolder
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
-    @classmethod
-    def from_yaml(cls, path: Path) -> "AppConfig":
-        raw = {}
-        if path.is_file():
-            try:
-                raw = yaml.safe_load(path.read_text()) or {}
-            except yaml.YAMLError:
-                raw = {}
-
-        data = {k.lower(): v for k, v in raw.items()}
-
-        # Collect environment variables overriding YAML
-        for field in ("etm_api_token", "base_url", "log_level", "environment"):
-            if val := os.getenv(field.upper()):
-                data[field] = val
-
-        # If base_url wasn't explicitly provided, infer it from environment if present
-        if "base_url" not in data or not data["base_url"]:
-            env = (data.get("environment") or "").strip().lower()
-            if env:
-                data["base_url"] = _infer_base_url_from_env(env)
-
-        return cls(**data)
+    @property
+    def proxy_servers(self) -> dict[str, str]:
+        """Return proxy servers as a dictionary for backward compatibility."""
+        proxies = {}
+        if self.proxy_servers_http:
+            proxies["http"] = self.proxy_servers_http
+        if self.proxy_servers_https:
+            proxies["https"] = self.proxy_servers_https
+        return proxies
 
 
 def get_settings() -> AppConfig:
     """
-    Always re-load AppConfig from disk and ENV on each call,
-    and raise a clear, aggregated message if anything required is missing.
+    Load AppConfig from .env file and environment variables.
     """
     try:
-        return AppConfig.from_yaml(CONFIG_FILE)
+        return AppConfig()
     except ValidationError as exc:
         missing_or_invalid: List[str] = []
         for err in exc.errors():
@@ -125,7 +134,7 @@ def get_settings() -> AppConfig:
         raise RuntimeError(
             f"\nConfiguration error: one or more required settings are missing or invalid:\n\n"
             f"{detail}\n\n"
-            f"Please set them via environment variables or in `{CONFIG_FILE}`."
+            f"Please set them via environment variables or in `{ENV_FILE}`."
         ) from exc
 
 
