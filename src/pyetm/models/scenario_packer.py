@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Sequence
+from typing import Optional, Dict, Any, Sequence, List
 from xlsxwriter import Workbook
 
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
@@ -19,24 +19,111 @@ from pyetm.utils.excel import add_frame
 logger = logging.getLogger(__name__)
 
 
+class ExportConfigResolver:
+    """Handles resolution of export configuration from various sources."""
+
+    @staticmethod
+    def resolve_boolean(
+        explicit_value: Optional[bool], config_value: Optional[bool], default: bool
+    ) -> bool:
+        """Resolve boolean value from explicit parameter, config, or default."""
+        if explicit_value is not None:
+            return bool(explicit_value)
+        if config_value is not None:
+            return bool(config_value)
+        return default
+
+    @staticmethod
+    def extract_from_main_sheet(
+        main_df: pd.DataFrame, scenarios: List[Scenario]
+    ) -> Optional[ExportConfig]:
+        """Extract export configuration from the first scenario column in main sheet."""
+        if main_df.empty or not scenarios:
+            return None
+
+        try:
+            helper_columns = {"description", "helper", "notes"}
+            candidate_series = None
+
+            for col in main_df.columns:
+                name = str(col).strip().lower()
+                if name in helper_columns or name in {"", "nan"}:
+                    continue
+                candidate_series = main_df[col]
+                break
+
+            if candidate_series is None:
+                candidate_series = main_df.iloc[:, 0]
+
+            return ExportConfigResolver._parse_config_from_series(candidate_series)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_config_from_series(series: pd.Series) -> ExportConfig:
+        """Parse ExportConfig from a pandas Series (column from main sheet)."""
+        index_map = {str(idx).strip().lower(): idx for idx in series.index}
+
+        def get_cell_value(name: str) -> Any:
+            key = name.strip().lower()
+            original_key = index_map.get(key)
+            return series.get(original_key) if original_key is not None else None
+
+        def parse_bool(value: Any) -> Optional[bool]:
+            """Parse boolean from various formats."""
+            if value is None or (isinstance(value, float) and pd.isna(value)):
+                return None
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                try:
+                    return bool(int(value))
+                except Exception:
+                    return None
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"true", "yes", "y", "1"}:
+                    return True
+                if normalized in {"false", "no", "n", "0"}:
+                    return False
+            return None
+
+        def parse_carriers(value: Any) -> Optional[List[str]]:
+            """Parse comma-separated carrier list."""
+            if not isinstance(value, str) or not value.strip():
+                return None
+            return [carrier.strip() for carrier in value.split(",") if carrier.strip()]
+
+        carriers_raw = get_cell_value("exports") or get_cell_value("output_carriers")
+
+        return ExportConfig(
+            include_inputs=parse_bool(get_cell_value("inputs")),
+            include_sortables=parse_bool(get_cell_value("sortables")),
+            include_custom_curves=parse_bool(get_cell_value("custom_curves")),
+            include_gqueries=(
+                parse_bool(get_cell_value("gquery_results"))
+                or parse_bool(get_cell_value("gqueries"))
+            ),
+            inputs_defaults=parse_bool(get_cell_value("defaults")),
+            inputs_min_max=parse_bool(get_cell_value("min_max")),
+            output_carriers=parse_carriers(carriers_raw),
+        )
+
+
 class ScenarioPacker(BaseModel):
     """
     Packs one or multiple scenarios for export to dataframes or excel
     """
 
-    # To avoid keeping all in memory, the packer only remembers which scenarios
-    # to pack what info for later
-    _custom_curves: "CustomCurvesPack" = CustomCurvesPack()
-    _inputs: "InputsPack" = InputsPack()
-    _sortables: "SortablePack" = SortablePack()
-    _output_curves: "OutputCurvesPack" = OutputCurvesPack()
+    # Pack collections
+    _custom_curves: CustomCurvesPack = CustomCurvesPack()
+    _inputs: InputsPack = InputsPack()
+    _sortables: SortablePack = SortablePack()
+    _output_curves: OutputCurvesPack = OutputCurvesPack()
 
-    # Setting up a packer
-
+    # Scenario management methods
     def add(self, *scenarios):
-        """
-        Shorthand method for adding all extractions for the scenario
-        """
+        """Add scenarios to all packs."""
         self.add_custom_curves(*scenarios)
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
@@ -54,19 +141,15 @@ class ScenarioPacker(BaseModel):
     def add_output_curves(self, *scenarios):
         self._output_curves.add(*scenarios)
 
-    # DataFrame outputs
-
     def main_info(self) -> pd.DataFrame:
         """Create main info DataFrame by concatenating scenario dataframes."""
-        if len(self._scenarios()) == 0:
+        scenarios = self._scenarios()
+        if not scenarios:
             return pd.DataFrame()
-
-        return pd.concat(
-            [scenario.to_dataframe() for scenario in self._scenarios()], axis=1
-        )
+        return pd.concat([scenario.to_dataframe() for scenario in scenarios], axis=1)
 
     def inputs(self, columns="user") -> pd.DataFrame:
-        return self._inputs.to_dataframe(columns=columns)
+        return self._inputs._to_dataframe(columns=columns)
 
     def gquery_results(self, columns="future") -> pd.DataFrame:
         return QueryPack(scenarios=self._scenarios()).to_dataframe(columns=columns)
@@ -85,568 +168,502 @@ class ScenarioPacker(BaseModel):
         path: str,
         *,
         carriers: Optional[Sequence[str]] = None,
-        include_inputs: bool | None = None,
-        include_sortables: bool | None = None,
-        include_custom_curves: bool | None = None,
-        include_gqueries: bool | None = None,
-        include_output_curves: bool | None = None,
+        include_inputs: Optional[bool] = None,
+        include_sortables: Optional[bool] = None,
+        include_custom_curves: Optional[bool] = None,
+        include_gqueries: Optional[bool] = None,
+        include_output_curves: Optional[bool] = None,
     ):
-        if len(self._scenarios()) == 0:
+        """Export scenarios to Excel file."""
+        if not self._scenarios():
             raise ValueError("Packer was empty, nothing to export")
 
-        workbook = Workbook(path)
+        global_config = self._get_global_export_config()
+        resolved_flags = self._resolve_export_flags(
+            global_config,
+            include_inputs,
+            include_sortables,
+            include_custom_curves,
+            include_gqueries,
+            include_output_curves,
+        )
 
-        # Main info sheet: enrich with metadata and friendly headers for Excel only
-        df_main = self._build_excel_main_dataframe()
-        if not df_main.empty:
-            df_main = self._sanitize_dataframe_for_excel(df_main)
+        # Create and populate workbook
+        workbook = Workbook(path)
+        try:
+            self._add_main_sheet(workbook)
+            self._add_data_sheets(workbook, global_config, resolved_flags)
+            self._add_gqueries_sheet(workbook, resolved_flags["include_gqueries"])
+        finally:
+            workbook.close()
+
+        # Handle output curves separately
+        self._export_output_curves_if_needed(
+            path, carriers, resolved_flags["include_output_curves"], global_config
+        )
+
+    def _get_global_export_config(self) -> Optional[ExportConfig]:
+        """Get global export configuration from first scenario that has one."""
+        for scenario in self._scenarios():
+            config = getattr(scenario, "_export_config", None)
+            if config is not None:
+                return config
+        return None
+
+    def _resolve_export_flags(
+        self,
+        global_config: Optional[ExportConfig],
+        include_inputs: Optional[bool],
+        include_sortables: Optional[bool],
+        include_custom_curves: Optional[bool],
+        include_gqueries: Optional[bool],
+        include_output_curves: Optional[bool],
+    ) -> Dict[str, Any]:
+        """Resolve all export flags from parameters and configuration."""
+        resolver = ExportConfigResolver()
+
+        return {
+            "include_inputs": resolver.resolve_boolean(
+                include_inputs,
+                (
+                    getattr(global_config, "include_inputs", None)
+                    if global_config
+                    else None
+                ),
+                True,
+            ),
+            "include_sortables": resolver.resolve_boolean(
+                include_sortables,
+                (
+                    getattr(global_config, "include_sortables", None)
+                    if global_config
+                    else None
+                ),
+                False,
+            ),
+            "include_custom_curves": resolver.resolve_boolean(
+                include_custom_curves,
+                (
+                    getattr(global_config, "include_custom_curves", None)
+                    if global_config
+                    else None
+                ),
+                False,
+            ),
+            "include_gqueries": resolver.resolve_boolean(
+                include_gqueries,
+                (
+                    getattr(global_config, "include_gqueries", None)
+                    if global_config
+                    else None
+                ),
+                False,
+            ),
+            "include_output_curves": resolver.resolve_boolean(
+                include_output_curves,
+                (
+                    getattr(global_config, "output_carriers", None) is not None
+                    if global_config
+                    else None
+                ),
+                False,
+            ),
+            "inputs_defaults": (
+                bool(getattr(global_config, "inputs_defaults", False))
+                if global_config
+                else False
+            ),
+            "inputs_min_max": (
+                bool(getattr(global_config, "inputs_min_max", False))
+                if global_config
+                else False
+            ),
+        }
+
+    def _add_main_sheet(self, workbook: Workbook):
+        """Add main scenario information sheet to workbook."""
+        main_df = self._build_excel_main_dataframe()
+        if not main_df.empty:
+            sanitized_df = self._sanitize_dataframe_for_excel(main_df)
             add_frame(
                 name="MAIN",
-                frame=df_main,
+                frame=sanitized_df,
                 workbook=workbook,
                 column_width=18,
                 scenario_styling=True,
             )
 
-        # Decide which packs to include using a single global config (applies to all scenarios)
-        packs: list[tuple[str, Any]] = [
-            ("inputs", self._inputs),
-            ("sortables", self._sortables),
-            ("custom_curves", self._custom_curves),
-        ]
-
-        # Determine a global ExportConfig from the first scenario (if any)
-        scen_list = list(self._scenarios())
-        global_cfg: ExportConfig | None = None
-        for s in scen_list:
-            cfg = getattr(s, "_export_config", None)
-            if cfg is not None:
-                global_cfg = cfg
-                break
-
-        def choose_bool(
-            opt_flag: Optional[bool], cfg_val: Optional[bool], default: bool
-        ) -> bool:
-            if opt_flag is not None:
-                return bool(opt_flag)
-            if cfg_val is not None:
-                return bool(cfg_val)
-            return default
-
-        include_inputs_final = choose_bool(
-            include_inputs,
-            getattr(global_cfg, "include_inputs", None) if global_cfg else None,
-            True,
-        )
-        include_sortables_final = choose_bool(
-            include_sortables,
-            getattr(global_cfg, "include_sortables", None) if global_cfg else None,
-            False,
-        )
-        include_custom_curves_final = choose_bool(
-            include_custom_curves,
-            getattr(global_cfg, "include_custom_curves", None) if global_cfg else None,
-            False,
-        )
-        include_gqueries_final = choose_bool(
-            include_gqueries,
-            getattr(global_cfg, "include_gqueries", None) if global_cfg else None,
-            False,
-        )
-
-        inputs_defaults_final = (
-            bool(getattr(global_cfg, "inputs_defaults", False)) if global_cfg else False
-        )
-        inputs_min_max_final = (
-            bool(getattr(global_cfg, "inputs_min_max", False)) if global_cfg else False
-        )
-
-        # Emit sheets based on global flags
-        for name, pack in packs:
-            if name == "inputs" and include_inputs_final:
-                try:
-                    fields: list[str] = ["user"]
-                    if inputs_defaults_final:
-                        fields.append("default")
-                    if inputs_min_max_final:
-                        fields.append("__bounds__")
-                    if fields == ["user"]:
-                        df = self._inputs.to_dataframe(columns="user")
-                    elif fields == ["min", "max"]:
-                        df = self._inputs.to_dataframe_min_max()
-                    elif fields == ["default"]:
-                        df = self._inputs.to_dataframe_defaults()
-                    elif fields == ["user", "default"]:
-                        fm = {s: fields for s in pack.scenarios}
-                        df = self._inputs.to_dataframe_per_scenario_fields(fm)
-                    elif fields == ["user", "min", "max"]:
-                        fm = {s: ["user"] for s in pack.scenarios}
-                        df_user = self._inputs.to_dataframe_per_scenario_fields(fm)
-                        df_bounds = self._inputs.to_dataframe_min_max()
-                        try:
-                            df = pd.concat([df_bounds, df_user], axis=1)
-                        except Exception:
-                            df = df_user
-                    else:
-                        mapped_fields = [f for f in fields if f != "__bounds__"]
-                        fm = {s: mapped_fields for s in pack.scenarios}
-                        df_core = self._inputs.to_dataframe_per_scenario_fields(fm)
-                        if "__bounds__" in fields:
-                            df_bounds = self._inputs.to_dataframe_min_max()
-                            try:
-                                df = pd.concat([df_bounds, df_core], axis=1)
-                            except Exception:
-                                df = df_core
-                        else:
-                            df = df_core
-                except Exception:
-                    df = pack.to_dataframe()
-            elif name == "sortables" and include_sortables_final:
-                df = pack.to_dataframe()
-            elif name == "custom_curves" and include_custom_curves_final:
-                df = pack.to_dataframe()
-            else:
-                df = pd.DataFrame()
-
-            if df is not None and not df.empty:
-                df_filled = df.fillna("").infer_objects(copy=False)
-                add_frame(
-                    name=pack.sheet_name,
-                    frame=df_filled,
-                    workbook=workbook,
-                    column_width=18,
-                    scenario_styling=True,
-                )
-
-        if include_gqueries_final:
-            gq_pack = QueryPack(scenarios=self._scenarios())
-            df_gq = gq_pack.to_dataframe(columns="future")
-            if not df_gq.empty:
-                add_frame(
-                    name=gq_pack.output_sheet_name,
-                    frame=df_gq.fillna("").infer_objects(copy=False),
-                    workbook=workbook,
-                    column_width=18,
-                    scenario_styling=True,
-                )
-
-        workbook.close()
-
-        # Export output curves to a separate workbook with one sheet per carrier
-        include_output_global = False
-        if include_output_curves is True:
-            include_output_global = True
-        elif include_output_curves is None:
-            try:
-                include_output_global = bool(
-                    getattr(global_cfg, "output_carriers", None)
-                )
-            except Exception:
-                include_output_global = False
-        if include_output_global:
-            base = Path(path)
-            oc_path = str(base.with_name(f"{base.stem}_exports{base.suffix}"))
-            chosen_carriers: Optional[Sequence[str]] = (
-                list(carriers) if carriers else None
+    def _add_data_sheets(
+        self,
+        workbook: Workbook,
+        global_config: Optional[ExportConfig],
+        flags: Dict[str, Any],
+    ):
+        """Add data sheets (inputs, sortables, custom_curves) to workbook."""
+        if flags["include_inputs"]:
+            self._add_inputs_sheet(
+                workbook, flags["inputs_defaults"], flags["inputs_min_max"]
             )
-            if chosen_carriers is None and global_cfg is not None:
-                try:
-                    chosen_carriers = (
-                        list(getattr(global_cfg, "output_carriers", None) or []) or None
-                    )
-                except Exception:
-                    chosen_carriers = None
-            try:
-                self._output_curves.to_excel_per_carrier(oc_path, chosen_carriers)
-            except Exception as e:
-                logger.warning("Failed exporting output curves workbook: %s", e)
 
-    def _coerce_int(self, v: Any) -> Optional[int]:
-        if v is None or (isinstance(v, float) and pd.isna(v)):
+        if flags["include_sortables"]:
+            self._add_pack_sheet(workbook, self._sortables)
+
+        if flags["include_custom_curves"]:
+            self._add_pack_sheet(workbook, self._custom_curves)
+
+    def _add_inputs_sheet(
+        self, workbook: Workbook, include_defaults: bool, include_min_max: bool
+    ):
+        """Add inputs sheet with proper field handling."""
+        try:
+            df = self._inputs.build_combined_dataframe(
+                include_defaults=include_defaults, include_min_max=include_min_max
+            )
+            if df is not None and not df.empty:
+                self._add_dataframe_to_workbook(workbook, self._inputs.sheet_name, df)
+        except Exception as e:
+            logger.warning("Failed to build inputs DataFrame: %s", e)
+            df = self._inputs._to_dataframe(columns="user")
+            if df is not None and not df.empty:
+                self._add_dataframe_to_workbook(workbook, self._inputs.sheet_name, df)
+
+    def _add_pack_sheet(self, workbook: Workbook, pack):
+        """Add a pack's DataFrame to the workbook."""
+        df = pack.to_dataframe()
+        if df is not None and not df.empty:
+            self._add_dataframe_to_workbook(workbook, pack.sheet_name, df)
+
+    def _add_gqueries_sheet(self, workbook: Workbook, include_gqueries: bool):
+        """Add gqueries sheet if requested."""
+        if not include_gqueries:
+            return
+
+        gquery_pack = QueryPack(scenarios=self._scenarios())
+        gqueries_df = gquery_pack.to_dataframe(columns="future")
+        if not gqueries_df.empty:
+            self._add_dataframe_to_workbook(
+                workbook, gquery_pack.output_sheet_name, gqueries_df
+            )
+
+    def _export_output_curves_if_needed(
+        self,
+        main_path: str,
+        carriers: Optional[Sequence[str]],
+        include_output_curves: bool,
+        global_config: Optional[ExportConfig],
+    ):
+        """Export output curves to separate file if needed."""
+        if not include_output_curves:
+            return
+
+        # Determine output file path
+        base_path = Path(main_path)
+        output_path = str(
+            base_path.with_name(f"{base_path.stem}_exports{base_path.suffix}")
+        )
+
+        # Determine carriers to export
+        chosen_carriers = list(carriers) if carriers else None
+        if chosen_carriers is None and global_config is not None:
+            config_carriers = getattr(global_config, "output_carriers", None)
+            chosen_carriers = list(config_carriers) if config_carriers else None
+
+        try:
+            self._output_curves.to_excel_per_carrier(output_path, chosen_carriers)
+        except Exception as e:
+            logger.warning("Failed exporting output curves workbook: %s", e)
+
+    def _add_dataframe_to_workbook(
+        self, workbook: Workbook, sheet_name: str, df: pd.DataFrame
+    ):
+        """Add a DataFrame to the workbook as a new sheet."""
+        cleaned_df = df.fillna("").infer_objects(copy=False)
+        add_frame(
+            name=sheet_name,
+            frame=cleaned_df,
+            workbook=workbook,
+            column_width=18,
+            scenario_styling=True,
+        )
+
+    @classmethod
+    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
+        """Import scenarios from Excel file."""
+        packer = cls()
+
+        try:
+            excel_file = pd.ExcelFile(xlsx_path)
+        except Exception as e:
+            logger.warning("Could not open Excel file '%s': %s", xlsx_path, e)
+            return packer
+
+        # Import main sheet and create scenarios
+        main_df = packer._import_main_sheet(excel_file)
+        if main_df is None:
+            return packer
+
+        scenarios_by_column = packer._create_scenarios_from_main(main_df)
+        if not scenarios_by_column:
+            return packer
+
+        packer._apply_export_configuration(main_df, scenarios_by_column)
+        packer._import_data_sheets(excel_file, main_df, scenarios_by_column)
+
+        return packer
+
+    def _import_main_sheet(self, excel_file: pd.ExcelFile) -> Optional[pd.DataFrame]:
+        """Import and validate the main sheet."""
+        try:
+            main_df = excel_file.parse("MAIN", index_col=0)
+            if main_df is None or getattr(main_df, "empty", False):
+                return None
+            return main_df
+        except Exception as e:
+            logger.warning("Failed to parse MAIN sheet: %s", e)
+            return None
+
+    def _create_scenarios_from_main(self, main_df: pd.DataFrame) -> Dict[str, Scenario]:
+        """Create scenarios from main sheet columns."""
+        scenarios_by_column = {}
+
+        for column_name in main_df.columns:
+            column_str = str(column_name) if column_name is not None else ""
+            if column_str.strip().lower() in {"description", "helper", "notes"}:
+                continue
+
+            try:
+                scenario = self._create_scenario_from_column(
+                    column_str, main_df[column_name]
+                )
+                if scenario is not None:
+                    self.add(scenario)
+                    scenarios_by_column[column_str] = scenario
+            except Exception as e:
+                logger.warning(
+                    "Failed to set up scenario for column '%s': %s", column_name, e
+                )
+
+        return scenarios_by_column
+
+    def _create_scenario_from_column(
+        self, column_name: str, column_data: pd.Series
+    ) -> Optional[Scenario]:
+        """Create a scenario from a main sheet column."""
+        scenario_id = self._safe_get_int(column_data.get("scenario_id"))
+        area_code = column_data.get("area_code")
+        end_year = self._safe_get_int(column_data.get("end_year"))
+        scenario = self._load_or_create_scenario(
+            scenario_id, area_code, end_year, column_name
+        )
+        if scenario is None:
+            return None
+
+        metadata_updates = self._extract_metadata_updates(column_data)
+        self._apply_metadata_to_scenario(scenario, metadata_updates)
+
+        return scenario
+
+    def _safe_get_int(self, value: Any) -> Optional[int]:
+        """Safely convert value to integer."""
+        if value is None or (isinstance(value, float) and pd.isna(value)):
             return None
         try:
-            return int(float(v))
+            return int(float(value))
         except (ValueError, TypeError):
             return None
 
+    def _safe_get_bool(self, value: Any) -> Optional[bool]:
+        """Safely convert value to boolean."""
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            try:
+                return bool(int(value))
+            except Exception:
+                return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "yes", "y", "1"}:
+                return True
+            if normalized in {"false", "no", "n", "0"}:
+                return False
+        return None
+
     def _load_or_create_scenario(
         self,
-        sid: Optional[int],
+        scenario_id: Optional[int],
         area_code: Any,
         end_year: Optional[int],
-        col_name: str,
-    ) -> Optional["Scenario"]:
-        scenario: Optional[Scenario] = None
-        if sid is not None:
+        column_name: str,
+    ) -> Optional[Scenario]:
+        """Load existing scenario or create new one."""
+        if scenario_id is not None:
             try:
-                scenario = Scenario.load(sid)
+                return Scenario.load(scenario_id)
             except Exception as e:
                 logger.warning(
-                    "Failed to load scenario %s for column '%s': %s", sid, col_name, e
+                    "Failed to load scenario %s for column '%s': %s",
+                    scenario_id,
+                    column_name,
+                    e,
                 )
-                scenario = None
-        else:
-            if area_code and end_year is not None:
-                try:
-                    scenario = Scenario.new(str(area_code), int(end_year))
-                except Exception as e:
-                    logger.warning(
-                        "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
-                        col_name,
-                        area_code,
-                        end_year,
-                        e,
-                    )
-                    scenario = None
-            else:
+
+        if area_code and end_year is not None:
+            try:
+                return Scenario.new(str(area_code), int(end_year))
+            except Exception as e:
                 logger.warning(
-                    "MAIN column '%s' missing required fields for creation (area_code/end_year)",
-                    col_name,
+                    "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
+                    column_name,
+                    area_code,
+                    end_year,
+                    e,
                 )
-                scenario = None
-        return scenario
 
-    def _collect_meta_updates(
-        self,
-        private: Optional[bool],
-        template: Optional[int],
-        source: Any,
-        title: Any,
-    ) -> Dict[str, Any]:
-        meta_updates: Dict[str, Any] = {}
+        logger.warning(
+            "MAIN column '%s' missing required fields for creation (area_code/end_year)",
+            column_name,
+        )
+        return None
+
+    def _extract_metadata_updates(self, column_data: pd.Series) -> Dict[str, Any]:
+        """Extract metadata updates from column data."""
+        metadata = {}
+
+        private = self._safe_get_bool(column_data.get("private"))
         if private is not None:
-            meta_updates["private"] = private
-        if template is not None:
-            meta_updates["template"] = template
-        if isinstance(source, str) and source.strip() != "":
-            meta_updates["source"] = source.strip()
-        if isinstance(title, str) and title.strip() != "":
-            meta_updates["title"] = title.strip()
-        return meta_updates
+            metadata["private"] = private
 
-    def _apply_metadata(
-        self, scenario: "Scenario", meta_updates: Dict[str, Any]
-    ) -> None:
-        if not meta_updates:
+        template = self._safe_get_int(column_data.get("template"))
+        if template is not None:
+            metadata["template"] = template
+
+        for field in ["source", "title"]:
+            value = column_data.get(field)
+            if isinstance(value, str) and value.strip():
+                metadata[field] = value.strip()
+
+        return metadata
+
+    def _apply_metadata_to_scenario(self, scenario: Scenario, metadata: Dict[str, Any]):
+        """Apply metadata updates to scenario."""
+        if not metadata:
             return
+
         try:
-            scenario.update_metadata(**meta_updates)
+            scenario.update_metadata(**metadata)
         except Exception as e:
             logger.warning(
                 "Failed to update metadata for '%s': %s", scenario.identifier(), e
             )
 
-    def _extract_scenario_sheet_info(
-        self, main_df: pd.DataFrame
-    ) -> Dict[str, Dict[str, str]]:
-        scenario_sheets = {}
-
-        def _value_before_output(series: pd.Series, key: str):
-            seen_output = False
-            for label, val in zip(series.index, series.values):
-                lab = str(label).strip().lower()
-                if lab == "output":
-                    seen_output = True
-                if lab == key and not seen_output:
-                    return val
-            return None
-
-        if isinstance(main_df, pd.Series):
-            # Single scenario
-            identifier = str(main_df.name)
-            short_name = main_df.get("short_name")
-            sortables_sheet = _value_before_output(main_df, "sortables")
-            custom_curves_sheet = _value_before_output(main_df, "custom_curves")
-
-            scenario_sheets[identifier] = {
-                "short_name": short_name if pd.notna(short_name) else identifier,
-                "sortables": sortables_sheet if pd.notna(sortables_sheet) else None,
-                "custom_curves": (
-                    custom_curves_sheet if pd.notna(custom_curves_sheet) else None
-                ),
-            }
-        else:
-            # Multiple scenarios
-            for identifier in main_df.columns:
-                col_data = main_df[identifier]
-                short_name = col_data.get("short_name")
-                sortables_sheet = _value_before_output(col_data, "sortables")
-                custom_curves_sheet = _value_before_output(col_data, "custom_curves")
-
-                scenario_sheets[str(identifier)] = {
-                    "short_name": (
-                        short_name if pd.notna(short_name) else str(identifier)
-                    ),
-                    "sortables": sortables_sheet if pd.notna(sortables_sheet) else None,
-                    "custom_curves": (
-                        custom_curves_sheet if pd.notna(custom_curves_sheet) else None
-                    ),
-                }
-
-        return scenario_sheets
-
-    def _process_single_scenario_sortables(
-        self, scenario: "Scenario", df: pd.DataFrame
+    def _apply_export_configuration(
+        self, main_df: pd.DataFrame, scenarios_by_column: Dict[str, Scenario]
     ):
-        data = self._normalize_sheet(
-            df,
-            helper_names={"sortables", "hour", "index"},
-            reset_index=True,
-            rename_map={"heat_network": "heat_network_lt"},
-        )
-        if data is None or data.empty:
-            return
+        """Apply export configuration to all scenarios."""
         try:
-            scenario.set_sortables_from_dataframe(data)
-        except Exception as e:
-            logger.warning(
-                "Failed processing sortables for '%s': %s", scenario.identifier(), e
+            config = ExportConfigResolver.extract_from_main_sheet(
+                main_df, list(scenarios_by_column.values())
             )
-        else:
-            try:
-                if hasattr(scenario, "_sortables") and scenario._sortables is not None:
-                    scenario._sortables.log_warnings(
-                        logger,
-                        prefix=f"Sortables warning for '{scenario.identifier()}'",
-                    )
-            except Exception:
-                pass
+            if config is None:
+                return
 
-    def _process_single_scenario_curves(self, scenario: "Scenario", df: pd.DataFrame):
-        data = self._normalize_sheet(
-            df,
-            helper_names={"curves", "custom_curves", "hour", "index"},
-            reset_index=True,
-        )
-        if data is None or data.empty:
-            return
-        # Build CustomCurves collection and apply
-        try:
-            curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
-            curves.log_warnings(
-                logger,
-                prefix=f"Custom curves warning for '{scenario.identifier()}'",
-            )
-            try:
-                validation = curves.validate_for_upload()
-                for key, collector in (validation or {}).items():
-                    for w in collector:
-                        logger.warning(
-                            "Custom curve validation for '%s' in '%s' [%s]: %s",
-                            key,
-                            scenario.identifier(),
-                            getattr(w, "field", key),
-                            getattr(w, "message", str(w)),
-                        )
-            except Exception:
-                pass
-
-            scenario.update_custom_curves(curves)
-        except Exception as e:
-            try:
-                if "curves" in locals():
-                    curves.log_warnings(
-                        logger,
-                        prefix=f"Custom curves warning for '{scenario.identifier()}'",
-                    )
-            except Exception:
-                pass
-            logger.warning(
-                "Failed processing custom curves for '%s': %s", scenario.identifier(), e
-            )
-
-    @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
-        packer = cls()
-
-        try:
-            xls = pd.ExcelFile(xlsx_path)
-        except Exception as e:
-            logger.warning("Could not open Excel file '%s': %s", xlsx_path, e)
-            return packer
-
-        # MAIN sheet
-        try:
-            main_df = xls.parse("MAIN", index_col=0)
-        except Exception as e:
-            logger.warning("Failed to parse MAIN sheet: %s", e)
-            return packer
-
-        if main_df is None or getattr(main_df, "empty", False):
-            return packer
-
-        # Build scenarios per MAIN column
-        scenarios_by_col: Dict[str, Scenario] = {}
-        for col in main_df.columns:
-            col_str = str(col) if col is not None else ""
-            if col_str.strip().lower() in {"description", "helper", "notes"}:
-                continue
-            try:
-                scenario = packer._setup_scenario_from_main_column(
-                    str(col_str), main_df[col]
-                )
-            except Exception as e:
-                logger.warning("Failed to set up scenario for column '%s': %s", col, e)
-                continue
-
-            if scenario is not None:
-                packer.add(scenario)
-                scenarios_by_col[str(col_str)] = scenario
-
-        # Apply OUTPUT settings globally from the first scenario column, if present
-        try:
-            first_col_name: Optional[str] = next(iter(scenarios_by_col.keys()), None)
-            if first_col_name is not None:
-                col_data = main_df[first_col_name]
-                # case-insensitive row access
-                idx_map = {str(i).strip().lower(): i for i in col_data.index}
-
-                def _cell_ci(name: str):
-                    key = name.strip().lower()
-                    src_key = idx_map.get(key)
-                    if src_key is None:
-                        return None
-                    return col_data.get(src_key)
-
-                def _bool(v) -> Optional[bool]:
-                    if v is None:
-                        return None
-                    if isinstance(v, bool):
-                        return v
-                    try:
-                        if isinstance(v, (int, float)) and not pd.isna(v):
-                            return bool(int(v))
-                    except Exception:
-                        pass
-                    if isinstance(v, str):
-                        s = v.strip().lower()
-                        if s in {"true", "yes", "y", "1"}:
-                            return True
-                        if s in {"false", "no", "n", "0"}:
-                            return False
-                    return None
-
-                inc_inputs = _bool(_cell_ci("inputs"))
-                inc_gq = _bool(_cell_ci("gquery_results")) or _bool(
-                    _cell_ci("gqueries")
-                )
-                inc_sortables = _bool(_cell_ci("sortables"))
-                inc_curves = _bool(_cell_ci("custom_curves"))
-                inputs_defaults = _bool(_cell_ci("defaults"))
-                inputs_min_max = _bool(_cell_ci("min_max"))
-                carriers_raw = _cell_ci("exports") or _cell_ci("output_carriers")
-                carriers_list = None
-                if isinstance(carriers_raw, str) and carriers_raw.strip():
-                    carriers_list = [
-                        p.strip() for p in carriers_raw.split(",") if p.strip()
-                    ]
-
-                # Legacy column-based include_* support
-                legacy_inc_inputs = _cell_ci("include_inputs")
-                legacy_inc_sortables = _cell_ci("include_sortables")
-                legacy_inc_curves = _cell_ci("include_custom_curves")
-                legacy_inc_gq = _cell_ci("include_gqueries")
-
-                cfg = ExportConfig(
-                    include_inputs=(
-                        _bool(legacy_inc_inputs)
-                        if legacy_inc_inputs is not None
-                        else inc_inputs
-                    ),
-                    include_sortables=(
-                        _bool(legacy_inc_sortables)
-                        if legacy_inc_sortables is not None
-                        else inc_sortables
-                    ),
-                    include_custom_curves=(
-                        _bool(legacy_inc_curves)
-                        if legacy_inc_curves is not None
-                        else inc_curves
-                    ),
-                    include_gqueries=(
-                        _bool(legacy_inc_gq) if legacy_inc_gq is not None else inc_gq
-                    ),
-                    inputs_defaults=inputs_defaults,
-                    inputs_min_max=inputs_min_max,
-                    output_carriers=carriers_list,
-                )
-
-                if any(
-                    getattr(cfg, f) is not None
-                    for f in (
-                        "include_inputs",
-                        "include_sortables",
-                        "include_custom_curves",
-                        "include_gqueries",
-                        "inputs_defaults",
-                        "inputs_min_max",
-                        "output_carriers",
-                    )
-                ):
-                    for scenario in scenarios_by_col.values():
-                        try:
-                            if hasattr(scenario, "set_export_config"):
-                                scenario.set_export_config(cfg)
-                            else:
-                                setattr(scenario, "_export_config", cfg)
-                        except Exception:
-                            pass
+            for scenario in scenarios_by_column.values():
+                try:
+                    if hasattr(scenario, "set_export_config"):
+                        scenario.set_export_config(config)
+                    else:
+                        setattr(scenario, "_export_config", config)
+                except Exception:
+                    pass
         except Exception:
             pass
 
-        if len(scenarios_by_col) == 0:
-            return packer
+    def _import_data_sheets(
+        self,
+        excel_file: pd.ExcelFile,
+        main_df: pd.DataFrame,
+        scenarios_by_column: Dict[str, Scenario],
+    ):
+        """Import all data sheets (inputs, gqueries, sortables, custom curves)."""
+        # Build short name mapping for inputs
+        short_name_map = self._build_short_name_mapping(main_df, scenarios_by_column)
+        self._import_inputs_sheet(excel_file, short_name_map)
+        self._import_gqueries_sheet(excel_file)
+        self._import_scenario_specific_sheets(excel_file, main_df, scenarios_by_column)
 
-        # Extract per-scenario sheet info and short_name mapping
-        sheet_info = packer._extract_scenario_sheet_info(main_df)
-        short_name_map: Dict[str, str] = {}
-        for col_name, scenario in scenarios_by_col.items():
-            info = sheet_info.get(col_name, {}) if isinstance(sheet_info, dict) else {}
-            short = info.get("short_name") if isinstance(info, dict) else None
-            if short is None or (isinstance(short, float) and pd.isna(short)):
-                short = str(scenario.identifier())
-            short_name_map[str(scenario.id)] = str(short)
+    def _build_short_name_mapping(
+        self, main_df: pd.DataFrame, scenarios_by_column: Dict[str, Scenario]
+    ) -> Dict[str, str]:
+        """Build mapping of scenario IDs to short names."""
+        sheet_info = self._extract_scenario_sheet_info(main_df)
+        short_name_map = {}
 
-        # SLIDER_SETTINGS sheet
-        params_df = None
+        for column_name, scenario in scenarios_by_column.items():
+            info = (
+                sheet_info.get(column_name, {}) if isinstance(sheet_info, dict) else {}
+            )
+            short_name = info.get("short_name") if isinstance(info, dict) else None
+
+            if short_name is None or (
+                isinstance(short_name, float) and pd.isna(short_name)
+            ):
+                short_name = str(scenario.identifier())
+
+            short_name_map[str(scenario.id)] = str(short_name)
+
+        return short_name_map
+
+    def _import_inputs_sheet(
+        self, excel_file: pd.ExcelFile, short_name_map: Dict[str, str]
+    ):
+        """Import inputs sheet - delegate to InputsPack."""
         try:
-            params_df = xls.parse(InputsPack.sheet_name, header=None)
-        except Exception:
-            params_df = None
+            slider_df = excel_file.parse(InputsPack.sheet_name, header=None)
+            if slider_df is not None and not slider_df.empty:
+                self._inputs.set_scenario_short_names(short_name_map)
+                self._inputs.from_dataframe(slider_df)
+        except Exception as e:
+            logger.warning("Failed to import SLIDER_SETTINGS: %s", e)
 
-        if params_df is not None and not params_df.empty:
-            try:
-                packer._inputs.set_scenario_short_names(short_name_map)
-                packer._inputs.from_dataframe(params_df)
-            except Exception as e:
-                logger.warning("Failed to import SLIDER_SETTINGS: %s", e)
-
-        # GQUERIES sheet
-        gq_df = None
-        for sheet in ("GQUERIES", QueryPack.sheet_name):
-            if sheet in xls.sheet_names:
+    def _import_gqueries_sheet(self, excel_file: pd.ExcelFile):
+        """Import gqueries sheet - delegate to QueryPack."""
+        for sheet_name in ("GQUERIES", QueryPack.sheet_name):
+            if sheet_name in excel_file.sheet_names:
                 try:
-                    gq_df = xls.parse(sheet, header=None)
-                    break
-                except Exception:
-                    gq_df = None
-        if gq_df is not None and not gq_df.empty:
-            try:
-                qp = QueryPack(scenarios=packer._scenarios())
-                qp.from_dataframe(gq_df)
-            except Exception as e:
-                logger.warning("Failed to import GQUERIES: %s", e)
+                    gqueries_df = excel_file.parse(sheet_name, header=None)
+                    if gqueries_df is not None and not gqueries_df.empty:
+                        query_pack = QueryPack(scenarios=self._scenarios())
+                        query_pack.from_dataframe(gqueries_df)
+                        return
+                except Exception as e:
+                    logger.warning("Failed to import GQUERIES: %s", e)
 
-        # Sortables and Custom Curves
-        for col_name, scenario in scenarios_by_col.items():
-            info = sheet_info.get(col_name, {}) if isinstance(sheet_info, dict) else {}
+    def _import_scenario_specific_sheets(
+        self,
+        excel_file: pd.ExcelFile,
+        main_df: pd.DataFrame,
+        scenarios_by_column: Dict[str, Scenario],
+    ):
+        """Import scenario-specific sortables and custom curves sheets."""
+        sheet_info = self._extract_scenario_sheet_info(main_df)
 
+        for column_name, scenario in scenarios_by_column.items():
+            info = (
+                sheet_info.get(column_name, {}) if isinstance(sheet_info, dict) else {}
+            )
+
+            # Import sortables
             sortables_sheet = info.get("sortables") if isinstance(info, dict) else None
-            if isinstance(sortables_sheet, str) and sortables_sheet in xls.sheet_names:
+            if (
+                isinstance(sortables_sheet, str)
+                and sortables_sheet in excel_file.sheet_names
+            ):
                 try:
-                    s_df = xls.parse(sortables_sheet, header=None)
-                    self_ref = packer  # clarity
-                    self_ref._process_single_scenario_sortables(scenario, s_df)
+                    sortables_df = excel_file.parse(sortables_sheet, header=None)
+                    self._process_single_scenario_sortables(scenario, sortables_df)
                 except Exception as e:
                     logger.warning(
                         "Failed to process SORTABLES sheet '%s' for '%s': %s",
@@ -655,12 +672,12 @@ class ScenarioPacker(BaseModel):
                         e,
                     )
 
+            # Import custom curves
             curves_sheet = info.get("custom_curves") if isinstance(info, dict) else None
-            if isinstance(curves_sheet, str) and curves_sheet in xls.sheet_names:
+            if isinstance(curves_sheet, str) and curves_sheet in excel_file.sheet_names:
                 try:
-                    c_df = xls.parse(curves_sheet, header=None)
-                    self_ref = packer
-                    self_ref._process_single_scenario_curves(scenario, c_df)
+                    curves_df = excel_file.parse(curves_sheet, header=None)
+                    self._process_single_scenario_curves(scenario, curves_df)
                 except Exception as e:
                     logger.warning(
                         "Failed to process CUSTOM_CURVES sheet '%s' for '%s': %s",
@@ -669,51 +686,72 @@ class ScenarioPacker(BaseModel):
                         e,
                     )
 
-        return packer
+    def _scenarios(self) -> set[Scenario]:
+        """All scenarios we are packing info for across all packs."""
+        all_scenarios = set()
+        for pack in self._get_all_packs():
+            scenarios = getattr(pack, "scenarios", None)
+            if scenarios:
+                if isinstance(scenarios, set):
+                    all_scenarios.update(scenarios)
+                else:
+                    try:
+                        all_scenarios.update(set(scenarios))
+                    except Exception:
+                        pass
+        return all_scenarios
 
-    def _setup_scenario_from_main_column(
-        self, col_name: str, col_data: pd.Series
-    ) -> Optional[Scenario]:
-        scenario_id = (
-            col_data.get("scenario_id") if isinstance(col_data, pd.Series) else None
-        )
-        area_code = (
-            col_data.get("area_code") if isinstance(col_data, pd.Series) else None
-        )
-        end_year = (
-            self._coerce_int(col_data.get("end_year"))
-            if isinstance(col_data, pd.Series)
-            else None
-        )
-        private = (
-            self._coerce_bool(col_data.get("private"))
-            if isinstance(col_data, pd.Series)
-            else None
-        )
-        template = (
-            self._coerce_int(col_data.get("template"))
-            if isinstance(col_data, pd.Series)
-            else None
-        )
-        source = col_data.get("source") if isinstance(col_data, pd.Series) else None
-        title = col_data.get("title") if isinstance(col_data, pd.Series) else None
-        sid = self._coerce_int(scenario_id)
-        scenario = self._load_or_create_scenario(sid, area_code, end_year, col_name)
+    def _get_all_packs(self):
+        """Get all pack instances."""
+        return [self._inputs, self._sortables, self._custom_curves, self._output_curves]
 
-        if scenario is None:
-            return None
-        meta_updates = self._collect_meta_updates(private, template, source, title)
-        self._apply_metadata(scenario, meta_updates)
+    def clear(self):
+        """Clear all scenarios from all packs."""
+        for pack in self._get_all_packs():
+            try:
+                pack.clear()
+            except Exception:
+                pass
 
-        return scenario
+    def remove_scenario(self, scenario: Scenario):
+        """Remove a specific scenario from all collections."""
+        for pack in self._get_all_packs():
+            try:
+                pack.discard(scenario)
+            except Exception:
+                pass
 
+    def get_summary(self) -> Dict[str, Any]:
+        """Get a summary of what's in the packer."""
+        summary = {"total_scenarios": len(self._scenarios())}
+        for pack in self._get_all_packs():
+            try:
+                summary.update(pack.summary())
+            except Exception:
+                pass
+        summary["scenario_ids"] = sorted(
+            [getattr(s, "id", None) for s in self._scenarios()]
+        )
+        return summary
+
+    # Excel and DataFrame processing methods - refactored for consistency
     def _build_excel_main_dataframe(self) -> pd.DataFrame:
-        """Build a MAIN sheet DataFrame for Excel export using main_info()."""
-        df = self.main_info()
-        if df is None or df.empty:
+        """Build a MAIN sheet DataFrame for Excel export with proper ordering and labeling."""
+        main_df = self.main_info()
+        if main_df is None or main_df.empty:
             return pd.DataFrame()
 
-        preferred = [
+        # Apply preferred field ordering
+        ordered_df = self._apply_field_ordering(main_df)
+
+        # Apply scenario column labeling
+        labeled_df = self._apply_scenario_column_labels(ordered_df)
+
+        return labeled_df
+
+    def _apply_field_ordering(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply preferred field ordering to DataFrame rows."""
+        preferred_fields = [
             "title",
             "description",
             "scenario_id",
@@ -729,140 +767,261 @@ class ScenarioPacker(BaseModel):
             "created_at",
             "updated_at",
         ]
-        present = [k for k in preferred if k in df.index]
-        remaining = [k for k in df.index if k not in present]
-        ordered = present + remaining
-        df = df.reindex(index=ordered)
-        df.index.name = "scenario"
 
-        # Rename columns to use an identifier
+        present_fields = [field for field in preferred_fields if field in df.index]
+        remaining_fields = [field for field in df.index if field not in present_fields]
+        ordered_fields = present_fields + remaining_fields
+
+        ordered_df = df.reindex(index=ordered_fields)
+        ordered_df.index.name = "scenario"
+        return ordered_df
+
+    def _apply_scenario_column_labels(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply human-readable labels to scenario columns."""
         try:
-            scen_list = list(self._scenarios())
-            rename_map: dict[Any, Any] = {}
-            by_str_id = {str(getattr(s, "id", "")): s for s in scen_list}
-            for col in list(df.columns):
-                matched_s = None
-                for s in scen_list:
-                    if col == getattr(s, "id", None):
-                        matched_s = s
-                        break
-                if matched_s is None:
-                    matched_s = by_str_id.get(str(col))
-                if matched_s is not None:
-                    try:
-                        label = (
-                            matched_s.identifier()
-                            if hasattr(matched_s, "identifier")
-                            else getattr(matched_s, "title", None)
-                            or getattr(matched_s, "id", col)
-                        )
-                    except Exception:
-                        label = getattr(matched_s, "title", None) or getattr(
-                            matched_s, "id", col
-                        )
-                    rename_map[col] = label
-            if rename_map:
-                df = df.rename(columns=rename_map)
+            scenarios = list(self._scenarios())
+            column_rename_map = self._build_column_rename_map(scenarios, df.columns)
+
+            if column_rename_map:
+                return df.rename(columns=column_rename_map)
+            return df
+        except Exception:
+            # If renaming fails, return original DataFrame
+            return df
+
+    def _build_column_rename_map(
+        self, scenarios: List[Scenario], columns
+    ) -> Dict[Any, str]:
+        """Build mapping of column IDs to human-readable labels."""
+        rename_map = {}
+        scenarios_by_id = {str(getattr(s, "id", "")): s for s in scenarios}
+
+        for column in columns:
+            matched_scenario = self._find_matching_scenario(
+                column, scenarios, scenarios_by_id
+            )
+            if matched_scenario is not None:
+                label = self._get_scenario_display_label(matched_scenario, column)
+                rename_map[column] = label
+
+        return rename_map
+
+    def _find_matching_scenario(
+        self, column, scenarios: List[Scenario], scenarios_by_id: Dict[str, Scenario]
+    ) -> Optional[Scenario]:
+        """Find scenario matching the given column identifier."""
+        # Try exact ID match first
+        for scenario in scenarios:
+            if column == getattr(scenario, "id", None):
+                return scenario
+
+        # Try string ID match as fallback
+        return scenarios_by_id.get(str(column))
+
+    def _get_scenario_display_label(self, scenario: Scenario, fallback_column) -> str:
+        """Get display label for scenario, with fallbacks."""
+        try:
+            if hasattr(scenario, "identifier"):
+                return scenario.identifier()
         except Exception:
             pass
-        return df
+
+        # Try title attribute
+        title = getattr(scenario, "title", None)
+        if title:
+            return title
+
+        # Try ID attribute
+        scenario_id = getattr(scenario, "id", None)
+        if scenario_id:
+            return str(scenario_id)
+
+        # Final fallback to original column
+        return str(fallback_column)
 
     def _sanitize_dataframe_for_excel(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Convert DataFrame values into Excel-safe primitives (str/number/bool/None)."""
-        import datetime as _dt
+        """Convert DataFrame to Excel-compatible format."""
+        if df is None or df.empty:
+            return pd.DataFrame()
 
-        def _safe(v: Any):
-            if v is None:
-                return ""
-            if isinstance(v, (str, int, float, bool)):
-                return v
-            if isinstance(v, (pd.Timestamp, _dt.datetime, _dt.date)):
-                try:
-                    return str(v)
-                except Exception:
-                    return ""
+        sanitized_df = df.copy()
+
+        # Sanitize index and columns
+        sanitized_df.index = sanitized_df.index.map(self._sanitize_excel_value)
+        sanitized_df.columns = [
+            self._sanitize_excel_value(col) for col in sanitized_df.columns
+        ]
+
+        # Sanitize cell values
+        sanitized_df = sanitized_df.map(self._sanitize_excel_value)
+
+        return sanitized_df
+
+    def _sanitize_excel_value(self, value: Any) -> str:
+        """Convert a single value to Excel-safe format."""
+        if value is None:
+            return ""
+
+        if isinstance(value, (str, int, float, bool)):
+            return value
+
+        # Handle datetime objects
+        if self._is_datetime_like(value):
             try:
-                return str(v)
+                return str(value)
             except Exception:
                 return ""
 
-        out = df.copy()
-        out.index = out.index.map(lambda x: str(x) if x is not None else "")
-        out.columns = [str(c) if c is not None else "" for c in out.columns]
-        return out.map(_safe)
+        # Generic fallback
+        try:
+            return str(value)
+        except Exception:
+            return ""
 
-    def all_pack_data(self):
-        """Yield each sub-pack collection."""
-        yield self._inputs
-        yield self._sortables
-        yield self._custom_curves
-        yield self._output_curves
+    def _is_datetime_like(self, value: Any) -> bool:
+        """Check if value is a datetime-like object."""
+        import datetime as dt
 
-    def _scenarios(self) -> set["Scenario"]:
-        """All scenarios we are packing info for across all packs."""
-        all_scenarios: set["Scenario"] = set()
-        for pack in self.all_pack_data():
-            try:
-                items = getattr(pack, "scenarios", None)
-                if not items:
-                    continue
-                if isinstance(items, set):
-                    all_scenarios.update(items)
-                else:
-                    try:
-                        all_scenarios.update(set(items))
-                    except Exception:
-                        pass
-            except Exception:
-                continue
-        return all_scenarios
+        return isinstance(value, (pd.Timestamp, dt.datetime, dt.date))
 
-    def clear(self):
-        """Clear all scenarios from all packs."""
-        for pack in self.all_pack_data():
-            try:
-                pack.clear()
-            except Exception:
-                pass
+    def _extract_scenario_sheet_info(
+        self, main_df: pd.DataFrame
+    ) -> Dict[str, Dict[str, str]]:
+        """Extract sheet information for each scenario from main DataFrame."""
+        if isinstance(main_df, pd.Series):
+            return self._extract_single_scenario_sheet_info(main_df)
+        else:
+            return self._extract_multiple_scenario_sheet_info(main_df)
 
-    def remove_scenario(self, scenario: "Scenario"):
-        """Remove a specific scenario from all collections."""
-        for pack in self.all_pack_data():
-            try:
-                pack.discard(scenario)
-            except Exception:
-                pass
+    def _extract_single_scenario_sheet_info(
+        self, series: pd.Series
+    ) -> Dict[str, Dict[str, str]]:
+        """Extract sheet info for single scenario (Series case)."""
+        identifier = str(series.name)
 
-    def get_summary(self) -> Dict[str, Any]:
-        """Get a summary of what's in the packer."""
-        summary: Dict[str, Any] = {"total_scenarios": len(self._scenarios())}
-        for pack in self.all_pack_data():
-            try:
-                summary.update(pack.summary())
-            except Exception:
-                pass
-        summary["scenario_ids"] = sorted(
-            [getattr(s, "id", None) for s in self._scenarios()]
-        )
-        return summary
+        return {
+            identifier: {
+                "short_name": self._get_safe_value(series, "short_name", identifier),
+                "sortables": self._get_value_before_output(series, "sortables"),
+                "custom_curves": self._get_value_before_output(series, "custom_curves"),
+            }
+        }
 
-    def _first_non_empty_row_index(self, df: pd.DataFrame) -> Optional[int]:
-        if df is None:
-            return None
-        for idx, (_, row) in enumerate(df.iterrows()):
-            try:
-                if not row.isna().all():
-                    return idx
-            except Exception:
-                if any(v not in (None, "", float("nan")) for v in row):
-                    return idx
+    def _extract_multiple_scenario_sheet_info(
+        self, df: pd.DataFrame
+    ) -> Dict[str, Dict[str, str]]:
+        """Extract sheet info for multiple scenarios (DataFrame case)."""
+        scenario_sheets = {}
+
+        for identifier in df.columns:
+            column_data = df[identifier]
+            scenario_sheets[str(identifier)] = {
+                "short_name": self._get_safe_value(
+                    column_data, "short_name", str(identifier)
+                ),
+                "sortables": self._get_value_before_output(column_data, "sortables"),
+                "custom_curves": self._get_value_before_output(
+                    column_data, "custom_curves"
+                ),
+            }
+
+        return scenario_sheets
+
+    def _get_safe_value(self, series: pd.Series, key: str, default: str) -> str:
+        """Safely get value from series with default fallback."""
+        value = series.get(key)
+        if pd.notna(value):
+            return str(value)
+        return default
+
+    def _get_value_before_output(self, series: pd.Series, key: str) -> Optional[str]:
+        """Get value from series, but only if it appears before 'output' section."""
+        seen_output = False
+
+        for label, value in zip(series.index, series.values):
+            normalized_label = str(label).strip().lower()
+
+            if normalized_label == "output":
+                seen_output = True
+
+            if normalized_label == key and not seen_output:
+                return value if pd.notna(value) else None
+
         return None
 
-    def _is_empty_or_helper(self, col_name: Any, helper_names: set[str]) -> bool:
-        if not isinstance(col_name, str):
-            return True
-        name = col_name.strip().lower()
-        return name in (helper_names or set()) or name in {"", "nan"}
+    def _process_single_scenario_sortables(self, scenario: Scenario, df: pd.DataFrame):
+        """Process sortables data for a single scenario."""
+        normalized_data = self._normalize_sheet(
+            df,
+            helper_names={"sortables", "hour", "index"},
+            reset_index=True,
+            rename_map={"heat_network": "heat_network_lt"},
+        )
+
+        if normalized_data is None or normalized_data.empty:
+            return
+
+        self._apply_sortables_to_scenario(scenario, normalized_data)
+
+    def _apply_sortables_to_scenario(self, scenario: Scenario, data: pd.DataFrame):
+        """Apply sortables data to scenario with error handling."""
+        try:
+            scenario.set_sortables_from_dataframe(data)
+            self._log_scenario_warnings(scenario, "_sortables", "Sortables")
+        except Exception as e:
+            logger.warning(
+                "Failed processing sortables for '%s': %s", scenario.identifier(), e
+            )
+
+    def _process_single_scenario_curves(self, scenario: Scenario, df: pd.DataFrame):
+        """Process custom curves data for a single scenario."""
+        normalized_data = self._normalize_sheet(
+            df,
+            helper_names={"curves", "custom_curves", "hour", "index"},
+            reset_index=True,
+        )
+
+        if normalized_data is None or normalized_data.empty:
+            return
+
+        self._apply_custom_curves_to_scenario(scenario, normalized_data)
+
+    def _apply_custom_curves_to_scenario(self, scenario: Scenario, data: pd.DataFrame):
+        """Apply custom curves to scenario with validation and error handling."""
+        try:
+            curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
+
+            # Log processing warnings
+            curves.log_warnings(
+                logger,
+                prefix=f"Custom curves warning for '{scenario.identifier()}'",
+            )
+
+            # Validate curves and log validation issues
+            self._validate_and_log_curves(curves, scenario)
+
+            # Apply curves to scenario
+            scenario.update_custom_curves(curves)
+
+        except Exception as e:
+            self._handle_curves_processing_error(scenario, e)
+
+    def _validate_and_log_curves(self, curves: CustomCurves, scenario: Scenario):
+        """Validate curves and log any validation issues."""
+        try:
+            validation_results = curves.validate_for_upload()
+            for key, issues in (validation_results or {}).items():
+                for issue in issues:
+                    logger.warning(
+                        "Custom curve validation for '%s' in '%s' [%s]: %s",
+                        key,
+                        scenario.identifier(),
+                        getattr(issue, "field", key),
+                        getattr(issue, "message", str(issue)),
+                    )
+        except Exception:
+            # Validation errors are not critical, continue processing
+            pass
 
     def _normalize_sheet(
         self,
@@ -872,27 +1031,30 @@ class ScenarioPacker(BaseModel):
         reset_index: bool = True,
         rename_map: Optional[Dict[str, str]] = None,
     ) -> pd.DataFrame:
+        """Normalize a sheet by finding headers and cleaning data."""
         if df is None:
             return pd.DataFrame()
+
         df = df.dropna(how="all")
         if df.empty:
             return df
 
-        header_pos = self._first_non_empty_row_index(df)
-        if header_pos is None:
+        header_position = self._find_first_non_empty_row(df)
+        if header_position is None:
             return pd.DataFrame()
 
-        header = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
-        data = df.iloc[header_pos + 1 :].copy()
+        # Extract header and data
+        header = df.iloc[header_position].astype(str).map(str.strip)
+        data = df.iloc[header_position + 1 :].copy()
         data.columns = header.values
 
-        keep_cols = [
-            col
-            for col in data.columns
-            if not self._is_empty_or_helper(col, helper_names)
+        # Keep only non-helper columns
+        columns_to_keep = [
+            col for col in data.columns if not self._is_helper_column(col, helper_names)
         ]
-        data = data[keep_cols]
+        data = data[columns_to_keep]
 
+        # Apply column renaming if provided
         if rename_map:
             data = data.rename(columns=rename_map)
 
@@ -901,20 +1063,50 @@ class ScenarioPacker(BaseModel):
 
         return data
 
-    def _coerce_bool(self, v: Any) -> Optional[bool]:
-        if v is None or (isinstance(v, float) and pd.isna(v)):
+    def _handle_curves_processing_error(self, scenario: Scenario, error: Exception):
+        """Handle errors during curves processing."""
+        logger.warning(
+            "Failed processing custom curves for '%s': %s", scenario.identifier(), error
+        )
+
+    def _log_scenario_warnings(
+        self, scenario: Scenario, attribute_name: str, context: str
+    ):
+        """Log warnings from scenario attributes if available."""
+        try:
+            attribute = getattr(scenario, attribute_name, None)
+            if attribute is not None and hasattr(attribute, "log_warnings"):
+                attribute.log_warnings(
+                    logger,
+                    prefix=f"{context} warning for '{scenario.identifier()}'",
+                )
+        except Exception:
+            # Warning logging failures should not interrupt processing
+            pass
+
+    def _find_first_non_empty_row(self, df: pd.DataFrame) -> Optional[int]:
+        """Find the first row that contains non-empty data."""
+        if df is None:
             return None
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, (int, float)):
+
+        for index, (_, row) in enumerate(df.iterrows()):
             try:
-                return bool(int(v))
+                if not row.isna().all():
+                    return index
             except Exception:
-                return None
-        if isinstance(v, str):
-            s = v.strip().lower()
-            if s in {"true", "yes", "y", "1"}:
-                return True
-            if s in {"false", "no", "n", "0"}:
-                return False
+                # Fallback check for non-standard empty values
+                if any(value not in (None, "", float("nan")) for value in row):
+                    return index
+
         return None
+
+    def _is_helper_column(self, column_name: Any, helper_names: set[str]) -> bool:
+        """Check if a column is a helper column that should be ignored."""
+        if not isinstance(column_name, str):
+            return True
+
+        normalized_name = column_name.strip().lower()
+        return normalized_name in (helper_names or set()) or normalized_name in {
+            "",
+            "nan",
+        }

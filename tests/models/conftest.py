@@ -15,6 +15,63 @@ from pyetm.models.scenario import Scenario
 
 
 # --- Scenario Fixtures --- #
+@pytest.fixture
+def multiple_scenarios():
+    """Create multiple scenarios for testing"""
+    scenarios = []
+    for i in range(3):
+        scenario = Mock(spec=Scenario)
+        scenario.id = f"scenario_{i}"
+        scenario.area_code = "nl2015"
+        scenario.end_year = 2050
+        scenario.start_year = 2019
+        scenario.identifier = Mock(return_value=scenario.id)
+        scenarios.append(scenario)
+    return scenarios
+
+
+@pytest.fixture
+def scenario_with_inputs():
+    """Create a scenario with mock inputs"""
+    scenario = Mock(spec=Scenario)
+    scenario.id = "input_scenario"
+    scenario.area_code = "nl2015"
+    scenario.end_year = 2050
+    scenario.start_year = 2019
+    scenario.identifier = Mock(return_value=scenario.id)
+
+    # Mock inputs
+    scenario.inputs = Mock()
+    mock_df = pd.DataFrame(
+        {"user": [1000, 2000], "unit": ["MW", "MW"], "default": [500, 800]},
+        index=["wind_capacity", "solar_capacity"],
+    )
+    mock_df.index.name = "input"
+    scenario.inputs.to_dataframe = Mock(return_value=mock_df)
+
+    return scenario
+
+
+@pytest.fixture
+def scenario_with_queries():
+    """Create a scenario with mock queries"""
+    scenario = Mock(spec=Scenario)
+    scenario.id = "query_scenario"
+    scenario.area_code = "nl2015"
+    scenario.end_year = 2050
+    scenario.start_year = 2019
+    scenario.identifier = Mock(return_value=scenario.id)
+
+    # Mock queries
+    mock_results = pd.DataFrame(
+        {"future": [100, 200], "unit": ["MW", "GWh"]},
+        index=["total_demand", "co2_emissions"],
+    )
+    mock_results.index.name = "gquery"
+    scenario.results = Mock(return_value=mock_results)
+    scenario.queries_requested = Mock(return_value=True)
+
+    return scenario
 
 
 @pytest.fixture
