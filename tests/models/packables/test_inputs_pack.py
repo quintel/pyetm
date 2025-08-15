@@ -32,13 +32,15 @@ def test_key_for_prefers_short_name_and_fallbacks():
     pack = InputsPack()
     pack.set_scenario_short_names({"1": "S1"})
 
-    assert pack._key_for(s1) == "S1"  # short name wins
-    assert pack._key_for(s2) == "id-2"  # falls back to identifier
+    assert pack._get_scenario_display_key(s1) == "S1"  # short name wins
+    assert pack._get_scenario_display_key(s2) == "id-2"  # falls back to identifier
 
     s3 = make_scenario(
         3, identifier=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
     )
-    assert pack._key_for(s3) == 3  # falls back to id when identifier fails
+    assert (
+        pack._get_scenario_display_key(s3) == 3
+    )  # falls back to id when identifier fails
 
 
 def test_resolve_scenario_by_short_identifier_and_numeric():
