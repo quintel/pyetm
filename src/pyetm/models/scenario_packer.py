@@ -170,11 +170,11 @@ class ScenarioPacker(BaseModel):
                     if inputs_defaults_final:
                         fields.append("default")
                     if inputs_min_max_final:
-                        fields.extend(["min", "max"])
+                        # Append a single bounds block (min/max once for all scenarios)
+                        fields.append("__bounds__")
                     if fields == ["user"]:
                         df = self._inputs.to_dataframe(columns="user")
                     elif fields == ["min", "max"]:
-                        # Not a legal case because we always include 'user', keep fallback
                         df = self._inputs.to_dataframe_min_max()
                     elif fields == ["default"]:
                         df = self._inputs.to_dataframe_defaults()
@@ -182,12 +182,26 @@ class ScenarioPacker(BaseModel):
                         fm = {s: fields for s in pack.scenarios}
                         df = self._inputs.to_dataframe_per_scenario_fields(fm)
                     elif fields == ["user", "min", "max"]:
-                        fm = {s: fields for s in pack.scenarios}
-                        df = self._inputs.to_dataframe_per_scenario_fields(fm)
+                        # Export one bounds block first, then 'user' per scenario
+                        fm = {s: ["user"] for s in pack.scenarios}
+                        df_user = self._inputs.to_dataframe_per_scenario_fields(fm)
+                        df_bounds = self._inputs.to_dataframe_min_max()
+                        try:
+                            df = pd.concat([df_bounds, df_user], axis=1)
+                        except Exception:
+                            df = df_user
                     else:
-                        # user + default + min + max
-                        fm = {s: fields for s in pack.scenarios}
-                        df = self._inputs.to_dataframe_per_scenario_fields(fm)
+                        mapped_fields = [f for f in fields if f != "__bounds__"]
+                        fm = {s: mapped_fields for s in pack.scenarios}
+                        df_core = self._inputs.to_dataframe_per_scenario_fields(fm)
+                        if "__bounds__" in fields:
+                            df_bounds = self._inputs.to_dataframe_min_max()
+                            try:
+                                df = pd.concat([df_bounds, df_core], axis=1)
+                            except Exception:
+                                df = df_core
+                        else:
+                            df = df_core
                 except Exception:
                     df = pack.to_dataframe()
             elif name == "sortables" and include_sortables_final:

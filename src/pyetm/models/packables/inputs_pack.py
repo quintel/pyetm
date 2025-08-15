@@ -55,43 +55,70 @@ class InputsPack(Packable):
         return None
 
     def _extract_map(self, scen, attr: str) -> dict[str, Any] | None:
-        """Extract a mapping of input key -> attribute value for a scenario's inputs."""
+        """Extract a mapping of input key -> attribute value for a scenario's inputs.
+
+        Special attr 'min_max' resolves to 'min' (fallback to 'max').
+        """
+        iter_attr_primary = attr
+        iter_attr_fallback = None
+        if attr == "min_max":
+            iter_attr_primary = "min"
+            iter_attr_fallback = "max"
+
+        # 1) Try iterating input objects first
         try:
-            it = iter(scen.inputs)
-            values = {}
-            for inp in it:
+            values: dict[str, Any] = {}
+            for inp in scen.inputs:
                 key = getattr(inp, "key", None)
                 if key is None:
                     continue
-                values[str(key)] = getattr(inp, attr, None)
+                val = getattr(inp, iter_attr_primary, None)
+                if val is None and iter_attr_fallback is not None:
+                    val = getattr(inp, iter_attr_fallback, None)
+                values[str(key)] = val if attr != "min_max" else val
             if values:
                 return values
         except Exception:
             pass
 
+        # 2) Fallback to DataFrame/Series
         try:
-            df = scen.inputs.to_dataframe(columns=attr)
+            df = (
+                scen.inputs.to_dataframe(columns=["min", "max"])
+                if attr == "min_max"
+                else scen.inputs.to_dataframe(columns=attr)
+            )
         except Exception:
             df = None
+
         if df is None or getattr(df, "empty", False):
             return None
 
+        # Normalize index (drop 'unit' if present)
         if isinstance(df.index, pd.MultiIndex) and "unit" in (df.index.names or []):
             df = df.copy()
             df.index = df.index.droplevel("unit")
+
         if isinstance(df, pd.Series):
             series = df
         else:
-            cols_lc = [str(c).lower() for c in df.columns]
-            chosen = None
-            for candidate in (attr, "user", "value", "default"):
-                if candidate in cols_lc:
-                    chosen = df.columns[cols_lc.index(candidate)]
-                    break
-            if chosen is None:
-                chosen = df.columns[0]
-            series = df[chosen]
-        series.index = series.index.map(lambda k: str(k))
+            cols_lc = {str(c).lower(): c for c in df.columns}
+            if attr == "min_max":
+                if "min" in cols_lc:
+                    series = df[cols_lc["min"]]
+                elif "max" in cols_lc:
+                    series = df[cols_lc["max"]]
+                else:
+                    series = df.iloc[:, 0]
+            else:
+                for candidate in (attr, "user", "value", "default"):
+                    if candidate in cols_lc:
+                        series = df[cols_lc[candidate]]
+                        break
+                else:
+                    series = df.iloc[:, 0]
+
+        series.index = series.index.map(str)
         return series.to_dict()
 
     def _to_dataframe(self, columns: str = "user", **kwargs):
@@ -174,13 +201,16 @@ class InputsPack(Packable):
         return self._to_dataframe(columns="default")
 
     def to_dataframe_min_max(self) -> pd.DataFrame:
-        """Build a DataFrame with MultiIndex columns (scenario, ['min','max'])."""
+        """Build a DataFrame with min/max once (shared across scenarios).
+
+        Assumes bounds (min/max) are identical across scenarios. If conflicts are
+        found, the first-seen value is used and no exception is raised.
+        """
         if not self.scenarios:
             return pd.DataFrame()
 
+        # Collect union of keys across scenarios
         all_keys: set[str] = set()
-        per_scen: list[tuple[Any, pd.DataFrame]] = []
-
         for scen in self.scenarios:
             try:
                 it = iter(scen.inputs)
@@ -188,7 +218,13 @@ class InputsPack(Packable):
             except Exception:
                 try:
                     df = scen.inputs.to_dataframe(columns=["min", "max"])
-                    keys = [str(i) for i in df.index.get_level_values(0).unique()]
+                    # Drop 'unit' level if present
+                    if isinstance(df.index, pd.MultiIndex) and "unit" in (
+                        df.index.names or []
+                    ):
+                        df = df.copy()
+                        df.index = df.index.droplevel("unit")
+                    keys = [str(i) for i in df.index.unique()]
                 except Exception:
                     keys = []
             all_keys.update([k for k in keys if k])
@@ -198,57 +234,28 @@ class InputsPack(Packable):
 
         sorted_keys = sorted(all_keys)
 
+        # Choose bounds from the first scenario that provides them; ignore conflicts
+        min_vals: dict[str, Any] = {}
+        max_vals: dict[str, Any] = {}
         for scen in self.scenarios:
-            label = self._key_for(scen)
-            min_map: dict[str, Any] = {}
-            max_map: dict[str, Any] = {}
-            try:
-                it = iter(scen.inputs)
-                for inp in it:
-                    key = str(getattr(inp, "key", ""))
-                    if not key:
-                        continue
-                    min_map[key] = getattr(inp, "min", None)
-                    max_map[key] = getattr(inp, "max", None)
-            except Exception:
-                try:
-                    df = scen.inputs.to_dataframe(columns=["min", "max"])
-                    if isinstance(df.index, pd.MultiIndex):
-                        df = df.copy()
-                        df.index = df.index.droplevel("unit")
-                    cols_lc = [str(c).lower() for c in df.columns]
+            m_min = self._extract_map(scen, "min") or {}
+            m_max = self._extract_map(scen, "max") or {}
+            for k in sorted_keys:
+                if k not in min_vals and k in m_min:
+                    min_vals[k] = m_min.get(k)
+                if k not in max_vals and k in m_max:
+                    max_vals[k] = m_max.get(k)
+            if len(min_vals) == len(sorted_keys) and len(max_vals) == len(sorted_keys):
+                break
 
-                    def _col(name: str):
-                        return (
-                            df.columns[cols_lc.index(name)]
-                            if name in cols_lc
-                            else df.columns[0]
-                        )
-
-                    try:
-                        min_s = df[_col("min")]
-                    except Exception:
-                        min_s = pd.Series(index=df.index, dtype=float)
-                    try:
-                        max_s = df[_col("max")]
-                    except Exception:
-                        max_s = pd.Series(index=df.index, dtype=float)
-                    min_map.update({str(k): v for k, v in min_s.items()})
-                    max_map.update({str(k): v for k, v in max_s.items()})
-                except Exception:
-                    pass
-
-            min_vals = [min_map.get(k) for k in sorted_keys]
-            max_vals = [max_map.get(k) for k in sorted_keys]
-            df_s = pd.DataFrame({"min": min_vals, "max": max_vals}, index=sorted_keys)
-            df_s.index.name = "input"
-            per_scen.append((label, df_s))
-
-        frames = [df for _, df in per_scen]
-        keys = [lbl for lbl, _ in per_scen]
-        if not frames:
-            return pd.DataFrame()
-        return pd.concat(frames, axis=1, keys=keys, names=["scenario", "stat"])
+        data = {
+            ("", "min"): [min_vals.get(k) for k in sorted_keys],
+            ("", "max"): [max_vals.get(k) for k in sorted_keys],
+        }
+        df = pd.DataFrame(data, index=sorted_keys)
+        df.index.name = "input"
+        df.columns = pd.MultiIndex.from_tuples(df.columns, names=["scenario", "field"])
+        return df
 
     def from_dataframe(self, df):
         if df is None or getattr(df, "empty", False):
