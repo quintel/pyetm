@@ -17,7 +17,16 @@ class QueryPack(Packable):
         self, scenario: Any, columns: str = "future", **kwargs
     ):
         try:
-            return scenario.results(columns=columns)
+            df = scenario.results(columns=columns)
+            try:
+                if hasattr(scenario, "_queries") and scenario._queries is not None:
+                    scenario._queries.log_warnings(
+                        logger,
+                        prefix=f"Queries warning for '{scenario.identifier()}'",
+                    )
+            except Exception:
+                pass
+            return df
         except Exception as e:
             logger.warning(
                 "Failed building gquery results for %s: %s", scenario.identifier(), e
@@ -38,4 +47,17 @@ class QueryPack(Packable):
         # Apply unique queries to all scenarios
         if unique_queries:
             for scenario in self.scenarios:
-                scenario.add_queries(unique_queries)
+                try:
+                    scenario.add_queries(unique_queries)
+                finally:
+                    try:
+                        if (
+                            hasattr(scenario, "_queries")
+                            and scenario._queries is not None
+                        ):
+                            scenario._queries.log_warnings(
+                                logger,
+                                prefix=f"Queries warning for '{scenario.identifier()}'",
+                            )
+                    except Exception:
+                        pass

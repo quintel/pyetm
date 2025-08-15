@@ -144,7 +144,7 @@ def test_from_dataframe_parses_and_updates(caplog):
     s1.update_user_values.assert_called_once_with({"a": 1})
     s3.update_user_values.assert_called_once_with({"a": 10})
     # Unknown column should produce a warning and not call any scenario
-    assert "Could not find scenario for PARAMETERS column label" in caplog.text
+    assert "Could not find scenario for SLIDER_SETTINGS column label" in caplog.text
 
 
 def test_from_dataframe_handles_update_exception(caplog):

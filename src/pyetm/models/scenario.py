@@ -12,6 +12,7 @@ from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
+from pyetm.models.export_config import ExportConfig
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
@@ -59,6 +60,7 @@ class Scenario(Base):
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
     _output_curves: Optional[OutputCurves] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
+    _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
 
     @classmethod
     def new(cls, area_code: str, end_year: int, **kwargs) -> "Scenario":
@@ -116,38 +118,28 @@ class Scenario(Base):
         self,
         path: PathLike | str,
         *others: "Scenario",
-        export_output_curves: bool = True,
-        output_curves_path: str | None = None,
         carriers: list[str] | None = None,
+        include_inputs: bool | None = None,
+        include_sortables: bool | None = None,
+        include_custom_curves: bool | None = None,
+        include_gqueries: bool | None = None,
+        include_output_curves: bool | None = None,
     ) -> None:
         """
         Export this scenario – and optionally additional scenarios – to an Excel file.
-        Output curves are exported to a separate workbook by default, with one sheet
-        per carrier. Use carriers to filter which carriers to include.
+        Output curves are exported to a separate workbook only when enabled, with one
+        sheet per carrier. Use carriers to filter which carriers to include when exporting.
         """
         from pyetm.models.scenarios import Scenarios
 
         Scenarios(items=[self, *others]).to_excel(
             path,
-            export_output_curves=export_output_curves,
-            output_curves_path=output_curves_path,
             carriers=carriers,
-        )
-
-    # Deprecated helper retained for backwards compatibility: route to main to_excel
-    def to_output_curves_excel(
-        self,
-        path: PathLike | str,
-        *others: "Scenario",
-        carriers: list[str] | None = None,
-    ) -> None:
-        from pyetm.models.scenarios import Scenarios
-
-        Scenarios(items=[self, *others]).to_excel(
-            path,
-            export_output_curves=True,
-            output_curves_path=str(path),
-            carriers=carriers,
+            include_inputs=include_inputs,
+            include_sortables=include_sortables,
+            include_custom_curves=include_custom_curves,
+            include_gqueries=include_gqueries,
+            include_output_curves=include_output_curves,
         )
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
@@ -183,11 +175,42 @@ class Scenario(Base):
         return hash((self.id, self.area_code, self.end_year))
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
-        return pd.DataFrame.from_dict(
-            self.model_dump(include={"end_year", "area_code", "private", "template"}),
-            orient="index",
-            columns=[self.id],
-        )
+        """
+        Return a single-column DataFrame describing this scenario
+        - Column name is the scenario_id for concatenation.
+        """
+        info: Dict[str, Any] = {
+            "title": self.title,
+            "scenario_id": self.id,
+            "template": self.template,
+            "area_code": self.area_code,
+            "start_year": self.start_year,
+            "end_year": self.end_year,
+            "keep_compatible": self.keep_compatible,
+            "private": self.private,
+            "source": self.source,
+            "url": self.url,
+            "version": self.version,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+        # Description from metadata (if present)
+        meta = self.metadata if isinstance(self.metadata, dict) else None
+        if meta is not None:
+            desc = meta.get("description")
+            if desc is not None:
+                info["description"] = desc
+
+        # Flatten remaining metadata keys
+        if meta is not None:
+            for k, v in meta.items():
+                if k == "description":
+                    continue
+                if k not in info:
+                    info[k] = v
+
+        return pd.DataFrame.from_dict(info, orient="index", columns=[self.id])
 
     def identifier(self):
         if self.title:
@@ -384,6 +407,10 @@ class Scenario(Base):
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
         coll = CustomCurves.from_json(result.data)
+        try:
+            coll._scenario = self
+        except Exception:
+            pass
         for w in result.errors:
             self.add_warning("custom_curves", w)
         self._merge_submodel_warnings(coll, key_attr="custom_curves")
@@ -429,6 +456,10 @@ class Scenario(Base):
                 existing_curve.file_path = new_curve.file_path
             else:
                 self.custom_curves.curves.append(new_curve)
+        try:
+            self.custom_curves._scenario = self
+        except Exception:
+            pass
 
     @property
     def output_curves(self) -> OutputCurves:
@@ -448,6 +479,12 @@ class Scenario(Base):
 
     def get_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
         return self.output_curves.get_curves_by_carrier_type(self, carrier_type)
+
+    def set_export_config(self, config: ExportConfig | None) -> None:
+        self._export_config = config
+
+    def get_export_config(self) -> ExportConfig | None:
+        return self._export_config
 
     def add_queries(self, gquery_keys: list[str]):
         if self._queries is None:

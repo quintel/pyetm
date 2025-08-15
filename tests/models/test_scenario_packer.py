@@ -432,6 +432,13 @@ class TestExcelExport:
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)
 
+        scenario_with_inputs.to_dataframe = Mock(
+            return_value=pd.DataFrame(
+                {scenario_with_inputs.id: ["nl2015", 2050]},
+                index=["area_code", "end_year"],
+            )
+        )
+
         with (
             patch.object(ScenarioPacker, "main_info", return_value=dummy_main_df),
             patch.object(InputsPack, "to_dataframe", return_value=dummy_inputs_df),
@@ -922,7 +929,9 @@ class TestFromExcelDetailed:
         path = tmp_path / "import.xlsx"
         with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
             main.to_excel(writer, sheet_name="MAIN")
-            params.to_excel(writer, sheet_name="PARAMETERS", header=False, index=False)
+            params.to_excel(
+                writer, sheet_name="SLIDER_SETTINGS", header=False, index=False
+            )
             gqueries.to_excel(writer, sheet_name="GQUERIES", header=False, index=False)
             s1_sort.to_excel(writer, sheet_name="S1_SORT", header=False, index=False)
             s2_sort.to_excel(writer, sheet_name="S2_SORT", header=False, index=False)
@@ -988,8 +997,9 @@ class TestFromExcelDetailed:
         assert isinstance(packer3, ScenarioPacker)
         assert len(packer3._scenarios()) == 0
 
-    def test_from_excel_parameters_and_gqueries_errors(self, tmp_path, monkeypatch):
-        # Prepare a minimal MAIN and both PARAMETERS and GQUERIES sheets
+    def test_from_excel_slider_settings_and_gqueries_errors(
+        self, tmp_path, monkeypatch
+    ):
         main = pd.DataFrame(
             {
                 "S": {
@@ -1007,7 +1017,9 @@ class TestFromExcelDetailed:
         path = tmp_path / "errs.xlsx"
         with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
             main.to_excel(writer, sheet_name="MAIN")
-            params.to_excel(writer, sheet_name="PARAMETERS", header=False, index=False)
+            params.to_excel(
+                writer, sheet_name="SLIDER_SETTINGS", header=False, index=False
+            )
             gqueries.to_excel(writer, sheet_name="GQUERIES", header=False, index=False)
 
         # Create returns a simple scenario
@@ -1139,7 +1151,7 @@ class TestFromExcelDetailed:
             packer2 = ScenarioPacker.from_excel(str(path))
             assert len(packer2._scenarios()) == 0
 
-    def test_from_excel_missing_parameters_sheet_parse_error(
+    def test_from_excel_missing_slider_settings_sheet_parse_error(
         self, tmp_path, monkeypatch
     ):
         main = pd.DataFrame(

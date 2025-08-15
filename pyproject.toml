@@ -39,7 +39,7 @@ pydeps = "*"
 pyetm = "pyetm.__main__:main"
 
 [tool.poetry.urls]
-"Bug Tracker" = "https://github.com/quintel/pyetm/issues"
+"Issue tracker" = "https://github.com/quintel/pyetm/issues"
 "Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
 
 [tool.pytest.ini_options]
