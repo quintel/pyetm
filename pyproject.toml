@@ -2,29 +2,43 @@
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry]
+
+[project]
 name = "pyetm"
 version = "2.0"
-description = "A Python package for energy transition modeling."
-authors = ["Your Name <you@example.com>"]
-license = "MIT"
+description = "Python-ETM Connector"
 readme = "README.md"
-homepage = "https://github.com/quintel/pyetm"
-repository = "https://github.com/quintel/pyetm"
-documentation = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
-keywords = ["energy", "transition", "modeling", "api"]
-packages = [{ include = "pyetm", from = "src" }]
+license = { text = "MIT" }
+authors = [
+  { name = "Nora Schinkel", email = "nora.schinkel@quintel.com" },
+  { name = "Louis Parkes-Talbo", email = "louis.parkestalbot@quintel.com" }
+]
+keywords = ["energy", "transition", "modeling", "api", "ETM"]
+requires-python = ">=3.12,<4.0"
 
-[tool.poetry.dependencies]
-python = ">=3.12,<4.0"
-pydantic = "*"
-pandas = "*"
-requests = "*"
-python-dotenv = "*"
-pyyaml = "*"
-pydantic-settings = "*"
-xlsxwriter = "*"
-openpyxl = "*"
+dependencies = [
+  "pydantic",
+  "pandas",
+  "requests",
+  "python-dotenv",
+  "pyyaml",
+  "pydantic-settings",
+  "xlsxwriter",
+  "openpyxl"
+]
+
+[project.scripts]
+pyetm = "pyetm.__main__:main"
+
+[project.urls]
+"Repository"    = "https://github.com/quintel/pyetm"
+"Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
+"Issue tracker" = "https://github.com/quintel/pyetm/issues"
+
+[tool.poetry]
+packages = [{ include = "pyetm", from = "src" }]
+include = ["LICENSE"]
+
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
@@ -35,12 +49,7 @@ notebook = "*"
 pytest-cov = "*"
 pydeps = "*"
 
-[tool.poetry.scripts]
-pyetm = "pyetm.__main__:main"
 
-[tool.poetry.urls]
-"Issue tracker" = "https://github.com/quintel/pyetm/issues"
-"Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
 
 [tool.pytest.ini_options]
 addopts = "--cov=pyetm --cov-report=term-missing"

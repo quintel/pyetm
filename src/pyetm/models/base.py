@@ -49,7 +49,6 @@ class Base(BaseModel):
     def __setattr__(self, name: str, value: Any) -> None:
         """
         Handle assignment with validation error capture.
-        Simplified from the original complex implementation.
         """
         # Skip validation for private attributes, methods/functions, or existing methods
         if (
