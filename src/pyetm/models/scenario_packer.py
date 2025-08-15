@@ -268,122 +268,6 @@ class ScenarioPacker(BaseModel):
             except Exception as e:
                 logger.warning("Failed exporting output curves workbook: %s", e)
 
-    def _scenarios(self) -> set["Scenario"]:
-        """
-        All scenarios we are packing info for across all packs.
-        """
-        all_scenarios: set["Scenario"] = set()
-        for pack in self.all_pack_data():
-            try:
-                items = getattr(pack, "scenarios", None)
-                if not items:
-                    continue
-                if isinstance(items, set):
-                    all_scenarios.update(items)
-                else:
-                    try:
-                        all_scenarios.update(list(items))
-                    except TypeError:
-                        continue
-            except Exception:
-                continue
-        return all_scenarios
-
-    def all_pack_data(self):
-        """Yields each subpack"""
-        # TODO: we can also do this with model dump?
-        yield self._inputs
-        yield self._sortables
-        yield self._custom_curves
-        yield self._output_curves
-
-    def clear(self):
-        """Clear all scenarios"""
-        for pack in self.all_pack_data():
-            pack.clear()
-
-    def remove_scenario(self, scenario: "Scenario"):
-        """Remove a specific scenario from all collections"""
-        for pack in self.all_pack_data():
-            pack.discard(scenario)
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get a summary of what's in the packer"""
-        summary = {"total_scenarios": len(self._scenarios())}
-
-        for pack in self.all_pack_data():
-            summary.update(pack.summary())
-
-        summary["scenario_ids"] = sorted([s.id for s in self._scenarios()])
-
-        return summary
-
-    def _first_non_empty_row_index(self, df: pd.DataFrame) -> Optional[int]:
-        if df is None:
-            return None
-        for idx, (_, row) in enumerate(df.iterrows()):
-            if not row.isna().all():
-                return idx
-        return None
-
-    def _is_empty_or_helper(self, col_name: Any, helper_names: set[str]) -> bool:
-        if not isinstance(col_name, str):
-            return True
-        name = col_name.strip().lower()
-        return name in (helper_names or set()) or name in {"", "nan"}
-
-    def _normalize_sheet(
-        self,
-        df: pd.DataFrame,
-        *,
-        helper_names: set[str],
-        reset_index: bool = True,
-        rename_map: Optional[Dict[str, str]] = None,
-    ) -> pd.DataFrame:
-        if df is None:
-            return pd.DataFrame()
-        df = df.dropna(how="all")
-        if df.empty:
-            return df
-
-        header_pos = self._first_non_empty_row_index(df)
-        if header_pos is None:
-            return pd.DataFrame()
-
-        header = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
-        data = df.iloc[header_pos + 1 :].copy()
-        data.columns = header.values
-
-        keep_cols = [
-            col
-            for col in data.columns
-            if not self._is_empty_or_helper(col, helper_names)
-        ]
-        data = data[keep_cols]
-
-        if rename_map:
-            data = data.rename(columns=rename_map)
-
-        if reset_index:
-            data.reset_index(drop=True, inplace=True)
-
-        return data
-
-    def _coerce_bool(self, v: Any) -> Optional[bool]:
-        if v is None or (isinstance(v, float) and pd.isna(v)):
-            return None
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, (int, float)):
-            return bool(int(v))
-        if isinstance(v, str):
-            s = v.strip().lower()
-            if s in {"true", "yes", "y", "1"}:
-                return True
-            if s in {"false", "no", "n", "0"}:
-                return False
-        return None
-
     def _coerce_int(self, v: Any) -> Optional[int]:
         if v is None or (isinstance(v, float) and pd.isna(v)):
             return None
@@ -833,81 +717,12 @@ class ScenarioPacker(BaseModel):
         return scenario
 
     def _build_excel_main_dataframe(self) -> pd.DataFrame:
-        """Build a MAIN sheet DataFrame with metadata for Excel export."""
-        scenarios = list(self._scenarios())
-        if not scenarios:
+        """Build a MAIN sheet DataFrame for Excel export using main_info()."""
+        df = self.main_info()
+        if df is None or df.empty:
             return pd.DataFrame()
 
-        def id_or_title(s):
-            try:
-                return s.identifier()
-            except Exception:
-                return getattr(s, "id", None)
-
-        columns: dict[Any, dict[str, Any]] = {}
-        all_keys: list[str] = []
-
-        def add_key(k: str):
-            if k not in all_keys:
-                all_keys.append(k)
-
-        for s in scenarios:
-            info: dict[str, Any] = {}
-
-            # Core identifiers and common fields
-            info["scenario_id"] = getattr(s, "id", None)
-            info["area_code"] = getattr(s, "area_code", None)
-            info["end_year"] = getattr(s, "end_year", None)
-            info["start_year"] = getattr(s, "start_year", None)
-            info["keep_compatible"] = getattr(s, "keep_compatible", None)
-            info["private"] = getattr(s, "private", None)
-            info["template"] = getattr(s, "template", None)
-            info["source"] = getattr(s, "source", None)
-            try:
-                info["title"] = s.title
-            except Exception:
-                info["title"] = None
-            meta = getattr(s, "metadata", None)
-            if isinstance(meta, dict):
-                desc = meta.get("description")
-                if desc is not None:
-                    info["description"] = desc
-            info["url"] = getattr(s, "url", None)
-            try:
-                info["version"] = s.version
-            except Exception:
-                info["version"] = None
-            info["created_at"] = getattr(s, "created_at", None)
-            info["updated_at"] = getattr(s, "updated_at", None)
-
-            # Export config flags (optional)
-            cfg: ExportConfig | None = getattr(s, "_export_config", None)
-            if cfg is not None:
-                info["include_inputs"] = cfg.include_inputs
-                info["include_sortables"] = cfg.include_sortables
-                info["include_custom_curves"] = cfg.include_custom_curves
-                info["include_gqueries"] = cfg.include_gqueries
-                info["defaults"] = cfg.inputs_defaults
-                info["min_max"] = cfg.inputs_min_max
-                if cfg.output_carriers is not None:
-                    try:
-                        info["output_carriers"] = ", ".join(cfg.output_carriers)
-                    except Exception:
-                        info["output_carriers"] = None
-
-            # Flatten all other metadata keys
-            if isinstance(meta, dict):
-                for k, v in meta.items():
-                    if k in ("title", "description"):
-                        continue
-                    info[f"metadata.{k}"] = v
-
-            label = id_or_title(s)
-            columns[label] = info
-            for k in info.keys():
-                add_key(k)
-
-        # Preferred key order at top
+        # Preferred key order at top; only keep those present, then append remaining
         preferred = [
             "title",
             "description",
@@ -923,22 +738,43 @@ class ScenarioPacker(BaseModel):
             "version",
             "created_at",
             "updated_at",
-            # Config flags after core meta
-            "include_inputs",
-            "include_sortables",
-            "include_custom_curves",
-            "include_gqueries",
-            "defaults",
-            "min_max",
-            "output_carriers",
         ]
-        remaining = [k for k in all_keys if k not in preferred]
-        index_order = preferred + remaining
-
-        df = pd.DataFrame(
-            {col: {k: columns[col].get(k) for k in index_order} for col in columns}
-        )
+        present = [k for k in preferred if k in df.index]
+        remaining = [k for k in df.index if k not in present]
+        ordered = present + remaining
+        df = df.reindex(index=ordered)
         df.index.name = "scenario"
+
+        # Rename columns to use an identifier
+        try:
+            scen_list = list(self._scenarios())
+            rename_map: dict[Any, Any] = {}
+            by_str_id = {str(getattr(s, "id", "")): s for s in scen_list}
+            for col in list(df.columns):
+                matched_s = None
+                for s in scen_list:
+                    if col == getattr(s, "id", None):
+                        matched_s = s
+                        break
+                if matched_s is None:
+                    matched_s = by_str_id.get(str(col))
+                if matched_s is not None:
+                    try:
+                        label = (
+                            matched_s.identifier()
+                            if hasattr(matched_s, "identifier")
+                            else getattr(matched_s, "title", None)
+                            or getattr(matched_s, "id", col)
+                        )
+                    except Exception:
+                        label = getattr(matched_s, "title", None) or getattr(
+                            matched_s, "id", col
+                        )
+                    rename_map[col] = label
+            if rename_map:
+                df = df.rename(columns=rename_map)
+        except Exception:
+            pass
         return df
 
     def _sanitize_dataframe_for_excel(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -950,13 +786,11 @@ class ScenarioPacker(BaseModel):
                 return ""
             if isinstance(v, (str, int, float, bool)):
                 return v
-            # Pandas Timestamp / datetime
             if isinstance(v, (pd.Timestamp, _dt.datetime, _dt.date)):
                 try:
                     return str(v)
                 except Exception:
                     return ""
-            # Convert everything else to string
             try:
                 return str(v)
             except Exception:
@@ -966,3 +800,131 @@ class ScenarioPacker(BaseModel):
         out.index = out.index.map(lambda x: str(x) if x is not None else "")
         out.columns = [str(c) if c is not None else "" for c in out.columns]
         return out.map(_safe)
+
+    def all_pack_data(self):
+        """Yield each sub-pack collection."""
+        yield self._inputs
+        yield self._sortables
+        yield self._custom_curves
+        yield self._output_curves
+
+    def _scenarios(self) -> set["Scenario"]:
+        """All scenarios we are packing info for across all packs."""
+        all_scenarios: set["Scenario"] = set()
+        for pack in self.all_pack_data():
+            try:
+                items = getattr(pack, "scenarios", None)
+                if not items:
+                    continue
+                if isinstance(items, set):
+                    all_scenarios.update(items)
+                else:
+                    try:
+                        all_scenarios.update(set(items))
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+        return all_scenarios
+
+    def clear(self):
+        """Clear all scenarios from all packs."""
+        for pack in self.all_pack_data():
+            try:
+                pack.clear()
+            except Exception:
+                pass
+
+    def remove_scenario(self, scenario: "Scenario"):
+        """Remove a specific scenario from all collections."""
+        for pack in self.all_pack_data():
+            try:
+                pack.discard(scenario)
+            except Exception:
+                pass
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get a summary of what's in the packer."""
+        summary: Dict[str, Any] = {"total_scenarios": len(self._scenarios())}
+        for pack in self.all_pack_data():
+            try:
+                summary.update(pack.summary())
+            except Exception:
+                pass
+        summary["scenario_ids"] = sorted(
+            [getattr(s, "id", None) for s in self._scenarios()]
+        )
+        return summary
+
+    def _first_non_empty_row_index(self, df: pd.DataFrame) -> Optional[int]:
+        if df is None:
+            return None
+        for idx, (_, row) in enumerate(df.iterrows()):
+            try:
+                if not row.isna().all():
+                    return idx
+            except Exception:
+                if any(v not in (None, "", float("nan")) for v in row):
+                    return idx
+        return None
+
+    def _is_empty_or_helper(self, col_name: Any, helper_names: set[str]) -> bool:
+        if not isinstance(col_name, str):
+            return True
+        name = col_name.strip().lower()
+        return name in (helper_names or set()) or name in {"", "nan"}
+
+    def _normalize_sheet(
+        self,
+        df: pd.DataFrame,
+        *,
+        helper_names: set[str],
+        reset_index: bool = True,
+        rename_map: Optional[Dict[str, str]] = None,
+    ) -> pd.DataFrame:
+        if df is None:
+            return pd.DataFrame()
+        df = df.dropna(how="all")
+        if df.empty:
+            return df
+
+        header_pos = self._first_non_empty_row_index(df)
+        if header_pos is None:
+            return pd.DataFrame()
+
+        header = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
+        data = df.iloc[header_pos + 1 :].copy()
+        data.columns = header.values
+
+        keep_cols = [
+            col
+            for col in data.columns
+            if not self._is_empty_or_helper(col, helper_names)
+        ]
+        data = data[keep_cols]
+
+        if rename_map:
+            data = data.rename(columns=rename_map)
+
+        if reset_index:
+            data.reset_index(drop=True, inplace=True)
+
+        return data
+
+    def _coerce_bool(self, v: Any) -> Optional[bool]:
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return None
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            try:
+                return bool(int(v))
+            except Exception:
+                return None
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"true", "yes", "y", "1"}:
+                return True
+            if s in {"false", "no", "n", "0"}:
+                return False
+        return None

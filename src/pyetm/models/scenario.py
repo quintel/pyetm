@@ -176,11 +176,42 @@ class Scenario(Base):
         return hash((self.id, self.area_code, self.end_year))
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
-        return pd.DataFrame.from_dict(
-            self.model_dump(include={"end_year", "area_code", "private", "template"}),
-            orient="index",
-            columns=[self.id],
-        )
+        """
+        Return a single-column DataFrame describing this scenario
+        - Column name is the scenario_id for concatenation.
+        """
+        info: Dict[str, Any] = {
+            "title": self.title,
+            "scenario_id": self.id,
+            "template": self.template,
+            "area_code": self.area_code,
+            "start_year": self.start_year,
+            "end_year": self.end_year,
+            "keep_compatible": self.keep_compatible,
+            "private": self.private,
+            "source": self.source,
+            "url": self.url,
+            "version": self.version,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+        # Description from metadata (if present)
+        meta = self.metadata if isinstance(self.metadata, dict) else None
+        if meta is not None:
+            desc = meta.get("description")
+            if desc is not None:
+                info["description"] = desc
+
+        # Flatten remaining metadata keys
+        if meta is not None:
+            for k, v in meta.items():
+                if k == "description":
+                    continue
+                if k not in info:
+                    info[k] = v
+
+        return pd.DataFrame.from_dict(info, orient="index", columns=[self.id])
 
     def identifier(self):
         if self.title:

@@ -432,6 +432,13 @@ class TestExcelExport:
         packer = ScenarioPacker()
         packer.add(scenario_with_inputs)
 
+        scenario_with_inputs.to_dataframe = Mock(
+            return_value=pd.DataFrame(
+                {scenario_with_inputs.id: ["nl2015", 2050]},
+                index=["area_code", "end_year"],
+            )
+        )
+
         with (
             patch.object(ScenarioPacker, "main_info", return_value=dummy_main_df),
             patch.object(InputsPack, "to_dataframe", return_value=dummy_inputs_df),
