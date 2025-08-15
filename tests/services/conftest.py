@@ -54,7 +54,6 @@ def dummy_client(fake_response):
                 if kwargs:
                     call_data.update(kwargs)
 
-                # If no parameters, record None for backwards compatibility
                 call_record = (url, call_data if call_data else None)
                 self.calls.append(call_record)
 

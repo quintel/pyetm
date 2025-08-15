@@ -10,7 +10,7 @@ from pyetm.services.scenario_runners import GetQueryResultsRunner
 
 class Gqueries(Base):
     """
-    We cannot validat yet - as we'd need a servcie connected to the main
+    We cannot validate yet - as we'd need a service connected to the main
     gquery endpoint
     """
 
@@ -48,7 +48,7 @@ class Gqueries(Base):
         if result.success:
             self.update(result.data)
         else:
-            self.add_warning('results', f"Error retrieving queries: {result.errors}")
+            self.add_warning("results", f"Error retrieving queries: {result.errors}")
 
     def to_dataframe(self, columns="future"):
         if not self.is_ready():
@@ -57,6 +57,13 @@ class Gqueries(Base):
         df = pd.DataFrame.from_dict(self.query_dict).reindex(["unit"] + [columns]).T
         df.index.name = "gquery"
         return df.set_index("unit", append=True)
+
+    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+        """
+        Implementation required by Base class.
+        Uses to_dataframe with default parameters.
+        """
+        return self.to_dataframe()
 
     @classmethod
     def from_list(cls, query_list: list[str]):
