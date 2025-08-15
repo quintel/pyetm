@@ -54,13 +54,21 @@ class AppConfig(BaseSettings):
     )
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
-        env_file=ENV_FILE,
-        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
 
     temp_folder: Optional[Path] = PROJECT_ROOT / "tmp"
+
+    def __init__(self, **values):
+        """
+        This ensures tests can monkeypatch `pyetm.config.settings.ENV_FILE`
+        """
+        super().__init__(
+            _env_file=ENV_FILE,
+            _env_file_encoding="utf-8",
+            **values,
+        )
 
     @field_validator("etm_api_token")
     @classmethod

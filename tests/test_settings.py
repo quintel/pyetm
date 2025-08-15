@@ -1,5 +1,4 @@
 import os
-import yaml
 import pytest
 from pathlib import Path
 import pyetm.config.settings as settings_module
@@ -9,83 +8,136 @@ AppConfig = settings_module.AppConfig
 get_settings = settings_module.get_settings
 
 
-# Fixture: clear any ENV vars
-@pytest.fixture(autouse=True)
-def clear_env(monkeypatch):
-    for var in ("ETM_API_TOKEN", "BASE_URL", "LOG_LEVEL"):
+# Settings-specific fixture for clean environment
+@pytest.fixture
+def clean_settings_env(monkeypatch, tmp_path):
+    """Create a completely clean environment for settings tests"""
+    # Clear all ETM environment variables
+    etm_vars = [
+        "ETM_API_TOKEN",
+        "BASE_URL",
+        "LOG_LEVEL",
+        "ENVIRONMENT",
+        "CSV_SEPARATOR",
+        "DECIMAL_SEPARATOR",
+        "PROXY_SERVERS_HTTP",
+        "PROXY_SERVERS_HTTPS",
+    ]
+    for var in etm_vars:
         monkeypatch.delenv(var, raising=False)
 
+    # Create isolated config file path
+    test_config_file = tmp_path / "isolated_config.env"
+    monkeypatch.setattr(settings_module, "ENV_FILE", test_config_file)
 
-# Helper to write a YAML file
-def write_yaml(path: Path, data: dict):
-    path.write_text(yaml.safe_dump(data))
+    return test_config_file
 
 
-# File has all values → use them
-def test_from_yaml_loads_file_values(tmp_path):
-    cfg_file = tmp_path / "config.yml"
-    payload = {
-        "etm_api_token": "etm_valid.looking.token",
-        "base_url": "https://custom.local/api",
-        "log_level": "DEBUG",
+# Helper to write a .env file
+def write_env_file(path: Path, data: dict):
+    lines = []
+    for key, value in data.items():
+        # Quote values with spaces
+        if isinstance(value, str) and (" " in value or "#" in value):
+            value = f'"{value}"'
+        lines.append(f"{key}={value}")
+    path.write_text("\n".join(lines))
+
+
+# Test basic .env file loading
+def test_config_loads_env_file_values(clean_settings_env):
+    env_file = clean_settings_env
+    env_data = {
+        "ETM_API_TOKEN": "etm_valid.looking.token",
+        "BASE_URL": "https://custom.local/api",
+        "LOG_LEVEL": "DEBUG",
+        "ENVIRONMENT": "beta",
+        "CSV_SEPARATOR": ";",
+        "DECIMAL_SEPARATOR": ",",
     }
-    write_yaml(cfg_file, payload)
+    write_env_file(env_file, env_data)
 
-    config = AppConfig.from_yaml(cfg_file)
+    config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
     assert config.base_url == HttpUrl("https://custom.local/api")
     assert config.log_level == "DEBUG"
+    assert config.environment == "beta"
+    assert config.csv_separator == ";"
+    assert config.decimal_separator == ","
 
 
-# File only has token; ENV overrides log_level; base_url uses default
-def test_from_yaml_env_overrides_and_defaults(tmp_path, monkeypatch):
-    cfg_file = tmp_path / "config.yml"
-    write_yaml(cfg_file, {"etm_api_token": "etm_valid.looking.token"})
+# Test environment variables override .env file
+def test_env_vars_override_env_file(clean_settings_env, monkeypatch):
+    env_file = clean_settings_env
+    write_env_file(
+        env_file, {"ETM_API_TOKEN": "etm_from.env.file", "LOG_LEVEL": "DEBUG"}
+    )
 
-    # only override LOG_LEVEL
+    # ENV var should override file
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
 
-    config = AppConfig.from_yaml(cfg_file)
+    config = AppConfig()
 
-    assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.log_level == "WARNING"
-    # default from the class
-    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
+    assert config.etm_api_token == "etm_from.env.file"  # from file
+    assert config.log_level == "WARNING"  # from env var (overrides file)
 
 
-# No file; ENV provides token; others default
-def test_from_yaml_no_file_uses_env_and_defaults(tmp_path, monkeypatch):
-    cfg_file = tmp_path / "does_not_exist.yml"
+# Test base_url inference from environment
+def test_base_url_inference_from_environment(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(
+        env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ENVIRONMENT": "beta"}
+    )
+
+    config = AppConfig()
+
+    assert config.environment == "beta"
+    assert config.base_url == HttpUrl(
+        "https://beta.engine.energytransitionmodel.com/api/v3"
+    )
+
+
+# Test proxy servers configuration
+def test_proxy_servers_configuration(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "PROXY_SERVERS_HTTP": "http://proxy.example.com:8080",
+            "PROXY_SERVERS_HTTPS": "https://secure.proxy.com:8080",
+        },
+    )
+
+    config = AppConfig()
+
+    assert config.proxy_servers_http == "http://proxy.example.com:8080"
+    assert config.proxy_servers_https == "https://secure.proxy.com:8080"
+
+    # Test backward compatibility property
+    proxy_dict = config.proxy_servers
+    assert proxy_dict["http"] == "http://proxy.example.com:8080"
+    assert proxy_dict["https"] == "https://secure.proxy.com:8080"
+
+
+# Test no .env file, only environment variables
+def test_no_env_file_uses_env_vars_and_defaults(clean_settings_env, monkeypatch):
+    # Don't create the env_file, just set environment variable
     monkeypatch.setenv("ETM_API_TOKEN", "etm_valid.looking.token")
 
-    config = AppConfig.from_yaml(cfg_file)
+    config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
     assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
     assert config.log_level == "INFO"
+    assert config.environment == "pro"
 
 
-# Invalid YAML is swallowed; ENV+defaults apply
-def test_from_yaml_invalid_yaml_is_swallowed(tmp_path, monkeypatch):
-    cfg_file = tmp_path / "config.yml"
-    cfg_file.write_text(":\t not valid yaml :::")
-
-    monkeypatch.setenv("ETM_API_TOKEN", "etm_valid.looking.token")
-
-    config = AppConfig.from_yaml(cfg_file)
-
-    assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
-    assert config.log_level == "INFO"
-
-
-# Empty file + no ENV → get_settings() raises RuntimeError with helpful message
-def test_get_settings_missing_token_raises_runtime_error(tmp_path, monkeypatch):
-    cfg_file = tmp_path / "config.yml"
-    write_yaml(cfg_file, {})
-
-    monkeypatch.setattr(settings_module, "CONFIG_FILE", cfg_file)
+# Test missing required token raises helpful error
+def test_get_settings_missing_token_raises_runtime_error(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(env_file, {})
 
     with pytest.raises(RuntimeError) as excinfo:
         get_settings()
@@ -96,10 +148,69 @@ def test_get_settings_missing_token_raises_runtime_error(tmp_path, monkeypatch):
         in msg
     )
     assert "• etm_api_token: Field required" in msg
-    assert str(cfg_file) in msg
+    assert str(env_file) in msg
 
 
-# VALID TOKENS
+# Test defaults when no configuration provided
+def test_default_values(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token"})
+
+    config = AppConfig()
+
+    assert config.etm_api_token == "etm_valid.looking.token"
+    assert config.environment == "pro"
+    assert config.log_level == "INFO"
+    assert config.csv_separator == ","
+    assert config.decimal_separator == "."
+    assert config.proxy_servers_http is None
+    assert config.proxy_servers_https is None
+    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
+
+
+# Test environment inference for different values
+@pytest.mark.parametrize(
+    "env,expected_url",
+    [
+        ("pro", "https://engine.energytransitionmodel.com/api/v3"),
+        ("beta", "https://beta.engine.energytransitionmodel.com/api/v3"),
+        ("local", "http://localhost:3000/api/v3"),
+        ("2025-01", "https://2025-01.engine.energytransitionmodel.com/api/v3"),
+        ("", "https://engine.energytransitionmodel.com/api/v3"),  # default
+        ("unknown", "https://engine.energytransitionmodel.com/api/v3"),  # fallback
+    ],
+)
+def test_environment_inference(clean_settings_env, env, expected_url):
+    env_file = clean_settings_env
+    env_data = {"ETM_API_TOKEN": "etm_valid.looking.token"}
+    if env:  # Don't add environment key if it's empty string
+        env_data["ENVIRONMENT"] = env
+
+    write_env_file(env_file, env_data)
+
+    config = AppConfig()
+    assert config.base_url == HttpUrl(expected_url)
+
+
+# Test explicit base_url overrides environment inference
+def test_explicit_base_url_overrides_environment(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "ENVIRONMENT": "beta",
+            "BASE_URL": "https://custom.override.com/api/v3",
+        },
+    )
+
+    config = AppConfig()
+
+    assert config.environment == "beta"
+    assert config.base_url == HttpUrl("https://custom.override.com/api/v3")
+
+
+# VALID TOKENS (same as before)
 @pytest.mark.parametrize(
     "token",
     [
@@ -111,16 +222,16 @@ def test_get_settings_missing_token_raises_runtime_error(tmp_path, monkeypatch):
         "IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
     ],
 )
-def test_valid_etm_api_token_regex(tmp_path, token):
-    # Write a minimal config.yml with only the token
-    cfg = tmp_path / "config.yml"
-    write_yaml(cfg, {"etm_api_token": token})
+def test_valid_etm_api_token_regex(clean_settings_env, token):
+    env_file = clean_settings_env
+    write_env_file(env_file, {"ETM_API_TOKEN": token})
+
     # Should not raise
-    conf = AppConfig.from_yaml(cfg)
-    assert conf.etm_api_token == token
+    config = AppConfig()
+    assert config.etm_api_token == token
 
 
-# INVALID TOKENS
+# INVALID TOKENS (same as before)
 @pytest.mark.parametrize(
     "token",
     [
@@ -134,12 +245,47 @@ def test_valid_etm_api_token_regex(tmp_path, token):
         "etm_beta_eyJhbGci.eyJ zdWIi.abc",
     ],
 )
-def test_invalid_etm_api_token_raises(tmp_path, token):
-    cfg = tmp_path / "config.yml"
-    write_yaml(cfg, {"etm_api_token": token})
+def test_invalid_etm_api_token_raises(clean_settings_env, token):
+    env_file = clean_settings_env
+    write_env_file(env_file, {"ETM_API_TOKEN": token})
+
     with pytest.raises(ValidationError) as excinfo:
-        AppConfig.from_yaml(cfg)
+        AppConfig()
     errs = excinfo.value.errors()
     # Should have exactly one error, on the token field
     assert any(err["loc"] == ("etm_api_token",) for err in errs)
     assert any("Invalid ETM API token" in err["msg"] for err in errs)
+
+
+# Test temp folder functionality
+def test_path_to_tmp_creates_directory(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token"})
+
+    config = AppConfig()
+    config.temp_folder = env_file.parent / "custom_tmp"
+
+    result_path = config.path_to_tmp("test_subfolder")
+
+    assert result_path.exists()
+    assert result_path.is_dir()
+    assert result_path.name == "test_subfolder"
+    assert result_path.parent == config.temp_folder
+
+
+# Test quoted values in .env file
+def test_quoted_values_in_env_file(clean_settings_env):
+    env_file = clean_settings_env
+    # Manually write with quotes to test parsing
+    content = '''ETM_API_TOKEN=etm_valid.looking.token
+LOG_LEVEL="DEBUG WITH SPACES"
+CSV_SEPARATOR=";"
+PROXY_SERVERS_HTTP="http://user:pass@proxy.example.com:8080"'''
+    env_file.write_text(content)
+
+    config = AppConfig()
+
+    assert config.etm_api_token == "etm_valid.looking.token"
+    assert config.log_level == "DEBUG WITH SPACES"
+    assert config.csv_separator == ";"
+    assert config.proxy_servers_http == "http://user:pass@proxy.example.com:8080"

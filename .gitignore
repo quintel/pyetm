@@ -19,5 +19,5 @@ tmp/
 
 *.xlsx
 # Keep the examples
-!examples/example_input_excel.xlsx
+!inputs/example_input_excel.xlsx
 !examples/example.config.env
