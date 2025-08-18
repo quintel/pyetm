@@ -56,18 +56,41 @@ class ExportConfigResolver:
                 candidate_series = main_df.iloc[:, 0]
 
             return ExportConfigResolver._parse_config_from_series(candidate_series)
-        except Exception:
+        except Exception as e:
+            logger.exception("Error extracting from main sheet: %s", e)
             return None
 
     @staticmethod
-    def _parse_config_from_series(series: pd.Series) -> ExportConfig:
+    def _parse_config_from_series(series: pd.Series) -> "ExportConfig":
         """Parse ExportConfig from a pandas Series (column from main sheet)."""
-        index_map = {str(idx).strip().lower(): idx for idx in series.index}
+
+        def _iter_rows():
+            for label, value in zip(series.index, series.values):
+                yield str(label).strip().lower(), value
+
+        def _value_after_output(name: str) -> Any:
+            target = name.strip().lower()
+            seen_output = False
+            chosen: Any = None
+            for lbl, val in _iter_rows():
+                if lbl == "output":
+                    seen_output = True
+                    continue
+                if seen_output and lbl == target:
+                    chosen = val
+            return chosen
+
+        def _value_any(name: str) -> Any:
+            target = name.strip().lower()
+            chosen: Any = None
+            for lbl, val in _iter_rows():
+                if lbl == target:
+                    chosen = val
+            return chosen
 
         def get_cell_value(name: str) -> Any:
-            key = name.strip().lower()
-            original_key = index_map.get(key)
-            return series.get(original_key) if original_key is not None else None
+            val = _value_after_output(name)
+            return val if val is not None else _value_any(name)
 
         def parse_bool(value: Any) -> Optional[bool]:
             """Parse boolean from various formats."""
@@ -88,26 +111,47 @@ class ExportConfigResolver:
                     return False
             return None
 
+        def parse_bool_field(*names: str) -> Optional[bool]:
+            """Return the first non-None boolean parsed from the provided field names."""
+            for n in names:
+                val = parse_bool(get_cell_value(n))
+                if val is not None:
+                    return val
+            return None
+
         def parse_carriers(value: Any) -> Optional[List[str]]:
             """Parse comma-separated carrier list."""
             if not isinstance(value, str) or not value.strip():
                 return None
             return [carrier.strip() for carrier in value.split(",") if carrier.strip()]
 
-        carriers_raw = get_cell_value("exports") or get_cell_value("output_carriers")
+        exports_val = get_cell_value("exports")
+        carriers_val = get_cell_value("output_carriers")
 
-        return ExportConfig(
-            include_inputs=parse_bool(get_cell_value("inputs")),
-            include_sortables=parse_bool(get_cell_value("sortables")),
-            include_custom_curves=parse_bool(get_cell_value("custom_curves")),
+        exports_bool = parse_bool(exports_val)
+        if exports_bool is True:
+            output_carriers = ["electricity", "hydrogen", "heat", "methane"]
+        elif exports_bool is False:
+            output_carriers = None
+        else:
+            output_carriers = parse_carriers(carriers_val) or parse_carriers(
+                exports_val
+            )
+
+        config = ExportConfig(
+            include_inputs=parse_bool_field("include_inputs", "inputs"),
+            include_sortables=parse_bool_field("include_sortables", "sortables"),
+            include_custom_curves=parse_bool_field(
+                "include_custom_curves", "custom_curves"
+            ),
             include_gqueries=(
-                parse_bool(get_cell_value("gquery_results"))
-                or parse_bool(get_cell_value("gqueries"))
+                parse_bool_field("include_gqueries", "gquery_results", "gqueries")
             ),
             inputs_defaults=parse_bool(get_cell_value("defaults")),
             inputs_min_max=parse_bool(get_cell_value("min_max")),
-            output_carriers=parse_carriers(carriers_raw),
+            output_carriers=output_carriers,
         )
+        return config
 
 
 class ScenarioPacker(BaseModel):
