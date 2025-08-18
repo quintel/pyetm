@@ -927,7 +927,10 @@ class TestCreateScenarioFromColumn:
         packer = ScenarioPacker()
         scenario = Mock(spec=Scenario)
         scenario.identifier = Mock(return_value="NEW")
-        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: scenario))
+        # Accept *args, **kwargs for compatibility with production code
+        monkeypatch.setattr(
+            Scenario, "new", staticmethod(lambda *args, **kwargs: scenario)
+        )
 
         ser = pd.Series(
             {
@@ -1014,8 +1017,12 @@ class TestFromExcelDetailed:
         s_created.id = "created"
         s_created.identifier = Mock(return_value="created")
 
-        monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: s_loaded))
-        monkeypatch.setattr(Scenario, "new", staticmethod(lambda a, y: s_created))
+        monkeypatch.setattr(
+            Scenario, "load", staticmethod(lambda *args, **kwargs: s_loaded)
+        )
+        monkeypatch.setattr(
+            Scenario, "new", staticmethod(lambda *args, **kwargs: s_created)
+        )
 
         # Spy on inputs and queries imports
         with (
