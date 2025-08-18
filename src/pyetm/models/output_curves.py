@@ -3,6 +3,7 @@ from functools import lru_cache
 import pandas as pd
 from pathlib import Path
 from typing import Optional
+import os
 
 import yaml
 from pyetm.clients import BaseClient
@@ -13,6 +14,18 @@ from pyetm.services.scenario_runners.fetch_output_curves import (
     DownloadOutputCurveRunner,
     FetchAllOutputCurvesRunner,
 )
+
+
+# Small LRU cache for reading CSVs from disk. Uses mtime to invalidate when file changes.
+def _read_csv_cached(path: Path) -> pd.DataFrame:
+    return _read_csv_cached_impl(str(path), os.path.getmtime(path))
+
+
+# TODO determine appropriate maxsize
+@lru_cache(maxsize=64)
+def _read_csv_cached_impl(path_str: str, mtime: float) -> pd.DataFrame:
+    df = pd.read_csv(path_str, index_col=0)
+    return df.dropna(how="all")
 
 
 class OutputCurveError(Exception):
@@ -34,18 +47,26 @@ class OutputCurve(Base):
     def available(self) -> bool:
         return bool(self.file_path)
 
-    def retrieve(self, client, scenario) -> Optional[pd.DataFrame]:
+    def retrieve(
+        self, client, scenario, force_refresh: bool = False
+    ) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
         file_path = (
             get_settings().path_to_tmp(str(scenario.id))
             / f"{self.key.replace('/','-')}.csv"
         )
 
-        # TODO: Examine the caching situation in the future if time permits: could be particularly
-        # relevant for bulk processing
-        # if file_path.is_file():
-        #     self.file_path = file_path
-        #     return self.contents()
+        # Reuse a cached file if present unless explicitly refreshing.
+        if not force_refresh and file_path.is_file():
+            self.file_path = file_path
+            try:
+                return _read_csv_cached(self.file_path)
+            except Exception as e:
+                # Fall through to re-download on cache read failure
+                self.add_warning(
+                    "file_path",
+                    f"Failed to read cached curve file for {self.key}: {e}; refetching",
+                )
         try:
             result = DownloadOutputCurveRunner.run(client, scenario, self.key)
             if result.success:
@@ -80,8 +101,7 @@ class OutputCurve(Base):
             return None
 
         try:
-            df = pd.read_csv(self.file_path, index_col=0)
-            return df.dropna(how="all")
+            return _read_csv_cached(self.file_path)
         except Exception as e:
             self.add_warning(
                 "file_path", f"Failed to read curve file for {self.key}: {e}"
@@ -147,6 +167,17 @@ class OutputCurves(Base):
             return None
 
         if not curve.available():
+            # Try to attach a cached file from disk first
+            expected_path = (
+                get_settings().path_to_tmp(str(scenario.id))
+                / f"{curve.key.replace('/', '-')}.csv"
+            )
+            if expected_path.is_file():
+                curve.file_path = expected_path
+                contents = curve.contents()
+                self._merge_submodel_warnings(curve, key_attr="key")
+                return contents
+
             result = curve.retrieve(BaseClient(), scenario)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
@@ -193,17 +224,7 @@ class OutputCurves(Base):
         Returns:
             Dictionary mapping curve names to DataFrames
         """
-        carrier_mapping = {
-            "electricity": ["merit_order", "electricity_price", "residual_load"],
-            "heat": [
-                "heat_network",
-                "agriculture_heat",
-                "household_heat",
-                "buildings_heat",
-            ],
-            "hydrogen": ["hydrogen", "hydrogen_integral_cost"],
-            "methane": ["network_gas"],
-        }
+        carrier_mapping = self._load_carrier_mappings()
 
         if carrier_type not in carrier_mapping:
             valid_types = ", ".join(carrier_mapping.keys())

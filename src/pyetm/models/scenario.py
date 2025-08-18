@@ -288,12 +288,7 @@ class Scenario(Base):
         """
         # Update them in the Inputs object, and check validation
         validity_errors = self.inputs.is_valid_update(update_inputs)
-        if validity_errors:
-            error_summary = []
-            for key, warning_collector in validity_errors.items():
-                warnings_list = [w.message for w in warning_collector]
-                error_summary.append(f"{key}: {warnings_list}")
-            raise ScenarioError(f"Could not update user values: {error_summary}")
+        self._handle_validity_errors(validity_errors, "user values")
 
         result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
 
@@ -357,12 +352,7 @@ class Scenario(Base):
         """
         # Validate the updates first
         validity_errors = self.sortables.is_valid_update(update_sortables)
-        if validity_errors:
-            error_summary = []
-            for key, warning_collector in validity_errors.items():
-                warnings_list = [w.message for w in warning_collector]
-                error_summary.append(f"{key}: {warnings_list}")
-            raise ScenarioError(f"Could not update sortables: {error_summary}")
+        self._handle_validity_errors(validity_errors, "sortables")
 
         # Make individual API calls for each sortable as there is no bulk endpoint
         for name, order in update_sortables.items():
@@ -443,16 +433,9 @@ class Scenario(Base):
         Args:
             custom_curves: CustomCurves object containing curves to upload
         """
-
         # Validate curves before uploading
         validity_errors = custom_curves.validate_for_upload()
-        # TODO: Extract all these validity_errors thingys to a single util or something, lots of repetition at the moment
-        if validity_errors:
-            error_summary = []
-            for key, warning_collector in validity_errors.items():
-                warnings_list = [w.message for w in warning_collector]
-                error_summary.append(f"{key}: {warnings_list}")
-            raise ScenarioError(f"Could not update custom curves: {error_summary}")
+        self._handle_validity_errors(validity_errors, "custom curves")
 
         # Upload curves
         result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
@@ -556,3 +539,19 @@ class Scenario(Base):
             if submodel is not None and len(submodel.warnings) > 0:
                 print(f"\n{name} warnings:")
                 submodel.show_warnings()
+
+    def _handle_validity_errors(
+        self, validity_errors: Dict[str, Any], context: str
+    ) -> None:
+        """
+        Helper method to format and raise ScenarioError for validity errors.
+        """
+        if not validity_errors:
+            return
+
+        error_summary = []
+        for key, warning_collector in validity_errors.items():
+            warnings_list = [w.message for w in warning_collector]
+            error_summary.append(f"{key}: {warnings_list}")
+
+        raise ScenarioError(f"Could not update {context}: {error_summary}")

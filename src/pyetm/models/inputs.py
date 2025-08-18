@@ -162,24 +162,23 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    # TODO: Check the efficiency of doing this in a loop
     def is_valid_update(self, key_vals: dict) -> dict[str, WarningCollector]:
         """
         Returns a dict mapping input keys to their WarningCollectors when errors were found.
         """
-        warnings = {}
+        warnings: dict[str, WarningCollector] = {}
 
-        # Check each input that has an update
-        for input_obj in self.inputs:
-            if input_obj.key in key_vals:
-                input_warnings = input_obj.is_valid_update(key_vals[input_obj.key])
-                if len(input_warnings) > 0:
-                    warnings[input_obj.key] = input_warnings
+        input_map = {inp.key: inp for inp in self.inputs}
 
-        # Check for non-existent keys
-        non_existent_keys = set(key_vals.keys()) - set(self.keys())
-        for key in non_existent_keys:
-            warnings[key] = WarningCollector.with_warning(key, "Key does not exist")
+        for key, value in key_vals.items():
+            input_obj = input_map.get(key)
+            if input_obj is None:
+                warnings[key] = WarningCollector.with_warning(key, "Key does not exist")
+                continue
+
+            input_warnings = input_obj.is_valid_update(value)
+            if len(input_warnings) > 0:
+                warnings[key] = input_warnings
 
         return warnings
 
