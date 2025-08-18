@@ -525,13 +525,14 @@ class ScenarioPacker(BaseModel):
         scenario_id = self._safe_get_int(column_data.get("scenario_id"))
         area_code = column_data.get("area_code")
         end_year = self._safe_get_int(column_data.get("end_year"))
+        metadata_updates = self._extract_metadata_updates(column_data)
         scenario = self._load_or_create_scenario(
-            scenario_id, area_code, end_year, column_name
+            scenario_id, area_code, end_year, column_name, **metadata_updates
         )
         if scenario is None:
             return None
 
-        metadata_updates = self._extract_metadata_updates(column_data)
+        # Metadata already applied in creation, but if needed, can update again here
         self._apply_metadata_to_scenario(scenario, metadata_updates)
 
         return scenario
@@ -570,8 +571,9 @@ class ScenarioPacker(BaseModel):
         area_code: Any,
         end_year: Optional[int],
         column_name: str,
+        **kwargs,
     ) -> Optional[Scenario]:
-        """Load existing scenario or create new one."""
+        """Load existing scenario or create new one. Passes all available kwargs to Scenario.new for full metadata."""
         if scenario_id is not None:
             try:
                 return Scenario.load(scenario_id)
@@ -585,7 +587,7 @@ class ScenarioPacker(BaseModel):
 
         if area_code and end_year is not None:
             try:
-                return Scenario.new(str(area_code), int(end_year))
+                return Scenario.new(str(area_code), int(end_year), **kwargs)
             except Exception as e:
                 logger.warning(
                     "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",

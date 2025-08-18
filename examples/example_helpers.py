@@ -1,29 +1,42 @@
 # Setting up everything for you!
 
 
-def setup_notebook():
+def setup_notebook(debug=False):
+    """
+    Set up the notebook environment for ETM API usage.
+
+    Args:
+        debug (bool): If True, shows full tracebacks. If False, hides them for cleaner output.
+    """
     import sys
     import builtins
     from pyetm.config.settings import get_settings
     from IPython import get_ipython
     from IPython.display import display, HTML
 
-    # Hide the traceback for a cleaner demo experience
+    # Handle traceback display based on debug mode
     ipython = get_ipython()
 
-    def hide_traceback(
-        exc_tuple=None,
-        filename=None,
-        tb_offset=None,
-        exception_only=False,
-        running_compiled_code=False,
-    ):
-        etype, value, tb = sys.exc_info()
-        return ipython._showtraceback(
-            etype, value, ipython.InteractiveTB.get_exception_only(etype, value)
-        )
+    if not debug:
+        # Hide the traceback for a cleaner demo experience
+        def hide_traceback(
+            exc_tuple=None,
+            filename=None,
+            tb_offset=None,
+            exception_only=False,
+            running_compiled_code=False,
+        ):
+            etype, value, tb = sys.exc_info()
+            return ipython._showtraceback(
+                etype, value, ipython.InteractiveTB.get_exception_only(etype, value)
+            )
 
-    ipython.showtraceback = hide_traceback
+        ipython.showtraceback = hide_traceback
+    else:
+        if hasattr(ipython, "_original_showtraceback"):
+            ipython.showtraceback = ipython._original_showtraceback
+        else:
+            ipython._original_showtraceback = ipython.showtraceback
 
     try:
         import pandas as pd
@@ -95,19 +108,31 @@ def setup_notebook():
 
         builtins.print = _smart_print
 
-    except Exception:
-        pass
+    except Exception as e:
+        if debug:
+            print(f"Error setting up pandas features: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     print("Environment setup complete")
 
     # Check if our API is ready!
+    try:
+        print("  Using ETM API at    ", get_settings().base_url)
+        print("  Token loaded?       ", bool(get_settings().etm_api_token))
 
-    print("  Using ETM API at    ", get_settings().base_url)
-    print("  Token loaded?       ", bool(get_settings().etm_api_token))
+        if not get_settings().etm_api_token:
+            print(
+                " Warning: No ETM_API_TOKEN found. Please set your token in the environment."
+            )
+        else:
+            print("API connection ready")
+    except Exception as e:
+        if debug:
+            print(f"Error checking API settings: {e}")
+            import traceback
 
-    if not get_settings().etm_api_token:
-        print(
-            " Warning: No ETM_API_TOKEN found. Please set your token in the environment."
-        )
-    else:
-        print("API connection ready")
+            traceback.print_exc()
+        else:
+            print("Error checking API settings. Run with debug=True for details.")
