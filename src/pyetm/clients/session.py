@@ -25,6 +25,10 @@ class RequestsSession(requests.Session):
             }
         )
 
+        proxies = get_settings().proxy_servers
+        if proxies:
+            self.proxies.update(proxies)
+
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         # Ensure we only pass a path to `url`; prefix with base_url
         full_url = (

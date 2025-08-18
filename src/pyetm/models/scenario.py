@@ -263,7 +263,8 @@ class Scenario(Base):
         # merge runner warnings and any item‐level warnings
         for w in result.errors:
             self.add_warning("inputs", w)
-        self._merge_submodel_warnings(coll, key_attr="inputs")
+        # Merge submodel warnings with a simple, clean prefix
+        self._merge_submodel_warnings(coll)
 
         self._inputs = coll
         return coll
@@ -325,7 +326,8 @@ class Scenario(Base):
         coll = Sortables.from_json(result.data)
         for w in result.errors:
             self.add_warning("sortables", w)
-        self._merge_submodel_warnings(coll, key_attr="sortables")
+        # Merge submodel warnings with a simple, clean prefix
+        self._merge_submodel_warnings(coll)
 
         self._sortables = coll
         return coll
@@ -413,7 +415,8 @@ class Scenario(Base):
             pass
         for w in result.errors:
             self.add_warning("custom_curves", w)
-        self._merge_submodel_warnings(coll, key_attr="custom_curves")
+        # Merge submodel warnings with a simple, clean prefix
+        self._merge_submodel_warnings(coll)
 
         self._custom_curves = coll
         return coll
@@ -491,7 +494,7 @@ class Scenario(Base):
         ready collecting all of them
         """
         self._queries.execute(BaseClient(), self)
-        self._merge_submodel_warnings(self._queries, key_attr="queries")
+        self._merge_submodel_warnings(self._queries)
 
     def results(self, columns="future") -> pd.DataFrame:
         """

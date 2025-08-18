@@ -41,7 +41,6 @@ class WarningCollector:
     ) -> "WarningCollector":
         """
         Convenience method to create a WarningCollector with a single warning.
-        E.g: WarningCollector.with_warning("field", "message")
         """
         collector = cls()
         collector.add(field, message, severity)
