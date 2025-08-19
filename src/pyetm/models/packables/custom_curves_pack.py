@@ -12,9 +12,11 @@ class CustomCurvesPack(Packable):
     key: ClassVar[str] = "custom_curves"
     sheet_name: ClassVar[str] = "CUSTOM_CURVES"
 
-    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
+    async def _build_dataframe_for_scenario(
+        self, scenario: Any, columns: str = "", **kwargs
+    ):
         try:
-            series_list = list(scenario.custom_curves_series())
+            series_list = [series async for series in scenario.custom_curves_series()]
         except Exception as e:
             logger.warning(
                 "Failed extracting custom curves for %s: %s", scenario.identifier(), e
@@ -24,8 +26,29 @@ class CustomCurvesPack(Packable):
             return None
         return pd.concat(series_list, axis=1)
 
-    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
-        return self.build_pack_dataframe(columns=columns, **kwargs)
+    async def to_dataframe_async(self, columns="", **kwargs) -> pd.DataFrame:
+        """Async version that ensures curves are loaded first."""
+        frames: list[pd.DataFrame] = []
+        keys: list[Any] = []
+
+        for scenario in self.scenarios:
+            try:
+                if hasattr(scenario, "fetch_custom_curves"):
+                    await scenario.fetch_custom_curves()
+
+                df = await self._build_dataframe_for_scenario(
+                    scenario, columns=columns, **kwargs
+                )
+                if df is not None and not df.empty:
+                    frames.append(df)
+                    keys.append(self._key_for(scenario))
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed building frame for scenario {scenario.identifier()}: {e}"
+                )
+
+        return self._concat_frames(frames, keys)
 
     def _normalize_curves_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         return self._normalize_single_header_sheet(
@@ -35,9 +58,7 @@ class CustomCurvesPack(Packable):
             reset_index=True,
         )
 
-    # Add async version of from_dataframe
     async def from_dataframe(self, df: pd.DataFrame):
-        """Async version of from_dataframe for handling async scenario updates."""
         if df is None or getattr(df, "empty", False):
             return
         try:

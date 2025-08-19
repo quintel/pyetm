@@ -208,7 +208,7 @@ class ScenarioPacker(BaseModel):
     def output_curves(self) -> pd.DataFrame:
         return self._output_curves.to_dataframe()
 
-    def to_excel(
+    async def to_excel(
         self,
         path: str,
         *,
@@ -219,7 +219,7 @@ class ScenarioPacker(BaseModel):
         include_gqueries: Optional[bool] = None,
         include_output_curves: Optional[bool] = None,
     ):
-        """Export scenarios to Excel file."""
+        """Export scenarios to Excel file (async version)."""
         if not self._scenarios():
             raise ValueError("Packer was empty, nothing to export")
 
@@ -243,7 +243,7 @@ class ScenarioPacker(BaseModel):
         workbook = Workbook(path)
         try:
             self._add_main_sheet(workbook)
-            self._add_data_sheets(workbook, global_config, resolved_flags)
+            await self._add_data_sheets(workbook, global_config, resolved_flags)
             self._add_gqueries_sheet(workbook, resolved_flags["include_gqueries"])
         finally:
             workbook.close()
@@ -344,7 +344,7 @@ class ScenarioPacker(BaseModel):
                 scenario_styling=True,
             )
 
-    def _add_data_sheets(
+    async def _add_data_sheets(
         self,
         workbook: Workbook,
         global_config: Optional[ExportConfig],
@@ -360,7 +360,20 @@ class ScenarioPacker(BaseModel):
             self._add_pack_sheet(workbook, self._sortables)
 
         if flags["include_custom_curves"]:
-            self._add_pack_sheet(workbook, self._custom_curves)
+            await self._add_custom_curves_sheet(workbook)
+
+    # TODO: if we make everything async this can be add_pack_sheet we just need to align it all
+    async def _add_custom_curves_sheet(self, workbook: Workbook):
+        """Add custom curves sheet asynchronously."""
+        try:
+            # Use async version to get custom curves
+            df = await self._custom_curves.to_dataframe_async()
+            if df is not None and not df.empty:
+                self._add_dataframe_to_workbook(
+                    workbook, self._custom_curves.sheet_name, df
+                )
+        except Exception as e:
+            logger.warning("Failed to add custom curves sheet: %s", e)
 
     def _add_inputs_sheet(
         self, workbook: Workbook, include_defaults: bool, include_min_max: bool

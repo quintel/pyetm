@@ -287,8 +287,7 @@ class CustomCurves(Base):
                                 "curves", f"Failed to retrieve curve {curve.key}: {e}"
                             )
 
-                    # Get the curve data (this is sync and reads from file)
-                    curve_df = curve._to_dataframe(**kwargs)
+                    curve_df = await curve._to_dataframe_async(**kwargs)
 
                     if not curve_df.empty:
                         # Get the curve data as a Series

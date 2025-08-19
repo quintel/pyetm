@@ -225,3 +225,34 @@ class Base(BaseModel):
             df.index.name = self.__class__.__name__.lower()
 
         return df
+
+    async def _to_dataframe_async(self, **kwargs) -> pd.DataFrame:
+        """
+        Async version of _to_dataframe for subclasses that need async operations.
+        Default implementation calls the sync version.
+        """
+        return self._to_dataframe(**kwargs)
+
+    async def to_dataframe_async(self, **kwargs) -> pd.DataFrame:
+        """
+        Async version that calls _to_dataframe_async.
+        """
+        columns = self._get_serializable_fields()
+        kwargs.setdefault("available_columns", columns)
+
+        # Get DataFrame with unified error handling
+        try:
+            df = await self._to_dataframe_async(**kwargs)
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"Expected DataFrame, got {type(df)}")
+        except Exception as e:
+            self.add_warning(
+                f"{self.__class__.__name__}._to_dataframe_async()", f"failed: {e}"
+            )
+            df = pd.DataFrame()
+
+        # Set index name if not already set
+        if df.index.name is None:
+            df.index.name = self.__class__.__name__.lower()
+
+        return df

@@ -30,7 +30,7 @@ class Scenarios(Base):
     def extend(self, scenarios: Iterable[Scenario]) -> None:
         self.items.extend(list(scenarios))
 
-    def to_excel(
+    async def to_excel(
         self,
         path: PathLike | str,
         *,
@@ -51,7 +51,7 @@ class Scenarios(Base):
         resolver = PyetmPaths()
         out_path = resolver.resolve_for_write(path, default_dir="outputs")
 
-        packer.to_excel(
+        await packer.to_excel(
             str(out_path),
             carriers=carriers,
             include_inputs=include_inputs,

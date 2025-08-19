@@ -120,7 +120,7 @@ class Scenario(Base):
         scenarios.sort(key=lambda s: s.id)
         return scenarios
 
-    def to_excel(
+    async def to_excel(
         self,
         path: PathLike | str,
         *others: "Scenario",
@@ -136,14 +136,13 @@ class Scenario(Base):
         Output curves are exported to a separate workbook only when enabled, with one
         sheet per carrier. Use carriers to filter which carriers to include when exporting.
         """
-
         from pyetm.models.scenarios import Scenarios
         from pyetm.utils.paths import PyetmPaths
 
         resolver = PyetmPaths()
         out_path = resolver.resolve_for_write(path, default_dir="outputs")
 
-        Scenarios(items=[self, *others]).to_excel(
+        await Scenarios(items=[self, *others]).to_excel(
             str(out_path),
             carriers=carriers,
             include_inputs=include_inputs,
@@ -438,13 +437,12 @@ class Scenario(Base):
             )
         return self._custom_curves
 
-    def custom_curve_series(self, curve_name: str) -> pd.Series:
-        return self.custom_curves.get_contents(self, curve_name)
+    async def custom_curve_series(self, curve_name: str) -> pd.Series:
+        return await self.custom_curves().get_contents(self, curve_name)
 
-    def custom_curves_series(self):
-        """Yield all Series"""
-        for key in self.custom_curves.attached_keys():
-            yield self.custom_curve_series(key)
+    async def custom_curves_series(self):
+        for key in self.custom_curves().attached_keys():
+            yield await self.custom_curve_series(key)
 
     async def update_custom_curves(self, custom_curves) -> None:
         """
