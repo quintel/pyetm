@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, Any
 from pyetm.models.warnings import WarningCollector
-from pyetm.clients import BaseClient
+from pyetm.clients import AsyncBaseClient
 from pyetm.models.base import Base
 from pydantic import PrivateAttr
 from pyetm.services.scenario_runners.fetch_custom_curves import (
@@ -31,7 +31,7 @@ class CustomCurve(Base):
     def available(self) -> bool:
         return bool(self.file_path)
 
-    def retrieve(self, client, scenario) -> Optional[pd.Series]:
+    async def retrieve(self, client, scenario) -> Optional[pd.Series]:
         """Process curve from client, save to file, set file_path"""
         file_path = (
             get_settings().path_to_tmp(str(scenario.id))
@@ -44,7 +44,7 @@ class CustomCurve(Base):
         #     self.file_path = file_path
         #     return self.contents()
         try:
-            result = DownloadCustomCurveRunner.run(client, scenario, self.key)
+            result = await DownloadCustomCurveRunner.run(client, scenario, self.key)
 
             if result.success:
                 try:
@@ -206,7 +206,7 @@ class CustomCurves(Base):
         """Returns the keys of attached curves"""
         yield from (curve.key for curve in self.curves)
 
-    def get_contents(
+    async def get_contents(
         self, scenario, curve_name: str
     ) -> Optional[pd.DataFrame | pd.Series]:
         curve = self._find(curve_name)
@@ -217,7 +217,7 @@ class CustomCurves(Base):
 
         if not curve.available():
             # Try to retrieve it
-            result = curve.retrieve(BaseClient(), scenario)
+            result = await curve.retrieve(AsyncBaseClient(), scenario)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -250,7 +250,7 @@ class CustomCurves(Base):
         collection._merge_submodel_warnings(*curves, key_attr="key")
         return collection
 
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+    async def _to_dataframe(self, **kwargs) -> pd.DataFrame:
         """
         Serialize CustomCurves collection to DataFrame with time series data.
         """
@@ -259,30 +259,57 @@ class CustomCurves(Base):
 
         curve_columns = {}
 
-        for curve in self.curves:
-            try:
-                if (
-                    not curve.available()
-                    and getattr(self, "_scenario", None) is not None
-                ):
-                    try:
-                        curve.retrieve(BaseClient(), self._scenario)
-                    except Exception:
-                        pass
-                curve_df = curve._to_dataframe(**kwargs)
-                if not curve_df.empty:
-                    # Get the curve data as a Series
-                    curve_series = curve_df.iloc[:, 0]  # First (and only) column
-                    curve_columns[curve.key] = curve_series
-                else:
-                    # TODO: Should we add empty series for curves with no data? currently yes
-                    curve_columns[curve.key] = pd.Series(dtype=float, name=curve.key)
+        client = None
+        should_close_client = False
 
-            except Exception as e:
-                curve_columns[curve.key] = pd.Series(dtype=float, name=curve.key)
-                self.add_warning(
-                    "curves", f"Failed to serialize curve {curve.key}: {e}"
-                )
+        needs_client = any(
+            not curve.available() and getattr(self, "_scenario", None) is not None
+            for curve in self.curves
+        )
+
+        if needs_client:
+            client = AsyncBaseClient()
+            should_close_client = True
+
+        try:
+            for curve in self.curves:
+                try:
+                    # Only try to retrieve if we have a scenario and the curve isn't available
+                    if (
+                        not curve.available()
+                        and getattr(self, "_scenario", None) is not None
+                        and client is not None
+                    ):
+                        try:
+                            await curve.retrieve(client, self._scenario)
+                        except Exception as e:
+                            self.add_warning(
+                                "curves", f"Failed to retrieve curve {curve.key}: {e}"
+                            )
+
+                    # Get the curve data (this is sync and reads from file)
+                    curve_df = curve._to_dataframe(**kwargs)
+
+                    if not curve_df.empty:
+                        # Get the curve data as a Series
+                        curve_series = curve_df.iloc[:, 0]  # First (and only) column
+                        curve_columns[curve.key] = curve_series
+                    else:
+                        # Add empty series for curves with no data
+                        curve_columns[curve.key] = pd.Series(
+                            dtype=float, name=curve.key
+                        )
+
+                except Exception as e:
+                    curve_columns[curve.key] = pd.Series(dtype=float, name=curve.key)
+                    self.add_warning(
+                        "curves", f"Failed to serialize curve {curve.key}: {e}"
+                    )
+
+        finally:
+            # Clean up the client if we created one
+            if should_close_client and client is not None:
+                await client.session.close()
 
         if curve_columns:
             # Combine all curves into a single DataFrame

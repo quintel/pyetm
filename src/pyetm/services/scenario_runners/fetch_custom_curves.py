@@ -1,14 +1,16 @@
 import io
 from typing import Any, Dict
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.async_base_runner import (
+    AsyncBaseRunner,
+)
 from pyetm.services.scenario_runners.fetch_curves_generic import (
     GenericCurveDownloadRunner,
 )
 from ..service_result import ServiceResult
-from pyetm.clients.base_client import BaseClient
+from pyetm.clients.async_base_client import AsyncBaseClient
 
 
-class DownloadCustomCurveRunner(BaseRunner[io.StringIO]):
+class DownloadCustomCurveRunner(AsyncBaseRunner[io.StringIO]):
     """
     Runner for downloading a specific custom curve as CSV data.
     GET /api/v3/scenarios/{scenario_id}/custom_curves/{curve_name}.csv
@@ -19,17 +21,17 @@ class DownloadCustomCurveRunner(BaseRunner[io.StringIO]):
     """
 
     @staticmethod
-    def run(
-        client: BaseClient,
+    async def run(
+        client: AsyncBaseClient,
         scenario: Any,
         curve_name: str,
     ) -> ServiceResult[io.StringIO]:
-        return GenericCurveDownloadRunner.run(
+        return await GenericCurveDownloadRunner.run(
             client, scenario, curve_name, curve_type="custom"
         )
 
 
-class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
+class FetchAllCustomCurveDataRunner(AsyncBaseRunner[Dict[str, Any]]):
     """
     Runner for fetching metadata for all custom curves on a scenario.
     GET /api/v3/scenarios/{scenario_id}/custom_curves
@@ -40,10 +42,10 @@ class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
     """
 
     @staticmethod
-    def run(
-        client: BaseClient,
+    async def run(
+        client: AsyncBaseClient,
         scenario: Any,
     ) -> ServiceResult[Dict[str, Any]]:
-        return FetchAllCustomCurveDataRunner._make_request(
+        return await FetchAllCustomCurveDataRunner._make_request(
             client=client, method="get", path=f"/scenarios/{scenario.id}/custom_curves"
         )

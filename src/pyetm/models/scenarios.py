@@ -62,9 +62,9 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
+    async def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
         """
         Load or create scenarios from an Excel workbook and wrap them in Scenarios.
         """
-        scenarios = Scenario.from_excel(xlsx_path)
+        scenarios = await Scenario.from_excel(xlsx_path)
         return cls(items=scenarios)

@@ -201,8 +201,9 @@ class ScenarioPacker(BaseModel):
     def sortables(self) -> pd.DataFrame:
         return self._sortables.to_dataframe()
 
-    def custom_curves(self) -> pd.DataFrame:
-        return self._custom_curves.to_dataframe()
+    async def custom_curves(self) -> pd.DataFrame:
+        """Get custom curves DataFrame asynchronously."""
+        return await self._custom_curves.to_dataframe()
 
     def output_curves(self) -> pd.DataFrame:
         return self._output_curves.to_dataframe()
@@ -437,7 +438,7 @@ class ScenarioPacker(BaseModel):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
+    async def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
         """Import scenarios from Excel file."""
         packer = cls()
 
@@ -480,7 +481,7 @@ class ScenarioPacker(BaseModel):
             return packer
 
         packer._apply_export_configuration(main_df, scenarios_by_column)
-        packer._import_data_sheets(excel_file, main_df, scenarios_by_column)
+        await packer._import_data_sheets(excel_file, main_df, scenarios_by_column)
 
         return packer
 
@@ -656,7 +657,7 @@ class ScenarioPacker(BaseModel):
         except Exception:
             pass
 
-    def _import_data_sheets(
+    async def _import_data_sheets(
         self,
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
@@ -667,7 +668,9 @@ class ScenarioPacker(BaseModel):
         short_name_map = self._build_short_name_mapping(main_df, scenarios_by_column)
         self._import_inputs_sheet(excel_file, short_name_map)
         self._import_gqueries_sheet(excel_file)
-        self._import_scenario_specific_sheets(excel_file, main_df, scenarios_by_column)
+        await self._import_scenario_specific_sheets(
+            excel_file, main_df, scenarios_by_column
+        )
 
     def _build_short_name_mapping(
         self, main_df: pd.DataFrame, scenarios_by_column: Dict[str, Scenario]
@@ -716,7 +719,7 @@ class ScenarioPacker(BaseModel):
                 except Exception as e:
                     logger.warning("Failed to import GQUERIES: %s", e)
 
-    def _import_scenario_specific_sheets(
+    async def _import_scenario_specific_sheets(
         self,
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
@@ -730,7 +733,7 @@ class ScenarioPacker(BaseModel):
                 sheet_info.get(column_name, {}) if isinstance(sheet_info, dict) else {}
             )
 
-            # Import sortables
+            # Import sortables (can stay sync)
             sortables_sheet = info.get("sortables") if isinstance(info, dict) else None
             if (
                 isinstance(sortables_sheet, str)
@@ -747,12 +750,12 @@ class ScenarioPacker(BaseModel):
                         e,
                     )
 
-            # Import custom curves
+            # Import custom curves (now async)
             curves_sheet = info.get("custom_curves") if isinstance(info, dict) else None
             if isinstance(curves_sheet, str) and curves_sheet in excel_file.sheet_names:
                 try:
                     curves_df = excel_file.parse(curves_sheet, header=None)
-                    self._process_single_scenario_curves(scenario, curves_df)
+                    await self._process_single_scenario_curves(scenario, curves_df)
                 except Exception as e:
                     logger.warning(
                         "Failed to process CUSTOM_CURVES sheet '%s' for '%s': %s",
@@ -1048,7 +1051,9 @@ class ScenarioPacker(BaseModel):
                 "Failed processing sortables for '%s': %s", scenario.identifier(), e
             )
 
-    def _process_single_scenario_curves(self, scenario: Scenario, df: pd.DataFrame):
+    async def _process_single_scenario_curves(
+        self, scenario: Scenario, df: pd.DataFrame
+    ):
         """Process custom curves data for a single scenario."""
         normalized_data = self._normalize_sheet(
             df,
@@ -1059,9 +1064,11 @@ class ScenarioPacker(BaseModel):
         if normalized_data is None or normalized_data.empty:
             return
 
-        self._apply_custom_curves_to_scenario(scenario, normalized_data)
+        await self._apply_custom_curves_to_scenario(scenario, normalized_data)
 
-    def _apply_custom_curves_to_scenario(self, scenario: Scenario, data: pd.DataFrame):
+    async def _apply_custom_curves_to_scenario(
+        self, scenario: Scenario, data: pd.DataFrame
+    ):
         """Apply custom curves to scenario with validation and error handling."""
         try:
             curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
@@ -1075,8 +1082,7 @@ class ScenarioPacker(BaseModel):
             # Validate curves and log validation issues
             self._validate_and_log_curves(curves, scenario)
 
-            # Apply curves to scenario
-            scenario.update_custom_curves(curves)
+            await scenario.update_custom_curves(curves)
 
         except Exception as e:
             self._handle_curves_processing_error(scenario, e)

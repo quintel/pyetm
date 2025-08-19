@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr
 from os import PathLike
+from pyetm.clients.async_base_client import AsyncBaseClient
 from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
@@ -104,7 +105,7 @@ class Scenario(Base):
         return scenario
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> List["Scenario"]:
+    async def from_excel(cls, xlsx_path: PathLike | str) -> List["Scenario"]:
         """
         Load or create one or more scenarios from an Excel workbook.
         """
@@ -114,7 +115,7 @@ class Scenario(Base):
         resolver = PyetmPaths()
         path = resolver.resolve_for_read(xlsx_path, default_dir="inputs")
 
-        packer = ScenarioPacker.from_excel(str(path))
+        packer = await ScenarioPacker.from_excel(str(path))
         scenarios = list(packer._scenarios())
         scenarios.sort(key=lambda s: s.id)
         return scenarios
@@ -399,12 +400,18 @@ class Scenario(Base):
         reset_sortables = {name: [] for name in sortable_names}
         self.sortables.update(reset_sortables)
 
-    @property
-    def custom_curves(self) -> CustomCurves:
+    async def fetch_custom_curves(self) -> CustomCurves:
+        """
+        Fetch custom curves asynchronously.
+        """
         if self._custom_curves is not None:
             return self._custom_curves
 
-        result = FetchAllCustomCurveDataRunner.run(BaseClient(), self)
+        try:
+            result = await FetchAllCustomCurveDataRunner.run(AsyncBaseClient(), self)
+        finally:
+            await AsyncBaseClient().session.close()
+
         if not result.success:
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
@@ -415,11 +422,21 @@ class Scenario(Base):
             pass
         for w in result.errors:
             self.add_warning("custom_curves", w)
-        # Merge submodel warnings with a simple, clean prefix
-        self._merge_submodel_warnings(coll)
 
+        self._merge_submodel_warnings(coll)
         self._custom_curves = coll
         return coll
+
+    def custom_curves(self) -> CustomCurves:
+        """
+        Sync access to cached custom curves.
+        Must call fetch_custom_curves() first.
+        """
+        if self._custom_curves is None:
+            raise RuntimeError(
+                "Custom curves not loaded. Call 'await scenario.fetch_custom_curves()' first."
+            )
+        return self._custom_curves
 
     def custom_curve_series(self, curve_name: str) -> pd.Series:
         return self.custom_curves.get_contents(self, curve_name)
@@ -429,7 +446,7 @@ class Scenario(Base):
         for key in self.custom_curves.attached_keys():
             yield self.custom_curve_series(key)
 
-    def update_custom_curves(self, custom_curves) -> None:
+    async def update_custom_curves(self, custom_curves) -> None:
         """
         Upload/update custom curves for this scenario.
 
@@ -441,19 +458,26 @@ class Scenario(Base):
         self._handle_validity_errors(validity_errors, "custom curves")
 
         # Upload curves
-        result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
+        result = await UpdateCustomCurvesRunner.run(
+            AsyncBaseClient(), self, custom_curves
+        )
         if not result.success:
             raise ScenarioError(f"Could not update custom curves: {result.errors}")
 
+        # Make sure we've got some curves
+        if self._custom_curves is None:
+            self._custom_curves = CustomCurves(curves=[])
+            self._custom_curves._scenario = self
+
         # Update the scenario's custom curves object
         for new_curve in custom_curves.curves:
-            existing_curve = self.custom_curves._find(new_curve.key)
+            existing_curve = self._custom_curves._find(new_curve.key)
             if existing_curve:
                 existing_curve.file_path = new_curve.file_path
             else:
-                self.custom_curves.curves.append(new_curve)
+                self._custom_curves.curves.append(new_curve)
         try:
-            self.custom_curves._scenario = self
+            self._custom_curves._scenario = self
         except Exception:
             pass
 

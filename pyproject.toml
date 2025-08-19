@@ -5,7 +5,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "pyetm"
-version = "2.0"
+version = "2.0.0"
 description = "Python-ETM Connector"
 readme = "README.md"
 license = { text = "MIT" }
@@ -24,7 +24,8 @@ dependencies = [
   "pyyaml",
   "pydantic-settings",
   "xlsxwriter",
-  "openpyxl"
+  "openpyxl",
+  "aiofiles (>=24.1.0,<25.0.0)"
 ]
 
 [project.scripts]

@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import ClassVar, Any
 import pandas as pd
 from pyetm.models.custom_curves import CustomCurves
@@ -34,7 +35,9 @@ class CustomCurvesPack(Packable):
             reset_index=True,
         )
 
-    def from_dataframe(self, df: pd.DataFrame):
+    # Add async version of from_dataframe
+    async def from_dataframe(self, df: pd.DataFrame):
+        """Async version of from_dataframe for handling async scenario updates."""
         if df is None or getattr(df, "empty", False):
             return
         try:
@@ -45,17 +48,17 @@ class CustomCurvesPack(Packable):
         if df is None or df.empty:
             return
 
-        def _apply(scenario, block: pd.DataFrame):
+        async def _apply_async(scenario, block: pd.DataFrame):
             try:
                 curves = CustomCurves._from_dataframe(block, scenario_id=scenario.id)
+                await scenario.update_custom_curves(curves)
             except Exception as e:
                 logger.warning(
                     "Failed to build custom curves for '%s': %s",
                     scenario.identifier(),
                     e,
                 )
-                return
-            scenario.update_custom_curves(curves)
 
-        for scenario in self.scenarios:
-            _apply(scenario, df)
+        # Process all scenarios concurrently
+        tasks = [_apply_async(scenario, df) for scenario in self.scenarios]
+        await asyncio.gather(*tasks, return_exceptions=True)
