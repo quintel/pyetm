@@ -320,8 +320,6 @@ def test_input_serializable_fields():
         "default",
         "user",
         "disabled",
-        "coupling_disabled",
-        "coupling_groups",
         "disabled_by",
     ]
     for field in expected_base:

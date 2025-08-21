@@ -1,11 +1,11 @@
 from __future__ import annotations
 import pandas as pd
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr
 from os import PathLike
+from pyetm.models.couplings import Couplings
 from pyetm.models.inputs import Inputs
 from pyetm.models.output_curves import OutputCurves
 from pyetm.clients import BaseClient
@@ -27,6 +27,8 @@ from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_custom_curves import (
     UpdateCustomCurvesRunner,
 )
+from pyetm.services.scenario_runners.fetch_couplings import FetchCouplingsRunner
+from pyetm.services.scenario_runners.update_couplings import UpdateCouplingsRunner
 
 
 class ScenarioError(Exception):
@@ -62,6 +64,7 @@ class Scenario(Base):
     _output_curves: Optional[OutputCurves] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
     _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
+    _couplings: Optional[Couplings] = PrivateAttr(default=None)
 
     @classmethod
     def new(cls, area_code: str, end_year: int, **kwargs) -> "Scenario":
@@ -536,6 +539,7 @@ class Scenario(Base):
             ("Custom Curves", self._custom_curves),
             ("Output Curves", self._output_curves),
             ("Queries", self._queries),
+            ("Couplings", self._couplings),
         ]
 
         for name, submodel in submodels:
@@ -558,3 +562,40 @@ class Scenario(Base):
             error_summary.append(f"{key}: {warnings_list}")
 
         raise ScenarioError(f"Could not update {context}: {error_summary}")
+
+    @property
+    def couplings(self) -> Couplings:
+        """Get coupling groups for this scenario"""
+        if self._couplings is not None:
+            return self._couplings
+
+        result = FetchCouplingsRunner.run(BaseClient(), self)
+        if not result.success:
+            raise ScenarioError(f"Could not retrieve couplings: {result.errors}")
+
+        coll = Couplings.from_json(result.data)
+        for w in result.errors:
+            self.add_warning("couplings", w)
+        self._merge_submodel_warnings(coll)
+
+        self._couplings = coll
+        return coll
+
+    def update_couplings(
+        self, coupling_groups: List[str], action: str = "couple", force: bool = False
+    ) -> None:
+
+        result = UpdateCouplingsRunner.run(
+            BaseClient(), self, coupling_groups, action, force
+        )
+
+        if not result.success:
+            raise ScenarioError(f"Could not update couplings: {result.errors}")
+
+        # Update the cached couplings with the response data
+        if self._couplings is not None:
+            updated_couplings = Couplings.from_json(result.data)
+            self._couplings = updated_couplings
+
+        for w in result.errors:
+            self.add_warning("couplings", w)
