@@ -1,7 +1,7 @@
-from typing import Any, Dict, Optional, TypeVar, Generic
+from typing import Any, Dict, List, Optional, TypeVar, Generic
 from abc import ABC, abstractmethod
 from ..service_result import ServiceResult
-from pyetm.clients.base_client import BaseClient
+from pyetm.clients.base_client import BaseClient, make_batch_requests
 
 T = TypeVar("T")
 
@@ -40,7 +40,7 @@ class BaseRunner(ABC, Generic[T]):
             request_kwargs = dict(kwargs)
 
             # Handle payload based on HTTP method
-            if payload is not None:
+            if payload is not None and "files" not in kwargs:
                 if method.upper() in ["POST", "PUT", "PATCH"]:
                     request_kwargs["json"] = payload
                 else:
@@ -67,6 +67,31 @@ class BaseRunner(ABC, Generic[T]):
         except Exception as e:
             # Any other unexpected exception is treated as breaking
             return ServiceResult.fail([str(e)])
+
+    @classmethod
+    def _make_batch_requests(
+        cls, client: BaseClient, requests: List[Dict[str, Any]]
+    ) -> List[ServiceResult[Any]]:
+        """
+        Make multiple requests concurrently.
+        """
+        formatted_requests = []
+        for req in requests:
+            formatted = {"method": req["method"], "url": req["path"], "kwargs": {}}
+
+            if req.get("payload") and "files" not in req.get("kwargs", {}):
+                if req["method"].upper() in ["POST", "PUT", "PATCH"]:
+                    formatted["kwargs"]["json"] = req["payload"]
+                else:
+                    formatted["kwargs"]["params"] = req["payload"]
+
+            # Merge any additional kwargs
+            if req.get("kwargs"):
+                formatted["kwargs"].update(req["kwargs"])
+
+            formatted_requests.append(formatted)
+
+        return make_batch_requests(client, formatted_requests)
 
     @staticmethod
     @abstractmethod
