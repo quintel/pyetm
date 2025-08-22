@@ -14,7 +14,6 @@ from pyetm.config.settings import get_settings
 class ETMResponse:
     """
     Response object that works with both sync and async operations.
-    Compatible with requests.Response interface for backward compatibility.
     """
 
     status_code: int
@@ -26,11 +25,9 @@ class ETMResponse:
 
     @property
     def ok(self) -> bool:
-        """Check if response was successful (2xx status)."""
         return 200 <= self.status_code < 300
 
     def json(self) -> dict:
-        """Parse response as JSON."""
         if self._json_data is not None:
             return self._json_data
 
@@ -103,9 +100,6 @@ class ETMSession:
             "keepalive_timeout": 30,
         }
 
-        if sys.version_info < (3, 12, 9):
-            connector_kwargs["enable_cleanup_closed"] = True
-
         connector = aiohttp.TCPConnector(**connector_kwargs)
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
 
@@ -114,7 +108,7 @@ class ETMSession:
         )
 
     def request(self, method: str, url: str, **kwargs) -> ETMResponse:
-        """Make HTTP request (sync interface)."""
+        """Make HTTP request (sync)."""
         self._ensure_session()
         future = asyncio.run_coroutine_threadsafe(
             self.async_request(method, url, **kwargs), self._loop
@@ -122,7 +116,7 @@ class ETMSession:
         return future.result()
 
     def __getattr__(self, name: str):
-        """Dynamic method generation for HTTP verbs."""
+        """Method generation for HTTP verbs."""
         if name in ["get", "post", "put", "patch", "delete"]:
             return lambda url, **kwargs: self.request(name.upper(), url, **kwargs)
 
