@@ -54,9 +54,23 @@ class Gqueries(Base):
         if not self.is_ready():
             return pd.DataFrame()
 
-        df = pd.DataFrame.from_dict(self.query_dict).reindex(["unit"] + [columns]).T
+        if isinstance(columns, str):
+            columns = [columns]
+        columns = ["unit"] + columns
+
+        normalized = {}
+        for k, v in self.query_dict.items():
+            if isinstance(v, dict):
+                normalized[k] = {col: v.get(col) for col in columns}
+            else:
+                normalized[k] = {"unit": None}
+                for col in columns:
+                    if col != "unit":
+                        normalized[k][col] = v
+
+        df = pd.DataFrame.from_dict(normalized, orient="index")
         df.index.name = "gquery"
-        return df.set_index("unit", append=True)
+        return df
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
         """

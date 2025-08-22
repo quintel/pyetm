@@ -499,12 +499,14 @@ class Scenario(Base):
         self._queries.execute(BaseClient(), self)
         self._merge_submodel_warnings(self._queries)
 
-    def results(self, columns="future") -> pd.DataFrame:
+    def results(self, columns=None) -> pd.DataFrame:
         """
         Returns the results of the requested queries in a dataframe
         """
+        if columns is None:
+            columns = ["unit", "future"]
+
         if not self.queries_requested():
-            # TODO: Return something nicer, or more useful.
             return pd.DataFrame()
 
         if not self._queries.is_ready():
