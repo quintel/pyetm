@@ -17,20 +17,19 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         **kwargs: Additional arguments passed to the request
     """
 
-    # TODO: Investigate why end_year is not setting correctly
     META_KEYS = [
         "keep_compatible",
         "private",
         "source",
         "metadata",
         "end_year",
+        "title",
     ]
     UNSETTABLE_META_KEYS = [
         "id",
         "created_at",
         "updated_at",
         "area_code",
-        "title",
         "start_year",
         "scaling",
         "template",
@@ -77,6 +76,15 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         existing_metadata = {}
         if hasattr(scenario, "metadata") and isinstance(scenario.metadata, dict):
             existing_metadata = scenario.metadata.copy()
+
+        legacy_title = None
+        if isinstance(existing_metadata, dict):
+            legacy_title = existing_metadata.pop("title", None)
+        if "metadata" in direct_fields and isinstance(direct_fields["metadata"], dict):
+            direct_fields["metadata"].pop("title", None)
+        nested_metadata.pop("title", None)
+        if legacy_title is not None and "title" not in direct_fields:
+            direct_fields["title"] = legacy_title
 
         final_metadata = existing_metadata.copy()
         if nested_metadata:

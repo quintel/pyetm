@@ -5,6 +5,7 @@ before each test
 
 from pydantic import HttpUrl
 import os, sys, pytest
+from pathlib import Path
 
 # Ensure src/ is on sys.path before any imports of your app code
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -12,7 +13,6 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-# Set the ENV vars at import time so BaseClient picks up the test URL and token
 os.environ["BASE_URL"] = "https://example.com/api"
 os.environ["ETM_API_TOKEN"] = "etm_real.looking.token"
 

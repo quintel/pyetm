@@ -1,80 +1,156 @@
 # pyetm
 
-This package provides a set of tools for interaction with the Energy Transition Model's API. Learn more
-about the Energy Transition Model [here](https://energytransitionmodel.com/). The
-package is designed to be a modular tool that advanced users can incorporate into their workflows. The
-complete documentation is available [via the ETM documentation page](https://docs.energytransitionmodel.com/main/pyetm/introduction).
+This package provides a set of tools for interaction with the Energy Transition Model's API.
+Learn more about the Energy Transition Model [here](https://energytransitionmodel.com/).
+
+The package is designed to be a modular tool that advanced users can incorporate into their scenario workflows.
+The complete documentation is available [via the ETM documentation page](https://docs.energytransitionmodel.com/main/pyetm/introduction).
+
+---
 
 ## Installation
 
-You can clone the pyetm from [our Github](https://github.com/quintel/pyetm). The package is also
-available via pip like any other python package - install it and use it in your project!
-```
+You can install **pyetm** directly from PyPI:
+```bash
 pip install pyetm
 ```
 
-## Just running the Jupyter Notebooks - or a beginner friendly guide to PyETM
-If you are not planning on developing the tool, but would like to open and run our Jupyter notebooks
-in VS Code, follow the beginner friendly guide at [Running notebooks](running_notebooks.md).
-
-## Getting started
-Make sure you have [Python 3](https://www.python.org/downloads/) installed. Then, install all required
-libraries by opening a terminal/command-prompt window in the `pyetm` folder (or navigate to this folder
-in the terminal using `cd "path/to/scenario-tools-folder"`). All following examples of running the tool
-expect you to be in this folder.
-
-#### Using pipenv
-It is recommended (but not required) that you use [`pipenv`](https://pipenv.pypa.io/en/latest/) for
-running these tools. When using `pipenv` it will create a virtual environment for you. A virtual
-environment helps with keeping the libraries you install here separate of your global libraries (in
-other words your `pyetm` will be in a stable and isolated environment and are thus less
-likely to break when updating things elsewhere on your computer).
-
-You can install `pipenv` with `pip` or `pip3` if you don't have it installed yet.
-```
-pip3 install pipenv
+Or clone from [our GitHub repository](https://github.com/quintel/pyetm) if you want the latest development version:
+```bash
+git clone https://github.com/quintel/pyetm.git
+cd pyetm
 ```
 
-Then you can create a new environment and install all the libraries in one go by running:
+---
+
+## Running Jupyter Notebooks (Beginner Friendly)
+
+If you only want to open and run our Jupyter notebooks in VS Code without developing the package,
+follow the beginner guide here: [Running notebooks](running_notebooks.md).
+
+---
+
+## Development Setup (Using Poetry)
+
+We recommend using [Poetry](https://python-poetry.org/) to manage dependencies and virtual environments.
+Poetry ensures all dependencies are installed in an isolated environment, keeping your system clean.
+
+### Python
+Make sure you have **Python 3.12** or later installed:
+- **Windows**: [Download from python.org](https://www.python.org/downloads/windows/)
+- **macOS**: Install via [Homebrew](https://brew.sh/)
+  ```bash
+  brew install python@3.12
+  ```
+- **Linux**: Use your package manager or install from source.
+
+Check your version:
+```bash
+python3 --version
 ```
-pipenv install
+
+---
+
+### Poetry
+Follow the [official instructions](https://python-poetry.org/docs/#installation):
+
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-If you plan to develop with the tool, install the dev dependencies too:
+After installation, ensure Poetry is available:
+```bash
+poetry --version
 ```
-pipenv install --dev
+
+
+#### Install Dependencies
+
+Navigate to the `pyetm` folder and install all dependencies:
+```bash
+poetry install
 ```
 
-#### Configuring your settings
-
-You can set your API token and the base url for your requests (depending which
-[environment](https://docs.energytransitionmodel.com/api/intro#environments) you want to interact with)
-either directly in the ENV or via a config.yml file.
-
-##### config.yml
-pyetm uses a `config.yml` file in the project root to store your personal settings:
-
-1. Duplicate the example file provided (`examples/config.example.yml`) and rename it to `config.yml`.
-2. Open `config.yml` and fill in your values:
-   - **etm_api_token**: Your personal ETM API token (overridden by the `$ETM_API_TOKEN` environment variable if set).
-   - **base_url**: The API base URL for the target environment (overridden by the `$BASE_URL` environment
-    variable if set) e.g., default pro, a stable engine at `https://2025-01.engine.energytransitionmodel.com/api/v3`,
-    or beta at `https://beta.engine.energytransitionmodel.com/api/v3`.
-   - **local_engine_url** and **local_model_url**: URLs for a local ETM instance, if running locally.
-   - **proxy_servers**: (Optional) HTTP/HTTPS proxy URLs, if required by your network.
-   - **csv_separator** and **decimal_separator**: Defaults are `,` and `.`; adjust if your CSV exports
-    use different separators.
-
-Your `config.yml` should reside in the root `pyetm/` folder.
-
-##### ENV variables
-If you use pyetm as a package, you may want to set your ENV variables using a custom flow. In that
-case, the variables you need to set are:
-
-    $ETM_API_TOKEN - Your api token (specific to the environment you are interacting with)
-    $BASE_URL - The base url of the environment you are interacting with.
-    $LOCAL_ENGINE_URL - The local url of the engine if running locally.
-    $LOCAL_MODEL_URL - The local url of the model if running locally.
+This will:
+- Create a virtual environment
+- Install runtime dependencies
+If you want development dependencies (testing, linting, etc.) then append the
+"--with dev" flag to the install command.
 
 
-#TODO - check links
+#### How to use the environment:
+You can either:
+- Run commands inside Poetry's environment:
+  ```bash
+  poetry run pytest
+  poetry run pyetm
+  ```
+- Or activate the shell:
+  ```bash
+  eval $(poetry env activate)
+  ```
+  Then run you can commands normally (e.g.):
+  ```bash
+  pytest
+  ```
+
+
+## Configuring Your Settings
+
+You can configure your API token and base URL either with a **config.env** file or environment variables. You can simply set an `environment` and the base URL will be inferred for you.
+
+### Option 1: `config.env` (Recommended)
+1. Copy the example file (`example.config.env`) and rename it to `config.env`.
+2. Edit `config.env`:
+   ```bash
+   # Your ETM API token (required)
+   ETM_API_TOKEN=your.token.here
+
+   # Environment (default: pro)
+   ENVIRONMENT=pro
+
+   # Optional: Override base URL directly
+   # BASE_URL=https://engine.energytransitionmodel.com/api/v3
+
+   # Optional: Proxy settings
+   # PROXY_SERVERS_HTTP=http://user:pass@proxy.example.com:8080
+   # PROXY_SERVERS_HTTPS=http://user:pass@secureproxy.example.com:8080
+
+   # CSV settings (optional)
+   CSV_SEPARATOR=,
+   DECIMAL_SEPARATOR=.
+   ```
+
+Place `config.env` in the project root (`pyetm/` folder).
+
+**Environment Options:**
+- `pro` (default): Production environment
+- `beta`: Staging environment
+- `local`: Local development environment
+- `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
+
+### Option 2: Environment Variables
+If you prefer, set these environment variables directly:
+```bash
+ETM_API_TOKEN=<your token>
+ENVIRONMENT=<pro|beta|local|YYYY-MM>
+# or provide a direct override instead of ENVIRONMENT
+BASE_URL=<api url>
+```
+
+---
+
+### Notes
+- **Windows**:
+  - Use `py` instead of `python3` if `python3` is not recognized.
+  - In PowerShell, set environment variables with:
+    ```powershell
+    $env:ETM_API_TOKEN="your-token"
+    ```
+- **macOS/Linux**:
+  - Use `python3` in commands.
+  - Set environment variables with:
+    ```bash
+    export ETM_API_TOKEN="your-token"
+    export ENVIRONMENT=beta
+    ```

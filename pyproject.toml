@@ -1,58 +1,59 @@
 [build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 
 [project]
 name = "pyetm"
-version = "2.0-beta"
-
+version = "2.0"
 description = "Python-ETM Connector"
-authors = [] # TODO: add us!
 readme = "README.md"
-requires-python = ">=3.12"
-license = {file = "LICENSE"}
+license = { text = "MIT" }
+authors = [
+  { name = "Nora Schinkel", email = "nora.schinkel@quintel.com" },
+  { name = "Louis Parkes-Talbo", email = "louis.parkestalbot@quintel.com" }
+]
+keywords = ["energy", "transition", "modeling", "api", "ETM"]
+requires-python = ">=3.12,<4.0"
+
 dependencies = [
-    # 'requests>=2.26',
-    # 'pandas[parquet]>=2.2',
-    # 'openpyxl>=3.0',
-    # 'xlsxwriter>=3.0',
+  "pydantic",
+  "pandas",
+  "requests",
+  "python-dotenv",
+  "pyyaml",
+  "pydantic-settings",
+  "xlsxwriter",
+  "openpyxl"
 ]
-keywords = ["ETM", "Energy Transition Model"]
-classifiers = [
-    'Development Status :: 4 - Beta',
-    'Intended Audience :: Developers',
-    'Intended Audience :: Education',
-    'Intended Audience :: Science/Research',
-    # 'License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)',
-    'Natural Language :: English',
-    'Operating System :: OS Independent',
-    'Programming Language :: Python',
-    # 'Programming Language :: Python :: 3',
-    # 'Programming Language :: Python :: 3.10',
-    # 'Programming Language :: Python :: 3.11',
-    # 'Programming Language :: Python :: 3.12',
-]
+
+[project.scripts]
+pyetm = "pyetm.__main__:main"
 
 [project.urls]
-repository = "https://github.com/robcalon/pyetm"
+"Repository"    = "https://github.com/quintel/pyetm"
+"Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
+"Issue tracker" = "https://github.com/quintel/pyetm/issues"
 
-[project.optional-dependencies]
-async = ["aiohttp>=3.8"]
-dev = [
-    "pytest>=7.0",
-    "pylint>=3.0",
-    "requests-mock>=1.11"
-]
+[tool.poetry]
+packages = [{ include = "pyetm", from = "src" }]
+include = ["LICENSE"]
 
-[tool.setuptools.package-data]
-"pyetm.data" = ["*.csv"]
 
-[tool.pylint]
-max-args = 15
-max-local = 20
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pylint = "*"
+requests-mock = "*"
+ipykernel = "*"
+notebook = "*"
+pytest-cov = "*"
+pydeps = "*"
+
+
 
 [tool.pytest.ini_options]
-minversion = "7.0"
-addopts = [
-    "--import-mode=importlib",
-]
+addopts = "--cov=pyetm --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.pylint.main]
+fail-under = 8.0

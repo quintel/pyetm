@@ -69,6 +69,52 @@ def write_index(
             worksheet.write(row + row_offset, 0, value)
 
 
+def create_scenario_formats(workbook: Workbook) -> dict:
+    """Create alternating background formats for scenario blocks"""
+    return {
+        "white_header": workbook.add_format(
+            {"bold": True, "bg_color": "#FFFFFF", "border": 1, "align": "center"}
+        ),
+        "grey_header": workbook.add_format(
+            {"bold": True, "bg_color": "#D9D9D9", "border": 1, "align": "center"}
+        ),
+        "white_data": workbook.add_format(
+            {"bg_color": "#FFFFFF", "border": 1, "align": "left"}
+        ),
+        "grey_data": workbook.add_format(
+            {"bg_color": "#D9D9D9", "border": 1, "align": "left"}
+        ),
+        "bold": workbook.add_format({"bold": True}),
+        "default": None,
+    }
+
+
+def get_scenario_blocks(columns: pd.MultiIndex) -> List[tuple]:
+    """
+    Identify scenario blocks in multi-index columns
+    Returns list of (scenario_name, start_col, end_col) tuples
+    """
+    if not isinstance(columns, pd.MultiIndex):
+        return []
+
+    blocks = []
+    current_scenario = None
+    start_col = None
+
+    for i, (scenario, _) in enumerate(columns):
+        if scenario != current_scenario:
+            if current_scenario is not None:
+                blocks.append((current_scenario, start_col, i - 1))
+            current_scenario = scenario
+            start_col = i
+
+    # Add the last block
+    if current_scenario is not None:
+        blocks.append((current_scenario, start_col, len(columns) - 1))
+
+    return blocks
+
+
 def add_frame(
     name: str,
     frame: pd.DataFrame,
@@ -80,8 +126,8 @@ def add_frame(
     bold_headers: bool = True,
     nan_as_formula: bool = True,
     decimal_precision: int = 10,
+    scenario_styling: bool = True,
 ) -> Worksheet:
-    """Add DataFrame to workbook as a new worksheet"""
 
     # Create worksheet
     worksheet = workbook.add_worksheet(str(name))
@@ -94,50 +140,140 @@ def add_frame(
         ),
     )
 
-    # Create bold format
-    bold_format = workbook.add_format({"bold": True}) if bold_headers else None
+    # Create formats
+    formats = (
+        create_scenario_formats(workbook)
+        if scenario_styling
+        else {
+            "bold": workbook.add_format({"bold": True}) if bold_headers else None,
+            "default": None,
+        }
+    )
 
     # Calculate offsets
     col_offset = frame.index.nlevels if index else 0
     row_offset = frame.columns.nlevels
 
-    # Adjust row offset if index has names
-    if index and frame.index.names != [None] * frame.index.nlevels:
-        row_offset += 1
+    # Handle multi-index columns with scenario styling
+    if isinstance(frame.columns, pd.MultiIndex) and scenario_styling:
+        # Get scenario blocks for alternating colors
+        scenario_blocks = get_scenario_blocks(frame.columns)
 
-    # Write column headers
-    if isinstance(frame.columns, pd.MultiIndex):
         # Write column names
-        if index and frame.columns.names != [None] * frame.columns.nlevels:
+        if frame.columns.names != [None] * frame.columns.nlevels:
             for idx, name in enumerate(frame.columns.names):
                 if name is not None:
-                    worksheet.write(idx, col_offset - 1, name, bold_format)
+                    worksheet.write(idx, col_offset - 1, name, formats["bold"])
 
-        # Write column values
+        # Write column headers with alternating scenario backgrounds
         for col_num, values in enumerate(frame.columns.values):
+            # Determine which scenario block this column belongs to
+            scenario_idx = next(
+                (
+                    i
+                    for i, (_, start, end) in enumerate(scenario_blocks)
+                    if start <= col_num <= end
+                ),
+                0,
+            )
+            is_grey = scenario_idx % 2 == 1
+            header_format = (
+                formats["grey_header"] if is_grey else formats["white_header"]
+            )
+
             for row_num, value in enumerate(values):
-                worksheet.write(row_num, col_num + col_offset, value, bold_format)
+                worksheet.write(row_num, col_num + col_offset, value, header_format)
+
+        # Write data with scenario block coloring
+        for row_num, row_data in enumerate(frame.values):
+            for col_num, value in enumerate(row_data):
+                # Determine scenario block
+                scenario_idx = next(
+                    (
+                        i
+                        for i, (_, start, end) in enumerate(scenario_blocks)
+                        if start <= col_num <= end
+                    ),
+                    0,
+                )
+                is_grey = scenario_idx % 2 == 1
+                data_format = formats["grey_data"] if is_grey else formats["white_data"]
+
+                worksheet.write(
+                    row_num + row_offset, col_num + col_offset, value, data_format
+                )
+
     else:
-        # Write simple column headers
-        for col_num, value in enumerate(frame.columns.values):
-            worksheet.write(row_offset - 1, col_num + col_offset, value, bold_format)
+        # Standard column handling or single-index scenario styling
+        bold_format = formats.get("bold") if bold_headers else None
+
+        if isinstance(frame.columns, pd.MultiIndex):
+            # Write column names without styling
+            if frame.columns.names != [None] * frame.columns.nlevels:
+                for idx, name in enumerate(frame.columns.names):
+                    if name is not None:
+                        worksheet.write(idx, col_offset - 1, name, bold_format)
+
+            # Write column values
+            for col_num, values in enumerate(frame.columns.values):
+                for row_num, value in enumerate(values):
+                    worksheet.write(row_num, col_num + col_offset, value, bold_format)
+
+            # Write data without styling
+            for row_num, row_data in enumerate(frame.values):
+                for col_num, value in enumerate(row_data):
+                    worksheet.write(row_num + row_offset, col_num + col_offset, value)
+        else:
+            # Single-level columns
+            if scenario_styling:
+                # Alternate header backgrounds by scenario column
+                for col_num, value in enumerate(frame.columns.values):
+                    is_grey = (col_num % 2) == 1
+                    header_format = (
+                        formats["grey_header"] if is_grey else formats["white_header"]
+                    )
+                    worksheet.write(
+                        row_offset - 1, col_num + col_offset, value, header_format
+                    )
+
+                # Alternate data backgrounds by scenario column
+                for row_num, row_data in enumerate(frame.values):
+                    for col_num, value in enumerate(row_data):
+                        is_grey = (col_num % 2) == 1
+                        data_format = (
+                            formats["grey_data"] if is_grey else formats["white_data"]
+                        )
+                        worksheet.write(
+                            row_num + row_offset,
+                            col_num + col_offset,
+                            value,
+                            data_format,
+                        )
+            else:
+                # No scenario styling: write simple headers and data
+                for col_num, value in enumerate(frame.columns.values):
+                    worksheet.write(
+                        row_offset - 1, col_num + col_offset, value, bold_format
+                    )
+
+                for row_num, row_data in enumerate(frame.values):
+                    for col_num, value in enumerate(row_data):
+                        worksheet.write(
+                            row_num + row_offset, col_num + col_offset, value
+                        )
 
     # Set column widths
     set_column_widths(worksheet, col_offset, len(frame.columns), column_width)
 
-    # Write data
-    for row_num, row_data in enumerate(frame.values):
-        for col_num, value in enumerate(row_data):
-            worksheet.write(row_num + row_offset, col_num + col_offset, value)
-
-    # Write index
     if index:
         set_column_widths(
             worksheet, 0, frame.index.nlevels, index_width or column_width
         )
-        write_index(worksheet, frame.index, row_offset, bold_format)
 
-    # Freeze panes
+        # Create index format matching the styling
+        index_format = formats.get("bold") if bold_headers else None
+        write_index(worksheet, frame.index, row_offset, index_format)
+
     if freeze_panes:
         worksheet.freeze_panes(row_offset, col_offset)
 
@@ -156,7 +292,6 @@ def add_series(
     nan_as_formula: bool = True,
     decimal_precision: int = 10,
 ) -> Worksheet:
-    """Add Series to workbook as a new worksheet"""
 
     # Create worksheet
     worksheet = workbook.add_worksheet(str(name))

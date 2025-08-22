@@ -108,7 +108,7 @@ def test_update_metadata_runner_unsettable_keys_generate_warnings():
 
     metadata = {
         "id": 456,  # Unsettable
-        "title": "New Title",  # Unsettable
+        "title": "New Title",  # Settable
         "end_year": 2050,  # Settable
     }
 
@@ -121,7 +121,8 @@ def test_update_metadata_runner_unsettable_keys_generate_warnings():
         expected_payload = {
             "scenario": {
                 "end_year": 2050,
-                "metadata": {"existing": "value", "id": 456, "title": "New Title"},
+                "title": "New Title",
+                "metadata": {"existing": "value", "id": 456},
             }
         }
         mock_request.assert_called_once_with(
@@ -293,6 +294,7 @@ def test_update_metadata_runner_meta_keys_constants():
         "source",
         "metadata",
         "end_year",
+        "title",
     ]
 
     expected_unsettable_keys = [
@@ -300,7 +302,6 @@ def test_update_metadata_runner_meta_keys_constants():
         "created_at",
         "updated_at",
         "area_code",
-        "title",
         "start_year",
         "scaling",
         "template",

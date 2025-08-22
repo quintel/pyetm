@@ -10,10 +10,69 @@ import pandas as pd
 import pytest
 from datetime import datetime
 from pathlib import Path
+from pyetm.models.sortables import Sortables
 from pyetm.models.scenario import Scenario
+from pyetm.models.output_curves import OutputCurves
 
 
 # --- Scenario Fixtures --- #
+@pytest.fixture
+def multiple_scenarios():
+    """Create multiple scenarios for testing"""
+    scenarios = []
+    for i in range(3):
+        scenario = Mock(spec=Scenario)
+        scenario.id = f"scenario_{i}"
+        scenario.area_code = "nl2015"
+        scenario.end_year = 2050
+        scenario.start_year = 2019
+        scenario.identifier = Mock(return_value=scenario.id)
+        scenarios.append(scenario)
+    return scenarios
+
+
+@pytest.fixture
+def scenario_with_inputs():
+    """Create a scenario with mock inputs"""
+    scenario = Mock(spec=Scenario)
+    scenario.id = "input_scenario"
+    scenario.area_code = "nl2015"
+    scenario.end_year = 2050
+    scenario.start_year = 2019
+    scenario.identifier = Mock(return_value=scenario.id)
+
+    # Mock inputs
+    scenario.inputs = Mock()
+    mock_df = pd.DataFrame(
+        {"user": [1000, 2000], "unit": ["MW", "MW"], "default": [500, 800]},
+        index=["wind_capacity", "solar_capacity"],
+    )
+    mock_df.index.name = "input"
+    scenario.inputs.to_dataframe = Mock(return_value=mock_df)
+
+    return scenario
+
+
+@pytest.fixture
+def scenario_with_queries():
+    """Create a scenario with mock queries"""
+    scenario = Mock(spec=Scenario)
+    scenario.id = "query_scenario"
+    scenario.area_code = "nl2015"
+    scenario.end_year = 2050
+    scenario.start_year = 2019
+    scenario.identifier = Mock(return_value=scenario.id)
+
+    # Mock queries
+    mock_results = pd.DataFrame(
+        {"future": [100, 200], "unit": ["MW", "GWh"]},
+        index=["total_demand", "co2_emissions"],
+    )
+    mock_results.index.name = "gquery"
+    scenario.results = Mock(return_value=mock_results)
+    scenario.queries_requested = Mock(return_value=True)
+
+    return scenario
 
 
 @pytest.fixture
@@ -154,6 +213,13 @@ def multiple_scenarios():
     return scenarios
 
 
+@pytest.fixture
+def patch_sortables_from_json(monkeypatch):
+    dummy = object()
+    monkeypatch.setattr(Sortables, "from_json", staticmethod(lambda data: dummy))
+    return dummy
+
+
 # --- Input Fixtures --- #
 
 
@@ -244,6 +310,20 @@ def sortable_collection_json():
     }
 
 
+@pytest.fixture
+def valid_sortable_collection_json():
+    """Fixture with valid data that won't trigger validation warnings"""
+    return {
+        "forecast_storage": ["fs1", "fs2"],
+        "heat_network": {
+            "lt": ["hn1", "hn2"],
+            "mt": ["hn3"],
+            "ht": ["hn4", "hn5", "hn6"],
+        },
+        "hydrogen_supply": ["hs1", "hs2", "hs3"],
+    }
+
+
 # --- Curve Fixtures --- #
 
 
@@ -290,3 +370,38 @@ def fixture_path():
 def interconnector_csv_path(fixture_path):
     """Path to the interconnector CSV fixture file"""
     return fixture_path / "interconnector_2_export_availability.csv"
+
+
+@pytest.fixture
+def carrier_mappings(monkeypatch):
+    mapping = {"electricity": {}, "gas": {}}
+    monkeypatch.setattr(
+        OutputCurves,
+        "_load_carrier_mappings",
+        staticmethod(lambda: mapping),
+        raising=True,
+    )
+    return mapping
+
+
+@pytest.fixture
+def mock_workbook(monkeypatch):
+    instance = Mock()
+    cls = Mock(return_value=instance)
+    monkeypatch.setattr(
+        "pyetm.models.packables.output_curves_pack.Workbook",
+        cls,
+        raising=True,
+    )
+    return {"cls": cls, "instance": instance}
+
+
+@pytest.fixture
+def patch_add_frame(monkeypatch):
+    m = Mock()
+    monkeypatch.setattr(
+        "pyetm.models.packables.output_curves_pack.add_frame",
+        m,
+        raising=True,
+    )
+    return m

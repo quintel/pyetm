@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Any, Type, TypeVar
+from typing import Any, Type, TypeVar, Union, List, Dict
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
 from pydantic_core import InitErrorDetails, PydanticCustomError
 import pandas as pd
+from pyetm.models.warnings import WarningCollector
 
 T = TypeVar("T", bound="Base")
 
@@ -10,7 +11,7 @@ T = TypeVar("T", bound="Base")
 class Base(BaseModel):
     """
     Custom base model that:
-      - Collects non-breaking validation or runtime warnings
+      - Collects non-breaking validation or runtime warnings using WarningCollector
       - Fails fast on critical errors
       - Catches validation errors and converts them into warnings
       - Validates on assignment, converting assignment errors into warnings
@@ -19,144 +20,167 @@ class Base(BaseModel):
 
     # Enable assignment validation
     model_config = ConfigDict(validate_assignment=True)
-
-    # Internal list of warnings (not part of serialized schema)
-    _warnings: dict[str, list[str]] = PrivateAttr(default_factory=dict)
+    _warning_collector: WarningCollector = PrivateAttr(default_factory=WarningCollector)
 
     def __init__(self, **data: Any) -> None:
-        # Ensure private warnings list exists before any validation
-        object.__setattr__(self, "_warnings", {})
+        """
+        Initialize the model, converting validation errors to warnings.
+        """
+        object.__setattr__(self, "_warning_collector", WarningCollector())
+
         try:
             super().__init__(**data)
         except ValidationError as e:
-            # Construct without validation to preserve fields
-            inst = self.__class__.model_construct(**data)
-            # Copy field data
-            object.__setattr__(self, "__dict__", inst.__dict__.copy())
-            # Ensure warnings list on this instance
-            if not hasattr(self, "_warnings"):
-                object.__setattr__(self, "_warnings", {})
-            # Convert each validation error into a warning
-            for err in e.errors():
-                loc = ".".join(str(x) for x in err.get("loc", []))
-                msg = err.get("msg", "")
-                self.add_warning(loc, msg)
+            # If validation fails, create model without validation and collect warnings
+            # Use model_construct to bypass validation
+            temp_instance = self.__class__.model_construct(**data)
+
+            # Copy the constructed data to this instance
+            for field_name, field_value in temp_instance.__dict__.items():
+                if not field_name.startswith("_"):
+                    object.__setattr__(self, field_name, field_value)
+
+            # Convert validation errors to warnings
+            for error in e.errors():
+                field_path = ".".join(str(part) for part in error.get("loc", []))
+                message = error.get("msg", "Validation failed")
+                self._warning_collector.add(field_path, message, "error")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """ Abuses the fact that init does not return on valdiation errors"""
-        # Intercept assignment-time validation errors
-        if name in self.__class__.model_fields:
-            try:
-                self._clear_warnings_for_attr(name)
-                current_data = self.model_dump()
-                current_data[name] = value
-                obj =self.__class__.model_validate(current_data)
-                if name in obj.warnings:
-                    self.add_warning(name, obj.warnings[name])
-                    # Do not assign invalid value
-                    return
-            except ValidationError as e:
-                for err in e.errors():
-                    if err.get("loc") == (name,):
-                        msg = err.get("msg", "")
-                        self.add_warning(name, msg)
-                # Do not assign invalid value
-                return
+        """
+        Handle assignment with validation error capture.
+        """
+        # Skip validation for private attributes, methods/functions, or existing methods
+        if (
+            name.startswith("_")
+            or name not in self.__class__.model_fields
+            or callable(value)
+            or hasattr(self.__class__, name)
+        ):
+            # Use object.__setattr__ to bypass Pydantic for these cases
+            object.__setattr__(self, name, value)
+            return
 
-        super().__setattr__(name, value)
+        # Clear existing warnings for this field
+        self._warning_collector.clear(name)
 
-    def add_warning(self, key: str, message: str) -> None:
-        """Append a warning message to this model."""
-        # TODO: this is horrible. we need a struct for it!!
-        if key in self._warnings:
-            if isinstance(self._warnings[key], dict):
-                if isinstance(message, dict):
-                    self._warnings[key].update(message)
-                else:
-                    self._warnings[key].update({'base', message})
-            elif isinstance(message, list):
-                self._warnings[key].extend(message)
-            else:
-                self._warnings[key].append(message)
-        else:
-            # TODO: this is horrible. we need a struct for it
-            if isinstance(message, list) or isinstance(message, dict):
-                self._warnings[key] = message
-            else:
-                self._warnings[key] = [message]
+        try:
+            # Try to validate the new value by creating a copy with the update
+            current_data = self.model_dump()
+            current_data[name] = value
+
+            # Test validation with a temporary instance
+            test_instance = self.__class__.model_validate(current_data)
+
+            # If validation succeeds, set the value
+            super().__setattr__(name, value)
+
+        except ValidationError as e:
+            # If validation fails, add warnings but don't set the value
+            for error in e.errors():
+                if error.get("loc") == (name,):
+                    message = error.get("msg", "Validation failed")
+                    self._warning_collector.add(name, message, "warning")
+            return
+
+    def add_warning(
+        self,
+        field: str,
+        message: Union[str, List[str], Dict[str, Any]],
+        severity: str = "warning",
+    ) -> None:
+        """Add a warning to this model instance."""
+        self._warning_collector.add(field, message, severity)
 
     @property
-    def warnings(self) -> dict[str, list[str]]:
-        """Return a copy of the warnings list."""
-        return self._warnings
+    def warnings(self) -> Union[WarningCollector, Dict[str, List[str]]]:
+        """
+        Return warnings.
+        """
+        return self._warning_collector
 
     def show_warnings(self) -> None:
         """Print all warnings to the console."""
-        if not self._warnings:
-            print("No warnings.")
-            return
-        print("Warnings:")
-        # TODO: use prettyprint
-        for i, w in enumerate(self._warnings, start=1):
-            print(f" {i}. {w}")
+        self._warning_collector.show_warnings()
 
-    def _clear_warnings_for_attr(self, key):
+    def log_warnings(
+        self, logger, level: str = "warning", prefix: str | None = None
+    ) -> None:
         """
-        Remove a key from the warnings.
+        Log all collected warnings using the provided logger.
         """
-        self._warnings.pop(key, None)
+        try:
+            collector = getattr(self, "warnings", None)
+            if collector is None or len(collector) == 0:
+                return
+            log_fn = getattr(logger, level, getattr(logger, "warning", None))
+            if log_fn is None:
+                return
+            for w in collector:
+                field = getattr(w, "field", "")
+                msg = getattr(w, "message", str(w))
+                if prefix:
+                    log_fn(f"{prefix} [{field}]: {msg}")
+                else:
+                    log_fn(f"[{field}]: {msg}")
+        except Exception:
+            pass
 
-    def _merge_submodel_warnings(self, *submodels: Base, key_attr=None) -> None:
+    def _clear_warnings_for_attr(self, field: str) -> None:
+        """Remove warnings for a specific field."""
+        self._warning_collector.clear(field)
+
+    def _merge_submodel_warnings(self, *submodels: Base, key_attr: str = None) -> None:
         """
-        Bring warnings from a nested Base (or list thereof)
-        into this model's warnings list.
+        Merge warnings from nested Base models.
         """
-        from typing import Iterable
-
-        def _collect(wm: Base):
-            if not wm.warnings: return
-
-            key = wm.__class__.__name__
-            if not key_attr is None:
-                key += f'({key_attr}={getattr(wm, key_attr)})'
-            self.add_warning(key, wm.warnings)
-
-        for item in submodels:
-            if isinstance(item, Base):
-                _collect(item)
+        self._warning_collector.merge_submodel_warnings(*submodels, key_attr=key_attr)
 
     @classmethod
-    def load_safe(cls: Type[T], **data: Any) -> T:
+    def from_dataframe(cls: Type[T], df: pd.DataFrame, **kwargs) -> T:
         """
-        Alternate constructor that always returns an instance,
-        converting all validation errors into warnings.
+        Create an instance from a pandas DataFrame.
         """
-        return cls(**data)
+        try:
+            return cls._from_dataframe(df, **kwargs)
+        except Exception as e:
+            # Create a fallback instance with warnings
+            instance = cls.model_construct()
+            instance.add_warning(
+                "from_dataframe", f"Failed to create from DataFrame: {e}"
+            )
+            return instance
 
-    def _get_serializable_fields(self) -> list[str]:
+    @classmethod
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs):
+        """
+        Private method to be implemented by each subclass for specific deserialization logic.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} must implement _from_dataframe() class method"
+        )
+
+    def _get_serializable_fields(self) -> List[str]:
         """
         Parse and return column names for serialization.
         Override this method in subclasses if you need custom field selection logic.
         """
         return [
             field_name
-            for field_name in self.model_fields.keys()
+            for field_name in self.__class__.model_fields.keys()
             if not field_name.startswith("_")
         ]
 
     def _raise_exception_on_loc(self, err: str, type: str, loc: str, msg: str):
         """
-        Nice and convoluted way to raise validation errors on custom locs.
-        Used in model validators
+        Raise validation errors on custom locations.
+        Used in model validators.
         """
         raise ValidationError.from_exception_data(
             err,
             [
                 InitErrorDetails(
-                    type=PydanticCustomError(
-                        type,
-                        msg,
-                    ),
+                    type=PydanticCustomError(type, msg),
                     loc=(loc,),
                     input=self,
                 ),
@@ -191,7 +215,9 @@ class Base(BaseModel):
             if not isinstance(df, pd.DataFrame):
                 raise ValueError(f"Expected DataFrame, got {type(df)}")
         except Exception as e:
-            self.add_warning(f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}")
+            self.add_warning(
+                f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}"
+            )
             df = pd.DataFrame()
 
         # Set index name if not already set

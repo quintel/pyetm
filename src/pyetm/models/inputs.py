@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import Any, Optional, Union
-from pydantic import field_validator, model_validator, ValidationInfo
+from typing import Optional, Union
+from pydantic import field_validator, model_validator
 import pandas as pd
+from pyetm.models.warnings import WarningCollector
 from pyetm.models.base import Base
 
 
@@ -15,13 +16,11 @@ class Input(Base):
     default: Optional[Union[float, str]] = None
     user: Optional[Union[float, str]] = None
     disabled: Optional[bool] = False
-    coupling_disabled: Optional[bool] = False
-    coupling_groups: Optional[list[str]] = []
     disabled_by: Optional[str] = None
 
-    def is_valid_update(self, value) -> list[str]:
+    def is_valid_update(self, value) -> WarningCollector:
         """
-        Returns a list of validation warnings without updating the current object
+        Returns a WarningCollector with validation warnings without updating the current object.
         """
         new_obj_dict = self.model_dump()
         new_obj_dict["user"] = value
@@ -30,7 +29,7 @@ class Input(Base):
         return warnings_obj.warnings
 
     @classmethod
-    def from_json(cls, data: tuple[str, dict]) -> Input:
+    def from_json(cls, data: tuple[str, dict]) -> "Input":
         """
         Initialize an Input from a JSON-like tuple coming from .items()
         """
@@ -43,7 +42,7 @@ class Input(Base):
             return input_instance
         except Exception as e:
             # Create a basic Input with warning attached
-            basic_input = cls.model_validate(payload)
+            basic_input = cls.model_construct(**payload)  # Bypass validation
             basic_input.add_warning(key, f"Failed to create specialized input: {e}")
             return basic_input
 
@@ -78,7 +77,7 @@ class BoolInput(Input):
 
     @field_validator("user", mode="after")
     @classmethod
-    def is_bool_float(cls, value: float) -> float:
+    def is_bool_float(cls, value: Optional[float]) -> Optional[float]:
         if value == 1.0 or value == 0.0 or value is None:
             return value
         raise ValueError(
@@ -96,7 +95,6 @@ class EnumInput(Input):
     def _get_serializable_fields(self) -> list[str]:
         """Include permitted_values in serialization for EnumInput"""
         base_fields = super()._get_serializable_fields()
-        # Ensure permitted_values is included
         if "permitted_values" not in base_fields:
             base_fields.append("permitted_values")
         return base_fields
@@ -106,11 +104,12 @@ class EnumInput(Input):
         if self.user is None or self.user in self.permitted_values:
             return self
         self._raise_exception_on_loc(
-            'ValueError',
-            type='inclusion',
-            loc='user',
-            msg=f"Value error, {self.user} should be in {self.permitted_values}"
+            "ValueError",
+            type="inclusion",
+            loc="user",
+            msg=f"Value error, {self.user} should be in {self.permitted_values}",
         )
+
 
 class FloatInput(Input):
     """Input representing a float"""
@@ -133,20 +132,22 @@ class FloatInput(Input):
     @model_validator(mode="after")
     def check_min_max(self) -> FloatInput:
         if not isinstance(self.user, float):
-            # We let pydantic handle the field validation
             return self
         if self.user is None or (self.user <= self.max and self.user >= self.min):
             return self
         self._raise_exception_on_loc(
-            'ValueError',
-            type='out_of_bounds',
-            loc='user',
-            msg=f"Value error, {self.user} should be between {self.min} and {self.max}"
+            "ValueError",
+            type="out_of_bounds",
+            loc="user",
+            msg=f"Value error, {self.user} should be between {self.min} and {self.max}",
         )
 
 
 class Inputs(Base):
     inputs: list[Input]
+
+    def __init__(self, **data):
+        super().__init__(**data)
 
     def __len__(self):
         return len(self.inputs)
@@ -157,30 +158,39 @@ class Inputs(Base):
     def keys(self):
         return [input.key for input in self.inputs]
 
-    def is_valid_update(self, key_vals: dict) -> dict:
-        """
-        Returns a dict of input keys and errors when errors were found
-        """
-        warnings = {}
-        for input in self.inputs:
-            if input.key in key_vals:
-                input_warn = input.is_valid_update(key_vals[input.key])
-                if len(input_warn) > 0:
-                    warnings[input.key] = input_warn
+    def get_input_by_key(self, key: str) -> Optional[Input]:
+        """Get input by its key"""
+        for input_obj in self.inputs:
+            if input_obj.key == key:
+                return input_obj
+        return None
 
-        non_existent_keys = set(key_vals.keys()) - set(self.keys())
-        for key in non_existent_keys:
-            warnings[key] = "Key does not exist"
+    def is_valid_update(self, key_vals: dict) -> dict[str, WarningCollector]:
+        """
+        Returns a dict mapping input keys to their WarningCollectors when errors were found.
+        """
+        warnings: dict[str, WarningCollector] = {}
+        input_map = {inp.key: inp for inp in self.inputs}
+
+        for key, value in key_vals.items():
+            input_obj = input_map.get(key)
+            if input_obj is None:
+                warnings[key] = WarningCollector.with_warning(key, "Key does not exist")
+                continue
+
+            input_warnings = input_obj.is_valid_update(value)
+            if len(input_warnings) > 0:
+                warnings[key] = input_warnings
 
         return warnings
 
     def update(self, key_vals: dict):
         """
-        Update the values of certain inputs
+        Update the values of certain inputs.
         """
-        for input in self.inputs:
-            if input.key in key_vals:
-                input.user = key_vals[input.key]
+        for input_obj in self.inputs:
+            if input_obj.key in key_vals:
+                input_obj.user = key_vals[input_obj.key]
 
     def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
         """
@@ -190,7 +200,6 @@ class Inputs(Base):
             columns = [columns]
         columns = ["unit"] + columns
 
-        # Create DataFrame from inputs
         df = pd.DataFrame.from_dict(
             {
                 input.key: [getattr(input, key, None) for key in columns]
@@ -207,6 +216,6 @@ class Inputs(Base):
         inputs = [Input.from_json(item) for item in data.items()]
 
         collection = cls.model_validate({"inputs": inputs})
-        collection._merge_submodel_warnings(*inputs, key_attr='key')
+        collection._merge_submodel_warnings(*inputs, key_attr="key")
 
         return collection
