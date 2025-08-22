@@ -1,13 +1,30 @@
-def test_download_custom_curve_success(requests_mock, api_url, scenario):
-    """
-    200 → success=True, data returns the StringIO object.
-    """
-    curve_key = "interconnector_2_export_availability"
-    url = f"{api_url}/scenarios/{scenario.id}/custom_curves/{curve_key}.csv"
+from unittest.mock import patch
+from pyetm.services.scenario_runners.fetch_custom_curves import (
+    DownloadCustomCurveRunner,
+)
+from pyetm.services.service_result import ServiceResult
+from pyetm.clients.session import ETMResponse
 
-    # Mock CSV content response
+
+def test_download_custom_curve_success(requests_mock, api_url, scenario):
+    """200 → success=True, data returns the StringIO object (batch infra)."""
+    curve_key = "interconnector_2_export_availability"
     csv_content = "time,value\n0,1.0\n1,0.5"
-    requests_mock.get(url, status_code=200, text=csv_content)
+
+    # Patch batch request method
+    response = ETMResponse(
+        status_code=200,
+        headers={"content-type": "text/csv"},
+        url="/x",
+        text=csv_content,
+        _content=csv_content.encode("utf-8"),
+    )
+    with patch(
+        "pyetm.services.scenario_runners.fetch_custom_curves.GenericCurveDownloadRunner._make_batch_requests",
+        return_value=[ServiceResult.ok(data=response)],
+    ):
+        result = DownloadCustomCurveRunner.run(None, scenario, curve_key)
+    assert result.success and "time,value" in result.data.getvalue()
 
 
 def test_fetch_custom_curves_success(
