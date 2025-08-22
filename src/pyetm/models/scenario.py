@@ -504,7 +504,7 @@ class Scenario(Base):
         Returns the results of the requested queries in a dataframe
         """
         if columns is None:
-            columns = ["unit", "future"]
+            columns = ["unit", "present", "future"]
 
         if not self.queries_requested():
             return pd.DataFrame()

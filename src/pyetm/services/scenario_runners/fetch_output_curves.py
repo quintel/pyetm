@@ -44,10 +44,12 @@ class FetchAllOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
     def run(
         client: BaseClient,
         scenario: Any,
+        batch_size: int | None = None,
     ) -> ServiceResult[Dict[str, io.StringIO]]:
         return GenericCurveBulkRunner.run(
             client,
             scenario,
             FetchAllOutputCurvesRunner.CURVE_TYPES,
             curve_type="output",
+            batch_size=batch_size,
         )
