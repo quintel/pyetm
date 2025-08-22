@@ -40,57 +40,49 @@ def temp_curve_files():
 
 def test_update_custom_curves_success_single_curve(temp_curve_files):
     """Test successful upload of a single custom curve"""
-    # Mock client
     mock_client = Mock()
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
-    # Mock scenario
     mock_scenario = Mock()
     mock_scenario.id = 12345
 
-    # Create custom curves with one curve
     curve = CustomCurve(
         key="test_curve", type="profile", file_path=temp_curve_files["valid"]
     )
     custom_curves = CustomCurves(curves=[curve])
 
-    # Mock successful _make_request response
     with patch.object(
         UpdateCustomCurvesRunner,
-        "_make_request",
-        return_value=ServiceResult.ok(data={"status": "uploaded"}),
-    ) as mock_make_request:
-
+        "_make_batch_requests",
+        return_value=[ServiceResult.ok(data={"status": "uploaded"})],
+    ) as mock_batch:
         result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
-        # Verify result
         assert result.success is True
         assert result.data["total_curves"] == 1
         assert result.data["successful_uploads"] == 1
-        assert "test_curve" in result.data["uploaded_curves"]
-        assert len(result.errors) == 0
+        assert result.data["uploaded_curves"] == ["test_curve"]
+        assert result.errors == []
 
-        # Verify _make_request was called correctly
-        mock_make_request.assert_called_once()
-        call_args = mock_make_request.call_args
-        assert call_args[1]["client"] == mock_client
-        assert call_args[1]["method"] == "put"
-        assert "/scenarios/12345/custom_curves/test_curve" in call_args[1]["path"]
-        assert "files" in call_args[1]
-        assert call_args[1]["headers"]["Content-Type"] is None
+    mock_batch.assert_called_once()
+    call_client, request_list = mock_batch.call_args[0]
+    assert call_client == mock_client
+    assert len(request_list) == 1
+    req = request_list[0]
+    assert req["method"] == "put"
+    assert f"/scenarios/{mock_scenario.id}/custom_curves/test_curve" in req["path"]
+    assert req["kwargs"]["headers"]["Content-Type"] is None
+    assert "files" in req["kwargs"]
 
 
 def test_update_custom_curves_success_multiple_curves(temp_curve_files):
     """Test successful upload of multiple custom curves"""
-    # Mock client
     mock_client = Mock()
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
-    # Mock scenario
     mock_scenario = Mock()
     mock_scenario.id = 54321
 
-    # Create custom curves with multiple curves
     curves = [
         CustomCurve(key="curve_1", type="profile", file_path=temp_curve_files["valid"]),
         CustomCurve(
@@ -99,40 +91,37 @@ def test_update_custom_curves_success_multiple_curves(temp_curve_files):
     ]
     custom_curves = CustomCurves(curves=curves)
 
-    # Mock successful _make_request responses
     with patch.object(
         UpdateCustomCurvesRunner,
-        "_make_request",
-        return_value=ServiceResult.ok(data={"status": "uploaded"}),
-    ) as mock_make_request:
-
+        "_make_batch_requests",
+        return_value=[
+            ServiceResult.ok(data={"status": "uploaded"}),
+            ServiceResult.ok(data={"status": "uploaded"}),
+        ],
+    ) as mock_batch:
         result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
-        # Verify result
         assert result.success is True
         assert result.data["total_curves"] == 2
         assert result.data["successful_uploads"] == 2
         assert set(result.data["uploaded_curves"]) == {"curve_1", "curve_2"}
-        assert len(result.errors) == 0
+        assert result.errors == []
 
-        # Verify _make_request was called twice
-        assert mock_make_request.call_count == 2
+    mock_batch.assert_called_once()
+    call_client, reqs = mock_batch.call_args[0]
+    assert call_client == mock_client
+    assert len(reqs) == 2
 
 
 def test_update_custom_curves_curve_without_file():
     """Test upload of curve without file (uses contents() method)"""
-    # Mock client
     mock_client = Mock()
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
-    # Mock scenario
     mock_scenario = Mock()
     mock_scenario.id = 99999
 
-    # Create curve without file_path but with contents
     curve = CustomCurve(key="no_file_curve", type="profile")
-
-    # Mock curve.contents() to return data
     mock_series = pd.Series(np.random.uniform(0, 100, 8760))
 
     with patch(
@@ -140,39 +129,32 @@ def test_update_custom_curves_curve_without_file():
     ):
         custom_curves = CustomCurves(curves=[curve])
 
-        # Mock successful _make_request response
         with patch.object(
             UpdateCustomCurvesRunner,
-            "_make_request",
-            return_value=ServiceResult.ok(data={"status": "uploaded"}),
-        ) as mock_make_request:
-
+            "_make_batch_requests",
+            return_value=[ServiceResult.ok(data={"status": "uploaded"})],
+        ) as mock_batch:
             result = UpdateCustomCurvesRunner.run(
                 mock_client, mock_scenario, custom_curves
             )
 
-            # Verify result
             assert result.success is True
             assert result.data["successful_uploads"] == 1
-            assert "no_file_curve" in result.data["uploaded_curves"]
+            assert result.data["uploaded_curves"] == ["no_file_curve"]
 
-            # Verify _make_request was called with file content
-            mock_make_request.assert_called_once()
-            call_args = mock_make_request.call_args
-            assert "files" in call_args[1]
+            mock_batch.assert_called_once()
+            req = mock_batch.call_args[0][1][0]
+            assert "files" in req["kwargs"]
 
 
 def test_update_custom_curves_http_error():
     """Test handling of HTTP errors during upload"""
-    # Mock client
     mock_client = Mock()
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
-    # Mock scenario
     mock_scenario = Mock()
     mock_scenario.id = 12345
 
-    # Create custom curves
     curve = CustomCurve(key="error_curve", type="profile")
     mock_series = pd.Series(np.random.uniform(0, 100, 8760))
 
@@ -181,35 +163,29 @@ def test_update_custom_curves_http_error():
     ):
         custom_curves = CustomCurves(curves=[curve])
 
-        # Mock _make_request failure response
         with patch.object(
             UpdateCustomCurvesRunner,
-            "_make_request",
-            return_value=ServiceResult.fail(["422: Validation failed"]),
-        ) as mock_make_request:
-
+            "_make_batch_requests",
+            return_value=[ServiceResult.fail(["422: Validation failed"])],
+        ):
             result = UpdateCustomCurvesRunner.run(
                 mock_client, mock_scenario, custom_curves
             )
 
-            # Verify result shows failure
             assert result.success is False
             assert result.data["successful_uploads"] == 0
             assert len(result.errors) == 1
-            assert "422: Validation failed" in result.errors[0]
+            assert result.errors[0] == "error_curve: 422: Validation failed"
 
 
 def test_update_custom_curves_network_exception():
-    """Test handling of network exceptions during upload"""
-    # Mock client
+    """Test handling of network errors (simulated as failure result)"""
     mock_client = Mock()
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
-    # Mock scenario
     mock_scenario = Mock()
     mock_scenario.id = 12345
 
-    # Create custom curves
     curve = CustomCurve(key="network_error_curve", type="profile")
     mock_series = pd.Series(np.random.uniform(0, 100, 8760))
 
@@ -218,37 +194,29 @@ def test_update_custom_curves_network_exception():
     ):
         custom_curves = CustomCurves(curves=[curve])
 
-        # Mock _make_request raising exception
         with patch.object(
             UpdateCustomCurvesRunner,
-            "_make_request",
-            side_effect=ConnectionError("Network unreachable"),
+            "_make_batch_requests",
+            return_value=[ServiceResult.fail(["Network unreachable"])],
         ):
             result = UpdateCustomCurvesRunner.run(
                 mock_client, mock_scenario, custom_curves
             )
 
-            # Verify result shows failure
             assert result.success is False
             assert result.data["successful_uploads"] == 0
             assert len(result.errors) == 1
-            assert (
-                "Error uploading network_error_curve: Network unreachable"
-                in result.errors[0]
-            )
+            assert result.errors[0] == "network_error_curve: Network unreachable"
 
 
 def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     """Test upload with mix of successful and failed curves"""
-    # Mock client
     mock_client = Mock()
     mock_client.session.base_url = "https://engine.example.com/api/v3"
 
-    # Mock scenario
     mock_scenario = Mock()
     mock_scenario.id = 12345
 
-    # Create multiple curves
     curves = [
         CustomCurve(
             key="success_curve", type="profile", file_path=temp_curve_files["valid"]
@@ -259,25 +227,22 @@ def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     ]
     custom_curves = CustomCurves(curves=curves)
 
-    # Mock mixed responses (first succeeds, second fails)
-    success_result = ServiceResult.ok(data={"status": "uploaded"})
-    fail_result = ServiceResult.fail(["500: Internal server error"])
-
     with patch.object(
         UpdateCustomCurvesRunner,
-        "_make_request",
-        side_effect=[success_result, fail_result],
-    ) as mock_make_request:
-
+        "_make_batch_requests",
+        return_value=[
+            ServiceResult.ok(data={"status": "uploaded"}),
+            ServiceResult.fail(["500: Internal server error"]),
+        ],
+    ):
         result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
-        # Verify mixed result
         assert result.success is False
         assert result.data["total_curves"] == 2
         assert result.data["successful_uploads"] == 1
         assert result.data["uploaded_curves"] == ["success_curve"]
         assert len(result.errors) == 1
-        assert "500: Internal server error" in result.errors[0]
+        assert result.errors[0] == "fail_curve: 500: Internal server error"
 
 
 def test_update_custom_curves_empty_curves_list():
@@ -291,12 +256,20 @@ def test_update_custom_curves_empty_curves_list():
     mock_scenario.id = 12345
 
     custom_curves = CustomCurves(curves=[])
+    # Patch batch requests to avoid touching async machinery when list empty
+    with patch.object(
+        UpdateCustomCurvesRunner, "_make_batch_requests", return_value=[]
+    ) as mock_batch:
+        result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
-    result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
-
-    # Should succeed with no uploads
-    assert result.success is True
-    assert result.data["total_curves"] == 0
-    assert result.data["successful_uploads"] == 0
-    assert result.data["uploaded_curves"] == []
-    assert len(result.errors) == 0
+        # Should succeed with no uploads and not attempt any real batch calls
+        assert result.success is True
+        assert result.data["total_curves"] == 0
+        assert result.data["successful_uploads"] == 0
+        assert result.data["uploaded_curves"] == []
+        assert len(result.errors) == 0
+        mock_batch.assert_called_once()
+        # Called with empty requests list
+        call_client, reqs = mock_batch.call_args[0]
+        assert call_client == mock_client
+        assert reqs == []
