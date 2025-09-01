@@ -23,7 +23,7 @@ class DownloadCustomCurveRunner(BaseRunner[io.StringIO]):
         client: BaseClient,
         scenario: Any,
         curve_name: str,
-    ) -> ServiceResult[io.StringIO]:
+    ) -> ServiceResult[Any]:
         return GenericCurveDownloadRunner.run(
             client, scenario, curve_name, curve_type="custom"
         )

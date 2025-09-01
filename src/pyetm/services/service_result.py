@@ -1,12 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
 from typing import Generic, TypeVar, Optional
+from pydantic import BaseModel
 
 T = TypeVar("T")
 
-
-@dataclass
-class ServiceResult(Generic[T]):
+class ServiceResult(BaseModel, Generic[T]):
     """
     A uniform result object for all service runners.
       - success=False means a breaking error: `data` will be None
@@ -16,8 +14,9 @@ class ServiceResult(Generic[T]):
 
     success: bool
     data: Optional[T] = None
-    errors: list[str] = field(default_factory=list)
+    errors: list[str] = []
 
+    # TODO: why we use OK and SUCCESS. Let's pick one.
     @classmethod
     def ok(cls, data: T, errors: Optional[list[str]] = None) -> ServiceResult[T]:
         """Use when your runner fetched data; pass warnings in `errors` if any."""
