@@ -31,6 +31,8 @@ class CustomCurve(Base):
     def available(self) -> bool:
         return bool(self.file_path)
 
+    # TODO: validation of length and read csv are same for this method and content method
+    # extract them!
     def retrieve(self, client, scenario) -> Optional[pd.Series]:
         """Process curve from client, save to file, set file_path"""
         file_path = (

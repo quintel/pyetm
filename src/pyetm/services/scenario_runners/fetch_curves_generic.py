@@ -5,7 +5,7 @@ from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class GenericCurveDownloadRunner(BaseRunner[io.StringIO]):
+class GenericCurveDownloadRunner(BaseRunner[Any]):
     """
     Generic runner for downloading any curve as CSV data.
     Supports both custom curves and output curves.
@@ -21,7 +21,7 @@ class GenericCurveDownloadRunner(BaseRunner[io.StringIO]):
         scenario: Any,
         curve_name: str,
         curve_type: Literal["custom", "output"] = "output",
-    ) -> ServiceResult[io.StringIO]:
+    ) -> ServiceResult[Any]:
         path = (
             f"/scenarios/{scenario.id}/custom_curves/{curve_name}.csv"
             if curve_type == "custom"
@@ -44,6 +44,8 @@ class GenericCurveDownloadRunner(BaseRunner[io.StringIO]):
             return ServiceResult.fail(result.errors)
         try:
             resp = result.data
+            # TODO: is this ok to return a io object??
+            # Is this what causes IO pressure?
             return ServiceResult.ok(data=io.StringIO(resp.content.decode("utf-8")))
         except Exception as e:
             return ServiceResult.fail([f"Failed to parse curve data: {e}"])
@@ -81,6 +83,8 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
             )
         return requests
 
+    # TODO: convert into generators that can return each item when its done
+    # this will save more memory in the end!
     @staticmethod
     def run(
         client: BaseClient,
@@ -88,7 +92,7 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
         curve_names: List[str],
         curve_type: Literal["custom", "output"] = "output",
         batch_size: Optional[int] = None,
-    ) -> ServiceResult[Dict[str, io.StringIO]]:
+    ) -> ServiceResult[Dict[str, Any]]:
         batch_size = batch_size or (
             GenericCurveBulkRunner.DEFAULT_BATCH_SIZE_OUTPUT
             if curve_type == "output"

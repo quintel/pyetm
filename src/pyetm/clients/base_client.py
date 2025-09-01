@@ -9,6 +9,7 @@ from .session import ETMSession
 from pyetm.config.settings import get_settings
 
 
+# TODO: like this it feels unnecessary
 class BaseClient(metaclass=SingletonMeta):
     """
     Singleton HTTP client with async capabilities.
@@ -26,7 +27,8 @@ class BaseClient(metaclass=SingletonMeta):
 
 
 class AsyncBatchRunner:
-
+    # NOTE: are we stuck to the gather?
+    # Can't we yield what is done somehow?
     @staticmethod
     async def batch_requests(
         session: ETMSession, requests: List[dict]
@@ -72,6 +74,8 @@ class AsyncBatchRunner:
                 return ServiceResult.fail(errors=[f"Unexpected error: {str(e)}"])
 
         # Execute all requests concurrently
+        # TODO: yes, but they are still in a list, which is a predetermined structure
+        # can we fire and yield?
         tasks = [make_single_request(req) for req in requests]
         return await asyncio.gather(*tasks)
 
@@ -93,7 +97,7 @@ class AsyncBatchRunner:
         future = asyncio.run_coroutine_threadsafe(coro, session._loop)
         return future.result()
 
-
+# TODO: why is he just here?
 # Helper function for runners that need batch operations
 def make_batch_requests(
     client: BaseClient, requests: List[dict]

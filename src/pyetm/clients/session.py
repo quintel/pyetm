@@ -2,24 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import threading
-import sys
-from typing import Optional, Dict
-from dataclasses import dataclass
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, field_validator
 
 import aiohttp
 from pyetm.config.settings import get_settings
 
-
-@dataclass
-class ETMResponse:
+class ETMResponse(BaseModel):
     """
     Response object that works with both sync and async operations.
     """
 
-    status_code: int
     headers: Dict[str, str]
     url: str
     text: str = ""
+    status_code: int
     _content: bytes = b""
     _json_data: Optional[dict] = None
 
@@ -35,23 +32,33 @@ class ETMResponse:
 
         return json.loads(self.text)
 
+    # TODO: why encode again? I understand that curves are creating IO streams
+    # but why so generic? Also, curves seem to be the only ones accessing this prop
+    # We are making object unneccessarily heavy by keeping both text and content
+    # and passing streams.
+    # IDEA: handle conversion into stream in possible handling classes
     @property
     def content(self) -> bytes:
         """Get response content as bytes."""
         return self._content or self.text.encode("utf-8")
 
-    def raise_for_status(self) -> None:
+    @field_validator("status_code", mode="before")
+    @classmethod
+    def raise_for_status(cls, value, values: dict[str, Any]) -> None:
         """Raise appropriate exception for HTTP errors."""
-        if self.status_code == 401:
+        if value == 401:
             raise PermissionError("Invalid or missing ETM_API_TOKEN")
 
-        if 400 <= self.status_code < 500:
-            raise ValueError(f"HTTP {self.status_code}: {self.text}")
+        if 400 <= value < 500:
+            raise ValueError(f"HTTP {value}: {values['text']}")
 
-        if 500 <= self.status_code < 600:
-            raise ConnectionError(f"HTTP {self.status_code}: {self.text}")
+        if 500 <= value < 600:
+            raise ConnectionError(f"HTTP {value}: {values['text']}")
 
+        return value
 
+# TODO: Extract utils and organise private methods
+# aiohttp usage looks legit - researching possibility to yield from pool [not likely]
 class ETMSession:
     """Modern async session for ETM API interactions."""
 
@@ -162,7 +169,6 @@ class ETMSession:
                 etm_response.text = await response.text()
                 etm_response._content = await response.read()
 
-            etm_response.raise_for_status()
             return etm_response
 
     def _build_request_kwargs(self, **kwargs) -> dict:
