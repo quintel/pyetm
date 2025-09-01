@@ -17,7 +17,7 @@ class DownloadOutputCurveRunner(BaseRunner[io.StringIO]):
         client: BaseClient,
         scenario: Any,
         curve_name: str,
-    ) -> ServiceResult[io.StringIO]:
+    ) -> ServiceResult[Any]:
         return GenericCurveDownloadRunner.run(
             client, scenario, curve_name, curve_type="output"
         )
@@ -45,7 +45,7 @@ class FetchAllOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
         client: BaseClient,
         scenario: Any,
         batch_size: int | None = None,
-    ) -> ServiceResult[Dict[str, io.StringIO]]:
+    ) -> ServiceResult[Dict[str, Any]]:
         return GenericCurveBulkRunner.run(
             client,
             scenario,
