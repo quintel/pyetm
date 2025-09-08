@@ -121,174 +121,56 @@ class InputsPack(Packable):
                 return df[columns_lower[candidate]]
         return df.iloc[:, 0]
 
-    def _build_consolidated_dataframe(
-        self, field_mappings: Dict[Any, List[str]]
+    def to_dataframe(
+        self,
+        columns: str | List[str] = "user",
+        *,
+        include_defaults: bool = False,
+        include_min_max: bool = False,
     ) -> pd.DataFrame:
-        """Build DataFrame with different fields per scenario."""
-        if not self.scenarios:
-            return pd.DataFrame()
-        relevant_scenarios = {s for s in self.scenarios if s in field_mappings}
-        if not relevant_scenarios:
-            return pd.DataFrame()
-        all_input_keys = self._collect_all_input_keys(
-            relevant_scenarios, field_mappings
-        )
-        if not all_input_keys:
-            return pd.DataFrame()
-        sorted_keys = sorted(all_input_keys)
-
-        scenario_frames = []
-        scenario_labels = []
-
-        for scenario in relevant_scenarios:
-            scenario_label = self._get_scenario_display_key(scenario)
-            fields = field_mappings.get(scenario, ["user"]) or ["user"]
-
-            scenario_data = self._build_scenario_data(scenario, fields, sorted_keys)
-            if not scenario_data:
-                continue
-
-            scenario_df = pd.DataFrame(scenario_data, index=sorted_keys)
-            scenario_df.index.name = "input"
-            scenario_frames.append(scenario_df)
-            scenario_labels.append(scenario_label)
-
-        if not scenario_frames:
-            return pd.DataFrame()
-
-        return pd.concat(
-            scenario_frames, axis=1, keys=scenario_labels, names=["scenario", "field"]
-        )
-
-    def _collect_all_input_keys(
-        self, scenarios: Set[Any], field_mappings: Dict[Any, List[str]]
-    ) -> Set[str]:
-        """Collect all unique input keys across scenarios and fields."""
-        all_keys = set()
-        for scenario in scenarios:
-            fields = field_mappings.get(scenario, ["user"]) or ["user"]
-            for field in fields:
-                input_values = self._extract_input_values(scenario, field)
-                all_keys.update(input_values.keys())
-        return all_keys
-
-    def _build_scenario_data(
-        self, scenario, fields: List[str], sorted_keys: List[str]
-    ) -> Dict[str, List[Any]]:
-        """Build data dictionary for a single scenario across multiple fields."""
-        data = {}
-        for field in fields:
-            value_mapping = self._extract_input_values(scenario, field) or {}
-            data[field] = [value_mapping.get(key) for key in sorted_keys]
-        return data
-
-    def _build_simple_dataframe(self, field_name: str = "user") -> pd.DataFrame:
-        """Build simple DataFrame with one field per scenario."""
         if not self.scenarios:
             return pd.DataFrame()
 
-        all_input_keys = set()
-        scenario_data = {}
+        # Normalize requested columns
+        base_cols: List[str]
+        if isinstance(columns, list):
+            base_cols = [c for c in columns if c]
+        else:
+            base_cols = [str(columns)] if columns else ["user"]
+        if not base_cols:
+            base_cols = ["user"]
 
-        # Collect data from all scenarios
-        for scenario in self.scenarios:
-            scenario_label = self._get_scenario_display_key(scenario)
-            input_values = self._extract_input_values(scenario, field_name)
+        if "user" not in base_cols:
+            base_cols.insert(0, "user")
 
-            if not input_values:
-                continue
+        if include_defaults and "default" not in base_cols:
+            base_cols.append("default")
+        if include_min_max:
+            for extra in ("min", "max"):
+                if extra not in base_cols:
+                    base_cols.append(extra)
 
-            scenario_data[scenario_label] = input_values
-            all_input_keys.update(input_values.keys())
-
-        if not all_input_keys:
-            return pd.DataFrame()
-
-        # Build DataFrame
-        sorted_keys = sorted(all_input_keys)
-        data = {}
-        for scenario_label, values in scenario_data.items():
-            data[scenario_label] = [values.get(key) for key in sorted_keys]
-
-        df = pd.DataFrame(data, index=sorted_keys)
-        df.index.name = "input"
-        return df
-
-    def _build_bounds_dataframe(self) -> pd.DataFrame:
-        """Build DataFrame with min/max bounds (assumes identical across scenarios)."""
-        if not self.scenarios:
-            return pd.DataFrame()
-
-        # Collect all input keys
-        all_input_keys = set()
+        frames: List[pd.DataFrame] = []
+        labels: List[Any] = []
         for scenario in self.scenarios:
             try:
-                keys = [
-                    str(getattr(inp, "key", ""))
-                    for inp in scenario.inputs
-                    if getattr(inp, "key", None)
-                ]
+                df = scenario.inputs.to_dataframe(columns=base_cols)
             except Exception:
-                try:
-                    df = scenario.inputs.to_dataframe(columns=["min", "max"])
-                    df = self._normalize_dataframe_index(df)
-                    keys = [str(idx) for idx in df.index.unique()]
-                except Exception:
-                    keys = []
+                continue
+            if df is None or getattr(df, "empty", False):
+                continue
 
-            all_input_keys.update(key for key in keys if key)
+            frames.append(df)
+            labels.append(self._get_scenario_display_key(scenario))
 
-        if not all_input_keys:
+        if not frames:
             return pd.DataFrame()
 
-        sorted_keys = sorted(all_input_keys)
+        merged = pd.concat(frames, axis=1, keys=labels, names=["scenario", "field"])
+        return merged
 
-        min_values = {}
-        max_values = {}
-
-        for scenario in self.scenarios:
-            min_mapping = self._extract_input_values(scenario, "min") or {}
-            max_mapping = self._extract_input_values(scenario, "max") or {}
-
-            for key in sorted_keys:
-                if key not in min_values and key in min_mapping:
-                    min_values[key] = min_mapping[key]
-                if key not in max_values and key in max_mapping:
-                    max_values[key] = max_mapping[key]
-
-            if len(min_values) == len(sorted_keys) and len(max_values) == len(
-                sorted_keys
-            ):
-                break
-
-        data = {
-            ("", "min"): [min_values.get(key) for key in sorted_keys],
-            ("", "max"): [max_values.get(key) for key in sorted_keys],
-        }
-        df = pd.DataFrame(data, index=sorted_keys)
-        df.index.name = "input"
-        df.columns = pd.MultiIndex.from_tuples(df.columns, names=["scenario", "field"])
-        return df
-
-    def _to_dataframe(self, columns: str = "user", **kwargs) -> pd.DataFrame:
-        """Build DataFrame with specified field for all scenarios."""
-        if not isinstance(columns, str) or columns.strip() == "":
-            columns = "user"
-        return self._build_simple_dataframe(columns)
-
-    def to_dataframe_per_scenario_fields(
-        self, fields_map: Dict["Any", List[str]]
-    ) -> pd.DataFrame:
-        """Build DataFrame where each scenario may have different fields."""
-        return self._build_consolidated_dataframe(fields_map)
-
-    def to_dataframe_defaults(self) -> pd.DataFrame:
-        """Build DataFrame of default values for each input per scenario."""
-        return self._build_simple_dataframe("default")
-
-    def to_dataframe_min_max(self) -> pd.DataFrame:
-        """Build DataFrame with min/max bounds (shared across scenarios)."""
-        return self._build_bounds_dataframe()
+    def _to_dataframe(self, columns="user", **kwargs):
+        return self.to_dataframe(columns=columns)
 
     def from_dataframe(self, df):
         """Import input values from DataFrame."""
@@ -371,46 +253,6 @@ class InputsPack(Packable):
         if isinstance(value, str) and value.strip().lower() in {"", "nan"}:
             return True
         return False
-
-    def build_combined_dataframe(
-        self, include_defaults: bool = False, include_min_max: bool = False
-    ) -> pd.DataFrame:
-        """Build DataFrame with various field combinations based on flags."""
-        if not self.scenarios:
-            return pd.DataFrame()
-
-        # Determine what fields we need
-        fields = ["user"]
-        if include_defaults:
-            fields.append("default")
-
-        if fields == ["user"]:
-            return self._build_simple_dataframe("user")
-        elif fields == ["default"]:
-            return self._build_simple_dataframe("default")
-        elif include_min_max and not include_defaults:
-            return self._build_user_with_bounds_dataframe()
-        elif include_min_max and include_defaults:
-            return self._build_full_combined_dataframe()
-        else:
-            field_map = {scenario: fields for scenario in self.scenarios}
-            return self._build_consolidated_dataframe(field_map)
-
-    def _build_full_combined_dataframe(self) -> pd.DataFrame:
-        """Build DataFrame with user values, defaults, and min/max bounds."""
-        try:
-            field_map = {scenario: ["user", "default"] for scenario in self.scenarios}
-            df_core = self._build_consolidated_dataframe(field_map)
-            df_bounds = self._build_bounds_dataframe()
-
-            if not df_bounds.empty and not df_core.empty:
-                return pd.concat([df_bounds, df_core], axis=1)
-            elif not df_core.empty:
-                return df_core
-            else:
-                return df_bounds
-        except Exception:
-            pass
 
     def _log_scenario_input_warnings(self, scenario):
         """Log any warnings from scenario inputs if available."""

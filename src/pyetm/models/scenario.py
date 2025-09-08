@@ -106,6 +106,7 @@ class Scenario(Base):
             scenario.add_warning("metadata", w)
         return scenario
 
+    # TODO: This should only return one scenario (or break) - move this logic to Scenarios and create the Scenario version
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> List["Scenario"]:
         """
@@ -122,6 +123,7 @@ class Scenario(Base):
         scenarios.sort(key=lambda s: s.id)
         return scenarios
 
+    # TODO: Same here
     def to_excel(
         self,
         path: PathLike | str,
