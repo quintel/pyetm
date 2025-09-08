@@ -192,24 +192,25 @@ class Inputs(Base):
             if input_obj.key in key_vals:
                 input_obj.user = key_vals[input_obj.key]
 
-    def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
-        """
-        Serialize the Inputs collection to DataFrame.
-        """
-        if not isinstance(columns, list):
+    def _to_dataframe(
+        self,
+        columns="user",
+        **kwargs,
+    ) -> pd.DataFrame:
+        """Serialize the collection to a DataFrame."""
+        if not isinstance(columns, (list)):
             columns = [columns]
-        columns = ["unit"] + columns
 
         df = pd.DataFrame.from_dict(
             {
-                input.key: [getattr(input, key, None) for key in columns]
+                input.key: [getattr(input, col, None) for col in columns]
                 for input in self.inputs
             },
             orient="index",
             columns=columns,
         )
         df.index.name = "input"
-        return df.set_index("unit", append=True)
+        return df
 
     @classmethod
     def from_json(cls, data) -> Inputs:

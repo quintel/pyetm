@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, List, Optional, Sequence
 from pydantic import Field
 from pyetm.models.base import Base
-from .scenario import Scenario
+from .scenario import Scenario, ScenarioError
 
 
 class Scenarios(Base):
@@ -29,6 +29,45 @@ class Scenarios(Base):
 
     def extend(self, scenarios: Iterable[Scenario]) -> None:
         self.items.extend(list(scenarios))
+
+    @classmethod
+    def load_many(cls, scenario_ids: Iterable[int]) -> "Scenarios":
+        scenarios = []
+        for sid in scenario_ids:
+            try:
+                scenarios.append(Scenario.load(sid))
+            except ScenarioError as e:
+                print(f"Could not load scenario {sid}: {e}")
+        return cls(items=scenarios)
+
+    @classmethod
+    def create_many(
+        cls,
+        scenario_params: Iterable[dict],
+        area_code: str | None = None,
+        end_year: int | None = None,
+    ) -> "Scenarios":
+        """Create multiple Scenario objects from parameter dicts."""
+        scenarios = []
+        for params in scenario_params:
+            # Prefer explicit param, then fallback to method default
+            area = params.get("area_code") or area_code
+            year = params.get("end_year") or end_year
+            if area is None or year is None:
+                print(
+                    f"Could not create scenario with {params}: Missing area_code or end_year. Provide them in each dict or as defaults."
+                )
+                continue
+            try:
+                extra = {
+                    k: v
+                    for k, v in params.items()
+                    if k not in ("area_code", "end_year")
+                }
+                scenarios.append(Scenario.new(area, year, **extra))
+            except (ScenarioError, ValueError) as e:
+                print(f"Could not create scenario with {params}: {e}")
+        return cls(items=scenarios)
 
     def to_excel(
         self,
