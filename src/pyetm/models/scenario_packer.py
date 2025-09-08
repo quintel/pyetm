@@ -366,14 +366,14 @@ class ScenarioPacker(BaseModel):
     ):
         """Add inputs sheet with proper field handling."""
         try:
-            df = self._inputs.build_combined_dataframe(
+            df = self._inputs.to_dataframe(
                 include_defaults=include_defaults, include_min_max=include_min_max
             )
             if df is not None and not df.empty:
                 self._add_dataframe_to_workbook(workbook, self._inputs.sheet_name, df)
         except Exception as e:
             logger.warning("Failed to build inputs DataFrame: %s", e)
-            df = self._inputs._to_dataframe(columns="user")
+            df = self._inputs.to_dataframe()
             if df is not None and not df.empty:
                 self._add_dataframe_to_workbook(workbook, self._inputs.sheet_name, df)
 
