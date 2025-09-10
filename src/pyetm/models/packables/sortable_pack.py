@@ -13,6 +13,7 @@ class SortablePack(Packable):
     def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
         try:
             df = scenario.sortables.to_dataframe()
+            self.log_scenario_warnings(scenario, "_sortables", "Sortables")
         except Exception as e:
             logger.warning(
                 "Failed extracting sortables for %s: %s", scenario.identifier(), e
@@ -23,21 +24,49 @@ class SortablePack(Packable):
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
-    def _normalize_sortables_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize a sortables sheet expecting a single header row."""
-        return self._normalize_single_header_sheet(
+    def import_scenario_specific_sheet(
+        self, excel_file: pd.ExcelFile, sheet_name: str, scenario: "Any"
+    ):
+        """Import sortables from a scenario-specific sheet."""
+        df = self.parse_excel_sheet(excel_file, sheet_name, header=None)
+        if df is not None and not df.empty:
+            self.process_single_scenario_sortables(scenario, df)
+
+    def process_single_scenario_sortables(self, scenario: "Any", df: pd.DataFrame):
+        """Process sortables data for a single scenario."""
+        normalized_data = self.normalize_sheet(
             df,
-            helper_columns={"sortables"},
-            drop_empty=True,
-            reset_index=False,
+            helper_names={"sortables", "hour", "index"},
+            reset_index=True,
+            rename_map={"heat_network": "heat_network_lt"},
         )
+
+        if normalized_data is None or normalized_data.empty:
+            return
+
+        self.apply_sortables_to_scenario(scenario, normalized_data)
+
+    def apply_sortables_to_scenario(self, scenario: "Any", data: pd.DataFrame):
+        """Apply sortables data to scenario with error handling."""
+        try:
+            scenario.set_sortables_from_dataframe(data)
+            self.log_scenario_warnings(scenario, "_sortables", "Sortables")
+        except Exception as e:
+            logger.warning(
+                "Failed processing sortables for '%s': %s", scenario.identifier(), e
+            )
 
     def from_dataframe(self, df: pd.DataFrame):
         """Unpack and update sortables for each scenario from the sheet."""
         if df is None or getattr(df, "empty", False):
             return
         try:
-            df = self._normalize_sortables_dataframe(df)
+            df = self._normalize_single_header_sheet(
+                df,
+                helper_columns={"sortables"},
+                drop_empty=True,
+                reset_index=False,
+            )
         except Exception as e:
             logger.warning("Failed to normalize sortables sheet: %s", e)
             return
@@ -46,6 +75,7 @@ class SortablePack(Packable):
 
         def _apply(scenario, block: pd.DataFrame):
             scenario.set_sortables_from_dataframe(block)
+            self.log_scenario_warnings(scenario, "_sortables", "Sortables")
 
         if isinstance(df.columns, pd.MultiIndex):
             self.apply_identifier_blocks(df, _apply)

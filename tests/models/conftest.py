@@ -400,7 +400,7 @@ def mock_workbook(monkeypatch):
 def patch_add_frame(monkeypatch):
     m = Mock()
     monkeypatch.setattr(
-        "pyetm.models.packables.output_curves_pack.add_frame",
+        "pyetm.utils.excel_utils.add_frame",
         m,
         raising=True,
     )

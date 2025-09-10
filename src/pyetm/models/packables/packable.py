@@ -2,8 +2,10 @@ from typing import ClassVar, Set, Callable, Optional, Dict, Any
 import logging
 import pandas as pd
 from pydantic import BaseModel, Field
+from xlsxwriter import Workbook
 
 from pyetm.models.scenario import Scenario
+from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +14,6 @@ class Packable(BaseModel):
     scenarios: Set["Scenario"] = Field(default_factory=set)
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"
-
     _scenario_id_cache: Dict[str, "Scenario"] | None = None
 
     def add(self, *scenarios):
@@ -213,3 +214,48 @@ class Packable(BaseModel):
         if reset_index:
             data.reset_index(drop=True, inplace=True)
         return data
+
+    def add_to_workbook(self, workbook: Workbook, **kwargs):
+        "Add this pack's data to an Excel workbook as a sheet."
+        df = self.to_dataframe(**kwargs)
+        if df is not None and not df.empty:
+            self._add_dataframe_to_workbook(workbook, self.sheet_name, df)
+
+    def _add_dataframe_to_workbook(
+        self, workbook: Workbook, sheet_name: str, df: pd.DataFrame
+    ):
+        "Add a DataFrame to the workbook as a new sheet."
+        cleaned_df = df.fillna("").infer_objects(copy=False)
+        excel_utils.add_frame(
+            name=sheet_name,
+            frame=cleaned_df,
+            workbook=workbook,
+            column_width=18,
+            scenario_styling=True,
+        )
+
+    def import_from_excel(
+        self,
+        excel_file: pd.ExcelFile,
+        main_df: Optional[pd.DataFrame] = None,
+        scenarios_by_column: Optional[Dict[str, "Scenario"]] = None,
+    ):
+        """Import pack data from Excel file.
+        Subclasses should override this to implement specific import logic."""
+        df = self.parse_excel_sheet(excel_file, self.sheet_name, header=None)
+        if df is not None and not df.empty:
+            self.from_dataframe(df)
+
+    def log_scenario_warnings(
+        self, scenario: "Scenario", attribute_name: str, context: str
+    ):
+        """Log warnings from scenario attributes if available."""
+        try:
+            attribute = getattr(scenario, attribute_name, None)
+            if attribute is not None and hasattr(attribute, "log_warnings"):
+                attribute.log_warnings(
+                    logger,
+                    prefix=f"{context} warning for '{scenario.identifier()}'",
+                )
+        except Exception:
+            pass
