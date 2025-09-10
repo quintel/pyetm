@@ -341,26 +341,3 @@ def test_from_dataframe_early_returns():
     # Should not raise exceptions
     pack.from_dataframe(None)
     pack.from_dataframe(pd.DataFrame())
-
-
-def test_log_scenario_input_warnings():
-    scenario = Mock()
-    scenario._inputs = Mock()
-    scenario._inputs.log_warnings = Mock()
-    scenario.identifier.return_value = "TestScenario"
-
-    pack = InputsPack()
-
-    pack._log_scenario_input_warnings(scenario)
-
-    scenario._inputs.log_warnings.assert_called_once()
-
-
-def test_log_scenario_input_warnings_handles_exception():
-    scenario = Mock()
-    scenario._inputs = None
-
-    pack = InputsPack()
-
-    # Should not raise exception
-    pack._log_scenario_input_warnings(scenario)

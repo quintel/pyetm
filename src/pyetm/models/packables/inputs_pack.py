@@ -1,7 +1,10 @@
 import logging
-from typing import ClassVar, Dict, Any, List, Set
+from typing import ClassVar, Dict, Any, List, Optional
+from openpyxl import Workbook
 import pandas as pd
 from pyetm.models.packables.packable import Packable
+from pyetm.utils import excel_utils
+
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,42 @@ class InputsPack(Packable):
     def _to_dataframe(self, columns="user", **kwargs):
         return self.to_dataframe(columns=columns)
 
+    def add_to_workbook(
+        self,
+        workbook: Workbook,
+        include_defaults: bool = False,
+        include_min_max: bool = False,
+    ):
+        """Add inputs sheet with proper field handling."""
+        try:
+            df = self.to_dataframe(
+                include_defaults=include_defaults, include_min_max=include_min_max
+            )
+            if df is not None and not df.empty:
+                self._add_dataframe_to_workbook(workbook, self.sheet_name, df)
+        except Exception as e:
+            logger.warning("Failed to build inputs DataFrame: %s", e)
+            df = self.to_dataframe()
+            if df is not None and not df.empty:
+                self._add_dataframe_to_workbook(workbook, self.sheet_name, df)
+
+    def import_from_excel(
+        self,
+        excel_file: pd.ExcelFile,
+        main_df: Optional[pd.DataFrame] = None,
+        scenarios_by_column: Optional[Dict[str, Any]] = None,
+    ):
+        """Import inputs sheet from Excel file."""
+        df = excel_utils.parse_excel_sheet(excel_file, self.sheet_name, header=None)
+        if df is not None and not df.empty:
+            # Build short name mapping if main_df provided
+            if main_df is not None and scenarios_by_column:
+                short_name_map = self.build_short_name_mapping(
+                    main_df, scenarios_by_column
+                )
+                self.set_scenario_short_names(short_name_map)
+            self.from_dataframe(df)
+
     def from_dataframe(self, df):
         """Import input values from DataFrame."""
         if df is None or getattr(df, "empty", False):
@@ -239,7 +278,7 @@ class InputsPack(Packable):
                         e,
                     )
                 finally:
-                    self._log_scenario_input_warnings(scenario)
+                    self.log_scenario_warnings(scenario, "_inputs", "Inputs")
 
         except Exception as e:
             logger.warning("Failed to parse simplified SLIDER_SETTINGS sheet: %s", e)
@@ -253,14 +292,3 @@ class InputsPack(Packable):
         if isinstance(value, str) and value.strip().lower() in {"", "nan"}:
             return True
         return False
-
-    def _log_scenario_input_warnings(self, scenario):
-        """Log any warnings from scenario inputs if available."""
-        try:
-            if hasattr(scenario, "_inputs") and scenario._inputs is not None:
-                scenario._inputs.log_warnings(
-                    logger,
-                    prefix=f"Inputs warning for '{scenario.identifier()}'",
-                )
-        except Exception:
-            pass

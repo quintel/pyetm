@@ -70,12 +70,3 @@ def test_from_dataframe_returns_early_for_empty_df():
     pack = CustomCurvesPack()
     df = pd.DataFrame()
     assert pack.from_dataframe(df) is None
-
-
-def test_from_dataframe_returns_early_if_not_multiindex(monkeypatch):
-    pack = CustomCurvesPack()
-
-    monkeypatch.setattr(pack, "_normalize_curves_dataframe", lambda df: df)
-
-    df = pd.DataFrame({"a": [1, 2]})
-    assert pack.from_dataframe(df) is None

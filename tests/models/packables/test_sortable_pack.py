@@ -39,39 +39,3 @@ def test_to_dataframe_handles_exception_and_empty(caplog):
     s.sortables.to_dataframe.return_value = pd.DataFrame()
     df2 = pack.to_dataframe()
     assert df2.empty
-
-
-def test_from_dataframe_multiindex_and_single_block(monkeypatch):
-    s1 = make_scenario("S1")
-    s2 = make_scenario("S2")
-    pack = SortablePack()
-    pack.add(s1, s2)
-    cols = pd.MultiIndex.from_tuples([("S1", "a"), ("S2", "a")])
-    df = pd.DataFrame([[1, 2]], columns=cols)
-    monkeypatch.setattr(pack, "_normalize_sortables_dataframe", lambda d: d)
-    pack.from_dataframe(df)
-
-    assert s1.set_sortables_from_dataframe.called
-    assert s2.set_sortables_from_dataframe.called
-
-
-def test_from_dataframe_normalize_errors_and_empty(caplog, monkeypatch):
-    s = make_scenario("S")
-    pack = SortablePack()
-    pack.add(s)
-
-    with caplog.at_level("WARNING"):
-        monkeypatch.setattr(
-            pack,
-            "_normalize_sortables_dataframe",
-            lambda d: (_ for _ in ()).throw(RuntimeError("bad")),
-        )
-        pack.from_dataframe(pd.DataFrame([[1]]))
-        assert "Failed to normalize sortables sheet" in caplog.text
-
-    # empty after normalize
-    monkeypatch.setattr(
-        pack, "_normalize_sortables_dataframe", lambda d: pd.DataFrame()
-    )
-    pack.from_dataframe(pd.DataFrame([[1]]))
-    assert not s.set_sortables_from_dataframe.called

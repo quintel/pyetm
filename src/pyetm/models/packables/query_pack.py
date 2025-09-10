@@ -1,8 +1,7 @@
 import logging
-from typing import ClassVar, Any
-
+from typing import ClassVar, Any, Dict, Optional
+from openpyxl import Workbook
 import pandas as pd
-
 from pyetm.models.packables.packable import Packable
 
 logger = logging.getLogger(__name__)
@@ -18,14 +17,7 @@ class QueryPack(Packable):
     ):
         try:
             df = scenario.results(columns=columns)
-            try:
-                if hasattr(scenario, "_queries") and scenario._queries is not None:
-                    scenario._queries.log_warnings(
-                        logger,
-                        prefix=f"Queries warning for '{scenario.identifier()}'",
-                    )
-            except Exception:
-                pass
+            self.log_scenario_warnings(scenario, "_queries", "Queries")
             return df
         except Exception as e:
             logger.warning(
@@ -35,6 +27,27 @@ class QueryPack(Packable):
 
     def _to_dataframe(self, columns="future", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs)
+
+    def add_to_workbook(self, workbook: Workbook, columns: str = "future"):
+        """Add gqueries results to workbook."""
+        gqueries_df = self.to_dataframe(columns=columns)
+        if not gqueries_df.empty:
+            self._add_dataframe_to_workbook(
+                workbook, self.output_sheet_name, gqueries_df
+            )
+
+    def import_from_excel(
+        self,
+        excel_file: pd.ExcelFile,
+        main_df: Optional[pd.DataFrame] = None,
+        scenarios_by_column: Optional[Dict[str, Any]] = None,
+    ):
+        """Import gqueries sheet from Excel file."""
+        for sheet_name in ("GQUERIES", self.sheet_name):
+            df = self.parse_excel_sheet(excel_file, sheet_name, header=None)
+            if df is not None and not df.empty:
+                self.from_dataframe(df)
+                return
 
     def from_dataframe(self, df: pd.DataFrame):
         if df is None or df.empty:
@@ -50,14 +63,4 @@ class QueryPack(Packable):
                 try:
                     scenario.add_queries(unique_queries)
                 finally:
-                    try:
-                        if (
-                            hasattr(scenario, "_queries")
-                            and scenario._queries is not None
-                        ):
-                            scenario._queries.log_warnings(
-                                logger,
-                                prefix=f"Queries warning for '{scenario.identifier()}'",
-                            )
-                    except Exception:
-                        pass
+                    self.log_scenario_warnings(scenario, "_queries", "Queries")
