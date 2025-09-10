@@ -3,6 +3,7 @@ from typing import ClassVar, Any, Dict, Optional
 from openpyxl import Workbook
 import pandas as pd
 from pyetm.models.packables.packable import Packable
+from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class QueryPack(Packable):
     ):
         """Import gqueries sheet from Excel file."""
         for sheet_name in ("GQUERIES", self.sheet_name):
-            df = self.parse_excel_sheet(excel_file, sheet_name, header=None)
+            df = excel_utils.parse_excel_sheet(excel_file, sheet_name, header=None)
             if df is not None and not df.empty:
                 self.from_dataframe(df)
                 return

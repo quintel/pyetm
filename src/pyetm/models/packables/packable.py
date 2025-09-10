@@ -242,7 +242,7 @@ class Packable(BaseModel):
     ):
         """Import pack data from Excel file.
         Subclasses should override this to implement specific import logic."""
-        df = self.parse_excel_sheet(excel_file, self.sheet_name, header=None)
+        df = excel_utils.parse_excel_sheet(excel_file, self.sheet_name, header=None)
         if df is not None and not df.empty:
             self.from_dataframe(df)
 
