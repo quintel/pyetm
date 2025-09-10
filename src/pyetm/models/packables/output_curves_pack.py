@@ -4,7 +4,7 @@ from xlsxwriter import Workbook
 from pyetm.models.output_curves import OutputCurves
 import pandas as pd
 from pyetm.models.packables.packable import Packable
-from pyetm.utils.excel import add_frame
+from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +16,7 @@ class OutputCurvesPack(Packable):
     def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
         try:
             series_list = list(scenario.all_output_curves())
-            try:
-                if (
-                    hasattr(scenario, "_output_curves")
-                    and scenario._output_curves is not None
-                ):
-                    scenario._output_curves.log_warnings(
-                        logger,
-                        prefix=f"Output curves warning for '{scenario.identifier()}'",
-                    )
-            except Exception:
-                pass
+            self.log_scenario_warnings(scenario, "_output_curves", "Output curves")
         except Exception as e:
             logger.warning(
                 "Failed extracting output curves for %s: %s", scenario.identifier(), e
@@ -42,6 +32,7 @@ class OutputCurvesPack(Packable):
     def to_excel_per_carrier(
         self, path: str, carriers: Optional[Sequence[str]] = None
     ) -> None:
+        """Export output curves to Excel file organized by carrier."""
 
         # Determine carrier selection
         carrier_map = OutputCurves._load_carrier_mappings()
@@ -121,7 +112,7 @@ class OutputCurvesPack(Packable):
                 # Lazily create the workbook on first real data
                 if workbook is None:
                     workbook = Workbook(str(path))
-                add_frame(
+                excel_utils.add_frame(
                     name=carrier.upper(),
                     frame=combined,
                     workbook=workbook,

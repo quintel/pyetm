@@ -7,14 +7,15 @@ from unittest.mock import Mock, patch, call
 from xlsxwriter.workbook import Workbook
 from xlsxwriter.worksheet import Worksheet
 
-from pyetm.utils.excel import (
-    add_frame,
+from pyetm.utils import excel_utils
+from pyetm.utils.excel_utils import (
     handle_numeric_value,
     set_column_widths,
     write_index,
-    add_series,
     create_scenario_formats,
     get_scenario_blocks,
+    add_series,
+    add_frame,
 )
 
 
@@ -26,7 +27,7 @@ class TestHandleNumericValue:
 
     def test_handle_nan_as_formula(self):
         """Test NaN handling with formula (default)"""
-        result = handle_numeric_value(
+        result = excel_utils.handle_numeric_value(
             self.mock_worksheet, 1, 2, np.nan, None, nan_as_formula=True
         )
 
@@ -36,7 +37,7 @@ class TestHandleNumericValue:
 
     def test_handle_nan_as_text(self):
         """Test NaN handling as text"""
-        result = handle_numeric_value(
+        result = excel_utils.handle_numeric_value(
             self.mock_worksheet, 1, 2, np.nan, None, nan_as_formula=False
         )
 
@@ -44,7 +45,9 @@ class TestHandleNumericValue:
 
     def test_handle_regular_number(self):
         """Test normal number handling"""
-        result = handle_numeric_value(self.mock_worksheet, 1, 2, 3.14159, None)
+        result = excel_utils.handle_numeric_value(
+            self.mock_worksheet, 1, 2, 3.14159, None
+        )
 
         # Should write with default precision (10 decimal places)
         expected_value = 3.14159
@@ -55,7 +58,7 @@ class TestHandleNumericValue:
     def test_handle_number_with_precision(self):
         """Test number with custom precision"""
         # Number that needs rounding
-        result = handle_numeric_value(
+        result = excel_utils.handle_numeric_value(
             self.mock_worksheet, 1, 2, 1.123456789012345, None, decimal_precision=5
         )
 
@@ -65,12 +68,12 @@ class TestHandleNumericValue:
 
     def test_handle_zero(self):
         """Test zero value"""
-        result = handle_numeric_value(self.mock_worksheet, 0, 0, 0.0, None)
+        result = excel_utils.handle_numeric_value(self.mock_worksheet, 0, 0, 0.0, None)
         self.mock_worksheet.write_number.assert_called_once_with(0, 0, 0.0, None)
 
     def test_handle_negative_number(self):
         """Test negative number handling"""
-        result = handle_numeric_value(self.mock_worksheet, 0, 0, -5.5, None)
+        result = excel_utils.handle_numeric_value(self.mock_worksheet, 0, 0, -5.5, None)
         self.mock_worksheet.write_number.assert_called_once_with(0, 0, -5.5, None)
 
     def test_handle_number_with_cell_format(self):
@@ -232,7 +235,7 @@ class TestWriteIndex:
             [("A", 1), ("A", 2), ("B", 1)], names=["letter", "number"]
         )
 
-        write_index(self.mock_worksheet, index, 2, self.bold_format)
+        excel_utils.write_index(self.mock_worksheet, index, 2, self.bold_format)
 
         # Should write both index names
         name_calls = [
