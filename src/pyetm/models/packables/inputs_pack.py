@@ -203,12 +203,6 @@ class InputsPack(Packable):
         """Import inputs sheet from Excel file."""
         df = excel_utils.parse_excel_sheet(excel_file, self.sheet_name, header=None)
         if df is not None and not df.empty:
-            # Build short name mapping if main_df provided
-            if main_df is not None and scenarios_by_column:
-                short_name_map = self.build_short_name_mapping(
-                    main_df, scenarios_by_column
-                )
-                self.set_scenario_short_names(short_name_map)
             self.from_dataframe(df)
 
     def from_dataframe(self, df):

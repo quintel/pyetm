@@ -52,6 +52,7 @@ class Scenario(Base):
     source: Optional[str] = None
     title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    short_name: Optional[str] = None
     start_year: Optional[int] = None
     scaling: Optional[Any] = None
     template: Optional[int] = None
@@ -227,10 +228,19 @@ class Scenario(Base):
 
         return pd.DataFrame.from_dict(info, orient="index", columns=[self.id])
 
+    def set_short_name(self, short_name: str):
+        """Set the short_name attribute and persist in metadata."""
+        self.short_name = str(short_name)
+        if self.metadata is not None:
+            self.metadata["short_name"] = str(short_name)
+        else:
+            self.metadata = {"short_name": str(short_name)}
+
     def identifier(self):
+        if self.short_name:
+            return self.short_name
         if self.title:
             return self.title
-
         return self.id
 
     def user_values(self) -> Dict[str, Any]:
