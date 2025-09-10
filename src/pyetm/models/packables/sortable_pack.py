@@ -2,6 +2,7 @@ import logging
 from typing import ClassVar, Any
 import pandas as pd
 from pyetm.models.packables.packable import Packable
+from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class SortablePack(Packable):
         self, excel_file: pd.ExcelFile, sheet_name: str, scenario: "Any"
     ):
         """Import sortables from a scenario-specific sheet."""
-        df = self.parse_excel_sheet(excel_file, sheet_name, header=None)
+        df = excel_utils.parse_excel_sheet(excel_file, sheet_name, header=None)
         if df is not None and not df.empty:
             self.process_single_scenario_sortables(scenario, df)
 

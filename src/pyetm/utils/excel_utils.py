@@ -11,13 +11,27 @@ from xlsxwriter.worksheet import Worksheet
 from pyetm.models.scenario import Scenario
 from pyetm.models.export_config import ExportConfig
 
-logger = logging.getLogger(__name__)
-
-
 # Export config resolution
 
 
 class ExportConfigResolver:
+    @staticmethod
+    def extract_from_main_sheet(
+        main: pd.DataFrame, scenarios: list
+    ) -> Optional[ExportConfig]:
+        """Extract export config from the main sheet, skipping helper columns."""
+        if main is None or main.empty or not scenarios:
+            return None
+        # Find the first non-helper column
+        for col in main.columns:
+            if str(col).lower() == "helper":
+                continue
+            series = main[col]
+            # Use the existing _parse_config_from_series if available
+            if hasattr(ExportConfigResolver, "_parse_config_from_series"):
+                return ExportConfigResolver._parse_config_from_series(series)
+        return None
+
     """Handles resolution of export configuration from various sources."""
 
     @staticmethod
@@ -32,30 +46,54 @@ class ExportConfigResolver:
         return default
 
     @staticmethod
-    def extract_from_main_sheet(
-        main_df: pd.DataFrame, scenarios: List[Scenario]
+    def extract_from_export_config_sheet(
+        export_config_df: pd.DataFrame,
     ) -> Optional[ExportConfig]:
-        """Extract export configuration from the first scenario column in main sheet."""
-        if main_df.empty or not scenarios:
+        """Extract export configuration from a row-based EXPORT_CONFIG sheet (fields as columns, one row of values)."""
+        if export_config_df is None or export_config_df.empty:
             return None
 
         try:
-            helper_columns = {"description", "helper", "notes"}
-            candidate_series = None
+            row = export_config_df.iloc[0]
 
-            for col in main_df.columns:
-                name = str(col).strip().lower()
-                if name in helper_columns or name in {"", "nan"}:
-                    continue
-                candidate_series = main_df[col]
-                break
+            def parse_carriers(value: Any) -> Optional[List[str]]:
+                if not isinstance(value, str) or not value.strip():
+                    return None
+                return [
+                    carrier.strip() for carrier in value.split(",") if carrier.strip()
+                ]
 
-            if candidate_series is None:
-                candidate_series = main_df.iloc[:, 0]
+            rb = ExportConfigResolver.resolve_boolean
+            get = row.get
 
-            return ExportConfigResolver._parse_config_from_series(candidate_series)
+            # Exports/output_carriers logic
+            exports_val = get("exports")
+            output_carriers = None
+            if rb(exports_val, None, False) is True:
+                output_carriers = ["electricity", "hydrogen", "heat", "methane"]
+            elif rb(exports_val, None, False) is False:
+                output_carriers = None
+            else:
+                output_carriers = parse_carriers(
+                    get("output_carriers")
+                ) or parse_carriers(exports_val)
+
+            config = ExportConfig(
+                include_inputs=rb(get("include_inputs"), get("inputs"), False),
+                include_sortables=rb(get("include_sortables"), get("sortables"), False),
+                include_custom_curves=rb(
+                    get("include_custom_curves"), get("custom_curves"), False
+                ),
+                include_gqueries=rb(
+                    get("include_gqueries"), get("gquery_results"), False
+                )
+                or rb(get("gqueries"), None, False),
+                inputs_defaults=rb(get("defaults"), None, False),
+                inputs_min_max=rb(get("min_max"), None, False),
+                output_carriers=output_carriers,
+            )
+            return config
         except Exception as e:
-            logger.exception("Error extracting from main sheet: %s", e)
             return None
 
     @staticmethod
@@ -531,21 +569,17 @@ def sanitize_excel_value(value: Any) -> Any:
 
 
 def build_excel_main_dataframe(main_df: pd.DataFrame, scenarios: List) -> pd.DataFrame:
-    """Build a MAIN sheet DataFrame for Excel export with proper ordering and labeling."""
+    """Build a MAIN sheet DataFrame for Excel export"""
     if main_df is None or main_df.empty:
         return pd.DataFrame()
 
     # Apply preferred field ordering
     ordered_df = apply_field_ordering(main_df)
-
-    # Apply scenario column labeling
-    labeled_df = apply_scenario_column_labels(ordered_df, scenarios)
-
-    return labeled_df
+    return ordered_df
 
 
 def apply_field_ordering(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply preferred field ordering to DataFrame rows."""
+    """Apply preferred field ordering to DataFrame columns (for pivoted main sheet)."""
     preferred_fields = [
         "title",
         "description",
@@ -562,14 +596,10 @@ def apply_field_ordering(df: pd.DataFrame) -> pd.DataFrame:
         "created_at",
         "updated_at",
     ]
-
-    present_fields = [field for field in preferred_fields if field in df.index]
-    remaining_fields = [field for field in df.index if field not in present_fields]
+    present_fields = [field for field in preferred_fields if field in df.columns]
+    remaining_fields = [field for field in df.columns if field not in present_fields]
     ordered_fields = present_fields + remaining_fields
-
-    ordered_df = df.reindex(index=ordered_fields)
-    ordered_df.index.name = "scenario"
-    return ordered_df
+    return df.loc[:, ordered_fields]
 
 
 def apply_scenario_column_labels(df: pd.DataFrame, scenarios: List) -> pd.DataFrame:
@@ -646,7 +676,6 @@ def parse_excel_sheet(
     try:
         return excel_file.parse(sheet_name, header=header)
     except Exception as e:
-        logger.warning("Failed to parse sheet '%s': %s", sheet_name, e)
         return None
 
 
@@ -717,27 +746,6 @@ def is_helper_column(column_name: Any, helper_names: Set[str]) -> bool:
 
 
 # Scenario metadata extraction
-
-
-def build_short_name_mapping(
-    main_df: pd.DataFrame, scenarios_by_column: Dict[str, Any]
-) -> Dict[str, str]:
-    """Build mapping of scenario IDs to short names."""
-    sheet_info = extract_scenario_sheet_info(main_df)
-    short_name_map = {}
-
-    for column_name, scenario in scenarios_by_column.items():
-        info = sheet_info.get(column_name, {}) if isinstance(sheet_info, dict) else {}
-        short_name = info.get("short_name") if isinstance(info, dict) else None
-
-        if short_name is None or (
-            isinstance(short_name, float) and pd.isna(short_name)
-        ):
-            short_name = str(scenario.identifier())
-
-        short_name_map[str(scenario.id)] = str(short_name)
-
-    return short_name_map
 
 
 def extract_scenario_sheet_info(main_df: pd.DataFrame) -> Dict[str, Dict[str, str]]:

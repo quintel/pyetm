@@ -54,7 +54,7 @@ class ScenarioPacker(BaseModel):
         scenarios = self._scenarios()
         if not scenarios:
             return pd.DataFrame()
-        return pd.concat([scenario.to_dataframe() for scenario in scenarios], axis=1)
+        return pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
 
     def inputs(self, columns="user") -> pd.DataFrame:
         return self._inputs._to_dataframe(columns=columns)
@@ -299,7 +299,19 @@ class ScenarioPacker(BaseModel):
         if not scenarios_by_column:
             return packer
 
-        packer._apply_export_configuration(main_df, scenarios_by_column)
+        # Require EXPORT_CONFIG sheet
+        if "EXPORT_CONFIG" not in excel_file.sheet_names:
+            logger.error("EXPORT_CONFIG sheet is required but not found in Excel file.")
+            return packer
+        try:
+            export_config_df = excel_file.parse("EXPORT_CONFIG")
+        except Exception as e:
+            logger.error("Could not parse EXPORT_CONFIG sheet: %s", e)
+            return packer
+
+        packer._apply_export_configuration(
+            main_df, scenarios_by_column, export_config_df
+        )
 
         packer._inputs.import_from_excel(excel_file, main_df, scenarios_by_column)
 
@@ -315,7 +327,7 @@ class ScenarioPacker(BaseModel):
     def _import_main_sheet(self, excel_file: pd.ExcelFile) -> Optional[pd.DataFrame]:
         """Import and validate the main sheet."""
         try:
-            main_df = excel_file.parse("MAIN", index_col=0)
+            main_df = excel_file.parse("MAIN")
             if main_df is None or getattr(main_df, "empty", False):
                 return None
             return main_df
@@ -324,44 +336,37 @@ class ScenarioPacker(BaseModel):
             return None
 
     def _create_scenarios_from_main(self, main_df: pd.DataFrame) -> Dict[str, Scenario]:
-        """Create scenarios from main sheet columns."""
-        scenarios_by_column = {}
-
-        for column_name in main_df.columns:
-            column_str = str(column_name) if column_name is not None else ""
-            if column_str.strip().lower() in {"description", "helper", "notes"}:
-                continue
-
+        """Create scenarios from main sheet rows."""
+        scenarios_by_row = {}
+        for idx, row in main_df.iterrows():
             try:
-                scenario = self._create_scenario_from_column(
-                    column_str, main_df[column_name]
-                )
+                scenario = self._create_scenario_from_row(idx, row)
                 if scenario is not None:
+                    short_name = row.get("short_name")
+                    if short_name is not None and not (
+                        isinstance(short_name, float) and pd.isna(short_name)
+                    ):
+                        scenario.set_short_name(short_name)
                     self.add(scenario)
-                    scenarios_by_column[column_str] = scenario
+                    scenarios_by_row[idx] = scenario
             except Exception as e:
-                logger.warning(
-                    "Failed to set up scenario for column '%s': %s", column_name, e
-                )
+                logger.warning("Failed to set up scenario for row '%s': %s", idx, e)
+        return scenarios_by_row
 
-        return scenarios_by_column
-
-    def _create_scenario_from_column(
-        self, column_name: str, column_data: pd.Series
+    def _create_scenario_from_row(
+        self, row_idx, row_data: pd.Series
     ) -> Optional[Scenario]:
-        """Create a scenario from a main sheet column."""
-        scenario_id = self._safe_get_int(column_data.get("scenario_id"))
-        area_code = column_data.get("area_code")
-        end_year = self._safe_get_int(column_data.get("end_year"))
-        metadata_updates = self._extract_metadata_updates(column_data)
+        """Create a scenario from a main sheet row."""
+        scenario_id = self._safe_get_int(row_data.get("scenario_id"))
+        area_code = row_data.get("area_code")
+        end_year = self._safe_get_int(row_data.get("end_year"))
+        metadata_updates = self._extract_metadata_updates(row_data)
 
         scenario = self._load_or_create_scenario(
-            scenario_id, area_code, end_year, column_name, **metadata_updates
+            scenario_id, area_code, end_year, str(row_idx), **metadata_updates
         )
-
         if scenario is None:
             return None
-
         self._apply_metadata_to_scenario(scenario, metadata_updates)
         return scenario
 
@@ -426,7 +431,7 @@ class ScenarioPacker(BaseModel):
                 )
 
         logger.warning(
-            "MAIN column '%s' missing required fields for creation (area_code/end_year)",
+            "MAIN row '%s' missing required fields for creation (area_code/end_year)",
             column_name,
         )
         return None
@@ -463,14 +468,18 @@ class ScenarioPacker(BaseModel):
             )
 
     def _apply_export_configuration(
-        self, main_df: pd.DataFrame, scenarios_by_column: Dict[str, Scenario]
+        self,
+        main_df: pd.DataFrame,
+        scenarios_by_column: Dict[str, Scenario],
+        export_config_df: Optional[pd.DataFrame] = None,
     ):
-        """Apply export configuration to all scenarios."""
+        """Apply export configuration to all scenarios. Requires EXPORT_CONFIG sheet."""
         try:
-            config = excel_utils.ExportConfigResolver.extract_from_main_sheet(
-                main_df, list(scenarios_by_column.values())
+            config = excel_utils.ExportConfigResolver.extract_from_export_config_sheet(
+                export_config_df
             )
             if config is None:
+                logger.error("Failed to read export config from EXPORT_CONFIG sheet.")
                 return
 
             for scenario in scenarios_by_column.values():
@@ -480,9 +489,11 @@ class ScenarioPacker(BaseModel):
                     else:
                         setattr(scenario, "_export_config", config)
                 except Exception:
-                    pass
-        except Exception:
-            pass
+                    logger.warning(
+                        f"Failed to set export config for scenario: {scenario}"
+                    )
+        except Exception as e:
+            logger.error(f"Exception in _apply_export_configuration: {e}")
 
     def _import_scenario_specific_sheets(
         self,
@@ -491,7 +502,7 @@ class ScenarioPacker(BaseModel):
         scenarios_by_column: Dict[str, Scenario],
     ):
         """Import scenario-specific sortables and custom curves sheets."""
-        sheet_info = self.extract_scenario_sheet_info(main_df)
+        sheet_info = excel_utils.extract_scenario_sheet_info(main_df)
 
         for column_name, scenario in scenarios_by_column.items():
             info = (
