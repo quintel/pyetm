@@ -35,7 +35,7 @@ class SortablePack(Packable):
 
     def process_single_scenario_sortables(self, scenario: "Any", df: pd.DataFrame):
         """Process sortables data for a single scenario."""
-        normalized_data = self.normalize_sheet(
+        normalized_data = excel_utils.normalize_sheet(
             df,
             helper_names={"sortables", "hour", "index"},
             reset_index=True,

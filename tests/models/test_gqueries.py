@@ -83,6 +83,7 @@ def test_to_dataframe(valid_queries):
     )
 
     dataframe = queries.to_dataframe()
+    dataframe = dataframe.set_index("gquery")
     assert dataframe.loc[valid_queries[0], "future"] == 20.5
     assert dataframe.loc[valid_queries[0], "unit"] == "euros"
     assert dataframe.loc[valid_queries[1], "future"] == 1.0

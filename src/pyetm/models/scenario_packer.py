@@ -27,7 +27,8 @@ class ScenarioPacker(BaseModel):
     _custom_curves: CustomCurvesPack = CustomCurvesPack()
     _inputs: InputsPack = InputsPack()
     _sortables: SortablePack = SortablePack()
-    _output_curves: OutputCurvesPack = OutputCurvesPack()
+    _exports: OutputCurvesPack = OutputCurvesPack()
+    _query_pack: QueryPack = QueryPack()
 
     # Scenario management methods
     def add(self, *scenarios):
@@ -35,7 +36,8 @@ class ScenarioPacker(BaseModel):
         self.add_custom_curves(*scenarios)
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
-        self.add_output_curves(*scenarios)
+        self.add_exports(*scenarios)
+        self._query_pack.add(*scenarios)
 
     def add_custom_curves(self, *scenarios):
         self._custom_curves.add(*scenarios)
@@ -46,8 +48,8 @@ class ScenarioPacker(BaseModel):
     def add_sortables(self, *scenarios):
         self._sortables.add(*scenarios)
 
-    def add_output_curves(self, *scenarios):
-        self._output_curves.add(*scenarios)
+    def add_exports(self, *scenarios):
+        self._exports.add(*scenarios)
 
     def main_info(self) -> pd.DataFrame:
         """Create main info DataFrame by concatenating scenario dataframes."""
@@ -60,7 +62,7 @@ class ScenarioPacker(BaseModel):
         return self._inputs._to_dataframe(columns=columns)
 
     def gquery_results(self, columns="future") -> pd.DataFrame:
-        return QueryPack(scenarios=self._scenarios()).to_dataframe(columns=columns)
+        return self._query_pack.to_dataframe(columns=columns)
 
     def sortables(self) -> pd.DataFrame:
         return self._sortables.to_dataframe()
@@ -68,8 +70,11 @@ class ScenarioPacker(BaseModel):
     def custom_curves(self) -> pd.DataFrame:
         return self._custom_curves.to_dataframe()
 
-    def output_curves(self) -> pd.DataFrame:
-        return self._output_curves.to_dataframe()
+    def exports(self) -> pd.DataFrame:
+        return self._exports.to_dataframe()
+
+    def add_queries(self, gquery_keys: List[str]):
+        self._query_pack.add_queries(gquery_keys)
 
     def to_excel(
         self,
@@ -80,7 +85,7 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool] = None,
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
-        include_output_curves: Optional[bool] = None,
+        include_exports: Optional[bool] = None,
     ):
         """Export scenarios to Excel file."""
         if not self._scenarios():
@@ -93,7 +98,7 @@ class ScenarioPacker(BaseModel):
             include_sortables,
             include_custom_curves,
             include_gqueries,
-            include_output_curves,
+            include_exports,
         )
 
         # Ensure destination directory exists
@@ -109,14 +114,13 @@ class ScenarioPacker(BaseModel):
             self._add_data_sheets(workbook, resolved_flags)
 
             if resolved_flags["include_gqueries"]:
-                gquery_pack = QueryPack(scenarios=self._scenarios())
-                gquery_pack.add_to_workbook(workbook)
+                self._query_pack.add_to_workbook(workbook)
         finally:
             workbook.close()
 
         # Handle output curves separately
         self._export_output_curves_if_needed(
-            path, carriers, resolved_flags["include_output_curves"], global_config
+            path, carriers, resolved_flags["include_exports"], global_config
         )
 
     def _get_global_export_config(self) -> Optional[ExportConfig]:
@@ -134,7 +138,7 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool],
         include_custom_curves: Optional[bool],
         include_gqueries: Optional[bool],
-        include_output_curves: Optional[bool],
+        include_exports: Optional[bool],
     ) -> Dict[str, Any]:
         """Resolve all export flags from parameters and configuration."""
         resolver = excel_utils.ExportConfigResolver()
@@ -176,8 +180,8 @@ class ScenarioPacker(BaseModel):
                 ),
                 False,
             ),
-            "include_output_curves": resolver.resolve_boolean(
-                include_output_curves,
+            "include_exports": resolver.resolve_boolean(
+                include_exports,
                 (
                     (getattr(global_config, "output_carriers", None) is not None)
                     if global_config
@@ -232,11 +236,11 @@ class ScenarioPacker(BaseModel):
         self,
         main_path: str,
         carriers: Optional[Sequence[str]],
-        include_output_curves: bool,
+        include_exports: bool,
         global_config: Optional[ExportConfig],
     ):
         """Export output curves to separate file if needed."""
-        if not include_output_curves:
+        if not include_exports:
             return
 
         # Determine output file path
@@ -252,7 +256,7 @@ class ScenarioPacker(BaseModel):
             chosen_carriers = list(config_carriers) if config_carriers else None
 
         try:
-            self._output_curves.to_excel_per_carrier(output_path, chosen_carriers)
+            self._exports.to_excel_per_carrier(output_path, chosen_carriers)
         except Exception as e:
             logger.warning("Failed exporting output curves workbook: %s", e)
 
@@ -315,8 +319,7 @@ class ScenarioPacker(BaseModel):
 
         packer._inputs.import_from_excel(excel_file, main_df, scenarios_by_column)
 
-        gquery_pack = QueryPack(scenarios=packer._scenarios())
-        gquery_pack.import_from_excel(excel_file)
+        packer._query_pack.import_from_excel(excel_file)
 
         packer._import_scenario_specific_sheets(
             excel_file, main_df, scenarios_by_column
@@ -505,9 +508,8 @@ class ScenarioPacker(BaseModel):
         sheet_info = excel_utils.extract_scenario_sheet_info(main_df)
 
         for column_name, scenario in scenarios_by_column.items():
-            info = (
-                sheet_info.get(column_name, {}) if isinstance(sheet_info, dict) else {}
-            )
+            key = str(column_name)
+            info = sheet_info.get(key, {}) if isinstance(sheet_info, dict) else {}
 
             # Import sortables
             sortables_sheet = info.get("sortables") if isinstance(info, dict) else None
@@ -543,7 +545,13 @@ class ScenarioPacker(BaseModel):
 
     def _get_all_packs(self):
         """Get all pack instances."""
-        return [self._inputs, self._sortables, self._custom_curves, self._output_curves]
+        return [
+            self._inputs,
+            self._sortables,
+            self._custom_curves,
+            self._exports,
+            self._query_pack,
+        ]
 
     def clear(self):
         """Clear all scenarios from all packs."""
@@ -560,16 +568,3 @@ class ScenarioPacker(BaseModel):
                 pack.discard(scenario)
             except Exception:
                 pass
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get a summary of what's in the packer."""
-        summary = {"total_scenarios": len(self._scenarios())}
-        for pack in self._get_all_packs():
-            try:
-                summary.update(pack.summary())
-            except Exception:
-                pass
-        summary["scenario_ids"] = sorted(
-            [getattr(s, "id", None) for s in self._scenarios()]
-        )
-        return summary
