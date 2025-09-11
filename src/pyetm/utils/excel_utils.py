@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import math
-import logging
 from typing import Any, Dict, List, Optional, Set, Union
 import numpy as np
 import pandas as pd
 import datetime as dt
 from xlsxwriter.workbook import Workbook
 from xlsxwriter.worksheet import Worksheet
-from pyetm.models.scenario import Scenario
 from pyetm.models.export_config import ExportConfig
 
 # Export config resolution
@@ -27,9 +25,7 @@ class ExportConfigResolver:
             if str(col).lower() == "helper":
                 continue
             series = main[col]
-            # Use the existing _parse_config_from_series if available
-            if hasattr(ExportConfigResolver, "_parse_config_from_series"):
-                return ExportConfigResolver._parse_config_from_series(series)
+            return ExportConfigResolver._parse_config_from_series(series)
         return None
 
     """Handles resolution of export configuration from various sources."""
@@ -770,15 +766,17 @@ def extract_single_scenario_sheet_info(series: pd.Series) -> Dict[str, Dict[str,
 
 
 def extract_multiple_scenario_sheet_info(df: pd.DataFrame) -> Dict[str, Dict[str, str]]:
-    """Extract sheet info for multiple scenarios (DataFrame case)."""
-    scenario_sheets = {}
+    """Extract sheet info for multiple scenarios"""
+    scenario_sheets: Dict[str, Dict[str, str]] = {}
 
-    for identifier in df.columns:
-        column_data = df[identifier]
-        scenario_sheets[str(identifier)] = {
-            "short_name": get_safe_value(column_data, "short_name", str(identifier)),
-            "sortables": get_value_before_output(column_data, "sortables"),
-            "custom_curves": get_value_before_output(column_data, "custom_curves"),
+    for idx, row in df.iterrows():
+        key = str(idx)
+        sortables = get_value_before_output(row, "sortables")
+        custom_curves = get_value_before_output(row, "custom_curves")
+        scenario_sheets[key] = {
+            "short_name": get_safe_value(row, "short_name", key),
+            "sortables": sortables,
+            "custom_curves": custom_curves,
         }
 
     return scenario_sheets

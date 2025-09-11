@@ -134,7 +134,7 @@ class Scenario(Base):
         include_sortables: bool | None = None,
         include_custom_curves: bool | None = None,
         include_gqueries: bool | None = None,
-        include_output_curves: bool | None = None,
+        include_exports: bool | None = None,
     ) -> None:
         """
         Export this scenario – and optionally additional scenarios – to an Excel file.
@@ -155,7 +155,7 @@ class Scenario(Base):
             include_sortables=include_sortables,
             include_custom_curves=include_custom_curves,
             include_gqueries=include_gqueries,
-            include_output_curves=include_output_curves,
+            include_exports=include_exports,
         )
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:

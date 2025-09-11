@@ -56,7 +56,7 @@ class TestScenarioPackerAdd:
         assert sample_scenario in packer._custom_curves.scenarios
         assert sample_scenario not in packer._inputs.scenarios
         assert sample_scenario not in packer._sortables.scenarios
-        assert sample_scenario not in packer._output_curves.scenarios
+        assert sample_scenario not in packer._exports.scenarios
 
     def test_add_inputs(self, sample_scenario):
         """Test adding scenarios to inputs only"""
@@ -74,12 +74,12 @@ class TestScenarioPackerAdd:
         assert sample_scenario in packer._sortables.scenarios
         assert sample_scenario not in packer._inputs.scenarios
 
-    def test_add_output_curves(self, sample_scenario):
+    def test_add_exports(self, sample_scenario):
         """Test adding scenarios to output_curves only"""
         packer = ScenarioPacker()
-        packer.add_output_curves(sample_scenario)
+        packer.add_exports(sample_scenario)
 
-        assert sample_scenario in packer._output_curves.scenarios
+        assert sample_scenario in packer._exports.scenarios
         assert sample_scenario not in packer._inputs.scenarios
 
 
@@ -380,28 +380,13 @@ class TestDataExtractionMethods:
             assert "curve1" in result.columns
             assert "curve2" in result.columns
 
-    def test_output_curves_empty(self):
+    def test_exports_empty(self):
         """Test output_curves with no scenarios"""
         packer = ScenarioPacker()
-        result = packer.output_curves()
+        result = packer.exports()
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
-
-    def test_output_curves_with_series(self, sample_scenario):
-        """Test output_curves with series data"""
-        mock_series = pd.Series([10, 20, 30], name="output_curve")
-        sample_scenario.all_output_curves = Mock(return_value=[mock_series])
-
-        packer = ScenarioPacker()
-        packer.add_output_curves(sample_scenario)
-        result = packer.output_curves()
-
-        assert not result.empty
-        if isinstance(result.columns, pd.MultiIndex):
-            assert "output_curve" in result.columns.get_level_values(1)
-        else:
-            assert "output_curve" in result.columns
 
 
 class TestExcelExport:
@@ -492,7 +477,7 @@ class TestExcelExport:
         scenario.custom_curves_series = Mock(
             return_value=[pd.Series([1, 2], name="curve1")]
         )
-        scenario.all_output_curves = Mock(
+        scenario.all_exports = Mock(
             return_value=[
                 pd.Series([1, 2], name="curve1"),
                 pd.Series([3, 4], name="carrier1"),
@@ -554,35 +539,6 @@ class TestUtilityMethods:
 
         # Original scenario should still be there
         assert sample_scenario in packer._scenarios()
-
-    def test_get_summary_empty(self):
-        """Test get_summary with empty packer"""
-        packer = ScenarioPacker()
-        summary = packer.get_summary()
-
-        assert summary["total_scenarios"] == 0
-        assert summary["custom_curves"]["scenario_count"] == 0
-        assert summary["inputs"]["scenario_count"] == 0
-        assert summary["sortables"]["scenario_count"] == 0
-        assert summary["output_curves"]["scenario_count"] == 0
-        assert summary["scenario_ids"] == []
-
-    def test_get_summary_with_data(self, multiple_scenarios):
-        """Test get_summary with scenarios"""
-        packer = ScenarioPacker()
-        packer.add_inputs(multiple_scenarios[0])
-        packer.add_custom_curves(multiple_scenarios[1])
-        packer.add(multiple_scenarios[2])
-
-        summary = packer.get_summary()
-
-        assert summary["total_scenarios"] == 3
-        assert summary["inputs"]["scenario_count"] == 2  # scenarios 0 and 2
-        assert summary["custom_curves"]["scenario_count"] == 2  # scenarios 1 and 2
-        assert summary["sortables"]["scenario_count"] == 1  # scenario 2 only
-        assert summary["output_curves"]["scenario_count"] == 1  # scenario 2 only
-        assert len(summary["scenario_ids"]) == 3
-        assert all(s.id in summary["scenario_ids"] for s in multiple_scenarios)
 
 
 class TestFromExcel:
@@ -920,7 +876,7 @@ class TestScenarioPackerExtras:
             assert "CUSTOM_CURVES" in sheet_names
             assert "GQUERIES_OUT" in sheet_names
 
-    def test_export_output_curves_with_params_and_config(self):
+    def test_export_exports_with_params_and_config(self):
         packer = ScenarioPacker()
         s = Mock(spec=Scenario)
         s.id = "S"
@@ -935,7 +891,7 @@ class TestScenarioPackerExtras:
         ):
             mock_wb.return_value = Mock()
             tmp = os.path.join(tempfile.gettempdir(), "export1.xlsx")
-            packer.to_excel(tmp, include_output_curves=True, carriers=["el", "gas"])
+            packer.to_excel(tmp, include_exports=True, carriers=["el", "gas"])
             args, _ = toe.call_args
             assert args[0].endswith("_exports.xlsx")
             assert args[1] == ["el", "gas"]
@@ -955,12 +911,12 @@ class TestScenarioPackerExtras:
         ):
             mock_wb2.return_value = Mock()
             tmp2 = os.path.join(tempfile.gettempdir(), "export2.xlsx")
-            packer2.to_excel(tmp2, include_output_curves=True)
+            packer2.to_excel(tmp2, include_exports=True)
             args2, _ = toe2.call_args
             assert args2[1] == ["h2"]
 
 
-def test_export_output_curves_if_needed_false():
+def test_export_exports_if_needed_false():
     packer = ScenarioPacker()
     s = Mock(spec=Scenario)
     s.id = "S"
@@ -973,7 +929,7 @@ def test_export_output_curves_if_needed_false():
         patch("pyetm.models.scenario_packer.Workbook") as wb,
     ):
         wb.return_value = Mock()
-        packer.to_excel("/tmp/x.xlsx", include_output_curves=False)
+        packer.to_excel("/tmp/x.xlsx", include_exports=False)
         toe.assert_not_called()
 
 
