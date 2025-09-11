@@ -38,7 +38,7 @@ class CustomCurvesPack(Packable):
 
     def process_single_scenario_curves(self, scenario: "Any", df: pd.DataFrame):
         """Process custom curves data for a single scenario."""
-        normalized_data = self.normalize_sheet(
+        normalized_data = excel_utils.normalize_sheet(
             df,
             helper_names={"curves", "custom_curves", "hour", "index"},
             reset_index=True,
