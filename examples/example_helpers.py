@@ -109,8 +109,8 @@ def setup_notebook(debug=False):
         builtins.print = _smart_print
 
     except Exception as e:
+        print(f"Error setting up pandas features: {e}")
         if debug:
-            print(f"Error setting up pandas features: {e}")
             import traceback
 
             traceback.print_exc()
@@ -129,10 +129,8 @@ def setup_notebook(debug=False):
         else:
             print("API connection ready")
     except Exception as e:
+        print(f"Error checking API settings: {e}")
         if debug:
-            print(f"Error checking API settings: {e}")
             import traceback
 
             traceback.print_exc()
-        else:
-            print("Error checking API settings. Run with debug=True for details.")

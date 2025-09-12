@@ -165,7 +165,7 @@ class Scenario(Base):
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
         """
         Return a single-column DataFrame describing this scenario
-        - Column name is the scenario_id for concatenation.
+        - Column name is the scenario identifier (short_name/title/id)
         """
         info: Dict[str, Any] = {
             "title": self.title,
@@ -198,7 +198,8 @@ class Scenario(Base):
                 if k not in info:
                     info[k] = v
 
-        return pd.DataFrame.from_dict(info, orient="index", columns=[self.id])
+        col_name = self.identifier() if self.identifier() is not None else self.id
+        return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
     def set_short_name(self, short_name: str):
         """Set the short_name attribute and persist in metadata."""
