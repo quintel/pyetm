@@ -1,10 +1,11 @@
 from __future__ import annotations
 from os import PathLike
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Sequence
+from typing import Iterable, Iterator, List
 from pydantic import Field
 from pyetm.models.base import Base
 from .scenario import Scenario, ScenarioError
+from pathlib import Path
 
 
 class Scenarios(Base):
@@ -69,41 +70,28 @@ class Scenarios(Base):
                 print(f"Could not create scenario with {params}: {e}")
         return cls(items=scenarios)
 
-    def to_excel(
-        self,
-        path: PathLike | str,
-        *,
-        carriers: Optional[Sequence[str]] = None,
-        include_inputs: bool | None = None,
-        include_sortables: bool | None = None,
-        include_custom_curves: bool | None = None,
-        include_gqueries: bool | None = None,
-        include_exports: bool | None = None,
-    ) -> None:
-        from .scenario_packer import ScenarioPacker
-        from pyetm.utils.paths import PyetmPaths
+    def to_excel(self, path: PathLike | str, **export_options) -> None:
+        """
+        Export all scenarios to Excel.
+        """
+        from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
-        packer = ScenarioPacker()
-        if self.items:
-            packer.add(*self.items)
+        if not self.items:
+            raise ValueError("No scenarios to export")
 
-        resolver = PyetmPaths()
-        out_path = resolver.resolve_for_write(path, default_dir="outputs")
-
-        packer.to_excel(
-            str(out_path),
-            carriers=carriers,
-            include_inputs=include_inputs,
-            include_sortables=include_sortables,
-            include_custom_curves=include_custom_curves,
-            include_gqueries=include_gqueries,
-            include_exports=include_exports,
+        resolved_path = Path(path).expanduser().resolve()
+        ScenarioExcelService.export_to_excel(
+            self.items, str(resolved_path), **export_options
         )
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
         """
-        Load or create scenarios from an Excel workbook and wrap them in Scenarios.
+        Import scenarios from Excel.
         """
-        scenarios = Scenario.from_excel(xlsx_path)
+        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+
+        resolved_path = Path(xlsx_path).expanduser().resolve()
+        scenarios = ScenarioExcelService.import_from_excel(str(resolved_path))
+        scenarios.sort(key=lambda s: s.id)
         return cls(items=scenarios)

@@ -107,56 +107,28 @@ class Scenario(Base):
             scenario.add_warning("metadata", w)
         return scenario
 
-    # TODO: This should only return one scenario (or break) - move this logic to Scenarios and create the Scenario version
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> List["Scenario"]:
+    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenario":
         """
-        Load or create one or more scenarios from an Excel workbook.
+        Convenience method to load a single scenario from Excel.
         """
-        from pyetm.models.scenario_packer import ScenarioPacker
-        from pyetm.utils.paths import PyetmPaths
+        from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
-        resolver = PyetmPaths()
-        path = resolver.resolve_for_read(xlsx_path, default_dir="inputs")
+        scenarios = ScenarioExcelService.import_from_excel(xlsx_path)
+        if len(scenarios) != 1:
+            raise ScenarioError(
+                f"Expected one scenario, found {len(scenarios)}. "
+                "Use Scenarios.from_excel() for multi-scenario workbooks."
+            )
+        return scenarios[0]
 
-        packer = ScenarioPacker.from_excel(str(path))
-        scenarios = list(packer._scenarios())
-        scenarios.sort(key=lambda s: s.id)
-        return scenarios
-
-    # TODO: Same here
-    def to_excel(
-        self,
-        path: PathLike | str,
-        *others: "Scenario",
-        carriers: list[str] | None = None,
-        include_inputs: bool | None = None,
-        include_sortables: bool | None = None,
-        include_custom_curves: bool | None = None,
-        include_gqueries: bool | None = None,
-        include_exports: bool | None = None,
-    ) -> None:
+    def to_excel(self, path: PathLike | str, **export_options) -> None:
         """
-        Export this scenario – and optionally additional scenarios – to an Excel file.
-        Output curves are exported to a separate workbook only when enabled, with one
-        sheet per carrier. Use carriers to filter which carriers to include when exporting.
+        Convenience method to export this scenario to Excel.
         """
+        from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
-        from pyetm.models.scenarios import Scenarios
-        from pyetm.utils.paths import PyetmPaths
-
-        resolver = PyetmPaths()
-        out_path = resolver.resolve_for_write(path, default_dir="outputs")
-
-        Scenarios(items=[self, *others]).to_excel(
-            str(out_path),
-            carriers=carriers,
-            include_inputs=include_inputs,
-            include_sortables=include_sortables,
-            include_custom_curves=include_custom_curves,
-            include_gqueries=include_gqueries,
-            include_exports=include_exports,
-        )
+        ScenarioExcelService.export_to_excel([self], path, **export_options)
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """
