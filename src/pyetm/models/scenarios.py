@@ -10,8 +10,7 @@ from pathlib import Path
 
 class Scenarios(Base):
     """
-    A simple collection of Scenario objects with convenience utilities.
-    #TODO: Make a nice repr or stats functions
+    A collection of Scenario objects
     """
 
     items: List[Scenario] = Field(default_factory=list)
@@ -51,7 +50,6 @@ class Scenarios(Base):
         """Create multiple Scenario objects from parameter dicts."""
         scenarios = []
         for params in scenario_params:
-            # Prefer explicit param, then fallback to method default
             area = params.get("area_code") or area_code
             year = params.get("end_year") or end_year
             if area is None or year is None:

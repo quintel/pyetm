@@ -86,6 +86,7 @@ class ScenarioPacker(BaseModel):
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
         include_exports: Optional[bool] = None,
+        include_input_details: Optional[bool] = None,
     ):
         """Export scenarios to Excel file."""
         if not self._scenarios():
@@ -115,6 +116,14 @@ class ScenarioPacker(BaseModel):
 
             if resolved_flags["include_gqueries"]:
                 self._query_pack.add_to_workbook(workbook)
+
+            if include_input_details:
+                self._inputs.add_to_workbook(
+                    workbook,
+                    include_defaults=True,
+                    include_min_max=True,
+                    sheet_name="INPUT_DETAILS",
+                )
         finally:
             workbook.close()
 
