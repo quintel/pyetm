@@ -23,7 +23,7 @@ class QueryPack(Packable):
         super().add(*scenarios)
         if not scenarios:
             return
-        # Apply effective queries to newly added scenarios (dedup automatically in Scenario)
+
         effective = self._effective_query_keys()
         if effective:
             for scenario in scenarios:
@@ -137,7 +137,6 @@ class QueryPack(Packable):
         super().clear()
         self._query_definitions.clear()
 
-    # --- Helpers ----------------------------------------------------------------------
     def _effective_query_keys(self) -> List[str]:
         """Combined unique list of queries from imported definitions and requested queries."""
         if not self._query_definitions and not self._requested_queries:
