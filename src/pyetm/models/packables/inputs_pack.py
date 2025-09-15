@@ -5,7 +5,6 @@ import pandas as pd
 from pyetm.models.packables.packable import Packable
 from pyetm.utils import excel_utils
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -180,19 +179,21 @@ class InputsPack(Packable):
         workbook: Workbook,
         include_defaults: bool = False,
         include_min_max: bool = False,
+        sheet_name: str = None,
     ):
-        """Add inputs sheet with proper field handling."""
+        """Add inputs sheet with proper field handling. Optionally override sheet name."""
+        name = sheet_name if sheet_name else self.sheet_name
         try:
             df = self.to_dataframe(
                 include_defaults=include_defaults, include_min_max=include_min_max
             )
             if df is not None and not df.empty:
-                self._add_dataframe_to_workbook(workbook, self.sheet_name, df)
+                self._add_dataframe_to_workbook(workbook, name, df)
         except Exception as e:
             logger.warning("Failed to build inputs DataFrame: %s", e)
             df = self.to_dataframe()
             if df is not None and not df.empty:
-                self._add_dataframe_to_workbook(workbook, self.sheet_name, df)
+                self._add_dataframe_to_workbook(workbook, name, df)
 
     def import_from_excel(
         self,

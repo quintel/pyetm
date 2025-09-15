@@ -70,7 +70,9 @@ class Gqueries(Base):
 
         df = pd.DataFrame.from_dict(normalized, orient="index")
         df.index.name = "gquery"
-        df = df.reset_index()
+        df = (
+            df.reset_index()
+        )  # Makes the gqueries and explicit column rather than just the index
         return df
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:

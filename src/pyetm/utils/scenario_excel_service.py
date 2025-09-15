@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class ScenarioExcelService:
     """
-    Service responsible for Excel import/export operations.
+    Manage Excel import/export operations.
     """
 
     @classmethod
