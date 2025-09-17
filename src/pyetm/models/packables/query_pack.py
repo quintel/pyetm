@@ -15,10 +15,6 @@ class QueryPack(Packable):
 
     _query_keys: list[str] = PrivateAttr(default=[])
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._query_definitions: List[str] = []
-
     @staticmethod
     def excel_read_kwargs():
         """
@@ -92,4 +88,4 @@ class QueryPack(Packable):
 
     def _push_query_keys(self, *keys):
         new_keys = set(keys) - set(self._query_keys)
-        self._query_keys.extend(list[new_keys])
+        self._query_keys.extend(list(new_keys))
