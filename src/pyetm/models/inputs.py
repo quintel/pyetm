@@ -199,17 +199,20 @@ class Inputs(Base):
         if not isinstance(columns, list):
             columns = [columns]
         columns = ["unit"] + columns
-
-        df = pd.DataFrame.from_dict(
-            {
-                input.key: [getattr(input, key, None) for key in columns]
-                for input in self.inputs
-            },
-            orient="index",
-            columns=columns,
-        )
-        df.index.name = "input"
-        return df.set_index("unit", append=True)
+        try:
+            df = pd.DataFrame.from_dict(
+                {
+                    input.key: [getattr(input, key, None) for key in columns]
+                    for input in self.inputs
+                },
+                orient="index",
+                columns=columns,
+            )
+            df.index.name = "input"
+            return df.set_index("unit", append=True)
+        except Exception as e:
+            self.add_warning("_to_dataframe", f"Failed to create DataFrame: {e}")
+            return pd.DataFrame()
 
     @classmethod
     def from_json(cls, data) -> Inputs:
