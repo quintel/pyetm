@@ -78,11 +78,43 @@ class BoolInput(Input):
     @field_validator("user", mode="after")
     @classmethod
     def is_bool_float(cls, value: Optional[float]) -> Optional[float]:
-        if value == 1.0 or value == 0.0 or value is None:
+        if pd.isna(value) or value in [1.0, 0.0]:
             return value
         raise ValueError(
             f"{value} should be 1.0 or 0.0 representing True/False, or On/Off"
         )
+
+    @field_validator("user", mode="before")
+    @classmethod
+    def coerce_bool(cls, value):
+        if value is None:
+            return None
+
+        truth_map = {
+            "true": 1.0,
+            "t": 1.0,
+            "1": 1.0,
+            "yes": 1.0,
+            "y": 1.0,
+            "on": 1.0,
+            "false": 0.0,
+            "f": 0.0,
+            "0": 0.0,
+            "no": 0.0,
+            "n": 0.0,
+            "off": 0.0,
+        }
+
+        if isinstance(value, str):
+            return truth_map.get(value.strip().lower(), value)
+
+        if isinstance(value, bool):
+            return 1.0 if value else 0.0
+
+        if isinstance(value, (int, float)):
+            return 1.0 if value != 0 else 0.0
+
+        return value
 
 
 class EnumInput(Input):
@@ -101,7 +133,7 @@ class EnumInput(Input):
 
     @model_validator(mode="after")
     def check_permitted(self) -> EnumInput:
-        if self.user is None or self.user in self.permitted_values:
+        if pd.isna(self.user) or self.user in self.permitted_values:
             return self
         self._raise_exception_on_loc(
             "ValueError",
@@ -109,6 +141,13 @@ class EnumInput(Input):
             loc="user",
             msg=f"Value error, {self.user} should be in {self.permitted_values}",
         )
+
+    @field_validator("user", mode="before")
+    @classmethod
+    def coerce_enum(cls, value):
+        if pd.isna(value):
+            return None
+        return pd.Series([value]).astype(str).str.strip().iloc[0]
 
 
 class FloatInput(Input):
@@ -141,6 +180,23 @@ class FloatInput(Input):
             loc="user",
             msg=f"Value error, {self.user} should be between {self.min} and {self.max}",
         )
+
+    @field_validator("user", mode="before")
+    @classmethod
+    def coerce_float(cls, value):
+        if pd.isna(value):
+            return None
+        try:
+            if isinstance(value, str):
+                return pd.to_numeric(
+                    pd.Series([value]).str.strip(), errors="raise"
+                ).iloc[0]
+            elif isinstance(value, (int, float)):
+                return pd.Series([value], dtype=float).iloc[0]
+        except (ValueError, pd.errors.ParserError):
+            pass
+
+        return value
 
 
 class Inputs(Base):

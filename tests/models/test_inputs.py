@@ -122,26 +122,18 @@ def test_bool_input():
     input_obj.user = 0.0
     assert input_obj.user == 0.0
 
-    # Is it valid to update to string? - should return WarningCollector
+    # Is it valid to update to string? - should coerce it to a 1.0, so no warning
     validity_warnings = input_obj.is_valid_update("true")
-    assert validity_warnings.has_warnings("user")
+    assert not validity_warnings.has_warnings("user")
 
-    user_warnings = validity_warnings.get_by_field("user")
-    assert any(
-        "unable to parse string as a number" in w.message.lower() for w in user_warnings
-    )
-
-    # Is it valid to update to 0.5?
+    # Is it valid to update to 0.5? Should be coerced to 1.0, so no warning
     validity_warnings = input_obj.is_valid_update(0.5)
-    assert validity_warnings.has_warnings("user")
+    assert not validity_warnings.has_warnings("user")
 
-    user_warnings = validity_warnings.get_by_field("user")
-    assert any("0.5 should be 1.0 or 0.0" in w.message for w in user_warnings)
-
-    # Try to update to 0.5 - should not change value but add warning
+    # Try to update to 0.5 - should change value to 1.0 and not add warning
     input_obj.user = 0.5
-    assert input_obj.user == 0.0  # Should not change
-    assert input_obj.warnings.has_warnings("user")  # Should have warning
+    assert input_obj.user == 1.0  # Should be coerced
+    assert not input_obj.warnings.has_warnings("user")  # Should not have warning
 
     # Reset the input
     input_obj.user = "reset"
