@@ -9,9 +9,8 @@ from xlsxwriter.workbook import Workbook
 from xlsxwriter.worksheet import Worksheet
 from pyetm.models.export_config import ExportConfig
 
+
 # Export config resolution
-
-
 class ExportConfigResolver:
     @staticmethod
     def extract_from_main_sheet(
@@ -187,8 +186,6 @@ class ExportConfigResolver:
 
 
 # Excel writing
-
-
 def handle_numeric_value(
     worksheet: Worksheet,
     row: int,
@@ -523,8 +520,6 @@ def add_series(
 
 
 # Dataframe prep and sanitization
-
-
 def sanitize_dataframe_for_excel(df: pd.DataFrame) -> pd.DataFrame:
     """Convert DataFrame to Excel-compatible format."""
     if df is None or df.empty:
@@ -556,6 +551,13 @@ def sanitize_excel_value(value: Any) -> Any:
             return str(value)
         except Exception:
             return ""
+
+    # Handle lists by converting to comma-separated string
+    if isinstance(value, (list, tuple, set)):
+        try:
+            return ", ".join(str(item) for item in value)
+        except Exception:
+            return str(value)
 
     # Generic fallback
     try:
