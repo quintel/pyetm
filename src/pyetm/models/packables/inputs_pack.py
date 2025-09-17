@@ -63,66 +63,6 @@ class InputsPack(Packable):
 
         return None
 
-    def _extract_input_values(self, scenario, field_name: str) -> Dict[str, Any]:
-        """Extract input values for a specific field from a scenario."""
-        values = self._extract_from_input_objects(scenario, field_name)
-        if values:
-            return values
-
-        return self._extract_from_dataframe(scenario, field_name)
-
-    def _extract_from_input_objects(self, scenario, field_name: str) -> Dict[str, Any]:
-        """Extract values by iterating through scenario input objects."""
-        try:
-            values = {}
-            for input_obj in scenario.inputs:
-                key = getattr(input_obj, "key", None)
-                if key is None:
-                    continue
-
-                value = getattr(input_obj, field_name, None)
-                values[str(key)] = value
-
-            return values if values else {}
-        except Exception:
-            return {}
-
-    def _extract_from_dataframe(self, scenario, field_name: str) -> Dict[str, Any]:
-        """Extract values from scenario inputs DataFrame."""
-        try:
-            df = scenario.inputs.to_dataframe(columns=field_name)
-        except Exception:
-            return {}
-
-        if df is None or getattr(df, "empty", False):
-            return {}
-
-        # Handle MultiIndex (drop 'unit' level if present)
-        df = self._normalize_dataframe_index(df)
-        series = self._dataframe_to_series(df, field_name)
-        if series is None:
-            return {}
-
-        series.index = series.index.map(str)
-        return series.to_dict()
-
-    def _normalize_dataframe_index(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Remove 'unit' level from MultiIndex if present."""
-        if isinstance(df.index, pd.MultiIndex) and "unit" in (df.index.names or []):
-            df = df.copy()
-            df.index = df.index.droplevel("unit")
-        return df
-
-    def _dataframe_to_series(self, df: pd.DataFrame, field_name: str) -> pd.Series:
-        """Convert DataFrame to Series, selecting appropriate column."""
-        if isinstance(df, pd.Series):
-            return df
-        columns_lower = {str(col).lower(): col for col in df.columns}
-        for candidate in (field_name, "user", "value", "default"):
-            if candidate in columns_lower:
-                return df[columns_lower[candidate]]
-        return df.iloc[:, 0]
-
     def to_dataframe(
         self,
         columns: str | List[str] = "user",
@@ -133,43 +73,35 @@ class InputsPack(Packable):
         if not self.scenarios:
             return pd.DataFrame()
 
-        # Normalize requested columns
-        base_cols: List[str]
-        if isinstance(columns, list):
-            base_cols = [c for c in columns if c]
+        if isinstance(columns, str):
+            cols = [columns] if columns else []
         else:
-            base_cols = [str(columns)] if columns else ["user"]
-        if not base_cols:
-            base_cols = ["user"]
+            cols = [c for c in columns if c]
+        if "user" in cols:
+            cols.remove("user")
+        cols.insert(0, "user")
 
-        if "user" not in base_cols:
-            base_cols.insert(0, "user")
-
-        if include_defaults and "default" not in base_cols:
-            base_cols.append("default")
+        if include_defaults:
+            for col in ("default", "permitted_values"):
+                if col not in cols:
+                    cols.append(col)
         if include_min_max:
-            for extra in ("min", "max"):
-                if extra not in base_cols:
-                    base_cols.append(extra)
+            for col in ("min", "max"):
+                if col not in cols:
+                    cols.append(col)
 
-        frames: List[pd.DataFrame] = []
-        labels: List[Any] = []
+        frames, labels = [], []
         for scenario in self.scenarios:
-            try:
-                df = scenario.inputs.to_dataframe(columns=base_cols)
-            except Exception:
-                continue
-            if df is None or getattr(df, "empty", False):
-                continue
+            df = scenario.inputs.to_dataframe(columns=cols)
+            if df is not None and not df.empty:
+                frames.append(df)
+                labels.append(self._get_scenario_display_key(scenario))
 
-            frames.append(df)
-            labels.append(self._get_scenario_display_key(scenario))
-
-        if not frames:
-            return pd.DataFrame()
-
-        merged = pd.concat(frames, axis=1, keys=labels, names=["scenario", "field"])
-        return merged
+        return (
+            pd.concat(frames, axis=1, keys=labels, names=["scenario", "field"])
+            if frames
+            else pd.DataFrame()
+        )
 
     def _to_dataframe(self, columns="user", **kwargs):
         return self.to_dataframe(columns=columns)
@@ -183,17 +115,16 @@ class InputsPack(Packable):
     ):
         """Add inputs sheet with proper field handling. Optionally override sheet name."""
         name = sheet_name if sheet_name else self.sheet_name
-        try:
-            df = self.to_dataframe(
-                include_defaults=include_defaults, include_min_max=include_min_max
+        df = self.to_dataframe(
+            include_defaults=include_defaults, include_min_max=include_min_max
+        )
+        if df is not None and not df.empty:
+            df = df.map(
+                lambda v: (
+                    ", ".join(map(str, v)) if isinstance(v, (list, tuple, set)) else v
+                )
             )
-            if df is not None and not df.empty:
-                self._add_dataframe_to_workbook(workbook, name, df)
-        except Exception as e:
-            logger.warning("Failed to build inputs DataFrame: %s", e)
-            df = self.to_dataframe()
-            if df is not None and not df.empty:
-                self._add_dataframe_to_workbook(workbook, name, df)
+            self._add_dataframe_to_workbook(workbook, name, df)
 
     def import_from_excel(
         self,
@@ -255,16 +186,18 @@ class InputsPack(Packable):
                 column_data = data_df[column_name]
 
                 # Filter out blank values
-                updates = {
-                    key: value
-                    for key, value in column_data.items()
-                    if not self._is_blank_value(value)
-                }
+                non_blank_mask = (
+                    ~column_data.isin([None, "", "nan"]) & column_data.notna()
+                )
+                raw_updates = column_data[non_blank_mask].to_dict()
 
-                if not updates:
+                if not raw_updates:
                     continue
+
+                converted_updates = self._convert_import_values(scenario, raw_updates)
+
                 try:
-                    scenario.update_user_values(updates)
+                    scenario.update_user_values(converted_updates)
                 except Exception as e:
                     logger.warning(
                         "Failed updating inputs for scenario '%s' from column '%s': %s",
@@ -278,12 +211,58 @@ class InputsPack(Packable):
         except Exception as e:
             logger.warning("Failed to parse simplified SLIDER_SETTINGS sheet: %s", e)
 
-    def _is_blank_value(self, value: Any) -> bool:
-        """Check if a value should be considered blank/empty."""
-        if value is None:
-            return True
-        if isinstance(value, float) and pd.isna(value):
-            return True
-        if isinstance(value, str) and value.strip().lower() in {"", "nan"}:
-            return True
-        return False
+    def _convert_import_values(self, scenario, raw_updates: dict) -> dict:
+        """Convert imported values using Input model validation logic."""
+        converted = {}
+
+        for key, value in raw_updates.items():
+            input_obj = scenario.inputs.get_input_by_key(key)
+
+            if input_obj is None:
+                converted[key] = value
+                continue
+
+            try:
+                warnings = input_obj.is_valid_update(value)
+                if len(warnings) == 0:
+                    converted[key] = value
+                else:
+                    # Try to convert based on input type
+                    converted_value = self._try_convert_value(input_obj, value)
+                    converted[key] = converted_value
+
+            except Exception as e:
+                logger.warning(f"Error processing input '{key}': {e}")
+                converted[key] = value
+
+        return converted
+
+    def _try_convert_value(self, input_obj, value):
+        """Try to convert value based on input type"""
+        unit = getattr(input_obj, "unit", "")
+
+        if unit == "bool":
+            if isinstance(value, str):
+                value_lower = value.lower().strip()
+                if value_lower in ("true", "t", "1", "yes", "y", "on"):
+                    return 1.0
+                elif value_lower in ("false", "f", "0", "no", "n", "off"):
+                    return 0.0
+            elif isinstance(value, bool):
+                return 1.0 if value else 0.0
+            elif isinstance(value, (int, float)):
+                return 1.0 if value != 0 else 0.0
+
+        elif unit == "enum":
+            return str(value).strip()
+
+        else:
+            if isinstance(value, str):
+                try:
+                    return float(value.strip())
+                except ValueError:
+                    pass
+            elif isinstance(value, (int, float)):
+                return float(value)
+
+        return value

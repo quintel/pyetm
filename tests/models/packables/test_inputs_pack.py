@@ -163,95 +163,6 @@ def test_resolve_scenario_returns_none_for_none():
     assert result is None
 
 
-def test_extract_input_values_from_objects():
-    inputs_data = {
-        "input1": {"user": 10, "default": 5},
-        "input2": {"user": 20, "default": 15},
-    }
-    scenario = make_scenario(inputs_data=inputs_data)
-
-    pack = InputsPack()
-
-    result = pack._extract_input_values(scenario, "user")
-
-    assert result == {"input1": 10, "input2": 20}
-
-
-def test_extract_input_values_from_dataframe():
-    scenario = make_scenario()
-    # Make input objects iteration fail to fall back to dataframe
-    scenario.inputs.__iter__.side_effect = Exception("No objects")
-
-    # Set up dataframe fallback
-    df = pd.DataFrame({"user": [10, 20]}, index=["input1", "input2"])
-    scenario.inputs.to_dataframe = Mock(return_value=df)
-
-    pack = InputsPack()
-
-    result = pack._extract_input_values(scenario, "user")
-
-    assert result == {"input1": 10, "input2": 20}
-
-
-def test_extract_from_input_objects_handles_missing_key():
-    input_obj = Mock()
-    input_obj.key = None  # Missing key
-    scenario = Mock()
-    scenario.inputs = [input_obj]
-
-    pack = InputsPack()
-
-    result = pack._extract_from_input_objects(scenario, "user")
-
-    assert result == {}
-
-
-def test_extract_from_dataframe_handles_exception():
-    scenario = Mock()
-    scenario.inputs.to_dataframe.side_effect = Exception("DataFrame error")
-
-    pack = InputsPack()
-
-    result = pack._extract_from_dataframe(scenario, "user")
-
-    assert result == {}
-
-
-def test_normalize_dataframe_index_removes_unit_level():
-    # Create MultiIndex with 'unit' level
-    index = pd.MultiIndex.from_tuples(
-        [("input1", "MW"), ("input2", "GW")], names=["key", "unit"]
-    )
-    df = pd.DataFrame({"user": [10, 20]}, index=index)
-
-    pack = InputsPack()
-
-    result = pack._normalize_dataframe_index(df)
-
-    assert not isinstance(result.index, pd.MultiIndex)
-    assert list(result.index) == ["input1", "input2"]
-
-
-def test_dataframe_to_series_returns_series():
-    series = pd.Series([10, 20], index=["input1", "input2"])
-
-    pack = InputsPack()
-
-    result = pack._dataframe_to_series(series, "user")
-
-    assert result is series
-
-
-def test_dataframe_to_series_selects_column():
-    df = pd.DataFrame({"user": [10, 20], "default": [5, 15]})
-
-    pack = InputsPack()
-
-    result = pack._dataframe_to_series(df, "user")
-
-    pd.testing.assert_series_equal(result, df["user"])
-
-
 def test_to_dataframe_with_scenarios():
     inputs_data1 = {"input1": {"user": 10}, "input2": {"user": 20}}
     inputs_data2 = {"input1": {"user": 15}, "input2": {"user": 25}}
@@ -300,18 +211,6 @@ def test_to_dataframe_with_include_min_max():
 
     assert "min" in df.columns.get_level_values("field")
     assert "max" in df.columns.get_level_values("field")
-
-
-def test_to_dataframe_handles_exception(caplog):
-    s = make_scenario()
-    s.inputs.to_dataframe.side_effect = RuntimeError("DataFrame error")
-
-    pack = InputsPack()
-    pack.add(s)
-
-    df = pack.to_dataframe()
-
-    assert df.empty
 
 
 def test_from_dataframe_handles_missing_scenario(caplog):
