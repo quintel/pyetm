@@ -212,16 +212,10 @@ class Base(BaseModel):
         # Get DataFrame with unified error handling
         try:
             df = self._to_dataframe(**kwargs)
-            if not isinstance(df, pd.DataFrame):
-                raise ValueError(f"Expected DataFrame, got {type(df)}")
         except Exception as e:
             self.add_warning(
                 f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}"
             )
             df = pd.DataFrame()
-
-        # Set index name if not already set
-        if df.index.name is None:
-            df.index.name = self.__class__.__name__.lower()
 
         return df
