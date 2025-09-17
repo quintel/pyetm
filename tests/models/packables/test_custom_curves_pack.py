@@ -1,12 +1,16 @@
 import pandas as pd
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
-
+from pyetm.models.custom_curves import CustomCurve, CustomCurves
 
 class MockScenario:
     def __init__(self, id="id1"):
         self.id = id
         self.curves_updated_with = None
         self.custom_series_called = False
+
+        c1 = CustomCurve(key="curve1", type="custom")
+        c2 = CustomCurve(key="curve2", type="custom")
+        self.custom_curves = CustomCurves(curves=[c1, c2])
 
     def custom_curves_series(self):
         self.custom_series_called = True
@@ -44,8 +48,8 @@ def test_build_dataframe_for_scenario_returns_none_if_exception(monkeypatch):
     scenario = MockScenario()
     scenario.custom_curves_series = bad_series
 
-    result = pack._build_dataframe_for_scenario(scenario)
-    assert result is None
+    result = pack.build_pack_dataframe()
+    assert result.empty
 
 
 def test_build_dataframe_for_scenario_returns_none_if_empty(monkeypatch):
@@ -56,9 +60,11 @@ def test_build_dataframe_for_scenario_returns_none_if_empty(monkeypatch):
 
     scenario = MockScenario()
     scenario.custom_curves_series = empty_series
+    # Mock empty length
+    scenario.custom_curves = []
 
     result = pack._build_dataframe_for_scenario(scenario)
-    assert result is None
+    assert result.empty
 
 
 def test_from_dataframe_returns_early_for_none_df():

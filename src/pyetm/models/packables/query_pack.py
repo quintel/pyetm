@@ -59,7 +59,7 @@ class QueryPack(Packable):
         """Build dataframe for a single scenario - the scenario handles query execution."""
         return scenario.results(columns=columns)
 
-    def to_dataframe(self, columns="future", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, columns="future", **kwargs) -> pd.DataFrame:
         """Build dataframe with query results from all scenarios."""
         # TODO: this build one should be private :) why else we have two?
         return self.build_pack_dataframe(columns=columns, **kwargs)

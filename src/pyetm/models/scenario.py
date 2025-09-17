@@ -433,6 +433,7 @@ class Scenario(Base):
         if not result.success:
             raise ScenarioError(f"Could not update custom curves: {result.errors}")
 
+        # TODO: this should be done in custom curves
         # Update the scenario's custom curves object
         for new_curve in custom_curves.curves:
             existing_curve = self.custom_curves._find(new_curve.key)

@@ -540,8 +540,12 @@ class ScenarioPacker(BaseModel):
             # Import custom curves
             curves_sheet = info.get("custom_curves") if isinstance(info, dict) else None
             if isinstance(curves_sheet, str) and curves_sheet in excel_file.sheet_names:
-                self._custom_curves.import_scenario_specific_sheet(
-                    excel_file, curves_sheet, scenario
+                self._custom_curves.load_from_dataframe(
+                    excel_utils.parse_excel_sheet(
+                        excel_file,
+                        curves_sheet,
+                        **self._custom_curves.excel_read_kwargs()),
+                    scenario
                 )
 
     def _scenarios(self) -> set[Scenario]:
