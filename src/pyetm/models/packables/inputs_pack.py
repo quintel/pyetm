@@ -2,6 +2,7 @@ import logging
 from typing import ClassVar, Dict, Any, List, Optional
 from openpyxl import Workbook
 import pandas as pd
+import numpy as np
 from pyetm.models.packables.packable import Packable
 from pyetm.utils import excel_utils
 
@@ -173,7 +174,9 @@ class InputsPack(Packable):
 
             # Process each scenario column
             scenario_columns = [col for col in data_df.columns if col != input_column]
-
+            data_df[scenario_columns] = data_df[scenario_columns].replace(
+                {"": np.nan, "nan": np.nan}
+            )
             for column_name in scenario_columns:
                 scenario = self.resolve_scenario(column_name)
                 if scenario is None:
@@ -183,21 +186,12 @@ class InputsPack(Packable):
                     )
                     continue
 
-                column_data = data_df[column_name]
-
-                # Filter out blank values
-                non_blank_mask = (
-                    ~column_data.isin([None, "", "nan"]) & column_data.notna()
-                )
-                raw_updates = column_data[non_blank_mask].to_dict()
-
+                raw_updates = data_df[column_name].dropna().to_dict()
                 if not raw_updates:
                     continue
 
-                converted_updates = self._convert_import_values(scenario, raw_updates)
-
                 try:
-                    scenario.update_user_values(converted_updates)
+                    scenario.update_user_values(raw_updates)
                 except Exception as e:
                     logger.warning(
                         "Failed updating inputs for scenario '%s' from column '%s': %s",
@@ -210,59 +204,3 @@ class InputsPack(Packable):
 
         except Exception as e:
             logger.warning("Failed to parse simplified SLIDER_SETTINGS sheet: %s", e)
-
-    def _convert_import_values(self, scenario, raw_updates: dict) -> dict:
-        """Convert imported values using Input model validation logic."""
-        converted = {}
-
-        for key, value in raw_updates.items():
-            input_obj = scenario.inputs.get_input_by_key(key)
-
-            if input_obj is None:
-                converted[key] = value
-                continue
-
-            try:
-                warnings = input_obj.is_valid_update(value)
-                if len(warnings) == 0:
-                    converted[key] = value
-                else:
-                    # Try to convert based on input type
-                    converted_value = self._try_convert_value(input_obj, value)
-                    converted[key] = converted_value
-
-            except Exception as e:
-                logger.warning(f"Error processing input '{key}': {e}")
-                converted[key] = value
-
-        return converted
-
-    def _try_convert_value(self, input_obj, value):
-        """Try to convert value based on input type"""
-        unit = getattr(input_obj, "unit", "")
-
-        if unit == "bool":
-            if isinstance(value, str):
-                value_lower = value.lower().strip()
-                if value_lower in ("true", "t", "1", "yes", "y", "on"):
-                    return 1.0
-                elif value_lower in ("false", "f", "0", "no", "n", "off"):
-                    return 0.0
-            elif isinstance(value, bool):
-                return 1.0 if value else 0.0
-            elif isinstance(value, (int, float)):
-                return 1.0 if value != 0 else 0.0
-
-        elif unit == "enum":
-            return str(value).strip()
-
-        else:
-            if isinstance(value, str):
-                try:
-                    return float(value.strip())
-                except ValueError:
-                    pass
-            elif isinstance(value, (int, float)):
-                return float(value)
-
-        return value
