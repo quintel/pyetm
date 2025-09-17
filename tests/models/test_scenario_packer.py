@@ -363,6 +363,8 @@ class TestDataExtractionMethods:
         mock_series1 = pd.Series([1, 2, 3], name="curve1")
         mock_series2 = pd.Series([4, 5, 6], name="curve2")
 
+        # Mock that there are two custom curves available
+        sample_scenario.custom_curves = [1,2]
         sample_scenario.custom_curves_series = Mock(
             return_value=[mock_series1, mock_series2]
         )
