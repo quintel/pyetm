@@ -323,6 +323,7 @@ class CustomCurves(Base):
         collection._merge_submodel_warnings(*curves, key_attr="key")
         return collection
 
+    # TODO: curves should validate themselves when created from dataframe
     def validate_for_upload(self) -> dict[str, WarningCollector]:
         """
         Validate all curves for upload
