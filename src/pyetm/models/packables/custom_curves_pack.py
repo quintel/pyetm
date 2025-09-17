@@ -11,41 +11,34 @@ logger = logging.getLogger(__name__)
 class CustomCurvesPack(Packable):
     key: ClassVar[str] = "custom_curves"
     sheet_name: ClassVar[str] = "CUSTOM_CURVES"
+    _sheet_index: ClassVar[set] = {"curves", "custom_curves", "hour", "index"}
 
-    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
-        try:
-            series_list = list(scenario.custom_curves_series())
-            self.log_scenario_warnings(scenario, "_custom_curves", "Custom curves")
-        except Exception as e:
-            logger.warning(
-                "Failed extracting custom curves for %s: %s", scenario.identifier(), e
-            )
-            return None
-        if not series_list:
-            return None
-        return pd.concat(series_list, axis=1)
+    @staticmethod
+    def excel_read_kwargs():
+        """
+        Returns a dict representing the excel read kwargs like the header
+        Availabale to overload for users own implementation
+        """
+        return {
+            "header": None
+        }
+
+    # TODO: quickly refactor the to_dataframe and build_ ones to use generators, and just keep one!
+    def _build_dataframe_for_scenario(self, scenario: Any, **kwargs) -> pd.DataFrame:
+        if len(scenario.custom_curves) == 0:
+            return pd.DataFrame()
+        return pd.concat(scenario.custom_curves_series(), axis=1)
 
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
-        return self.build_pack_dataframe(columns=columns, **kwargs)
+        return self.build_pack_dataframe(columns=columns, **kwargs).rename_axis("hour")
 
-    def import_scenario_specific_sheet(
-        self, excel_file: pd.ExcelFile, sheet_name: str, scenario: "Any"
-    ):
-        """Import custom curves from a scenario-specific sheet."""
-        df = excel_utils.parse_excel_sheet(excel_file, sheet_name, header=None)
-        if df is not None and not df.empty:
-            self.process_single_scenario_curves(scenario, df)
+    def load_from_dataframe(self, df: pd.DataFrame, scenario: "Any"):
+        """
+        Loads from a dataframe for a single scenario
+        """
+        normalized_data = excel_utils.normalize_sheet(df, helper_names=self._sheet_index)
 
-    def process_single_scenario_curves(self, scenario: "Any", df: pd.DataFrame):
-        """Process custom curves data for a single scenario."""
-        normalized_data = excel_utils.normalize_sheet(
-            df,
-            helper_names={"curves", "custom_curves", "hour", "index"},
-            reset_index=True,
-        )
-
-        if normalized_data is None or normalized_data.empty:
-            return
+        if normalized_data.empty: return
 
         self.apply_custom_curves_to_scenario(scenario, normalized_data)
 
@@ -61,6 +54,7 @@ class CustomCurvesPack(Packable):
             )
 
             # Validate curves and log validation issues
+            # TODO: this should be done on CustomCurve level and will bubble upwards on its own
             self.validate_and_log_curves(curves, scenario)
 
             # Apply curves to scenario
@@ -71,6 +65,7 @@ class CustomCurvesPack(Packable):
                 "Failed processing custom curves for '%s': %s", scenario.identifier(), e
             )
 
+    # TODO: curves should validate themselves on their from_dataframe
     def validate_and_log_curves(self, curves: CustomCurves, scenario: "Any"):
         """Validate curves and log any validation issues."""
         try:
