@@ -50,37 +50,20 @@ class Gqueries(Base):
         else:
             self.add_warning("results", f"Error retrieving queries: {result.errors}")
 
-    def to_dataframe(self, columns="future"):
+    def _to_dataframe(self, columns="future", **kwargs) -> pd.DataFrame:
+        """
+        Implementation required by Base class.
+        Uses to_dataframe with default parameters.
+        """
         if not self.is_ready():
             return pd.DataFrame()
 
         if isinstance(columns, str):
             columns = [columns]
-        columns = ["unit"] + columns
 
-        normalized = {}
-        for k, v in self.query_dict.items():
-            if isinstance(v, dict):
-                normalized[k] = {col: v.get(col) for col in columns}
-            else:
-                normalized[k] = {"unit": None}
-                for col in columns:
-                    if col != "unit":
-                        normalized[k][col] = v
-
-        df = pd.DataFrame.from_dict(normalized, orient="index")
+        df = pd.DataFrame.from_dict(self.query_dict).reindex(["unit"] + columns).T
         df.index.name = "gquery"
-        df = (
-            df.reset_index()
-        )  # Makes the gqueries and explicit column rather than just the index
-        return df
-
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
-        """
-        Implementation required by Base class.
-        Uses to_dataframe with default parameters.
-        """
-        return self.to_dataframe()
+        return df.set_index("unit", append=True)
 
     @classmethod
     def from_list(cls, query_list: list[str]):

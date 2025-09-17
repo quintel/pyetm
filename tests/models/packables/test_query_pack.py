@@ -10,7 +10,7 @@ def make_scenario(id_val="S"):
     s.results = Mock(
         return_value=pd.DataFrame(
             {"future": [1], "unit": ["MW"]}, index=["q1"]
-        ).set_index("unit", append=True)
+        ).set_index("unit", append=True).rename_axis(("gquery", "unit"))
     )
     s.add_queries = Mock()
     return s
@@ -24,8 +24,9 @@ def test_to_dataframe_calls_results_and_builds(caplog):
     pack.add(s1, s2)
 
     df = pack.to_dataframe()
+
     assert not df.empty
-    assert "S1" in df.columns or "S2" in df.columns
+    assert "S1" in df.columns and "S2" in df.columns
 
 
 def test_to_dataframe_handles_exception(caplog):
@@ -38,7 +39,8 @@ def test_to_dataframe_handles_exception(caplog):
     with caplog.at_level("WARNING"):
         df = pack.to_dataframe()
         assert df.empty
-        assert "Failed building gquery results" in caplog.text
+        assert "Failed building frame for" in caplog.text
+        assert "QueryPack" in caplog.text
 
 
 def test_from_dataframe_applies_unique_queries():
@@ -49,7 +51,7 @@ def test_from_dataframe_applies_unique_queries():
     pack.add(s1, s2)
 
     df = pd.DataFrame({"queries": ["a", " a ", "b", None, "nan", "B"]})
-    pack.from_dataframe(df)
+    pack.load_from_dataframe(df)
 
     # Should deduplicate and strip, keep case of non-'nan' values
     expected = ["a", "b", "B"]
@@ -59,5 +61,5 @@ def test_from_dataframe_applies_unique_queries():
 
 def test_from_dataframe_early_returns():
     pack = QueryPack()
-    pack.from_dataframe(None)
-    pack.from_dataframe(pd.DataFrame())
+    pack.load_from_dataframe(None)
+    pack.load_from_dataframe(pd.DataFrame())
