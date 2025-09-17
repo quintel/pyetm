@@ -52,7 +52,7 @@ def setup_notebook(debug=False):
         except Exception:
             pass
 
-        def show(obj, *, index=False):
+        def show(obj):
             """Pretty-display DataFrames/Series (HTML) or fall back to normal display."""
 
             if isinstance(obj, (pd.DataFrame, pd.Series)):
@@ -79,13 +79,7 @@ def setup_notebook(debug=False):
                         )
                         return
 
-                    styler = obj.style
-                    styler = styler.format(precision=3)
-                    if not index and isinstance(obj, pd.DataFrame):
-                        try:
-                            styler = styler.hide(axis="index")
-                        except Exception:
-                            pass
+                    styler = obj.style.format(precision=3)
                     display(styler)
                 except Exception:
                     display(obj)
