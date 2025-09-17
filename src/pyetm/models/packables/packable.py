@@ -60,6 +60,7 @@ class Packable(BaseModel):
                 df = self._build_dataframe_for_scenario(
                     scenario, columns=columns, **kwargs
                 )
+                self.log_scenario_warnings(scenario, self.key, self.sheet_name)
             except Exception as e:
                 logger.warning(
                     "Failed building frame for scenario %s in %s: %s",

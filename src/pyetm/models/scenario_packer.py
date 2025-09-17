@@ -328,7 +328,14 @@ class ScenarioPacker(BaseModel):
 
         packer._inputs.import_from_excel(excel_file, main_df, scenarios_by_column)
 
-        packer._query_pack.import_from_excel(excel_file)
+        # Queries
+
+        packer._query_pack.load_from_dataframe(
+            excel_utils.parse_excel_sheet(
+                excel_file,
+                packer._query_pack.sheet_name,
+                **packer._query_pack.excel_read_kwargs())
+        )
 
         packer._import_scenario_specific_sheets(
             excel_file, main_df, scenarios_by_column

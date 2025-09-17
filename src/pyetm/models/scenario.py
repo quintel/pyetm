@@ -470,7 +470,7 @@ class Scenario(Base):
     def get_export_config(self) -> ExportConfig | None:
         return self._export_config
 
-    def add_queries(self, gquery_keys: list[str]):
+    def add_queries(self, gquery_keys: (list[str]|set[str])):
         if self._queries is None:
             self._queries = Gqueries.from_list(gquery_keys)
         else:
@@ -489,7 +489,7 @@ class Scenario(Base):
         Returns the results of the requested queries in a dataframe
         """
         if columns is None:
-            columns = ["unit", "present", "future"]
+            columns = ["present", "future"]
 
         if not self.queries_requested():
             return pd.DataFrame()
