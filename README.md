@@ -168,3 +168,7 @@ BASE_URL=<api url>
     export ETM_API_TOKEN="your-token"
     export ENVIRONMENT=beta
     ```
+
+
+## Contributing
+See our [Contributing Guide](Contributing.md) for details.
