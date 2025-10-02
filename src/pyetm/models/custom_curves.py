@@ -191,6 +191,10 @@ class CustomCurve(Base):
 
 
 class CustomCurves(Base):
+    """
+    Wrapper around a collection of custom curves.
+    """
+
     curves: list[CustomCurve]
     _scenario: Any = PrivateAttr(default=None)
 

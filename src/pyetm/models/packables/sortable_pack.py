@@ -8,6 +8,13 @@ logger = logging.getLogger(__name__)
 
 
 class SortablePack(Packable):
+    """
+    A packable for managing sortables data.
+
+    SortablePack handles the extraction, processing, and application of sortable data
+    for scenarios.
+    """
+
     key: ClassVar[str] = "sortables"
     sheet_name: ClassVar[str] = "SORTABLES"
 

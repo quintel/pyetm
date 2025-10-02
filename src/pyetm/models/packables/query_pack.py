@@ -8,7 +8,12 @@ from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
 
+
 class QueryPack(Packable):
+    """
+    A packable for managing queries (gqueries) across scenarios.
+    """
+
     key: ClassVar[str] = "gquery"
     sheet_name: ClassVar[str] = "GQUERIES"
     output_sheet_name: ClassVar[str] = "GQUERIES_RESULTS"
@@ -21,9 +26,7 @@ class QueryPack(Packable):
         Returns a dict representing the excel read kwargs like the header
         Availabale to overload for users own implementation
         """
-        return {
-            "header": None
-        }
+        return {"header": None}
 
     def add(self, *scenarios):
         """Add scenarios and ensure they receive any requested queries."""

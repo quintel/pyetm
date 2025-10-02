@@ -9,6 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 class CustomCurvesPack(Packable):
+    """
+    A packable for managing custom curves data.
+    """
+
     key: ClassVar[str] = "custom_curves"
     sheet_name: ClassVar[str] = "CUSTOM_CURVES"
     _sheet_index: ClassVar[set] = {"curves", "custom_curves", "hour", "index"}
@@ -19,9 +23,7 @@ class CustomCurvesPack(Packable):
         Returns a dict representing the excel read kwargs like the header
         Availabale to overload for users own implementation
         """
-        return {
-            "header": None
-        }
+        return {"header": None}
 
     # TODO: quickly refactor the to_dataframe and build_ ones to use generators, and just keep one!
     def _build_dataframe_for_scenario(self, scenario: Any, **kwargs) -> pd.DataFrame:
@@ -36,9 +38,12 @@ class CustomCurvesPack(Packable):
         """
         Loads from a dataframe for a single scenario
         """
-        normalized_data = excel_utils.normalize_sheet(df, helper_names=self._sheet_index)
+        normalized_data = excel_utils.normalize_sheet(
+            df, helper_names=self._sheet_index
+        )
 
-        if normalized_data.empty: return
+        if normalized_data.empty:
+            return
 
         self.apply_custom_curves_to_scenario(scenario, normalized_data)
 

@@ -10,6 +10,18 @@ logger = logging.getLogger(__name__)
 
 
 class InputsPack(Packable):
+    """
+    InputsPack handles the import, export, and management of scenario input values,
+    including support for scenario short names, flexible scenario resolution,
+    and comprehensive data validation.
+
+    Features:
+        - Optional inclusion of default values and min/max ranges
+        - Multi-level column headers for organized data export
+        - Proper handling of list/tuple values in Excel export
+        - Comprehensive error handling with detailed logging
+    """
+
     key: ClassVar[str] = "inputs"
     sheet_name: ClassVar[str] = "SLIDER_SETTINGS"
 

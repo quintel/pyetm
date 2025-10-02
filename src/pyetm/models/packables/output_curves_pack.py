@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 class OutputCurvesPack(Packable):
+    """
+    A packable for managing output curves (exports) data across scenarios.
+
+    OutputCurvesPack handles the extraction and export of output curves from
+    scenarios.
+
+    The class supports carrier-based organization of output curves, allowing
+    users to export specific carriers or all available carriers.
+    """
+
     key: ClassVar[str] = "output_curves"
     sheet_name: ClassVar[str] = "OUTPUT_CURVES"
 

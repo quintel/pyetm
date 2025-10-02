@@ -11,6 +11,11 @@ class InputError(Exception):
 
 
 class Input(Base):
+    """
+    Represents a slider in the front end. Inputs have default values, units and keys and may
+    have a user value or be disabled by a coupling setting.
+    """
+
     key: str
     unit: str
     default: Optional[Union[float, str]] = None
@@ -200,6 +205,10 @@ class FloatInput(Input):
 
 
 class Inputs(Base):
+    """
+    A collection of Inputs.
+    """
+
     inputs: list[Input]
 
     def __init__(self, **data):

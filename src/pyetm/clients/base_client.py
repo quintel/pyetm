@@ -16,17 +16,38 @@ class BaseClient(metaclass=SingletonMeta):
     """
 
     def __init__(self, token: Optional[str] = None, base_url: Optional[str] = None):
+        """
+        Initialize the BaseClient with authentication and connection details.
+
+        Args:
+            token (Optional[str]): API authentication token. If None, uses the token
+                from application settings.
+            base_url (Optional[str]): Base URL for API requests. If None, uses the
+                base URL from application settings.
+        """
         self.session = ETMSession(
             base_url=base_url or get_settings().base_url,
             token=token or get_settings().etm_api_token,
         )
 
     def close(self):
-        """Clean up resources."""
+        """
+        Clean up resources and close the session.
+
+        This method should be called when the client is no longer needed to properly
+        release network connections and other resources.
+        """
         self.session.close()
 
 
 class AsyncBatchRunner:
+    """
+    Utility class for executing multiple HTTP requests concurrently.
+
+    This class provides both asynchronous and synchronous methods for batch
+    processing of HTTP requests with proper error handling and result wrapping.
+    """
+
     # NOTE: are we stuck to the gather?
     # Can't we yield what is done somehow?
     @staticmethod
@@ -34,18 +55,23 @@ class AsyncBatchRunner:
         session: ETMSession, requests: List[dict]
     ) -> List[ServiceResult]:
         """
-        Execute multiple requests concurrently.
+        Execute multiple requests concurrently using asyncio.
 
-        Args:
-            session: ETMSession instance
-            requests: List of request specifications with keys:
-                - method: HTTP method
-                - url: URL path
-                - kwargs: Additional request parameters
+        This method processes all requests in parallel and returns results in the
+        same order as the input requests. Each result is wrapped in a ServiceResult
+        for consistent error handling.
         """
 
         async def make_single_request(req: dict) -> ServiceResult:
-            """Execute a single request and wrap in ServiceResult."""
+            """
+            Execute a single request and wrap the result in ServiceResult.
+
+            Args:
+                req (dict): Request specification containing method, url, and kwargs.
+
+            Returns:
+                ServiceResult: Wrapped result with either success data or error details.
+            """
             try:
                 response = await session.async_request(
                     req["method"], req["url"], **req.get("kwargs", {})
@@ -84,22 +110,39 @@ class AsyncBatchRunner:
         session: ETMSession, requests: List[dict]
     ) -> List[ServiceResult]:
         """
-        Sync wrapper for batch_requests.
+        Synchronous wrapper for batch_requests method.
+
+        This method provides a synchronous interface to the async batch_requests
+        functionality by running it in the session's event loop using
+        asyncio.run_coroutine_threadsafe.
 
         Args:
-            session: ETMSession instance
-            requests: List of request specifications
+            session (ETMSession): Active ETM session instance for making requests.
+            requests (List[dict]): List of request specifications with the same
+                format as batch_requests method.
 
         Returns:
-            List of ServiceResult objects
+            List[ServiceResult]: List of ServiceResult objects containing either
+                success data or error information for each request.
+
+        Note:
+            This method blocks until all requests are completed and should only
+            be used when async/await syntax is not available in the calling context.
         """
         coro = AsyncBatchRunner.batch_requests(session, requests)
         future = asyncio.run_coroutine_threadsafe(coro, session._loop)
         return future.result()
+
 
 # TODO: why is he just here?
 # Helper function for runners that need batch operations
 def make_batch_requests(
     client: BaseClient, requests: List[dict]
 ) -> List[ServiceResult]:
+    """
+    Convenience function for making batch requests using a BaseClient instance.
+
+    This helper function extracts the session from a BaseClient and delegates
+    to AsyncBatchRunner.batch_requests_sync for execution.
+    """
     return AsyncBatchRunner.batch_requests_sync(client.session, requests)
