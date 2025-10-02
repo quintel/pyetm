@@ -11,6 +11,19 @@ logger = logging.getLogger(__name__)
 
 
 class Packable(BaseModel):
+    """
+    Abstract base class for managing collections of scenarios.
+
+    Packable provides the foundation for organizing, processing, and exporting
+    scenario data in various formats. It defines the common interface and utilities
+    used by all specific packable implementations (inputs, queries, curves, etc.).
+
+    Subclasses should implement:
+        - _build_dataframe_for_scenario: Extract data from single scenario
+        - from_dataframe: Import and apply data to scenarios
+        - Any specialized import/export logic
+    """
+
     scenarios: Set["Scenario"] = Field(default_factory=set)
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"

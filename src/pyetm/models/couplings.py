@@ -4,6 +4,9 @@ from pyetm.models.base import Base
 
 
 class Couplings(Base):
+    """
+    Represents active and inactive couplings of a scenario.
+    """
 
     active_couplings: List[str] = []
     inactive_couplings: List[str] = []

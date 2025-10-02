@@ -34,7 +34,7 @@ class OutputCurveError(Exception):
 
 class OutputCurve(Base):
     """
-    Wrapper around a single carrier curve (output curve).
+    Wrapper around a single carrier curve (output curve / export in the front end).
     Curves are getting saved to the filesystem, as bulk processing of scenarios
     could end up with several 100 MBs of curves, which we don't want to keep in
     memory.
@@ -143,6 +143,10 @@ class OutputCurve(Base):
 
 
 class OutputCurves(Base):
+    """
+    Collection of Output Curves (exports).
+    """
+
     curves: list[OutputCurve]
 
     def __len__(self) -> int:

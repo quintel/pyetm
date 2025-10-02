@@ -12,6 +12,8 @@ from pyetm.models.export_config import ExportConfig
 
 # Export config resolution
 class ExportConfigResolver:
+    """Handles resolution of export configuration from various sources."""
+
     @staticmethod
     def extract_from_main_sheet(
         main: pd.DataFrame, scenarios: list
