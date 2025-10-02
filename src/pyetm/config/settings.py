@@ -116,7 +116,7 @@ class AppConfig(BaseSettings):
 
     @property
     def proxy_servers(self) -> dict[str, str]:
-        """Return proxy servers as a dictionary for backward compatibility."""
+        """Return proxy servers as a dictionary"""
         proxies = {}
         if self.proxy_servers_http:
             proxies["http"] = self.proxy_servers_http
