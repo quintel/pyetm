@@ -4,7 +4,7 @@ This package provides a set of tools for interaction with the Energy Transition 
 Learn more about the Energy Transition Model [here](https://energytransitionmodel.com/).
 
 The package is designed to be a modular tool that advanced users can incorporate into their scenario workflows.
-The complete documentation is available [via the ETM documentation page](https://docs.energytransitionmodel.com/main/pyetm/introduction).
+More documentation is available [via the ETM documentation page](https://docs.energytransitionmodel.com/main/pyetm/introduction).
 
 ---
 
