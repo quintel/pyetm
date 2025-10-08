@@ -243,7 +243,7 @@ class Scenario(Base):
             return self._inputs
 
         # Otherwise fetch and cache
-        result = FetchInputsRunner.run(BaseClient(), self)
+        result = FetchInputsRunner.run(BaseClient(), self, defaults="original")
         if not result.success:
             raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
 
@@ -471,7 +471,7 @@ class Scenario(Base):
     def get_export_config(self) -> ExportConfig | None:
         return self._export_config
 
-    def add_queries(self, gquery_keys: (list[str]|set[str])):
+    def add_queries(self, gquery_keys: list[str] | set[str]):
         if self._queries is None:
             self._queries = Gqueries.from_list(gquery_keys)
         else:
