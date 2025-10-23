@@ -1,5 +1,7 @@
 <img width="3392" height="736" alt="PyETM Logo (16xRes)" src="https://github.com/user-attachments/assets/3570d78f-681f-4360-935e-906a95807f15" />
 
+---
+
 This package provides a set of tools for interaction with the Energy Transition Model's API.
 Learn more about the Energy Transition Model [here](https://energytransitionmodel.com/).
 
