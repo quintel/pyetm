@@ -17,15 +17,22 @@ keywords = ["energy", "transition", "modeling", "api", "ETM"]
 requires-python = ">=3.12,<4.0"
 
 dependencies = [
-  "pydantic",
-  "pandas",
-  "requests",
-  "python-dotenv",
-  "pyyaml",
-  "pydantic-settings",
-  "xlsxwriter",
-  "openpyxl",
-  "aiohttp (>=3.12.15,<4.0.0)"
+  # Pydantic ecosystem - pinned to v2 for API stability
+  "pydantic>=2.8.0,<3.0.0",
+  "pydantic-settings>=2.7.0,<3.0.0",
+
+  # Data handling - pandas 2.x has breaking changes from 1.x
+  "pandas>=2.0.0,<3.0.0",
+  "openpyxl>=3.0.0",
+  "xlsxwriter>=3.0.0",
+
+  # HTTP clients
+  "requests>=2.31.0,<3.0.0",
+  "aiohttp>=3.12.15,<4.0.0",
+
+  # Configuration and utilities
+  "python-dotenv>=1.0.0",
+  "pyyaml>=6.0.0",
 ]
 
 [project.scripts]
@@ -42,13 +49,18 @@ include = ["LICENSE"]
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = "*"
-pylint = "*"
-requests-mock = "*"
-ipykernel = "*"
-notebook = "*"
-pytest-cov = "*"
-pydeps = "*"
+# Testing
+pytest = ">=8.0.0"
+pytest-cov = ">=4.0.0"
+requests-mock = ">=1.12.0"
+
+# Code quality
+pylint = ">=3.0.0"
+pydeps = ">=3.0.0"
+
+# Jupyter/Notebooks
+ipykernel = ">=6.29.0"
+notebook = ">=7.0.0"
 
 
 
