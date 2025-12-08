@@ -129,9 +129,9 @@ def test_create_scenario_filters_invalid_fields(dummy_client, fake_response):
 
     # Should have warnings for filtered fields
     expected_warnings = [
-        "Ignoring invalid field for scenario creation: 'id'",
-        "Ignoring invalid field for scenario creation: 'created_at'",
-        "Ignoring invalid field for scenario creation: 'invalid_field'",
+        "Ignoring invalid field for create scenario: 'id'",
+        "Ignoring invalid field for create scenario: 'created_at'",
+        "Ignoring invalid field for create scenario: 'invalid_field'",
     ]
     for warning in expected_warnings:
         assert warning in result.errors

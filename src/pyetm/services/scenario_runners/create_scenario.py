@@ -53,41 +53,29 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
                 }
             )
         """
-        # Validate required fields
-        missing_required = []
-        for key in CreateScenarioRunner.REQUIRED_KEYS:
-            if key not in scenario_data:
-                missing_required.append(key)
+        errors = CreateScenarioRunner._validate_required_fields(
+            scenario_data, CreateScenarioRunner.REQUIRED_KEYS
+        )
 
-        if missing_required:
-            return ServiceResult.fail(
-                [f"Missing required fields: {', '.join(missing_required)}"]
-            )
+        if errors:
+            return ServiceResult.fail(errors)
 
-        # Filter to only allowed fields
         all_allowed = (
             CreateScenarioRunner.REQUIRED_KEYS + CreateScenarioRunner.OPTIONAL_KEYS
         )
-        filtered_data = {
-            key: value for key, value in scenario_data.items() if key in all_allowed
-        }
-
-        warnings = []
-        filtered_keys = set(scenario_data.keys()) - set(filtered_data.keys())
-        for key in filtered_keys:
-            warnings.append(f"Ignoring invalid field for scenario creation: {key!r}")
+        filtered_data, warnings = CreateScenarioRunner._filter_allowed_fields(
+            scenario_data,
+            all_allowed,
+            "create scenario",
+        )
 
         payload = {"scenario": filtered_data}
 
         result = CreateScenarioRunner._make_request(
-            client=client,
-            method="post",
-            path="/scenarios",
-            payload=payload,
+            client=client, method="post", path="/scenarios", payload=payload, **kwargs
         )
 
         if result.success and warnings:
-            # Merge our warnings with any from the API call
             combined_errors = list(result.errors) + warnings
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 

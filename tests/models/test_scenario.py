@@ -77,7 +77,7 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
 def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
     """Test scenario creation with warnings"""
     created_scenario_data = {"id": 12347, "area_code": "nl", "end_year": 2050}
-    warnings = ["Ignoring invalid field for scenario creation: 'invalid_field'"]
+    warnings = ["Ignoring invalid field for create scenario: 'invalid_field'"]
 
     monkeypatch.setattr(
         CreateScenarioRunner,
@@ -267,7 +267,9 @@ def test_version_when_url_latest():
 
 def test_inputs_success(monkeypatch, scenario, inputs_json, ok_service_result):
     monkeypatch.setattr(
-        FetchInputsRunner, "run", lambda client, scen, defaults=None: ok_service_result(inputs_json)
+        FetchInputsRunner,
+        "run",
+        lambda client, scen, defaults=None: ok_service_result(inputs_json),
     )
 
     coll = scenario.inputs

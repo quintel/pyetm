@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import threading
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ValidationInfo
 
 import aiohttp
 from pyetm.config.settings import get_settings
+
 
 class ETMResponse(BaseModel):
     """
@@ -44,18 +45,21 @@ class ETMResponse(BaseModel):
 
     @field_validator("status_code", mode="before")
     @classmethod
-    def raise_for_status(cls, value, values: dict[str, Any]) -> None:
+    def raise_for_status(cls, value, info: ValidationInfo) -> None:
         """Raise appropriate exception for HTTP errors."""
         if value == 401:
             raise PermissionError("Invalid or missing ETM_API_TOKEN")
 
+        text = info.data.get("text", "")
+
         if 400 <= value < 500:
-            raise ValueError(f"HTTP {value}: {values['text']}")
+            raise ValueError(f"HTTP {value}: {text}")
 
         if 500 <= value < 600:
-            raise ConnectionError(f"HTTP {value}: {values['text']}")
+            raise ConnectionError(f"HTTP {value}: {text}")
 
         return value
+
 
 # TODO: Extract utils and organise private methods
 # aiohttp usage looks legit - researching possibility to yield from pool [not likely]

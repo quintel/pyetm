@@ -41,17 +41,10 @@ class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
         if not result.success:
             return result
 
-        # Custom post-processing for metadata
-        body = result.data
-        meta: Dict[str, Any] = {}
-        warnings: list[str] = []
+        validated_data, warnings = FetchMetadataRunner._validate_response_keys(
+            result.data,
+            FetchMetadataRunner.META_KEYS,
+            fill_missing=True
+        )
 
-        for key in FetchMetadataRunner.META_KEYS:
-            if key in body:
-                meta[key] = body[key]
-            else:
-                # non-breaking: warning
-                meta[key] = None
-                warnings.append(f"Missing field in response: {key!r}")
-
-        return ServiceResult.ok(data=meta, errors=warnings)
+        return ServiceResult.ok(data=validated_data, errors=warnings)
