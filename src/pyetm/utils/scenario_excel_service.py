@@ -54,18 +54,19 @@ class ScenarioExcelService:
         )
 
     @classmethod
-    def import_from_excel(cls, xlsx_path: PathLike | str) -> List[Scenario]:
+    def import_from_excel(cls, xlsx_path: PathLike | str, read_only: bool | List[str] = False) -> List[Scenario]:
         """
         Import scenarios from Excel file.
 
         Args:
             xlsx_path: Path to Excel file
+            read_only: If True, skip all API uploads. If list, skip only specified types.
 
         Returns:
             List of Scenario objects
         """
         path = Path(xlsx_path).expanduser().resolve()
-        packer = ScenarioPacker.from_excel(str(path))
+        packer = ScenarioPacker.from_excel(str(path), read_only=read_only)
         scenarios = list(packer._scenarios())
 
         if not scenarios:
