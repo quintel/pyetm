@@ -83,13 +83,18 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
+    def from_excel(cls, xlsx_path: PathLike | str, read_only: bool | list[str] = False) -> "Scenarios":
         """
         Import scenarios from Excel.
+
+        Args:
+            xlsx_path: Path to Excel file
+            read_only: If True, skip all API uploads. If list, skip only specified types.
+                       Valid types: 'user_values', 'custom_curves', 'sortables'
         """
         from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
-        scenarios = ScenarioExcelService.import_from_excel(str(resolved_path))
+        scenarios = ScenarioExcelService.import_from_excel(str(resolved_path), read_only=read_only)
         scenarios.sort(key=lambda s: s.id)
         return cls(items=scenarios)

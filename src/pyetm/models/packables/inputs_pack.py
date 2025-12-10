@@ -144,16 +144,19 @@ class InputsPack(Packable):
         excel_file: pd.ExcelFile,
         main_df: Optional[pd.DataFrame] = None,
         scenarios_by_column: Optional[Dict[str, Any]] = None,
+        read_only_set: set[str] = None,
     ):
         """Import inputs sheet from Excel file."""
         df = excel_utils.parse_excel_sheet(excel_file, self.sheet_name, header=None)
         if df is not None and not df.empty:
-            self.from_dataframe(df)
+            self.from_dataframe(df, read_only_set)
 
-    def from_dataframe(self, df):
+    def from_dataframe(self, df, read_only_set: set[str] = None):
         """Import input values from DataFrame."""
         if df is None or getattr(df, "empty", False):
             return
+
+        skip_upload = self._should_skip_upload(read_only_set)
 
         try:
             df = df.dropna(how="all")
@@ -203,7 +206,7 @@ class InputsPack(Packable):
                     continue
 
                 try:
-                    scenario.update_user_values(raw_updates)
+                    scenario.update_user_values(raw_updates, skip_upload=skip_upload)
                 except Exception as e:
                     logger.warning(
                         "Failed updating inputs for scenario '%s' from column '%s': %s",
