@@ -1,9 +1,16 @@
-from typing import Any, Dict, List, Optional, TypeVar, Generic
+from typing import Any, Dict, List, Optional, TypeVar, Generic, Protocol
 from abc import ABC, abstractmethod
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient, make_batch_requests
 
 T = TypeVar("T")
+
+
+class ScenarioIdentifier(Protocol):
+    """Protocol for objects with a scenario or saved_scenario ID."""
+
+    @property
+    def id(self) -> int: ...
 
 
 class BaseRunner(ABC, Generic[T]):
@@ -92,6 +99,32 @@ class BaseRunner(ABC, Generic[T]):
             formatted_requests.append(formatted)
 
         return make_batch_requests(client, formatted_requests)
+
+    @classmethod
+    def _validate_response_keys(
+        cls, data: Dict[str, Any], required_keys: List[str], fill_missing: bool = False
+    ) -> tuple[Dict[str, Any], List[str]]:
+        """
+        Validate that response contains required keys.
+
+        Args:
+            data: Response data to validate
+            required_keys: Keys that should be present
+            fill_missing: If True, add None for missing keys; if False, only warn
+
+        Returns:
+            (validated_data, warnings) tuple
+        """
+        warnings = []
+        result = data.copy() if fill_missing else data
+
+        for key in required_keys:
+            if key not in data:
+                warnings.append(f"Missing field in response: {key!r}")
+                if fill_missing:
+                    result[key] = None
+
+        return result, warnings
 
     @staticmethod
     @abstractmethod
