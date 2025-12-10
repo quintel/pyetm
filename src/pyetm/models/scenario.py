@@ -270,19 +270,21 @@ class Scenario(Base):
             series = series.droplevel("unit")
         self.update_user_values(series.fillna("reset").to_dict())
 
-    def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
+    def update_user_values(self, update_inputs: Dict[str, Any], skip_upload: bool = False) -> None:
         """
         Args:
-            inputs: Dictionary of input key-value pairs to update
+            update_inputs: Dictionary of input key-value pairs to update
+            skip_upload: If True, skip API call and validation, only update local cache
         """
-        # Update them in the Inputs object, and check validation
-        validity_errors = self.inputs.is_valid_update(update_inputs)
-        self._handle_validity_errors(validity_errors, "user values")
+        if not skip_upload:
+            # Update them in the Inputs object, and check validation
+            validity_errors = self.inputs.is_valid_update(update_inputs)
+            self._handle_validity_errors(validity_errors, "user values")
 
-        result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
+            result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
 
-        if not result.success:
-            raise ScenarioError(f"Could not update user values: {result.errors}")
+            if not result.success:
+                raise ScenarioError(f"Could not update user values: {result.errors}")
 
         self.inputs.update(update_inputs)
 
@@ -320,44 +322,47 @@ class Scenario(Base):
         self._sortables = coll
         return coll
 
-    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame, skip_upload: bool = False) -> None:
         """
         Extract sortables from dataframe and update them.
         The dataframe should have sortable names as columns and orders as rows.
 
         Args:
             dataframe: DataFrame with sortable names as columns and order values as rows
+            skip_upload: If True, skip API call and validation, only update local cache
         """
         coll = Sortables._from_dataframe(dataframe)
         updates = coll.to_updates_dict()
         if updates:
-            self.update_sortables(updates)
+            self.update_sortables(updates, skip_upload=skip_upload)
 
-    def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
+    def update_sortables(self, update_sortables: Dict[str, List[Any]], skip_upload: bool = False) -> None:
         """
         Update the order of specified sortables.
 
         Args:
             update_sortables: Dictionary mapping sortable names to their new orders
+            skip_upload: If True, skip API calls and validation, only update local cache
         """
-        # Validate the updates first
-        validity_errors = self.sortables.is_valid_update(update_sortables)
-        self._handle_validity_errors(validity_errors, "sortables")
+        if not skip_upload:
+            # Validate the updates first
+            validity_errors = self.sortables.is_valid_update(update_sortables)
+            self._handle_validity_errors(validity_errors, "sortables")
 
-        # Make individual API calls for each sortable as there is no bulk endpoint
-        for name, order in update_sortables.items():
-            if name.startswith("heat_network_"):
-                subtype = name.replace("heat_network_", "")
-                result = UpdateSortablesRunner.run(
-                    BaseClient(), self, "heat_network", order, subtype=subtype
-                )
-            else:
-                result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
+            # Make individual API calls for each sortable as there is no bulk endpoint
+            for name, order in update_sortables.items():
+                if name.startswith("heat_network_"):
+                    subtype = name.replace("heat_network_", "")
+                    result = UpdateSortablesRunner.run(
+                        BaseClient(), self, "heat_network", order, subtype=subtype
+                    )
+                else:
+                    result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
 
-            if not result.success:
-                raise ScenarioError(
-                    f"Could not update sortable '{name}': {result.errors}"
-                )
+                if not result.success:
+                    raise ScenarioError(
+                        f"Could not update sortable '{name}': {result.errors}"
+                    )
 
         self.sortables.update(update_sortables)
 
@@ -417,21 +422,23 @@ class Scenario(Base):
         for key in self.custom_curves.attached_keys():
             yield self.custom_curve_series(key)
 
-    def update_custom_curves(self, custom_curves) -> None:
+    def update_custom_curves(self, custom_curves, skip_upload: bool = False) -> None:
         """
         Upload/update custom curves for this scenario.
 
         Args:
             custom_curves: CustomCurves object containing curves to upload
+            skip_upload: If True, skip API call and validation, only update local cache
         """
-        # Validate curves before uploading
-        validity_errors = custom_curves.validate_for_upload()
-        self._handle_validity_errors(validity_errors, "custom curves")
+        if not skip_upload:
+            # Validate curves before uploading
+            validity_errors = custom_curves.validate_for_upload()
+            self._handle_validity_errors(validity_errors, "custom curves")
 
-        # Upload curves
-        result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
-        if not result.success:
-            raise ScenarioError(f"Could not update custom curves: {result.errors}")
+            # Upload curves
+            result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
+            if not result.success:
+                raise ScenarioError(f"Could not update custom curves: {result.errors}")
 
         # TODO: this should be done in custom curves
         # Update the scenario's custom curves object

@@ -523,7 +523,7 @@ def test_set_sortables_from_dataframe(monkeypatch, scenario):
 
     update_calls = []
 
-    def mock_update_sortables(self, updates):
+    def mock_update_sortables(self, updates, skip_upload=False):
         update_calls.append(updates)
 
     monkeypatch.setattr(scenario.__class__, "update_sortables", mock_update_sortables)

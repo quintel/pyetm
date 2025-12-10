@@ -34,7 +34,7 @@ class CustomCurvesPack(Packable):
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs).rename_axis("hour")
 
-    def load_from_dataframe(self, df: pd.DataFrame, scenario: "Any"):
+    def load_from_dataframe(self, df: pd.DataFrame, scenario: "Any", read_only_set: set[str] = None):
         """
         Loads from a dataframe for a single scenario
         """
@@ -45,10 +45,12 @@ class CustomCurvesPack(Packable):
         if normalized_data.empty:
             return
 
-        self.apply_custom_curves_to_scenario(scenario, normalized_data)
+        self.apply_custom_curves_to_scenario(scenario, normalized_data, read_only_set)
 
-    def apply_custom_curves_to_scenario(self, scenario: "Any", data: pd.DataFrame):
+    def apply_custom_curves_to_scenario(self, scenario: "Any", data: pd.DataFrame, read_only_set: set[str] = None):
         """Apply custom curves to scenario with validation and error handling."""
+        skip_upload = self._should_skip_upload(read_only_set)
+
         try:
             curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)
 
@@ -58,12 +60,12 @@ class CustomCurvesPack(Packable):
                 prefix=f"Custom curves warning for '{scenario.identifier()}'",
             )
 
-            # Validate curves and log validation issues
-            # TODO: this should be done on CustomCurve level and will bubble upwards on its own
-            self.validate_and_log_curves(curves, scenario)
+            # Validate curves and log validation issues (skip if read-only)
+            if not skip_upload:
+                self.validate_and_log_curves(curves, scenario)
 
             # Apply curves to scenario
-            scenario.update_custom_curves(curves)
+            scenario.update_custom_curves(curves, skip_upload=skip_upload)
 
         except Exception as e:
             logger.warning(

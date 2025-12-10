@@ -972,3 +972,41 @@ def test_clear_and_remove_scenario_swallow_errors():
         packer.clear()  # should not raise
         sc = Mock(spec=Scenario)
         packer.remove_scenario(sc)  # should not raise
+
+
+class TestNormalizeReadOnly:
+
+    def test_normalize_read_only_false(self):
+        """Test normalizing read_only=False returns empty set"""
+        result = ScenarioPacker._normalize_read_only(False)
+        assert result == set()
+
+    def test_normalize_read_only_true(self):
+        """Test normalizing read_only=True returns all types"""
+        result = ScenarioPacker._normalize_read_only(True)
+        assert result == {'user_values', 'custom_curves', 'sortables'}
+
+    def test_normalize_read_only_list(self):
+        """Test normalizing list of types"""
+        result = ScenarioPacker._normalize_read_only(['user_values', 'custom_curves'])
+        assert result == {'user_values', 'custom_curves'}
+
+    def test_normalize_read_only_empty_list(self):
+        """Test normalizing empty list returns empty set"""
+        result = ScenarioPacker._normalize_read_only([])
+        assert result == set()
+
+    def test_normalize_read_only_invalid_types(self):
+        """Test that invalid types are filtered out with warning"""
+        with patch('pyetm.models.scenario_packer.logger') as mock_logger:
+            result = ScenarioPacker._normalize_read_only(['user_values', 'invalid_type', 'custom_curves'])
+            assert result == {'user_values', 'custom_curves'}
+            mock_logger.warning.assert_called_once()
+            assert 'invalid_type' in str(mock_logger.warning.call_args)
+
+    def test_normalize_read_only_only_invalid_types(self):
+        """Test that only invalid types returns empty set with warning"""
+        with patch('pyetm.models.scenario_packer.logger') as mock_logger:
+            result = ScenarioPacker._normalize_read_only(['invalid1', 'invalid2'])
+            assert result == set()
+            mock_logger.warning.assert_called_once()

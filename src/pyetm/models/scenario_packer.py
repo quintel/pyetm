@@ -269,10 +269,24 @@ class ScenarioPacker(BaseModel):
         except Exception as e:
             logger.warning("Failed exporting output curves workbook: %s", e)
 
+    @staticmethod
+    def _normalize_read_only(read_only: bool | List[str]) -> set[str]:
+        """Normalize read_only parameter to a set of type names."""
+        valid_types = {'user_values', 'custom_curves', 'sortables'}
+        if isinstance(read_only, bool):
+            return valid_types if read_only else set()
+
+        read_only_set = set(read_only) if read_only else set()
+        invalid_types = read_only_set - valid_types
+        if invalid_types:
+            logger.warning(f"Invalid read_only types will be ignored: {invalid_types}. Valid types: {valid_types}")
+        return read_only_set & valid_types
+
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
+    def from_excel(cls, xlsx_path: PathLike | str, read_only: bool | List[str] = False) -> "ScenarioPacker":
         """Import scenarios from Excel file."""
         packer = cls()
+        read_only_set = cls._normalize_read_only(read_only)
 
         # Resolve default location: if a relative path/filename is provided and the
         # file does not exist at that location, look for it in the project /inputs dir.
@@ -308,7 +322,7 @@ class ScenarioPacker(BaseModel):
         if main_df is None:
             return packer
 
-        scenarios_by_column = packer._create_scenarios_from_main(main_df)
+        scenarios_by_column = packer._create_scenarios_from_main(main_df, read_only_set)
         if not scenarios_by_column:
             return packer
 
@@ -326,7 +340,7 @@ class ScenarioPacker(BaseModel):
             main_df, scenarios_by_column, export_config_df
         )
 
-        packer._inputs.import_from_excel(excel_file, main_df, scenarios_by_column)
+        packer._inputs.import_from_excel(excel_file, main_df, scenarios_by_column, read_only_set)
 
         # Queries
 
@@ -338,7 +352,7 @@ class ScenarioPacker(BaseModel):
         )
 
         packer._import_scenario_specific_sheets(
-            excel_file, main_df, scenarios_by_column
+            excel_file, main_df, scenarios_by_column, read_only_set
         )
 
         return packer
@@ -354,12 +368,12 @@ class ScenarioPacker(BaseModel):
             logger.warning("Failed to parse MAIN sheet: %s", e)
             return None
 
-    def _create_scenarios_from_main(self, main_df: pd.DataFrame) -> Dict[str, Scenario]:
+    def _create_scenarios_from_main(self, main_df: pd.DataFrame, read_only_set: set[str] = None) -> Dict[str, Scenario]:
         """Create scenarios from main sheet rows."""
         scenarios_by_row = {}
         for idx, row in main_df.iterrows():
             try:
-                scenario = self._create_scenario_from_row(idx, row)
+                scenario = self._create_scenario_from_row(idx, row, read_only_set)
                 if scenario is not None:
                     short_name = row.get("short_name")
                     if short_name is not None and not (
@@ -373,7 +387,7 @@ class ScenarioPacker(BaseModel):
         return scenarios_by_row
 
     def _create_scenario_from_row(
-        self, row_idx, row_data: pd.Series
+        self, row_idx, row_data: pd.Series, read_only_set: set[str] = None
     ) -> Optional[Scenario]:
         """Create a scenario from a main sheet row."""
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
@@ -381,8 +395,11 @@ class ScenarioPacker(BaseModel):
         end_year = self._safe_get_int(row_data.get("end_year"))
         metadata_updates = self._extract_metadata_updates(row_data)
 
+        # Check if we're in full read-only mode
+        is_full_readonly = read_only_set == {'user_values', 'custom_curves', 'sortables'}
+
         scenario = self._load_or_create_scenario(
-            scenario_id, area_code, end_year, str(row_idx), **metadata_updates
+            scenario_id, area_code, end_year, str(row_idx), is_full_readonly, **metadata_updates
         )
         if scenario is None:
             return None
@@ -423,6 +440,7 @@ class ScenarioPacker(BaseModel):
         area_code: Any,
         end_year: Optional[int],
         column_name: str,
+        is_full_readonly: bool = False,
         **kwargs,
     ) -> Optional[Scenario]:
         """Load existing scenario or create new one. Passes all available kwargs to Scenario.new for full metadata."""
@@ -436,6 +454,13 @@ class ScenarioPacker(BaseModel):
                     column_name,
                     e,
                 )
+                # In full read-only mode, if load fails but we have area/year, create locally
+                if is_full_readonly and area_code and end_year is not None:
+                    logger.info(
+                        "Creating local-only scenario for column '%s' in read-only mode",
+                        column_name,
+                    )
+                    # Don't return here, fall through to creation logic
 
         if area_code and end_year is not None:
             try:
@@ -519,9 +544,11 @@ class ScenarioPacker(BaseModel):
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
         scenarios_by_column: Dict[str, Scenario],
+        read_only_set: set[str] = None,
     ):
         """Import scenario-specific sortables and custom curves sheets."""
         sheet_info = excel_utils.extract_scenario_sheet_info(main_df)
+        read_only_set = read_only_set or set()
 
         for column_name, scenario in scenarios_by_column.items():
             key = str(column_name)
@@ -534,7 +561,7 @@ class ScenarioPacker(BaseModel):
                 and sortables_sheet in excel_file.sheet_names
             ):
                 self._sortables.import_scenario_specific_sheet(
-                    excel_file, sortables_sheet, scenario
+                    excel_file, sortables_sheet, scenario, read_only_set
                 )
 
             # Import custom curves
@@ -545,7 +572,8 @@ class ScenarioPacker(BaseModel):
                         excel_file,
                         curves_sheet,
                         **self._custom_curves.excel_read_kwargs()),
-                    scenario
+                    scenario,
+                    read_only_set
                 )
 
     def _scenarios(self) -> set[Scenario]:
