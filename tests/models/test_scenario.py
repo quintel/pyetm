@@ -14,6 +14,8 @@ from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
+from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
+from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
 
 
 def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
@@ -267,7 +269,9 @@ def test_version_when_url_latest():
 
 def test_inputs_success(monkeypatch, scenario, inputs_json, ok_service_result):
     monkeypatch.setattr(
-        FetchInputsRunner, "run", lambda client, scen, defaults=None: ok_service_result(inputs_json)
+        FetchInputsRunner,
+        "run",
+        lambda client, scen, defaults=None: ok_service_result(inputs_json),
     )
 
     coll = scenario.inputs
@@ -939,3 +943,261 @@ def test_scenario_update_custom_curves_multiple_validation_errors():
     assert "Wrong length" in error_message
     assert "Non-numeric values" in error_message
     assert "No data available" in error_message
+
+
+# ------ copy ------ #
+
+
+def test_copy_scenario_success_minimal(monkeypatch, ok_service_result, dummy_scenario):
+    """Test successful scenario copy with no overrides"""
+    copied_scenario_data = {
+        "id": 67890,
+        "area_code": "nl",
+        "end_year": 2050,
+        "private": False,
+        "title": "Copy of Original Scenario",
+    }
+
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.copy()
+    assert scenario.id == 67890
+    assert scenario.area_code == "nl"
+    assert scenario.end_year == 2050
+    assert scenario.title == "Copy of Original Scenario"
+    assert len(scenario.warnings) == 0
+
+
+def test_copy_scenario_with_title_override(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test successful scenario copy with title override"""
+    copied_scenario_data = {
+        "id": 67891,
+        "area_code": "nl",
+        "end_year": 2050,
+        "title": "My Custom Copy",
+    }
+
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.copy(title="My Custom Copy")
+    assert scenario.id == 67891
+    assert scenario.title == "My Custom Copy"
+    assert len(scenario.warnings) == 0
+
+
+def test_copy_scenario_with_multiple_overrides(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test successful scenario copy with multiple overrides"""
+    copied_scenario_data = {
+        "id": 67892,
+        "area_code": "de",
+        "end_year": 2040,
+        "private": True,
+        "title": "Private Copy",
+        "source": "test",
+    }
+
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.copy(
+        title="Private Copy",
+        private=True,
+        source="test",
+        area_code="de",
+        end_year=2040,
+    )
+    assert scenario.id == 67892
+    assert scenario.title == "Private Copy"
+    assert scenario.private is True
+    assert scenario.source == "test"
+    assert scenario.area_code == "de"
+    assert scenario.end_year == 2040
+    assert len(scenario.warnings) == 0
+
+
+def test_copy_scenario_with_warnings(monkeypatch, ok_service_result, dummy_scenario):
+    """Test scenario copy with warnings"""
+    copied_scenario_data = {"id": 67893, "area_code": "nl", "end_year": 2050}
+    warnings = ["Ignoring invalid field for scenario copy: 'invalid_field'"]
+
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: ok_service_result(
+            copied_scenario_data, warnings
+        ),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.copy(invalid_field="should_be_ignored")
+    assert scenario.id == 67893
+    base_warnings = scenario.warnings.get_by_field("base")
+    assert len(base_warnings) == 1
+    assert base_warnings[0].message == warnings[0]
+
+
+def test_copy_scenario_failure(monkeypatch, fail_service_result, dummy_scenario):
+    """Test scenario copy failure"""
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: fail_service_result(
+            ["Scenario not found"]
+        ),
+    )
+
+    original = dummy_scenario(99999)
+    with pytest.raises(ScenarioError, match="Failed to copy scenario"):
+        original.copy()
+
+
+def test_copy_scenario_with_preset_scenario_id(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test that template is visible in copied scenarios"""
+    copied_scenario_data = {
+        "id": 67894,
+        "area_code": "nl",
+        "end_year": 2050,
+        "template": 12345,
+    }
+
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.copy()
+    assert scenario.id == 67894
+    assert scenario.template == 12345
+    assert len(scenario.warnings) == 0
+
+
+def test_copy_scenario_deep_copy_success(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test successful deep copy that breaks the preset link"""
+    copied_scenario_data = {
+        "id": 67894,
+        "area_code": "nl",
+        "end_year": 2050,
+        "template": 12345,  # Initially linked
+    }
+
+    break_link_response = {
+        "scenario": {
+            "id": 67894,
+            "area_code": "nl",
+            "end_year": 2050,
+            "template": None,  # Link broken
+        }
+    }
+
+    # Track calls to verify both runners are called
+    calls = []
+
+    def mock_copy_run(client, scenario_id, overrides):
+        calls.append(("copy", scenario_id))
+        return ok_service_result(copied_scenario_data)
+
+    def mock_break_link_run(client, scenario):
+        calls.append(("break_link", scenario.id))
+        return ok_service_result(break_link_response)
+
+    monkeypatch.setattr(CopyScenarioRunner, "run", mock_copy_run)
+    monkeypatch.setattr(BreakPresetLinkRunner, "run", mock_break_link_run)
+
+    original = dummy_scenario(12345)
+    scenario = original.deep_copy()
+
+    # Verify both operations were called
+    assert len(calls) == 2
+    assert calls[0] == ("copy", 12345)
+    assert calls[1] == ("break_link", 67894)
+
+    # Verify the scenario is correct and preset link was broken
+    assert scenario.id == 67894
+    assert scenario.template is None
+    assert len(scenario.warnings) == 0
+
+
+def test_copy_scenario_deep_copy_break_link_failure(
+    monkeypatch, ok_service_result, fail_service_result, dummy_scenario
+):
+    """Test deep copy when breaking the preset link fails"""
+    copied_scenario_data = {
+        "id": 67895,
+        "area_code": "nl",
+        "end_year": 2050,
+    }
+
+    monkeypatch.setattr(
+        CopyScenarioRunner,
+        "run",
+        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
+    )
+
+    monkeypatch.setattr(
+        BreakPresetLinkRunner,
+        "run",
+        lambda client, scenario: fail_service_result(["Cannot modify scenario"]),
+    )
+
+    original = dummy_scenario(12345)
+    with pytest.raises(
+        ScenarioError, match="Copied scenario but failed to break template link"
+    ):
+        original.deep_copy()
+
+
+def test_copy_scenario_deep_false_doesnt_break_link(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test that copy() (not deep_copy) doesn't call BreakPresetLinkRunner"""
+    copied_scenario_data = {
+        "id": 67896,
+        "area_code": "nl",
+        "end_year": 2050,
+    }
+
+    copy_called = []
+    break_link_called = []
+
+    def mock_copy_run(client, scenario_id, overrides):
+        copy_called.append(True)
+        return ok_service_result(copied_scenario_data)
+
+    def mock_break_link_run(client, scenario):
+        break_link_called.append(True)
+        return ok_service_result({})
+
+    monkeypatch.setattr(CopyScenarioRunner, "run", mock_copy_run)
+    monkeypatch.setattr(BreakPresetLinkRunner, "run", mock_break_link_run)
+
+    original = dummy_scenario(12345)
+    scenario = original.copy()
+
+    # Verify only copy was called, not break_link
+    assert len(copy_called) == 1
+    assert len(break_link_called) == 0
+    assert scenario.id == 67896

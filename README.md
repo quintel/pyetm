@@ -57,7 +57,11 @@ python3 --version
 Follow the [official instructions](https://python-poetry.org/docs/#installation):
 
 #### For Mac with brew
+```bash
+brew install poetry
+```
 
+#### For other systems
 Make sure pipx is installed, otherwise use:
 ```bash
 brew install pipx
@@ -68,17 +72,11 @@ Then:
 pipx install poetry
 ```
 
-#### Other systems
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
 #### Finally
 After installation, ensure Poetry is available:
 ```bash
 poetry --version
 ```
-
 
 #### Install Dependencies
 

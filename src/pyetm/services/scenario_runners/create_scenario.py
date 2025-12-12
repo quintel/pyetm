@@ -77,6 +77,9 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
         for key in filtered_keys:
             warnings.append(f"Ignoring invalid field for scenario creation: {key!r}")
 
+        if "template" in filtered_data:
+            filtered_data["preset_scenario_id"] = filtered_data.pop("template")
+
         payload = {"scenario": filtered_data}
 
         result = CreateScenarioRunner._make_request(

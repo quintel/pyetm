@@ -295,6 +295,7 @@ def test_update_metadata_runner_meta_keys_constants():
         "metadata",
         "end_year",
         "title",
+        "template",
     ]
 
     expected_unsettable_keys = [
@@ -304,7 +305,6 @@ def test_update_metadata_runner_meta_keys_constants():
         "area_code",
         "start_year",
         "scaling",
-        "template",
         "url",
     ]
 
