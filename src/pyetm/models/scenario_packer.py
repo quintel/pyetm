@@ -381,8 +381,8 @@ class ScenarioPacker(BaseModel):
 
         """
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
-        parent = row_data.get("parent")
-        copy_from = row_data.get("copy_from")
+        parent = self._safe_get_int(row_data.get("parent"))
+        copy_from = self._safe_get_int(row_data.get("copy_from"))
         area_code = row_data.get("area_code")
         end_year = self._safe_get_int(row_data.get("end_year"))
         metadata_updates = self._extract_metadata_updates(row_data)
@@ -426,24 +426,18 @@ class ScenarioPacker(BaseModel):
 
     def _deep_copy_scenario(
         self,
-        copy_from: Any,
+        scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
     ) -> Optional[Scenario]:
         """Create a deep copy of a scenario (no template link)."""
-        scenario_id = self._safe_get_int(copy_from)
-        if scenario_id is None:
-            logger.warning(
-                "Invalid scenario ID '%s' for row '%s'", copy_from, row_label
-            )
-            return None
         try:
             source_scenario = Scenario.load(scenario_id)
             return source_scenario.deep_copy(**metadata_updates)
         except Exception as e:
             logger.warning(
                 "Failed to deep copy from '%s' for row '%s': %s",
-                copy_from,
+                scenario_id,
                 row_label,
                 e,
             )
@@ -451,15 +445,11 @@ class ScenarioPacker(BaseModel):
 
     def _copy_with_roles(
         self,
-        parent: Any,
+        scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
     ) -> Optional[Scenario]:
         """Copy a scenario with roles preserved (maintains template link)."""
-        scenario_id = self._safe_get_int(parent)
-        if scenario_id is None:
-            logger.warning("Invalid scenario ID '%s' for row '%s'", parent, row_label)
-            return None
         try:
             source_scenario = Scenario.load(scenario_id)
             copy_metadata = metadata_updates.copy()
@@ -468,7 +458,7 @@ class ScenarioPacker(BaseModel):
         except Exception as e:
             logger.warning(
                 "Failed to copy from parent '%s' for row '%s': %s",
-                parent,
+                scenario_id,
                 row_label,
                 e,
             )
@@ -563,10 +553,6 @@ class ScenarioPacker(BaseModel):
         private = self._safe_get_bool(column_data.get("private"))
         if private is not None:
             metadata["private"] = private
-
-        template = self._safe_get_int(column_data.get("template"))
-        if template is not None:
-            metadata["template"] = template
 
         for field in ["source", "title"]:
             value = column_data.get(field)

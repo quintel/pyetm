@@ -140,14 +140,10 @@ class Scenario(Base):
         """
         Create a deep copy with no template link to the original scenario.
         """
-        # Remove copy_roles if present (not meaningful for deep copy)
-        overrides.pop("copy_roles", None)
-        overrides.pop("set_preset_roles", None)
-
-        # First, create the copy
+        # Create the copy
         new_scenario = self.copy(**overrides)
 
-        # Then break the template link
+        # Break the template link
         result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
 
         if not result.success:
@@ -155,7 +151,6 @@ class Scenario(Base):
                 f"Copied scenario but failed to break template link: {result.errors}"
             )
 
-        # Update the scenario with cleared template
         if result.data and "scenario" in result.data:
             scenario_data = result.data["scenario"]
             for field, value in scenario_data.items():
