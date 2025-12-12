@@ -334,7 +334,8 @@ class ScenarioPacker(BaseModel):
             excel_utils.parse_excel_sheet(
                 excel_file,
                 packer._query_pack.sheet_name,
-                **packer._query_pack.excel_read_kwargs())
+                **packer._query_pack.excel_read_kwargs(),
+            )
         )
 
         packer._import_scenario_specific_sheets(
@@ -375,14 +376,114 @@ class ScenarioPacker(BaseModel):
     def _create_scenario_from_row(
         self, row_idx, row_data: pd.Series
     ) -> Optional[Scenario]:
-        """Create a scenario from a main sheet row."""
+        """
+        Create a scenario from a main sheet row.
+
+        """
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
+        parent = row_data.get("parent")
+        copy_from = row_data.get("copy_from")
         area_code = row_data.get("area_code")
         end_year = self._safe_get_int(row_data.get("end_year"))
         metadata_updates = self._extract_metadata_updates(row_data)
+        row_label = str(row_idx)
 
+        # Load existing scenario if scenario_id is provided
+        if scenario_id:
+            return self._load_existing_scenario(
+                scenario_id, area_code, end_year, row_label, metadata_updates
+            )
+
+        # Deep copy if copy_from is provided
+        if copy_from:
+            return self._deep_copy_scenario(copy_from, row_label, metadata_updates)
+
+        # Copy with roles if parent is provided
+        if parent:
+            return self._copy_with_roles(parent, row_label, metadata_updates)
+
+        # Create new scenario
+        return self._create_new_scenario(
+            area_code, end_year, row_label, metadata_updates
+        )
+
+    def _load_existing_scenario(
+        self,
+        scenario_id: int,
+        area_code: Any,
+        end_year: Optional[int],
+        row_label: str,
+        metadata_updates: Dict[str, Any],
+    ) -> Optional[Scenario]:
+        """Load an existing scenario by ID and apply metadata updates."""
         scenario = self._load_or_create_scenario(
-            scenario_id, area_code, end_year, str(row_idx), **metadata_updates
+            scenario_id, area_code, end_year, row_label, **metadata_updates
+        )
+        if scenario is None:
+            return None
+        self._apply_metadata_to_scenario(scenario, metadata_updates)
+        return scenario
+
+    def _deep_copy_scenario(
+        self,
+        copy_from: Any,
+        row_label: str,
+        metadata_updates: Dict[str, Any],
+    ) -> Optional[Scenario]:
+        """Create a deep copy of a scenario (no template link)."""
+        scenario_id = self._safe_get_int(copy_from)
+        if scenario_id is None:
+            logger.warning(
+                "Invalid scenario ID '%s' for row '%s'", copy_from, row_label
+            )
+            return None
+        try:
+            source_scenario = Scenario.load(scenario_id)
+            return source_scenario.deep_copy(**metadata_updates)
+        except Exception as e:
+            logger.warning(
+                "Failed to deep copy from '%s' for row '%s': %s",
+                copy_from,
+                row_label,
+                e,
+            )
+            return None
+
+    def _copy_with_roles(
+        self,
+        parent: Any,
+        row_label: str,
+        metadata_updates: Dict[str, Any],
+    ) -> Optional[Scenario]:
+        """Copy a scenario with roles preserved (maintains template link)."""
+        scenario_id = self._safe_get_int(parent)
+        if scenario_id is None:
+            logger.warning("Invalid scenario ID '%s' for row '%s'", parent, row_label)
+            return None
+        try:
+            source_scenario = Scenario.load(scenario_id)
+            copy_metadata = metadata_updates.copy()
+            copy_metadata["copy_roles"] = True
+            return source_scenario.copy(**copy_metadata)
+        except Exception as e:
+            logger.warning(
+                "Failed to copy from parent '%s' for row '%s': %s",
+                parent,
+                row_label,
+                e,
+            )
+            return None
+
+    def _create_new_scenario(
+        self,
+        area_code: Any,
+        end_year: Optional[int],
+        row_label: str,
+        metadata_updates: Dict[str, Any],
+    ) -> Optional[Scenario]:
+        """Create a brand new scenario."""
+        scenario = self._load_or_create_scenario(
+            None, area_code, end_year, row_label, **metadata_updates
         )
         if scenario is None:
             return None
@@ -544,8 +645,9 @@ class ScenarioPacker(BaseModel):
                     excel_utils.parse_excel_sheet(
                         excel_file,
                         curves_sheet,
-                        **self._custom_curves.excel_read_kwargs()),
-                    scenario
+                        **self._custom_curves.excel_read_kwargs(),
+                    ),
+                    scenario,
                 )
 
     def _scenarios(self) -> set[Scenario]:
