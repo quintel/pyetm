@@ -54,11 +54,13 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
             "create saved scenario",
         )
 
+        payload = {"saved_scenario": filtered_data}
+
         result = CreateSavedScenarioRunner._make_request(
             client=client,
             method="post",
             path="/saved_scenarios",
-            payload=filtered_data,
+            payload=payload,
             **kwargs,
         )
 
