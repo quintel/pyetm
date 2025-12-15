@@ -7,6 +7,9 @@ from pyetm.clients import BaseClient
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.update_saved_scenario import (
+    UpdateSavedScenarioRunner,
+)
 
 if TYPE_CHECKING:
     from pyetm.models.scenario import Scenario
@@ -64,6 +67,10 @@ class SavedScenario(Base):
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
 
+        for field, value in params.items():
+            if hasattr(saved_scenario, field) and field not in result.data:
+                setattr(saved_scenario, field, value)
+
         return saved_scenario
 
     @classmethod
@@ -108,3 +115,30 @@ class SavedScenario(Base):
 
         self._scenario_model = Scenario.load(self.scenario_id)
         return self._scenario_model
+
+    def update(self, client: BaseClient, **kwargs) -> None:
+        """
+        Update this SavedScenario
+
+        Args:
+            client: BaseClient instance
+            **kwargs: Fields to update (title, description, private, discarded)
+        """
+        result = UpdateSavedScenarioRunner.run(client, self.id, kwargs)
+
+        if not result.success:
+            raise SavedScenarioError(
+                f"Could not update saved scenario: {result.errors}"
+            )
+
+        for warning in result.errors:
+            self.add_warning("update", warning)
+
+        if result.data:
+            for field, value in result.data.items():
+                if hasattr(self, field):
+                    setattr(self, field, value)
+
+        for field, value in kwargs.items():
+            if hasattr(self, field) and (not result.data or field not in result.data):
+                setattr(self, field, value)
