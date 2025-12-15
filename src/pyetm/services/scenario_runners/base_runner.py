@@ -125,8 +125,10 @@ class BaseRunner(ABC, Generic[T]):
                     result[key] = None
 
         return result, warnings
+
+    @staticmethod
     def _validate_required_fields(
-        cls, data: Dict[str, Any], required_keys: List[str]
+        data: Dict[str, Any], required_keys: List[str]
     ) -> List[str]:
         """
         Check for missing required fields.

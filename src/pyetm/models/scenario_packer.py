@@ -392,7 +392,6 @@ class ScenarioPacker(BaseModel):
     ) -> Optional[Scenario]:
         """
         Create a scenario from a main sheet row.
-
         """
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
         parent = self._safe_get_int(row_data.get("parent"))
@@ -418,7 +417,7 @@ class ScenarioPacker(BaseModel):
 
         # Create new scenario
         return self._create_new_scenario(
-            area_code, end_year, row_label, metadata_updates
+            area_code, end_year, row_label, metadata_updates, read_only_set=read_only_set
         )
 
     def _load_existing_scenario(
@@ -484,9 +483,10 @@ class ScenarioPacker(BaseModel):
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
+        read_only_set: set[str] = None,
     ) -> Optional[Scenario]:
         """Create a brand new scenario."""
-        # Check if we're in full read-only mode
+        read_only_set = read_only_set or set()
         is_full_readonly = read_only_set == {'user_values', 'custom_curves', 'sortables'}
 
         scenario = self._load_or_create_scenario(
@@ -660,7 +660,7 @@ class ScenarioPacker(BaseModel):
                         curves_sheet,
                         **self._custom_curves.excel_read_kwargs(),
                     ),
-                    scenario,,
+                    scenario,
                     read_only_set
                 )
 
