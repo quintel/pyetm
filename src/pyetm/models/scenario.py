@@ -161,7 +161,7 @@ class Scenario(Base):
         if self.private is not None:
             params.setdefault("private", self.private)
 
-        return SavedScenario.create(client, params)
+        return SavedScenario.create(params, client=client)
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """
