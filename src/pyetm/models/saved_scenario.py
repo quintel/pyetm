@@ -41,14 +41,14 @@ class SavedScenario(Base):
     _scenario_model: Optional[Scenario] = PrivateAttr(None)
 
     @classmethod
-    def create(cls, client: BaseClient, params: Dict[str, Any]) -> SavedScenario:
+    def create(cls, params: Dict[str, Any], client: Optional[BaseClient] = None) -> "SavedScenario":
         """
         Create a new SavedScenario in MyETM from an existing session scenario.
 
         Args:
-            client: BaseClient instance
             params: Dictionary with required keys (scenario_id, title) and optional keys
                    (description, private)
+            client: Optional BaseClient instance
 
         Returns:
             SavedScenario instance
@@ -56,6 +56,8 @@ class SavedScenario(Base):
         Raises:
             SavedScenarioError if creation fails
         """
+        if client is None:
+            client = BaseClient()
         result = CreateSavedScenarioRunner.run(client, params)
 
         if not result.success:
@@ -75,31 +77,31 @@ class SavedScenario(Base):
 
     @classmethod
     def from_scenario(
-        cls, client: BaseClient, scenario: Scenario, title: str, **kwargs
-    ) -> SavedScenario:
+        cls, scenario: "Scenario", title: str, client: Optional[BaseClient] = None, **kwargs
+    ) -> "SavedScenario":
         """
         Convenience method to create SavedScenario from a Scenario instance.
 
         Args:
-            client: BaseClient instance
             scenario: Scenario instance to save
             title: Title for the saved scenario
+            client: Optional BaseClient instance
             **kwargs: Optional params (description, private)
 
         Returns:
             SavedScenario instance
         """
         params = {"scenario_id": scenario.id, "title": title, **kwargs}
-        return cls.create(client, params)
+        return cls.create(params, client=client)
 
-    def get_scenario(self, client: BaseClient) -> Scenario:
+    def get_scenario(self, client: Optional[BaseClient] = None) -> "Scenario":
         """
         Get the associated Scenario model instance.
 
         Loads from cache if available, otherwise creates from nested data or fetches.
 
         Args:
-            client: BaseClient instance
+            client: Optional BaseClient instance
 
         Returns:
             Scenario instance
@@ -113,17 +115,21 @@ class SavedScenario(Base):
             self._scenario_model = Scenario.model_validate(self.scenario)
             return self._scenario_model
 
+        if client is None:
+            client = BaseClient()
         self._scenario_model = Scenario.load(self.scenario_id)
         return self._scenario_model
 
-    def update(self, client: BaseClient, **kwargs) -> None:
+    def update(self, client: Optional[BaseClient] = None, **kwargs) -> None:
         """
         Update this SavedScenario
 
         Args:
-            client: BaseClient instance
+            client: Optional BaseClient instance
             **kwargs: Fields to update (title, description, private, discarded)
         """
+        if client is None:
+            client = BaseClient()
         result = UpdateSavedScenarioRunner.run(client, self.id, kwargs)
 
         if not result.success:

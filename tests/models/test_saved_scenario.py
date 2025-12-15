@@ -84,7 +84,7 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
         "private": True,
     }
 
-    saved_scenario = SavedScenario.create(mock_client, params)
+    saved_scenario = SavedScenario.create(params, client=mock_client)
     assert saved_scenario.id == 789
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "New Saved Scenario"
@@ -115,7 +115,7 @@ def test_create_saved_scenario_with_warnings(
         "invalid_field": "should_be_ignored",
     }
 
-    saved_scenario = SavedScenario.create(mock_client, params)
+    saved_scenario = SavedScenario.create(params, client=mock_client)
     assert saved_scenario.id == 790
     base_warnings = saved_scenario.warnings.get_by_field("base")
     assert len(base_warnings) == 1
@@ -133,7 +133,7 @@ def test_create_saved_scenario_failure(monkeypatch, fail_service_result, mock_cl
     params = {"scenario_id": 123}  # Missing title
 
     with pytest.raises(SavedScenarioError, match="Could not create saved scenario"):
-        SavedScenario.create(mock_client, params)
+        SavedScenario.create(params, client=mock_client)
 
 
 def test_create_saved_scenario_preserves_params_not_in_response(
@@ -159,7 +159,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
         "description": "Local description",
     }
 
-    saved_scenario = SavedScenario.create(mock_client, params)
+    saved_scenario = SavedScenario.create(params, client=mock_client)
     # description should be set from params since it wasn't in response
     assert saved_scenario.description == "Local description"
 
@@ -188,9 +188,9 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
     )
 
     saved_scenario = SavedScenario.from_scenario(
-        mock_client,
         scenario,
         title="From Scenario",
+        client=mock_client,
         description="Created from scenario",
     )
 
@@ -221,7 +221,7 @@ def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
     monkeypatch.setattr(CreateSavedScenarioRunner, "run", capture_run)
 
     SavedScenario.from_scenario(
-        mock_client, scenario, title="Private Scenario", private=True
+        scenario, title="Private Scenario", client=mock_client, private=True
     )
 
     assert captured_params["scenario_id"] == 1000
