@@ -29,6 +29,8 @@ from pyetm.services.scenario_runners.update_custom_curves import (
 )
 from pyetm.services.scenario_runners.fetch_couplings import FetchCouplingsRunner
 from pyetm.services.scenario_runners.update_couplings import UpdateCouplingsRunner
+from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
+from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
 
 
 class ScenarioError(Exception):
@@ -55,7 +57,9 @@ class Scenario(Base):
     short_name: Optional[str] = None
     start_year: Optional[int] = None
     scaling: Optional[Any] = None
-    template: Optional[int] = None
+    template: Optional[int] = Field(
+        None, description="ID of the preset scenario this was copied from"
+    )
     url: Optional[str] = None
 
     # private caches for submodels
@@ -109,6 +113,51 @@ class Scenario(Base):
         for w in result.errors:
             scenario.add_warning("metadata", w)
         return scenario
+
+    def copy(self, **overrides) -> "Scenario":
+        """
+        Create a copy of this scenario using ETEngine's copy utility.
+        The copied scenario will have its template field set to this scenario's ID.
+        """
+        copy_roles = overrides.pop("copy_roles", False)
+        if copy_roles:
+            overrides["set_preset_roles"] = copy_roles
+
+        # Call CopyScenarioRunner
+        result = CopyScenarioRunner.run(BaseClient(), self.id, overrides=overrides)
+
+        if not result.success:
+            raise ScenarioError(f"Failed to copy scenario: {result.errors}")
+
+        # Create and return new scenario
+        scenario = Scenario.model_validate(result.data)
+        for warning in result.errors:
+            scenario.add_warning("base", warning)
+
+        return scenario
+
+    def deep_copy(self, **overrides) -> "Scenario":
+        """
+        Create a deep copy with no template link to the original scenario.
+        """
+        # Create the copy
+        new_scenario = self.copy(**overrides)
+
+        # Break the template link
+        result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
+
+        if not result.success:
+            raise ScenarioError(
+                f"Copied scenario but failed to break template link: {result.errors}"
+            )
+
+        if result.data and "scenario" in result.data:
+            scenario_data = result.data["scenario"]
+            for field, value in scenario_data.items():
+                if hasattr(new_scenario, field):
+                    setattr(new_scenario, field, value)
+
+        return new_scenario
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Scenario":

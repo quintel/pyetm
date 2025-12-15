@@ -109,6 +109,22 @@ def scenario(minimal_scenario_metadata):
 
 
 @pytest.fixture
+def dummy_scenario():
+    """Factory fixture for creating Scenario instances for testing copy operations"""
+
+    def _make_scenario(scenario_id, **kwargs):
+        defaults = {
+            "id": scenario_id,
+            "area_code": "nl",
+            "end_year": 2050,
+        }
+        defaults.update(kwargs)
+        return Scenario.model_validate(defaults)
+
+    return _make_scenario
+
+
+@pytest.fixture
 def sample_scenario():
     """Create a sample scenario for testing"""
     # Use Mock to avoid Pydantic validation issues

@@ -364,7 +364,7 @@ class TestDataExtractionMethods:
         mock_series2 = pd.Series([4, 5, 6], name="curve2")
 
         # Mock that there are two custom curves available
-        sample_scenario.custom_curves = [1,2]
+        sample_scenario.custom_curves = [1, 2]
         sample_scenario.custom_curves_series = Mock(
             return_value=[mock_series1, mock_series2]
         )
@@ -646,22 +646,17 @@ class TestScenarioPackerHelpers:
         packer = ScenarioPacker()
 
         # Test extraction
-        series = pd.Series(
-            {"private": True, "template": 7, "source": " src ", "title": "  title  "}
-        )
+        series = pd.Series({"private": True, "source": " src ", "title": "  title  "})
 
         meta = packer._extract_metadata_updates(series)
         assert meta == {
             "private": True,
-            "template": 7,
             "source": "src",
             "title": "title",
         }
 
         # empty strings trimmed out
-        series_empty = pd.Series(
-            {"private": None, "template": None, "source": " ", "title": ""}
-        )
+        series_empty = pd.Series({"private": None, "source": " ", "title": ""})
         meta_empty = packer._extract_metadata_updates(series_empty)
         assert meta_empty == {}
 
