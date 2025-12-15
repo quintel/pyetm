@@ -33,14 +33,14 @@ class SortablePack(Packable):
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     def import_scenario_specific_sheet(
-        self, excel_file: pd.ExcelFile, sheet_name: str, scenario: "Any"
+        self, excel_file: pd.ExcelFile, sheet_name: str, scenario: "Any", read_only_set: set[str] = None
     ):
         """Import sortables from a scenario-specific sheet."""
         df = excel_utils.parse_excel_sheet(excel_file, sheet_name, header=None)
         if df is not None and not df.empty:
-            self.process_single_scenario_sortables(scenario, df)
+            self.process_single_scenario_sortables(scenario, df, read_only_set)
 
-    def process_single_scenario_sortables(self, scenario: "Any", df: pd.DataFrame):
+    def process_single_scenario_sortables(self, scenario: "Any", df: pd.DataFrame, read_only_set: set[str] = None):
         """Process sortables data for a single scenario."""
         normalized_data = excel_utils.normalize_sheet(
             df,
@@ -52,12 +52,14 @@ class SortablePack(Packable):
         if normalized_data is None or normalized_data.empty:
             return
 
-        self.apply_sortables_to_scenario(scenario, normalized_data)
+        self.apply_sortables_to_scenario(scenario, normalized_data, read_only_set)
 
-    def apply_sortables_to_scenario(self, scenario: "Any", data: pd.DataFrame):
+    def apply_sortables_to_scenario(self, scenario: "Any", data: pd.DataFrame, read_only_set: set[str] = None):
         """Apply sortables data to scenario with error handling."""
+        skip_upload = self._should_skip_upload(read_only_set)
+
         try:
-            scenario.set_sortables_from_dataframe(data)
+            scenario.set_sortables_from_dataframe(data, skip_upload=skip_upload)
             self.log_scenario_warnings(scenario, "_sortables", "Sortables")
         except Exception as e:
             logger.warning(
