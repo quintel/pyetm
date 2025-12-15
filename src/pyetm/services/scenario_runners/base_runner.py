@@ -125,6 +125,64 @@ class BaseRunner(ABC, Generic[T]):
                     result[key] = None
 
         return result, warnings
+    def _validate_required_fields(
+        cls, data: Dict[str, Any], required_keys: List[str]
+    ) -> List[str]:
+        """
+        Check for missing required fields.
+        """
+        missing = [key for key in required_keys if key not in data]
+        if missing:
+            return [f"Missing required fields: {', '.join(missing)}"]
+        return []
+
+    @staticmethod
+    def _filter_allowed_fields(
+        data: Dict[str, Any],
+        allowed_keys: List[str],
+        context: str,
+    ) -> tuple[Dict[str, Any], List[str]]:
+        """
+        Filter dictionary to only allowed keys, returning filtered data and warnings.
+
+        Args:
+            data: Input dictionary to filter
+            allowed_keys: List of keys to keep
+            context: Description for warning messages (e.g. "create saved scenario")
+
+        Returns:
+            (filtered_data, warnings) tuple
+        """
+        filtered = {k: v for k, v in data.items() if k in allowed_keys}
+        ignored_keys = set(data.keys()) - set(filtered.keys())
+        warnings = [
+            f"Ignoring invalid field for {context}: {key!r}" for key in ignored_keys
+        ]
+        return filtered, warnings
+
+    @staticmethod
+    def _filter_allowed_fields(
+        data: Dict[str, Any],
+        allowed_keys: List[str],
+        context: str,
+    ) -> tuple[Dict[str, Any], List[str]]:
+        """
+        Filter dictionary to only allowed keys, returning filtered data and warnings.
+
+        Args:
+            data: Input dictionary to filter
+            allowed_keys: List of keys to keep
+            context: Description for warning messages (e.g. "create saved scenario")
+
+        Returns:
+            (filtered_data, warnings) tuple
+        """
+        filtered = {k: v for k, v in data.items() if k in allowed_keys}
+        ignored_keys = set(data.keys()) - set(filtered.keys())
+        warnings = [
+            f"Ignoring invalid field for {context}: {key!r}" for key in ignored_keys
+        ]
+        return filtered, warnings
 
     @staticmethod
     @abstractmethod
