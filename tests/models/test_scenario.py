@@ -1017,19 +1017,11 @@ def test_copy_scenario_with_multiple_overrides(
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy(
-        title="Private Copy",
-        private=True,
-        source="test",
-        area_code="de",
-        end_year=2040,
-    )
+    scenario = original.copy(title="Private Copy", private=True, source="test")
     assert scenario.id == 67892
     assert scenario.title == "Private Copy"
     assert scenario.private is True
     assert scenario.source == "test"
-    assert scenario.area_code == "de"
-    assert scenario.end_year == 2040
     assert len(scenario.warnings) == 0
 
 

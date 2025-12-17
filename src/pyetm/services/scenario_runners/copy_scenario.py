@@ -25,10 +25,6 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         "keep_compatible",
         "set_preset_roles",
         "template",
-        "area_code",
-        "end_year",
-        "start_year",
-        "scaling",
     ]
 
     @staticmethod
@@ -36,7 +32,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         client: BaseClient,
         scenario_id: int,
         overrides: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Copy an existing scenario with optional attribute overrides.
@@ -68,9 +64,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
             # Warn about ignored keys
             filtered_keys = set(overrides.keys()) - set(filtered_overrides.keys())
             for key in filtered_keys:
-                warnings.append(
-                    f"Ignoring invalid field for scenario copy: {key!r}"
-                )
+                warnings.append(f"Ignoring invalid field for scenario copy: {key!r}")
 
             scenario_data.update(filtered_overrides)
 

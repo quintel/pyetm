@@ -21,7 +21,9 @@ def test_copy_scenario_success_no_overrides(dummy_client, fake_response):
     ]
 
 
-def test_copy_scenario_with_metadata_override_including_title(dummy_client, fake_response):
+def test_copy_scenario_with_metadata_override_including_title(
+    dummy_client, fake_response
+):
     """Test that title can be set via metadata"""
     body = {
         "id": 67891,
@@ -48,8 +50,6 @@ def test_copy_scenario_with_metadata_override_including_title(dummy_client, fake
 def test_copy_scenario_with_multiple_overrides(dummy_client, fake_response):
     body = {
         "id": 67892,
-        "area_code": "de",
-        "end_year": 2040,
         "private": True,
         "source": "test",
     }
@@ -59,8 +59,6 @@ def test_copy_scenario_with_multiple_overrides(dummy_client, fake_response):
     overrides = {
         "private": True,
         "source": "test",
-        "area_code": "de",
-        "end_year": 2040,
     }
     result = CopyScenarioRunner.run(client, scenario_id=12345, overrides=overrides)
 
@@ -73,8 +71,6 @@ def test_copy_scenario_with_multiple_overrides(dummy_client, fake_response):
             "scenario_id": 12345,
             "private": True,
             "source": "test",
-            "area_code": "de",
-            "end_year": 2040,
         }
     }
     assert client.calls == [("/scenarios", {"json": expected_payload})]
@@ -149,9 +145,7 @@ def test_copy_scenario_with_set_preset_roles(dummy_client, fake_response):
     assert result.data == body
     assert result.errors == []
 
-    expected_payload = {
-        "scenario": {"scenario_id": 12345, "set_preset_roles": True}
-    }
+    expected_payload = {"scenario": {"scenario_id": 12345, "set_preset_roles": True}}
     assert client.calls == [("/scenarios", {"json": expected_payload})]
 
 
@@ -202,10 +196,6 @@ def test_copy_scenario_all_allowed_overrides(dummy_client, fake_response):
         "private": False,
         "keep_compatible": True,
         "set_preset_roles": False,
-        "area_code": "be",
-        "end_year": 2040,
-        "start_year": 2024,
-        "scaling": {"factor": 1.5},
     }
 
     result = CopyScenarioRunner.run(client, scenario_id=12345, overrides=overrides)
@@ -222,10 +212,6 @@ def test_copy_scenario_all_allowed_overrides(dummy_client, fake_response):
             "private": False,
             "keep_compatible": True,
             "set_preset_roles": False,
-            "area_code": "be",
-            "end_year": 2040,
-            "start_year": 2024,
-            "scaling": {"factor": 1.5},
         }
     }
     assert client.calls == [("/scenarios", {"json": expected_payload})]
