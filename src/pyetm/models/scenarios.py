@@ -83,13 +83,28 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
+    def from_excel(
+        cls, xlsx_path: PathLike | str, session: bool = False
+    ) -> "Scenarios":
         """
         Import scenarios from Excel.
+
+        Args:
+            xlsx_path: Path to Excel file
+            session: If True, interpret scenario_id and copy_from as Session IDs (ETEngine).
+                    If False (default), interpret as SavedScenario IDs (MyETM).
+
+        Returns:
+            Scenarios collection
         """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        from pyetm.models.scenario_packer import ScenarioPacker
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
-        scenarios = ScenarioExcelService.import_from_excel(str(resolved_path))
-        scenarios.sort(key=lambda s: s.id)
+        packer = ScenarioPacker.from_excel(str(resolved_path), session=session)
+        scenarios = list(packer._scenarios())
+
+        if not scenarios:
+            print(f"No scenarios found in Excel file: {resolved_path}")
+
+        scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
         return cls(items=scenarios)

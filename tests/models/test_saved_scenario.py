@@ -9,6 +9,9 @@ from pyetm.services.scenario_runners.create_saved_scenario import (
 from pyetm.services.scenario_runners.update_saved_scenario import (
     UpdateSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.fetch_saved_scenario import (
+    FetchSavedScenarioRunner,
+)
 
 
 # --- Model Validation Tests --- #
@@ -425,3 +428,78 @@ def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario)
 
         mock_load.assert_called_once_with(123)
         assert scenario is fetched_scenario
+
+
+# --- Delegation Tests --- #
+
+
+def test_saved_scenario_delegates_property_access(saved_scenario):
+    """Test SavedScenario delegates property access to underlying session."""
+    # Mock the session
+    mock_session = Mock(spec=Scenario)
+    mock_session.inputs = Mock()
+    mock_session.sortables = Mock()
+    mock_session.custom_curves = Mock()
+    mock_session.output_curves = Mock()
+    mock_session.couplings = Mock()
+    mock_session.version = "latest"
+    mock_session.start_year = 2020
+    mock_session.url = "http://test.com"
+
+    saved_scenario._scenario_session = mock_session
+
+    # Test property delegation
+    assert saved_scenario.inputs is mock_session.inputs
+    assert saved_scenario.sortables is mock_session.sortables
+    assert saved_scenario.custom_curves is mock_session.custom_curves
+    assert saved_scenario.output_curves is mock_session.output_curves
+    assert saved_scenario.couplings is mock_session.couplings
+    assert saved_scenario.version == "latest"
+    assert saved_scenario.start_year == 2020
+    assert saved_scenario.url == "http://test.com"
+
+
+def test_saved_scenario_delegates_method_calls(saved_scenario):
+    """Test SavedScenario delegates method calls to underlying session."""
+    # Mock the session
+    mock_session = Mock(spec=Scenario)
+    mock_session.user_values.return_value = {"input1": 42}
+    mock_session.update_user_values = Mock()
+    mock_session.update_sortables = Mock()
+    mock_session.results.return_value = Mock()
+
+    saved_scenario._scenario_session = mock_session
+
+    # Test method delegation
+    values = saved_scenario.user_values()
+    assert values == {"input1": 42}
+    mock_session.user_values.assert_called_once()
+
+    saved_scenario.update_user_values({"input1": 50})
+    mock_session.update_user_values.assert_called_once_with({"input1": 50})
+
+    saved_scenario.update_sortables({"demand": ["a", "b"]})
+    mock_session.update_sortables.assert_called_once_with({"demand": ["a", "b"]})
+
+    saved_scenario.results()
+    mock_session.results.assert_called_once()
+
+
+def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
+    """Test that SavedScenario and Scenario can be used interchangeably."""
+    # Mock a scenario with some behavior
+    mock_session = Mock(spec=Scenario)
+    mock_session.inputs = Mock()
+    mock_session.inputs.is_valid_update.return_value = {}
+    mock_session.update_user_values = Mock()
+    mock_session.identifier.return_value = "test_scenario"
+
+    saved_scenario._scenario_session = mock_session
+
+    # User code should work identically whether they have a Scenario or SavedScenario
+    identifier = saved_scenario.identifier()
+    assert identifier == "test_scenario"
+
+    # Both should support the same operations
+    saved_scenario.update_user_values({"test": 123})
+    mock_session.update_user_values.assert_called_once_with({"test": 123})

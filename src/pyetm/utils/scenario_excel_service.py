@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Union
 from os import PathLike
 import logging
 
 from pyetm.models.scenario import Scenario
+from pyetm.models.saved_scenario import SavedScenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ class ScenarioExcelService:
     @classmethod
     def export_to_excel(
         cls,
-        scenarios: List[Scenario],
+        scenarios: List[Union[Scenario, SavedScenario]],
         path: PathLike | str,
         *,
         carriers: Optional[Sequence[str]] = None,
@@ -30,8 +31,11 @@ class ScenarioExcelService:
         """
         Export scenarios to Excel file.
 
+        Accepts both Scenario and SavedScenario objects. SavedScenarios will export
+        their underlying session data.
+
         Args:
-            scenarios: List of Scenario objects to export
+            scenarios: List of Scenario or SavedScenario objects to export
             path: Output file path
             **kwargs: Export configuration options
         """
@@ -63,6 +67,10 @@ class ScenarioExcelService:
 
         Returns:
             List of Scenario objects
+
+        Note:
+            SavedScenario objects can be used interchangeably with Scenario objects
+            due to delegation. The main difference is persistence metadata.
         """
         path = Path(xlsx_path).expanduser().resolve()
         packer = ScenarioPacker.from_excel(str(path))
