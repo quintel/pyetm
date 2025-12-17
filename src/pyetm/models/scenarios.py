@@ -37,7 +37,7 @@ class Scenarios(Base):
             try:
                 scenarios.append(Scenario.load(sid))
             except ScenarioError as e:
-                print(f"Could not load scenario {sid}: {e}")
+                print(e)
         return cls(items=scenarios)
 
     @classmethod

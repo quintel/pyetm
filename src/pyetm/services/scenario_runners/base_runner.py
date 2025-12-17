@@ -60,20 +60,71 @@ class BaseRunner(ABC, Generic[T]):
             if resp.ok:
                 # For JSON responses, parse automatically
                 try:
-                    return ServiceResult.ok(data=resp.json())
+                    data = resp.json()
+                    # Check if response contains errors even though HTTP status is OK
+                    if isinstance(data, dict) and "errors" in data:
+                        errors = data.get("errors", [])
+                        # If errors is a list of strings, use those as error messages
+                        if isinstance(errors, list) and errors:
+                            return ServiceResult.fail(errors)
+                    return ServiceResult.ok(data=data)
                 except ValueError:
                     # Not JSON, return raw response
                     return ServiceResult.ok(data=resp)
 
-            # HTTP-level failure is breaking
-            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
+            # HTTP-level failure - parse and format error
+            error_msg = f"{resp.status_code}: {resp.text}"
+            cleaned = cls._parse_json_error(error_msg)
+            return ServiceResult.fail([cleaned])
 
         except (PermissionError, ValueError, ConnectionError) as e:
-            # These are HTTP errors from our _handle_errors method
-            return ServiceResult.fail([str(e)])
+            # HTTP errors from raise_for_status()
+            # Try to parse and clean up JSON error responses
+            error_msg = str(e)
+            cleaned = cls._parse_json_error(error_msg)
+            return ServiceResult.fail([cleaned])
         except Exception as e:
-            # Any other unexpected exception is treated as breaking
+            # Any other unexpected exception
             return ServiceResult.fail([str(e)])
+
+    @staticmethod
+    def _parse_json_error(error_msg: str) -> str:
+        """
+        Parse JSON error responses and format them nicely.
+
+        Converts "422: {\"errors\":{\"field\":[\"message\"]}}"
+        to "422: field message"
+        """
+        import json
+
+        if ": " not in error_msg:
+            return error_msg
+
+        try:
+            status_part, json_part = error_msg.split(": ", 1)
+            data = json.loads(json_part)
+
+            if isinstance(data, dict) and "errors" in data:
+                errors = data["errors"]
+                parsed = []
+
+                # Handle dict of field errors: {"field": ["msg1", "msg2"]}
+                if isinstance(errors, dict):
+                    for field, messages in errors.items():
+                        if isinstance(messages, list):
+                            parsed.extend(f"{field} {m}" for m in messages)
+                        else:
+                            parsed.append(f"{field} {messages}")
+                # Handle list of error strings: ["msg1", "msg2"]
+                elif isinstance(errors, list):
+                    parsed = errors
+
+                if parsed:
+                    return f"{status_part}: {'; '.join(parsed)}"
+        except (ValueError, json.JSONDecodeError):
+            pass
+
+        return error_msg
 
     @classmethod
     def _make_batch_requests(

@@ -67,7 +67,7 @@ class SavedScenario(Base):
 
         if not result.success:
             raise SavedScenarioError(
-                f"Could not create saved scenario: {result.errors}"
+                f"Could not create saved scenario:\n{result.error_message()}"
             )
 
         saved_scenario = cls.model_validate(result.data)
@@ -128,7 +128,7 @@ class SavedScenario(Base):
 
         if not result.success:
             raise SavedScenarioError(
-                f"Could not load saved scenario {saved_scenario_id}: {result.errors}"
+                f"Could not load saved scenario {saved_scenario_id}:\n{result.error_message()}"
             )
 
         saved_scenario = cls.model_validate(result.data)
@@ -200,7 +200,7 @@ class SavedScenario(Base):
 
         if not result.success:
             raise SavedScenarioError(
-                f"Could not update saved scenario: {result.errors}"
+                f"Could not update saved scenario:\n{result.error_message()}"
             )
 
         for warning in result.errors:

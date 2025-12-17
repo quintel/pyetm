@@ -83,7 +83,7 @@ class Scenario(Base):
         result = CreateScenarioRunner.run(BaseClient(), scenario_data)
 
         if not result.success:
-            raise ScenarioError(f"Could not create scenario: {result.errors}")
+            raise ScenarioError(f"Could not create scenario:\n{result.error_message()}")
 
         scenario = cls.model_validate(result.data)
         for warning in result.errors:
@@ -105,7 +105,7 @@ class Scenario(Base):
 
         if not result.success:
             raise ScenarioError(
-                f"Could not load scenario {scenario_id}: {result.errors}"
+                f"Could not load scenario {scenario_id}:\n{result.error_message()}"
             )
 
         # parse into a Scenario
@@ -127,7 +127,7 @@ class Scenario(Base):
         result = CopyScenarioRunner.run(BaseClient(), self.id, overrides=overrides)
 
         if not result.success:
-            raise ScenarioError(f"Failed to copy scenario: {result.errors}")
+            raise ScenarioError(f"Failed to copy scenario:\n{result.error_message()}")
 
         # Create and return new scenario
         scenario = Scenario.model_validate(result.data)
@@ -148,7 +148,7 @@ class Scenario(Base):
 
         if not result.success:
             raise ScenarioError(
-                f"Copied scenario but failed to break template link: {result.errors}"
+                f"Copied scenario but failed to break template link:\n{result.error_message()}"
             )
 
         if result.data and "scenario" in result.data:
@@ -219,7 +219,7 @@ class Scenario(Base):
         result = UpdateMetadataRunner.run(BaseClient(), self, kwargs)
 
         if not result.success:
-            raise ScenarioError(f"Could not update metadata: {result.errors}")
+            raise ScenarioError(f"Could not update metadata:\n{result.error_message()}")
 
         # Add any warnings from the update
         for w in result.errors:
@@ -327,7 +327,7 @@ class Scenario(Base):
         # Otherwise fetch and cache
         result = FetchInputsRunner.run(BaseClient(), self, defaults="original")
         if not result.success:
-            raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
+            raise ScenarioError(f"Could not retrieve inputs:\n{result.error_message()}")
 
         coll = Inputs.from_json(result.data)
         # merge runner warnings and any item‐level warnings
@@ -364,7 +364,7 @@ class Scenario(Base):
         result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
 
         if not result.success:
-            raise ScenarioError(f"Could not update user values: {result.errors}")
+            raise ScenarioError(f"Could not update user values:\n{result.error_message()}")
 
         self.inputs.update(update_inputs)
 
@@ -379,7 +379,7 @@ class Scenario(Base):
         result = UpdateInputsRunner.run(BaseClient(), self, reset_inputs)
 
         if not result.success:
-            raise ScenarioError(f"Could not remove inputs: {result.errors}")
+            raise ScenarioError(f"Could not remove inputs:\n{result.error_message()}")
 
         # Update them in the Inputs object
         self.inputs.update(reset_inputs)
@@ -391,7 +391,7 @@ class Scenario(Base):
 
         result = FetchSortablesRunner.run(BaseClient(), self)
         if not result.success:
-            raise ScenarioError(f"Could not retrieve sortables: {result.errors}")
+            raise ScenarioError(f"Could not retrieve sortables:\n{result.error_message()}")
 
         coll = Sortables.from_json(result.data)
         for w in result.errors:
@@ -438,7 +438,7 @@ class Scenario(Base):
 
             if not result.success:
                 raise ScenarioError(
-                    f"Could not update sortable '{name}': {result.errors}"
+                    f"Could not update sortable '{name}':\n{result.error_message()}"
                 )
 
         self.sortables.update(update_sortables)
@@ -463,7 +463,7 @@ class Scenario(Base):
 
             if not result.success:
                 raise ScenarioError(
-                    f"Could not remove sortable '{name}': {result.errors}"
+                    f"Could not remove sortable '{name}':\n{result.error_message()}"
                 )
 
         reset_sortables = {name: [] for name in sortable_names}
@@ -476,7 +476,7 @@ class Scenario(Base):
 
         result = FetchAllCustomCurveDataRunner.run(BaseClient(), self)
         if not result.success:
-            raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
+            raise ScenarioError(f"Could not retrieve custom_curves:\n{result.error_message()}")
 
         coll = CustomCurves.from_json(result.data)
         try:
@@ -513,7 +513,7 @@ class Scenario(Base):
         # Upload curves
         result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
         if not result.success:
-            raise ScenarioError(f"Could not update custom curves: {result.errors}")
+            raise ScenarioError(f"Could not update custom curves:\n{result.error_message()}")
 
         # TODO: this should be done in custom curves
         # Update the scenario's custom curves object
@@ -641,7 +641,7 @@ class Scenario(Base):
 
         result = FetchCouplingsRunner.run(BaseClient(), self)
         if not result.success:
-            raise ScenarioError(f"Could not retrieve couplings: {result.errors}")
+            raise ScenarioError(f"Could not retrieve couplings:\n{result.error_message()}")
 
         coll = Couplings.from_json(result.data)
         for w in result.errors:
@@ -660,7 +660,7 @@ class Scenario(Base):
         )
 
         if not result.success:
-            raise ScenarioError(f"Could not update couplings: {result.errors}")
+            raise ScenarioError(f"Could not update couplings:\n{result.error_message()}")
 
         # Update the cached couplings with the response data
         if self._couplings is not None:

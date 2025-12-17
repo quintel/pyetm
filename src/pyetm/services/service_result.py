@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 T = TypeVar("T")
 
+
 class ServiceResult(BaseModel, Generic[T]):
     """
     A uniform result object for all service runners.
@@ -29,6 +30,12 @@ class ServiceResult(BaseModel, Generic[T]):
         """Use when a critical error happened and you cannot proceed."""
         err_copy: list[str] = list(errors)
         return cls(success=False, data=None, errors=err_copy)
+
+    def error_message(self) -> str:
+        """
+        Return a newline-separated error message string or "Unknown error" if empty.
+        """
+        return "\n".join(self.errors) if self.errors else "Unknown error"
 
     def __repr__(self) -> str:
         # represent presence of data with an ellipsis, absence with None

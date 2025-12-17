@@ -43,22 +43,16 @@ class ETMResponse(BaseModel):
         """Get response content as bytes."""
         return self._content or self.text.encode("utf-8")
 
-    @field_validator("status_code", mode="before")
-    @classmethod
-    def raise_for_status(cls, value, info: ValidationInfo) -> None:
+    def raise_for_status(self) -> None:
         """Raise appropriate exception for HTTP errors."""
-        if value == 401:
+        if self.status_code == 401:
             raise PermissionError("Invalid or missing ETM_API_TOKEN")
 
-        text = info.data.get("text", "")
+        if 400 <= self.status_code < 500:
+            raise ValueError(f"{self.status_code}: {self.text}")
 
-        if 400 <= value < 500:
-            raise ValueError(f"HTTP {value}: {text}")
-
-        if 500 <= value < 600:
-            raise ConnectionError(f"HTTP {value}: {text}")
-
-        return value
+        if 500 <= self.status_code < 600:
+            raise ConnectionError(f"{self.status_code}: {self.text}")
 
 
 # TODO: Extract utils and organise private methods
@@ -155,23 +149,37 @@ class ETMSession:
         async with self._session.request(
             method, full_url, **request_kwargs
         ) as response:
-            etm_response = ETMResponse(
-                status_code=response.status,
-                headers=dict(response.headers),
-                url=str(response.url),
-            )
-
+            # Fetch response data first before creating ETMResponse
+            # so field validators have access to all data
+            status_code = response.status
+            headers = dict(response.headers)
+            url = str(response.url)
             content_type = response.headers.get("content-type", "").lower()
+
+            text = await response.text()
+            json_data = None
+            content = b""
 
             if "application/json" in content_type:
                 try:
-                    etm_response._json_data = await response.json()
-                    etm_response.text = await response.text()
+                    json_data = await response.json()
                 except Exception:
-                    etm_response.text = await response.text()
+                    pass
             else:
-                etm_response.text = await response.text()
-                etm_response._content = await response.read()
+                content = await response.read()
+
+            # Create ETMResponse and check for HTTP errors
+            etm_response = ETMResponse(
+                status_code=status_code,
+                headers=headers,
+                url=url,
+                text=text,
+            )
+            etm_response._json_data = json_data
+            etm_response._content = content
+
+            # Raise exceptions for HTTP errors
+            etm_response.raise_for_status()
 
             return etm_response
 
