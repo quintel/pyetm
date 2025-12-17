@@ -165,7 +165,11 @@ def test_create_scenario_all_optional_fields(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios", {"json": {"scenario": scenario_data}})]
+
+    # Verify template was transformed to preset_scenario_id
+    expected_data = scenario_data.copy()
+    expected_data["preset_scenario_id"] = expected_data.pop("template")
+    assert client.calls == [("/scenarios", {"json": {"scenario": expected_data}})]
 
 
 def test_create_scenario_http_failure_422(dummy_client, fake_response):
