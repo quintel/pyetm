@@ -45,7 +45,7 @@ class ETMResponse(BaseModel):
 
     @field_validator("status_code", mode="before")
     @classmethod
-    def raise_for_status(cls, value, info: ValidationInfo) -> int:
+    def raise_for_status(cls, value, info: ValidationInfo) -> None:
         """Raise appropriate exception for HTTP errors."""
         if value == 401:
             raise PermissionError("Invalid or missing ETM_API_TOKEN")

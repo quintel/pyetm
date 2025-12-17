@@ -81,10 +81,13 @@ class Scenario(Base):
         if not result.success:
             raise ScenarioError(f"Could not create scenario: {result.errors}")
 
-        # parse into a Scenario
         scenario = cls.model_validate(result.data)
         for warning in result.errors:
             scenario.add_warning("base", warning)
+
+        for field, value in scenario_data.items():
+            if hasattr(scenario, field) and field not in result.data:
+                setattr(scenario, field, value)
 
         return scenario
 
@@ -129,6 +132,36 @@ class Scenario(Base):
         from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
         ScenarioExcelService.export_to_excel([self], path, **export_options)
+
+    def save(
+        self, client: Optional[BaseClient] = None, title: Optional[str] = None, **kwargs
+    ):
+        """
+        Save this scenario to MyETM as a SavedScenario.
+
+        Returns:
+            SavedScenario instance
+        """
+        from pyetm.models.saved_scenario import SavedScenario
+
+        client = client or BaseClient()
+
+        save_title = title or self.title
+        if not save_title:
+            raise ScenarioError(
+                "Title is required to save scenario. Provide title parameter or set scenario.title"
+            )
+
+        params = {
+            "scenario_id": self.id,
+            "title": save_title,
+            **kwargs,
+        }
+
+        if self.private is not None:
+            params.setdefault("private", self.private)
+
+        return SavedScenario.create(params, client=client)
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """

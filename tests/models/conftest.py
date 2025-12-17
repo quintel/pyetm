@@ -13,6 +13,7 @@ from pathlib import Path
 from pyetm.models.sortables import Sortables
 from pyetm.models.scenario import Scenario
 from pyetm.models.output_curves import OutputCurves
+from pyetm.models.saved_scenario import SavedScenario
 
 
 # --- Scenario Fixtures --- #
@@ -405,3 +406,34 @@ def patch_add_frame(monkeypatch):
         raising=True,
     )
     return m
+
+
+# --- SavedScenario Fixtures --- #
+
+
+@pytest.fixture
+def saved_scenario_data():
+    """Saved scenario data for testing."""
+    return {
+        "id": 456,
+        "scenario_id": 123,
+        "title": "My Saved Scenario",
+        "description": "A test description",
+        "private": False,
+        "area_code": "nl",
+        "end_year": 2050,
+        "created_at": "2025-01-01T12:00:00Z",
+        "updated_at": "2025-01-02T12:00:00Z",
+    }
+
+
+@pytest.fixture
+def saved_scenario(saved_scenario_data):
+    """A basic SavedScenario instance for testing."""
+    return SavedScenario.model_validate(saved_scenario_data)
+
+
+@pytest.fixture
+def mock_client():
+    """Mock BaseClient for testing."""
+    return Mock()
