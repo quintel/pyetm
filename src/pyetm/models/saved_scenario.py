@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient
@@ -13,9 +13,18 @@ from pyetm.services.scenario_runners.update_saved_scenario import (
 from pyetm.services.scenario_runners.fetch_saved_scenario import (
     FetchSavedScenarioRunner,
 )
+import pandas as pd
+from os import PathLike
 
 if TYPE_CHECKING:
     from pyetm.models.scenario import Scenario
+    from pyetm.models.inputs import Inputs
+    from pyetm.models.sortables import Sortables
+    from pyetm.models.custom_curves import CustomCurves
+    from pyetm.models.output_curves import OutputCurves
+    from pyetm.models.couplings import Couplings
+    from pyetm.models.gqueries import Gqueries
+    from pyetm.models.export_config import ExportConfig
 
 
 class SavedScenarioError(Exception):
@@ -42,6 +51,12 @@ class SavedScenario(Base):
     scenario: Optional[Dict[str, Any]] = None
 
     _scenario_session: Optional[Scenario] = PrivateAttr(None)
+
+    def __eq__(self, other: "SavedScenario"):
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash((self.id, self.area_code, self.end_year))
 
     @classmethod
     def create(
@@ -71,6 +86,7 @@ class SavedScenario(Base):
             )
 
         saved_scenario = cls.model_validate(result.data)
+
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
 
@@ -132,6 +148,7 @@ class SavedScenario(Base):
             )
 
         saved_scenario = cls.model_validate(result.data)
+
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
 
@@ -214,3 +231,213 @@ class SavedScenario(Base):
         for field, value in kwargs.items():
             if hasattr(self, field) and (not result.data or field not in result.data):
                 setattr(self, field, value)
+
+    @property
+    def inputs(self) -> "Inputs":
+        """Get inputs from the underlying session."""
+        return self.session.inputs
+
+    @property
+    def sortables(self) -> "Sortables":
+        """Get sortables from the underlying session."""
+        return self.session.sortables
+
+    @property
+    def custom_curves(self) -> "CustomCurves":
+        """Get custom curves from the underlying session."""
+        return self.session.custom_curves
+
+    @property
+    def output_curves(self) -> "OutputCurves":
+        """Get output curves from the underlying session."""
+        return self.session.output_curves
+
+    @property
+    def couplings(self) -> "Couplings":
+        """Get couplings from the underlying session."""
+        return self.session.couplings
+
+    @property
+    def version(self) -> str:
+        """Get ETM version from the underlying session."""
+        return self.session.version
+
+    @property
+    def start_year(self) -> Optional[int]:
+        """Get start year from the underlying session."""
+        return self.session.start_year
+
+    @property
+    def template(self) -> Optional[int]:
+        """Get template ID from the underlying session."""
+        return self.session.template
+
+    @property
+    def keep_compatible(self) -> Optional[bool]:
+        """Get keep_compatible flag from the underlying session."""
+        return self.session.keep_compatible
+
+    @property
+    def scaling(self) -> Optional[Any]:
+        """Get scaling from the underlying session."""
+        return self.session.scaling
+
+    @property
+    def url(self) -> Optional[str]:
+        """Get URL from the underlying session."""
+        return self.session.url
+
+    def user_values(self) -> Dict[str, Any]:
+        """Get user values from the underlying session."""
+        return self.session.user_values()
+
+    def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
+        """Update user values on the underlying session."""
+        self.session.update_user_values(update_inputs)
+
+    def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
+        """Remove user values on the underlying session."""
+        self.session.remove_user_values(input_keys)
+
+    def set_user_values_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+        """Set user values from dataframe on the underlying session."""
+        self.session.set_user_values_from_dataframe(dataframe)
+
+    def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
+        """Update sortables on the underlying session."""
+        self.session.update_sortables(update_sortables)
+
+    def remove_sortables(self, sortable_names: Union[List[str], Set[str]]) -> None:
+        """Remove sortables on the underlying session."""
+        self.session.remove_sortables(sortable_names)
+
+    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+        """Set sortables from dataframe on the underlying session."""
+        self.session.set_sortables_from_dataframe(dataframe)
+
+    def update_custom_curves(self, custom_curves) -> None:
+        """Update custom curves on the underlying session."""
+        self.session.update_custom_curves(custom_curves)
+
+    def custom_curve_series(self, curve_name: str) -> pd.Series:
+        """Get a custom curve series from the underlying session."""
+        return self.session.custom_curve_series(curve_name)
+
+    def custom_curves_series(self):
+        """Yield all custom curve series from the underlying session."""
+        return self.session.custom_curves_series()
+
+    def output_curve(self, curve_name: str) -> pd.DataFrame:
+        """Get an output curve from the underlying session."""
+        return self.session.output_curve(curve_name)
+
+    def all_output_curves(self):
+        """Yield all output curves from the underlying session."""
+        return self.session.all_output_curves()
+
+    def get_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+        """Get output curves by carrier type from the underlying session."""
+        return self.session.get_output_curves(carrier_type)
+
+    def update_couplings(
+        self, coupling_groups: List[str], action: str = "couple", force: bool = False
+    ) -> None:
+        """Update couplings on the underlying session."""
+        self.session.update_couplings(coupling_groups, action, force)
+
+    def add_queries(self, gquery_keys: Union[list[str], set[str]]) -> None:
+        """Add queries to the underlying session."""
+        self.session.add_queries(gquery_keys)
+
+    def execute_queries(self) -> None:
+        """Execute queries on the underlying session."""
+        self.session.execute_queries()
+
+    def results(self, columns=None) -> pd.DataFrame:
+        """Get query results from the underlying session."""
+        return self.session.results(columns)
+
+    def queries_requested(self) -> bool:
+        """Check if queries have been requested on the underlying session."""
+        return self.session.queries_requested()
+
+    def set_export_config(self, config: "ExportConfig" | None) -> None:
+        """Set export config on the underlying session."""
+        self.session.set_export_config(config)
+
+    def get_export_config(self) -> "ExportConfig" | None:
+        """Get export config from the underlying session."""
+        return self.session.get_export_config()
+
+    def show_all_warnings(self) -> None:
+        """Show all warnings from the underlying session."""
+        self.session.show_all_warnings()
+
+    def identifier(self) -> Union[str, int]:
+        """Get identifier (short_name, title, or id) from the underlying session."""
+        return self.session.identifier()
+
+    def set_short_name(self, short_name: str) -> None:
+        """Set short name on the underlying session."""
+        self.session.set_short_name(short_name)
+
+    def update_metadata(self, **kwargs) -> Dict[str, Any]:
+        """Update metadata on the underlying session."""
+        return self.session.update_metadata(**kwargs)
+
+    def copy(self, **overrides) -> "Scenario":
+        """Create a copy of the underlying session."""
+        return self.session.copy(**overrides)
+
+    def deep_copy(self, **overrides) -> "Scenario":
+        """Create a deep copy of the underlying session."""
+        return self.session.deep_copy(**overrides)
+
+    def to_excel(self, path: PathLike | str, **export_options) -> None:
+        """Export this saved scenario to Excel."""
+        self.session.to_excel(path, **export_options)
+
+    def _to_dataframe(self, **kwargs) -> "pd.DataFrame":
+        """
+        Return a single-column DataFrame describing this saved scenario.
+
+        Exports SavedScenario metadata merged with underlying session data.
+        The scenario_id field contains the SavedScenario ID (MyETM ID), not the session ID.
+        """
+        # Start with SavedScenario-specific fields
+        info: Dict[str, Any] = {
+            "title": self.title,
+            "description": self.description,
+            "scenario_id": self.id,  # MyETM SavedScenario ID
+            "private": self.private,
+        }
+
+        # Add session metadata
+        session = self.session
+        info.update(
+            {
+                "template": session.template,
+                "area_code": session.area_code,
+                "start_year": session.start_year,
+                "end_year": session.end_year,
+                "keep_compatible": session.keep_compatible,
+                "source": session.source,
+                "url": session.url,
+                "version": session.version,
+                "created_at": session.created_at,
+                "updated_at": session.updated_at,
+            }
+        )
+
+        # Add short_name if available
+        if session.short_name:
+            info["short_name"] = session.short_name
+
+        # Flatten session metadata keys
+        if session.metadata and isinstance(session.metadata, dict):
+            for k, v in session.metadata.items():
+                if k not in info:
+                    info[k] = v
+
+        col_name = self.identifier() if self.identifier() is not None else self.id
+        return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])

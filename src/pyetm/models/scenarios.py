@@ -83,7 +83,12 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str, update: bool | list[str] = False) -> "Scenarios":
+    def from_excel(
+        cls,
+        xlsx_path: PathLike | str,
+        update: bool | list[str] = False,
+        session: bool = False,
+    ) -> "Scenarios":
         """
         Import scenarios from Excel.
 
@@ -91,10 +96,20 @@ class Scenarios(Base):
             xlsx_path: Path to Excel file
             update: If True, upload all data. If list, upload only specified types. If False (default), skip all uploads.
                     Valid types: 'user_values', 'custom_curves', 'sortables'
+
+        Returns:
+            Scenarios collection
         """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        from pyetm.models.scenario_packer import ScenarioPacker
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
-        scenarios = ScenarioExcelService.import_from_excel(str(resolved_path), update=update)
-        scenarios.sort(key=lambda s: s.id)
+        packer = ScenarioPacker.from_excel(
+            str(resolved_path), update=update, session=session
+        )
+        scenarios = list(packer._scenarios())
+
+        if not scenarios:
+            print(f"No scenarios found in Excel file: {resolved_path}")
+
+        scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
         return cls(items=scenarios)

@@ -683,6 +683,7 @@ class TestCreateScenarioFromColumn:
     def test_create_scenario_from_row_loads_and_updates(self, monkeypatch):
         """Test _create_scenario_from_row method with loading existing scenario"""
         packer = ScenarioPacker()
+        packer._session_mode = True
         scenario = Mock(spec=Scenario)
         scenario.identifier = Mock(return_value="SID")
         monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: scenario))
@@ -706,6 +707,7 @@ class TestCreateScenarioFromColumn:
     def test_create_scenario_fromrow_creates(self, monkeypatch):
         """Test _create_scenario_from_row method with creating new scenario"""
         packer = ScenarioPacker()
+        packer._session_mode = True  # Test Session mode (no auto-save)
         scenario = Mock(spec=Scenario)
         scenario.identifier = Mock(return_value="NEW")
         # Accept *args, **kwargs for compatibility with production code

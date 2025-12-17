@@ -272,21 +272,23 @@ class ScenarioPacker(BaseModel):
     @staticmethod
     def _normalize_update(update: bool | List[str]) -> set[str]:
         """Normalize update parameter to a set of type names."""
-        valid_types = {'user_values', 'custom_curves', 'sortables'}
+        valid_types = {"user_values", "custom_curves", "sortables"}
         if isinstance(update, bool):
             return valid_types if update else set()
 
         update_set = set(update) if update else set()
         invalid_types = update_set - valid_types
         if invalid_types:
-            logger.warning(f"Invalid update types will be ignored: {invalid_types}. Valid types: {valid_types}")
+            logger.warning(
+                f"Invalid update types will be ignored: {invalid_types}. Valid types: {valid_types}"
+            )
         return update_set & valid_types
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str, update: bool | List[str] = False) -> "ScenarioPacker":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
         """Import scenarios from Excel file."""
         packer = cls()
-        update_set = cls._normalize_update(update)
+        update_set = cls._normalize_update(True)
 
         # Resolve default location: if a relative path/filename is provided and the
         # file does not exist at that location, look for it in the project /inputs dir.
@@ -340,7 +342,9 @@ class ScenarioPacker(BaseModel):
             main_df, scenarios_by_column, export_config_df
         )
 
-        packer._inputs.import_from_excel(excel_file, main_df, scenarios_by_column, update_set)
+        packer._inputs.import_from_excel(
+            excel_file, main_df, scenarios_by_column, update_set
+        )
 
         # Queries
 
@@ -369,7 +373,9 @@ class ScenarioPacker(BaseModel):
             logger.warning("Failed to parse MAIN sheet: %s", e)
             return None
 
-    def _create_scenarios_from_main(self, main_df: pd.DataFrame, update_set: set[str] = None) -> Dict[str, Scenario]:
+    def _create_scenarios_from_main(
+        self, main_df: pd.DataFrame, update_set: set[str] = None
+    ) -> Dict[str, Scenario]:
         """Create scenarios from main sheet rows."""
         scenarios_by_row = {}
         for idx, row in main_df.iterrows():
@@ -393,23 +399,37 @@ class ScenarioPacker(BaseModel):
         """
         Create a scenario from a main sheet row.
 
+        Interprets scenario_id and copy_from based on session mode:
+        - session=False (default): IDs refer to SavedScenarios (MyETM)
+        - session=True: IDs refer to Sessions (ETEngine)
         """
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
+        parent = self._safe_get_int(row_data.get("parent"))
         copy_from = self._safe_get_int(row_data.get("copy_from"))
         area_code = row_data.get("area_code")
         end_year = self._safe_get_int(row_data.get("end_year"))
         metadata_updates = self._extract_metadata_updates(row_data)
         row_label = str(row_idx)
+        session_mode = getattr(self, "_session_mode", False)
 
         # Load existing scenario if scenario_id is provided
         if scenario_id:
             return self._load_existing_scenario(
-                scenario_id, area_code, end_year, row_label, metadata_updates
+                scenario_id,
+                area_code,
+                end_year,
+                row_label,
+                metadata_updates,
+                session_mode,
             )
 
         # Copy if copy_from is provided
         if copy_from:
-            return self._copy_scenario(copy_from, row_label, metadata_updates)
+            return self._deep_copy_scenario(copy_from, row_label, metadata_updates)
+
+        # Copy with roles if parent is provided
+        if parent:
+            return self._copy_with_roles(parent, row_label, metadata_updates)
 
         # Create new scenario
         return self._create_new_scenario(
@@ -423,31 +443,71 @@ class ScenarioPacker(BaseModel):
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
+        session_mode: bool = False,
     ) -> Optional[Scenario]:
-        """Load an existing scenario by ID and apply metadata updates."""
-        scenario = self._load_or_create_scenario(
-            scenario_id, area_code, end_year, row_label, **metadata_updates
-        )
-        if scenario is None:
-            return None
-        self._apply_metadata_to_scenario(scenario, metadata_updates)
-        return scenario
+        """
+        Load an existing scenario by ID and apply metadata updates.
+
+        Args:
+            scenario_id: ID to load
+            session_mode: If True, load as Session (ETEngine). If False, load as SavedScenario (MyETM).
+        """
+        if session_mode:
+            scenario = self._load_or_create_scenario(
+                scenario_id, area_code, end_year, row_label, **metadata_updates
+            )
+            if scenario is None:
+                return None
+            self._apply_metadata_to_scenario(scenario, metadata_updates)
+            return scenario
+        else:
+            # Load SavedScenario from MyETM
+            from pyetm.models.saved_scenario import SavedScenario
+
+            try:
+                saved_scenario = SavedScenario.load(scenario_id)
+                return saved_scenario
+            except Exception as e:
+                logger.warning(
+                    f"Could not load SavedScenario {scenario_id} for row '{row_label}': {e}"
+                )
+                return None
 
     def _copy_scenario(
         self,
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
+        session_mode: bool = False,
     ) -> Optional[Scenario]:
-        """Create a copy of a scenario (no template link)."""
+        """Create a deep copy of a scenario (no template link)."""
         try:
             source_scenario = Scenario.load(scenario_id)
-            new_scenario = source_scenario.copy(**metadata_updates)
-            self._apply_metadata_to_scenario(new_scenario, metadata_updates)
-            return new_scenario
+            return source_scenario.deep_copy(**metadata_updates)
         except Exception as e:
             logger.warning(
-                "Failed to copy from '%s' for row '%s': %s",
+                "Failed to deep copy from '%s' for row '%s': %s",
+                scenario_id,
+                row_label,
+                e,
+            )
+            return None
+
+    def _copy_with_roles(
+        self,
+        scenario_id: int,
+        row_label: str,
+        metadata_updates: Dict[str, Any],
+    ) -> Optional[Scenario]:
+        """Copy a scenario with roles preserved (maintains template link)."""
+        try:
+            source_scenario = Scenario.load(scenario_id)
+            copy_metadata = metadata_updates.copy()
+            copy_metadata["copy_roles"] = True
+            return source_scenario.copy(**copy_metadata)
+        except Exception as e:
+            logger.warning(
+                "Failed to copy from parent '%s' for row '%s': %s",
                 scenario_id,
                 row_label,
                 e,
@@ -472,6 +532,30 @@ class ScenarioPacker(BaseModel):
         if scenario is None:
             return None
         self._apply_metadata_to_scenario(scenario, metadata_updates)
+
+        session_mode = getattr(self, "_session_mode", False)
+        if not session_mode:
+            from pyetm.models.saved_scenario import SavedScenario
+
+            # Extract title from metadata or use a default
+            title = metadata_updates.get("title") or f"Scenario {area_code} {end_year}"
+
+            try:
+                saved_scenario = scenario.save(title=title)
+                logger.info(
+                    "Automatically saved new scenario to MyETM with ID %s (session ID: %s)",
+                    saved_scenario.id,
+                    saved_scenario.scenario_id,
+                )
+                return saved_scenario
+            except Exception as e:
+                logger.warning(
+                    "Failed to save new scenario to MyETM for row '%s': %s. Returning session instead.",
+                    row_label,
+                    e,
+                )
+                return scenario
+
         return scenario
 
     def _safe_get_int(self, value: Any) -> Optional[int]:
@@ -638,7 +722,7 @@ class ScenarioPacker(BaseModel):
                         **self._custom_curves.excel_read_kwargs(),
                     ),
                     scenario,
-                    update_set
+                    update_set,
                 )
 
     def _scenarios(self) -> set[Scenario]:
