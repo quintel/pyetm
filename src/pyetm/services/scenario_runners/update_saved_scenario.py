@@ -17,14 +17,14 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
         **kwargs: Additional arguments passed to the request
     """
 
-    ALLOWED_KEYS = ["title", "description", "private", "discarded"]
+    ALLOWED_KEYS = ["title", "scenario_id", "private", "discarded"]
 
     @staticmethod
     def run(
         client: BaseClient,
         saved_scenario_id: int,
         update_data: Dict[str, Any],
-        **kwargs
+        **kwargs,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update an existing SavedScenario in MyETM.

@@ -14,7 +14,7 @@ from pyetm.services.scenario_runners.update_saved_scenario import (
 # --- Model Validation Tests --- #
 
 
-def test_saved_scenario_model_validation_minimal():
+def test_saved_scenario_session_validation_minimal():
     """Test SavedScenario model validates with minimal required fields."""
     data = {
         "id": 1,
@@ -29,7 +29,7 @@ def test_saved_scenario_model_validation_minimal():
     assert saved_scenario.private is False
 
 
-def test_saved_scenario_model_validation_full(saved_scenario_data):
+def test_saved_scenario_session_validation_full(saved_scenario_data):
     """Test SavedScenario model validates with all fields."""
     saved_scenario = SavedScenario.model_validate(saved_scenario_data)
     assert saved_scenario.id == 456
@@ -41,7 +41,7 @@ def test_saved_scenario_model_validation_full(saved_scenario_data):
     assert saved_scenario.end_year == 2050
 
 
-def test_saved_scenario_model_with_nested_scenario():
+def test_saved_scenario_session_with_nested_scenario():
     """Test SavedScenario model with nested scenario data."""
     data = {
         "id": 1,
@@ -369,61 +369,59 @@ def test_update_saved_scenario_change_privacy(
     assert saved_scenario.private is True
 
 
-# --- get_scenario Tests --- #
+# --- session Property Tests --- #
 
 
-def test_get_scenario_from_nested_data(saved_scenario, mock_client):
-    """Test get_scenario creates Scenario from nested data."""
+def test_session_property_from_nested_data(saved_scenario):
+    """Test session property creates Scenario from nested data."""
     saved_scenario.scenario = {
         "id": 123,
         "area_code": "nl",
         "end_year": 2050,
     }
 
-    scenario = saved_scenario.get_scenario(mock_client)
+    scenario = saved_scenario.session
     assert scenario.id == 123
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050
 
 
-def test_get_scenario_caches_result(saved_scenario, mock_client):
-    """Test get_scenario caches the Scenario instance."""
+def test_session_property_caches_result(saved_scenario):
+    """Test session property caches the Scenario instance."""
     saved_scenario.scenario = {
         "id": 123,
         "area_code": "nl",
         "end_year": 2050,
     }
 
-    scenario1 = saved_scenario.get_scenario(mock_client)
-    scenario2 = saved_scenario.get_scenario(mock_client)
+    scenario1 = saved_scenario.session
+    scenario2 = saved_scenario.session
 
     # Should return the same cached instance
     assert scenario1 is scenario2
 
 
-def test_get_scenario_returns_cached_model(saved_scenario, mock_client):
-    """Test get_scenario returns cached model if set."""
+def test_session_property_returns_cached_model(saved_scenario):
+    """Test session property returns cached model if set."""
     cached_scenario = Mock(spec=Scenario)
     cached_scenario.id = 999
-    saved_scenario._scenario_model = cached_scenario
+    saved_scenario._scenario_session = cached_scenario
 
-    scenario = saved_scenario.get_scenario(mock_client)
+    scenario = saved_scenario.session
     assert scenario is cached_scenario
     assert scenario.id == 999
 
 
-def test_get_scenario_fetches_if_no_nested_data(
-    monkeypatch, saved_scenario, mock_client
-):
-    """Test get_scenario fetches if no nested scenario data."""
+def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario):
+    """Test session property fetches if no nested scenario data."""
     saved_scenario.scenario = None
-    saved_scenario._scenario_model = None
+    saved_scenario._scenario_session = None
 
     fetched_scenario = Mock(spec=Scenario)
     fetched_scenario.id = 123
 
     with patch.object(Scenario, "load", return_value=fetched_scenario) as mock_load:
-        scenario = saved_scenario.get_scenario(mock_client)
+        scenario = saved_scenario.session
 
         mock_load.assert_called_once_with(123)
         assert scenario is fetched_scenario

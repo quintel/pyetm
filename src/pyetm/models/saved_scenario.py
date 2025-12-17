@@ -10,6 +10,9 @@ from pyetm.services.scenario_runners.create_saved_scenario import (
 from pyetm.services.scenario_runners.update_saved_scenario import (
     UpdateSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.fetch_saved_scenario import (
+    FetchSavedScenarioRunner,
+)
 
 if TYPE_CHECKING:
     from pyetm.models.scenario import Scenario
@@ -38,7 +41,7 @@ class SavedScenario(Base):
     updated_at: Optional[datetime] = None
     scenario: Optional[Dict[str, Any]] = None
 
-    _scenario_model: Optional[Scenario] = PrivateAttr(None)
+    _scenario_session: Optional[Scenario] = PrivateAttr(None)
 
     @classmethod
     def create(
@@ -100,31 +103,88 @@ class SavedScenario(Base):
         params = {"scenario_id": scenario.id, "title": title, **kwargs}
         return cls.create(params, client=client)
 
-    def get_scenario(self, client: Optional[BaseClient] = None) -> "Scenario":
+    @classmethod
+    def load(
+        cls, saved_scenario_id: int, client: Optional[BaseClient] = None
+    ) -> "SavedScenario":
         """
-        Get the associated Scenario model instance.
-
-        Loads from cache if available, otherwise creates from nested data or fetches.
+        Load an existing SavedScenario from MyETM by its ID.
 
         Args:
+            saved_scenario_id: The ID of the saved scenario to load
             client: Optional BaseClient instance
 
         Returns:
-            Scenario instance
+            SavedScenario instance
+
+        Raises:
+            SavedScenarioError if loading fails
+        """
+        if client is None:
+            client = BaseClient()
+
+        template = type("T", (), {"id": saved_scenario_id})
+        result = FetchSavedScenarioRunner.run(client, template)
+
+        if not result.success:
+            raise SavedScenarioError(
+                f"Could not load saved scenario {saved_scenario_id}: {result.errors}"
+            )
+
+        saved_scenario = cls.model_validate(result.data)
+        for warning in result.errors:
+            saved_scenario.add_warning("base", warning)
+
+        return saved_scenario
+
+    @classmethod
+    def new(
+        cls,
+        scenario_id: int,
+        title: str,
+        client: Optional[BaseClient] = None,
+        **kwargs,
+    ) -> "SavedScenario":
+        """
+        Create a new SavedScenario from an ETEngine scenario ID.
+
+        Args:
+            scenario_id: The ETEngine scenario ID to save
+            title: Title for the saved scenario
+            client: Optional BaseClient instance
+            **kwargs: Optional params (description, private)
+
+        Returns:
+            SavedScenario instance
+
+        Raises:
+            SavedScenarioError if creation fails
+        """
+        params = {"scenario_id": scenario_id, "title": title, **kwargs}
+        return cls.create(params, client=client)
+
+    @property
+    def session(self) -> "Scenario":
+        """
+        Get the current underlying ETEngine Scenario for this SavedScenario.
+
+        Returns:
+            Scenario: The current ETEngine scenario session (cached after first access)
         """
         from pyetm.models.scenario import Scenario
 
-        if self._scenario_model is not None:
-            return self._scenario_model
+        # Return cached if already loaded
+        if self._scenario_session is not None:
+            return self._scenario_session
 
+        # Build from nested data if available (e.g., from SavedScenario.load())
         if self.scenario is not None:
-            self._scenario_model = Scenario.model_validate(self.scenario)
-            return self._scenario_model
+            self._scenario_session = Scenario.model_validate(self.scenario)
+            return self._scenario_session
 
-        if client is None:
-            client = BaseClient()
-        self._scenario_model = Scenario.load(self.scenario_id)
-        return self._scenario_model
+        # Fetch fresh from ETEngine API
+        self._scenario_session = Scenario.load(self.scenario_id)
+        return self._scenario_session
 
     def update(self, client: Optional[BaseClient] = None, **kwargs) -> None:
         """

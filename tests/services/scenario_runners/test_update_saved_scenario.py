@@ -34,7 +34,6 @@ def test_update_saved_scenario_success_multiple_fields(dummy_client, fake_respon
         "id": 456,
         "scenario_id": 123,
         "title": "New Title",
-        "description": "New description",
         "private": True,
     }
     response = fake_response(ok=True, status_code=200, json_data=body)
@@ -42,7 +41,6 @@ def test_update_saved_scenario_success_multiple_fields(dummy_client, fake_respon
 
     update_data = {
         "title": "New Title",
-        "description": "New description",
         "private": True,
     }
 
@@ -63,7 +61,6 @@ def test_update_saved_scenario_success_all_allowed_fields(dummy_client, fake_res
         "id": 456,
         "scenario_id": 123,
         "title": "Full Update",
-        "description": "Complete description",
         "private": True,
         "discarded": False,
     }
@@ -72,7 +69,6 @@ def test_update_saved_scenario_success_all_allowed_fields(dummy_client, fake_res
 
     update_data = {
         "title": "Full Update",
-        "description": "Complete description",
         "private": True,
         "discarded": False,
     }
@@ -115,7 +111,7 @@ def test_update_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
     update_data = {
         "title": "Updated Title",  # Valid
         "id": 999,  # Invalid - should be filtered
-        "scenario_id": 123,  # Invalid - should be filtered
+        "scenario_id": 123,  # Valid
         "created_at": "2019-01-01",  # Invalid - should be filtered
         "invalid_field": "value",  # Invalid - should be filtered
     }
@@ -129,7 +125,6 @@ def test_update_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
     # Should have warnings for filtered fields
     expected_warnings = [
         "Ignoring invalid field for update saved scenario: 'id'",
-        "Ignoring invalid field for update saved scenario: 'scenario_id'",
         "Ignoring invalid field for update saved scenario: 'created_at'",
         "Ignoring invalid field for update saved scenario: 'invalid_field'",
     ]
@@ -137,7 +132,9 @@ def test_update_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         assert warning in result.errors
 
     # Should only send valid fields
-    expected_payload = {"saved_scenario": {"title": "Updated Title"}}
+    expected_payload = {
+        "saved_scenario": {"title": "Updated Title", "scenario_id": 123}
+    }
     assert client.calls == [("/saved_scenarios/456", {"json": expected_payload})]
 
 
@@ -147,7 +144,6 @@ def test_update_saved_scenario_only_invalid_fields(dummy_client, fake_response):
 
     update_data = {
         "id": 999,  # Invalid
-        "scenario_id": 123,  # Invalid
         "invalid_field": "value",  # Invalid
     }
 
@@ -264,7 +260,6 @@ def test_update_saved_scenario_payload_structure(dummy_client, fake_response):
 
     update_data = {
         "title": "Test Title",
-        "description": "Test description",
     }
 
     UpdateSavedScenarioRunner.run(
