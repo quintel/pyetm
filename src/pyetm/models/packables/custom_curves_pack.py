@@ -34,7 +34,7 @@ class CustomCurvesPack(Packable):
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs).rename_axis("hour")
 
-    def load_from_dataframe(self, df: pd.DataFrame, scenario: "Any", read_only_set: set[str] = None):
+    def load_from_dataframe(self, df: pd.DataFrame, scenario: "Any", update_set: set[str] = None):
         """
         Loads from a dataframe for a single scenario
         """
@@ -45,11 +45,11 @@ class CustomCurvesPack(Packable):
         if normalized_data.empty:
             return
 
-        self.apply_custom_curves_to_scenario(scenario, normalized_data, read_only_set)
+        self.apply_custom_curves_to_scenario(scenario, normalized_data, update_set)
 
-    def apply_custom_curves_to_scenario(self, scenario: "Any", data: pd.DataFrame, read_only_set: set[str] = None):
+    def apply_custom_curves_to_scenario(self, scenario: "Any", data: pd.DataFrame, update_set: set[str] = None):
         """Apply custom curves to scenario with validation and error handling."""
-        skip_upload = self._should_skip_upload(read_only_set)
+        skip_upload = not self._should_include_upload(update_set)
 
         try:
             curves = CustomCurves._from_dataframe(data, scenario_id=scenario.id)

@@ -274,17 +274,17 @@ class Packable(BaseModel):
         except Exception:
             pass
 
-    def _should_skip_upload(self, read_only_set: set[str] = None) -> bool:
+    def _should_include_upload(self, update_set: set[str] = None) -> bool:
         """
-        Check if uploads should be skipped for this pack type.
+        Check if uploads should be included for this pack type.
 
         Args:
-            read_only_set: Set of type names to skip uploading (user_values, custom_curves, sortables)
+            update_set: Set of type names to upload (user_values, custom_curves, sortables)
 
         Returns:
-            True if this pack's type should skip uploads based on read_only_set
+            True if this pack's type should upload based on update_set
         """
-        if not read_only_set:
+        if not update_set:
             return False
 
         pack_mapping = {
@@ -293,9 +293,9 @@ class Packable(BaseModel):
             "sortables": "sortables",
         }
 
-        # Check if any of the read_only types map to this pack's key
-        for readonly_type, pack_key in pack_mapping.items():
-            if readonly_type in read_only_set and self.key == pack_key:
+        # Check if any of the update types map to this pack's key
+        for update_type, pack_key in pack_mapping.items():
+            if update_type in update_set and self.key == pack_key:
                 return True
 
         return False
