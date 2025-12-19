@@ -965,7 +965,7 @@ def test_copy_scenario_success_minimal(monkeypatch, ok_service_result, dummy_sce
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy()
+    scenario = original.copy_with_preset()
     assert scenario.id == 67890
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050
@@ -991,7 +991,7 @@ def test_copy_scenario_with_title_override(
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy(title="My Custom Copy")
+    scenario = original.copy_with_preset(title="My Custom Copy")
     assert scenario.id == 67891
     assert scenario.title == "My Custom Copy"
     assert len(scenario.warnings) == 0
@@ -1017,7 +1017,7 @@ def test_copy_scenario_with_multiple_overrides(
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy(title="Private Copy", private=True, source="test")
+    scenario = original.copy_with_preset(title="Private Copy", private=True, source="test")
     assert scenario.id == 67892
     assert scenario.title == "Private Copy"
     assert scenario.private is True
@@ -1039,7 +1039,7 @@ def test_copy_scenario_with_warnings(monkeypatch, ok_service_result, dummy_scena
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy(invalid_field="should_be_ignored")
+    scenario = original.copy_with_preset(invalid_field="should_be_ignored")
     assert scenario.id == 67893
     base_warnings = scenario.warnings.get_by_field("base")
     assert len(base_warnings) == 1
@@ -1058,7 +1058,7 @@ def test_copy_scenario_failure(monkeypatch, fail_service_result, dummy_scenario)
 
     original = dummy_scenario(99999)
     with pytest.raises(ScenarioError, match="Failed to copy scenario"):
-        original.copy()
+        original.copy_with_preset()
 
 
 def test_copy_scenario_with_preset_scenario_id(
@@ -1079,7 +1079,7 @@ def test_copy_scenario_with_preset_scenario_id(
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy()
+    scenario = original.copy_with_preset()
     assert scenario.id == 67894
     assert scenario.template == 12345
     assert len(scenario.warnings) == 0
@@ -1088,7 +1088,7 @@ def test_copy_scenario_with_preset_scenario_id(
 def test_copy_scenario_deep_copy_success(
     monkeypatch, ok_service_result, dummy_scenario
 ):
-    """Test successful deep copy that breaks the preset link"""
+    """Test successful copy that breaks the preset link"""
     copied_scenario_data = {
         "id": 67894,
         "area_code": "nl",
@@ -1120,7 +1120,7 @@ def test_copy_scenario_deep_copy_success(
     monkeypatch.setattr(BreakPresetLinkRunner, "run", mock_break_link_run)
 
     original = dummy_scenario(12345)
-    scenario = original.deep_copy()
+    scenario = original.copy()
 
     # Verify both operations were called
     assert len(calls) == 2
@@ -1136,7 +1136,7 @@ def test_copy_scenario_deep_copy_success(
 def test_copy_scenario_deep_copy_break_link_failure(
     monkeypatch, ok_service_result, fail_service_result, dummy_scenario
 ):
-    """Test deep copy when breaking the preset link fails"""
+    """Test copy when breaking the preset link fails"""
     copied_scenario_data = {
         "id": 67895,
         "area_code": "nl",
@@ -1159,13 +1159,13 @@ def test_copy_scenario_deep_copy_break_link_failure(
     with pytest.raises(
         ScenarioError, match="Copied scenario but failed to break template link"
     ):
-        original.deep_copy()
+        original.copy()
 
 
 def test_copy_scenario_deep_false_doesnt_break_link(
     monkeypatch, ok_service_result, dummy_scenario
 ):
-    """Test that copy() (not deep_copy) doesn't call BreakPresetLinkRunner"""
+    """Test that copy_with_preset() doesn't call BreakPresetLinkRunner"""
     copied_scenario_data = {
         "id": 67896,
         "area_code": "nl",
@@ -1187,7 +1187,7 @@ def test_copy_scenario_deep_false_doesnt_break_link(
     monkeypatch.setattr(BreakPresetLinkRunner, "run", mock_break_link_run)
 
     original = dummy_scenario(12345)
-    scenario = original.copy()
+    scenario = original.copy_with_preset()
 
     # Verify only copy was called, not break_link
     assert len(copy_called) == 1
