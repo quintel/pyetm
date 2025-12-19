@@ -224,46 +224,46 @@ def test_normalize_single_header_sheet(packable):
     assert result.index.equals(pd.RangeIndex(0, 2))
 
 
-def test_should_skip_upload_inputs_pack():
-    """Test that InputsPack correctly identifies when to skip uploads"""
+def test_should_include_upload_inputs_pack():
+    """Test that InputsPack correctly identifies when to include uploads"""
     pack = InputsPack()
 
-    # Should skip when 'user_values' is in read_only_set
-    assert pack._should_skip_upload({'user_values'}) is True
-    assert pack._should_skip_upload({'user_values', 'custom_curves'}) is True
+    # Should include when 'user_values' is in update_set
+    assert pack._should_include_upload({'user_values'}) is True
+    assert pack._should_include_upload({'user_values', 'custom_curves'}) is True
 
-    # Should not skip for other types
-    assert pack._should_skip_upload({'custom_curves'}) is False
-    assert pack._should_skip_upload({'sortables'}) is False
-    assert pack._should_skip_upload(set()) is False
-    assert pack._should_skip_upload(None) is False
+    # Should not include for other types
+    assert pack._should_include_upload({'custom_curves'}) is False
+    assert pack._should_include_upload({'sortables'}) is False
+    assert pack._should_include_upload(set()) is False
+    assert pack._should_include_upload(None) is False
 
 
-def test_should_skip_upload_custom_curves_pack():
-    """Test that CustomCurvesPack correctly identifies when to skip uploads"""
+def test_should_include_upload_custom_curves_pack():
+    """Test that CustomCurvesPack correctly identifies when to include uploads"""
     pack = CustomCurvesPack()
 
-    # Should skip when 'custom_curves' is in read_only_set
-    assert pack._should_skip_upload({'custom_curves'}) is True
-    assert pack._should_skip_upload({'user_values', 'custom_curves'}) is True
+    # Should include when 'custom_curves' is in update_set
+    assert pack._should_include_upload({'custom_curves'}) is True
+    assert pack._should_include_upload({'user_values', 'custom_curves'}) is True
 
-    # Should not skip for other types
-    assert pack._should_skip_upload({'user_values'}) is False
-    assert pack._should_skip_upload({'sortables'}) is False
-    assert pack._should_skip_upload(set()) is False
-    assert pack._should_skip_upload(None) is False
+    # Should not include for other types
+    assert pack._should_include_upload({'user_values'}) is False
+    assert pack._should_include_upload({'sortables'}) is False
+    assert pack._should_include_upload(set()) is False
+    assert pack._should_include_upload(None) is False
 
 
-def test_should_skip_upload_sortables_pack():
-    """Test that SortablePack correctly identifies when to skip uploads"""
+def test_should_include_upload_sortables_pack():
+    """Test that SortablePack correctly identifies when to include uploads"""
     pack = SortablePack()
 
-    # Should skip when 'sortables' is in read_only_set
-    assert pack._should_skip_upload({'sortables'}) is True
-    assert pack._should_skip_upload({'user_values', 'sortables'}) is True
+    # Should include when 'sortables' is in update_set
+    assert pack._should_include_upload({'sortables'}) is True
+    assert pack._should_include_upload({'user_values', 'sortables'}) is True
 
-    # Should not skip for other types
-    assert pack._should_skip_upload({'user_values'}) is False
-    assert pack._should_skip_upload({'custom_curves'}) is False
-    assert pack._should_skip_upload(set()) is False
-    assert pack._should_skip_upload(None) is False
+    # Should not include for other types
+    assert pack._should_include_upload({'user_values'}) is False
+    assert pack._should_include_upload({'custom_curves'}) is False
+    assert pack._should_include_upload(set()) is False
+    assert pack._should_include_upload(None) is False
