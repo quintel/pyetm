@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from models.sessions import Sessions
-from pyetm.models.saved_scenarios import SavedScenarios
+from models.scenarios import Scenarios
 from models.session import Session
 from models.scenario import Scenario
 from pyetm.models.scenario_packer import ScenarioPacker
@@ -112,7 +112,7 @@ class TestSavedScenariosFromExcel:
         mock_packer._scenarios.return_value = {session1, saved1, saved2}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = SavedScenarios.from_excel("test.xlsx")
+            result = Scenarios.from_excel("test.xlsx")
 
         # Should only include SavedScenario instances
         assert len(result.items) == 2
@@ -131,7 +131,7 @@ class TestSavedScenariosFromExcel:
         mock_packer._scenarios.return_value = {session1, session2}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = SavedScenarios.from_excel("test.xlsx")
+            result = Scenarios.from_excel("test.xlsx")
 
         # Should be empty
         assert len(result.items) == 0
@@ -149,7 +149,7 @@ class TestSavedScenariosFromExcel:
         mock_packer._scenarios.return_value = {saved1, saved2, saved3}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = SavedScenarios.from_excel("test.xlsx")
+            result = Scenarios.from_excel("test.xlsx")
 
         # Should include all SavedScenarios
         assert len(result.items) == 3
@@ -170,7 +170,7 @@ class TestSavedScenariosFromExcel:
         mock_packer._scenarios.return_value = {saved1, saved2, saved3}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = SavedScenarios.from_excel("test.xlsx")
+            result = Scenarios.from_excel("test.xlsx")
 
         # Should be sorted by ID
         assert result.items[0].id == 100
@@ -197,7 +197,7 @@ class TestSavedScenariosSessionsProperty:
         saved2.id = 2
         saved2.session = scenario2
 
-        collection = SavedScenarios(items=[saved1, saved2])
+        collection = Scenarios(items=[saved1, saved2])
 
         # Access sessions property
         sessions = collection.sessions
@@ -210,7 +210,7 @@ class TestSavedScenariosSessionsProperty:
 
     def test_sessions_property_empty_collection(self):
         """Test that sessions property returns empty list for empty collection."""
-        collection = SavedScenarios(items=[])
+        collection = Scenarios(items=[])
         sessions = collection.sessions
 
         assert isinstance(sessions, list)
@@ -225,7 +225,7 @@ class TestSavedScenariosSessionsProperty:
         saved.id = 1
         saved.session = scenario
 
-        collection = SavedScenarios(items=[saved])
+        collection = Scenarios(items=[saved])
         sessions = collection.sessions
 
         assert len(sessions) == 1
@@ -255,7 +255,7 @@ class TestMixedScenariosSeparation:
             sessions_result = Sessions.from_excel("test.xlsx")
 
             # Load as SavedScenarios (SavedScenarios only)
-            saved_result = SavedScenarios.from_excel("test.xlsx")
+            saved_result = Scenarios.from_excel("test.xlsx")
 
         # Verify Sessions collection
         assert len(sessions_result.items) == 2
@@ -283,7 +283,7 @@ class TestMixedScenariosSeparation:
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
             sessions_result = Sessions.from_excel("test.xlsx")
-            saved_result = SavedScenarios.from_excel("test.xlsx")
+            saved_result = Scenarios.from_excel("test.xlsx")
 
         # Get all items from both collections
         all_sessions = set(sessions_result.items)

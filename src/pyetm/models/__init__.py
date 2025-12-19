@@ -2,7 +2,7 @@ from .custom_curves import CustomCurves
 from .gqueries import Gqueries
 from .inputs import Input, Inputs
 from .scenario import Scenario
-from .saved_scenarios import SavedScenarios
+from .scenarios import Scenarios
 from .session import Session
 from .sessions import Sessions
 from .sortables import Sortable, Sortables

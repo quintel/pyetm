@@ -8,7 +8,7 @@ from pyetm.models.base import Base
 from .scenario import Scenario, SavedScenarioError
 
 
-class SavedScenarios(Base):
+class Scenarios(Base):
     """
     A collection of SavedScenario objects.
     """
@@ -43,7 +43,7 @@ class SavedScenarios(Base):
         return [saved.session for saved in self.items]
 
     @classmethod
-    def load_many(cls, saved_scenario_ids: Iterable[int]) -> "SavedScenarios":
+    def load_many(cls, saved_scenario_ids: Iterable[int]) -> "Scenarios":
         """
         Load multiple SavedScenario objects by their MyETM saved scenario IDs.
 
@@ -79,7 +79,7 @@ class SavedScenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "SavedScenarios":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
         """
         Import SavedScenarios from Excel file.
 
