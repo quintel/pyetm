@@ -13,7 +13,7 @@ from pathlib import Path
 from pyetm.models.sortables import Sortables
 from models.session import Session
 from pyetm.models.output_curves import OutputCurves
-from pyetm.models.saved_scenario import SavedScenario
+from models.scenario import Scenario
 
 
 # --- Scenario Fixtures --- #
@@ -446,7 +446,7 @@ def saved_scenario_data():
 @pytest.fixture
 def saved_scenario(saved_scenario_data):
     """A basic SavedScenario instance for testing."""
-    return SavedScenario.model_validate(saved_scenario_data)
+    return Scenario.model_validate(saved_scenario_data)
 
 
 @pytest.fixture

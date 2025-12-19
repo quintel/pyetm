@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, MagicMock
 from models.sessions import Sessions
 from pyetm.models.saved_scenarios import SavedScenarios
 from models.session import Session
-from pyetm.models.saved_scenario import SavedScenario
+from models.scenario import Scenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
 
@@ -22,7 +22,7 @@ class TestScenariosFromExcel:
         session1.id = 100
         session2 = Mock(spec=Session)
         session2.id = 200
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 300
 
         # Mock ScenarioPacker to return mixed scenarios
@@ -40,9 +40,9 @@ class TestScenariosFromExcel:
 
     def test_from_excel_empty_when_no_sessions(self, monkeypatch):
         """Test that from_excel returns empty collection when only SavedScenarios exist."""
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 100
-        saved2 = Mock(spec=SavedScenario)
+        saved2 = Mock(spec=Scenario)
         saved2.id = 200
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -103,9 +103,9 @@ class TestSavedScenariosFromExcel:
         """Test that from_excel only returns SavedScenario instances."""
         session1 = Mock(spec=Session)
         session1.id = 100
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 200
-        saved2 = Mock(spec=SavedScenario)
+        saved2 = Mock(spec=Scenario)
         saved2.id = 300
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -138,11 +138,11 @@ class TestSavedScenariosFromExcel:
 
     def test_from_excel_all_saved_scenarios(self, monkeypatch):
         """Test that from_excel returns all SavedScenarios when no Sessions exist."""
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 100
-        saved2 = Mock(spec=SavedScenario)
+        saved2 = Mock(spec=Scenario)
         saved2.id = 200
-        saved3 = Mock(spec=SavedScenario)
+        saved3 = Mock(spec=Scenario)
         saved3.id = 300
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -159,11 +159,11 @@ class TestSavedScenariosFromExcel:
 
     def test_from_excel_sorts_by_id(self, monkeypatch):
         """Test that SavedScenarios are sorted by ID."""
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 300
-        saved2 = Mock(spec=SavedScenario)
+        saved2 = Mock(spec=Scenario)
         saved2.id = 100
-        saved3 = Mock(spec=SavedScenario)
+        saved3 = Mock(spec=Scenario)
         saved3.id = 200
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -189,11 +189,11 @@ class TestSavedScenariosSessionsProperty:
         scenario2 = Mock(spec=Session)
         scenario2.id = 200
 
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 1
         saved1.session = scenario1
 
-        saved2 = Mock(spec=SavedScenario)
+        saved2 = Mock(spec=Scenario)
         saved2.id = 2
         saved2.session = scenario2
 
@@ -221,7 +221,7 @@ class TestSavedScenariosSessionsProperty:
         scenario = Mock(spec=Session)
         scenario.id = 100
 
-        saved = Mock(spec=SavedScenario)
+        saved = Mock(spec=Scenario)
         saved.id = 1
         saved.session = scenario
 
@@ -242,9 +242,9 @@ class TestMixedScenariosSeparation:
         session1.id = 100
         session2 = Mock(spec=Session)
         session2.id = 200
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 300
-        saved2 = Mock(spec=SavedScenario)
+        saved2 = Mock(spec=Scenario)
         saved2.id = 400
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -275,7 +275,7 @@ class TestMixedScenariosSeparation:
         """Test that there's no overlap between the two collections."""
         session1 = Mock(spec=Session)
         session1.id = 100
-        saved1 = Mock(spec=SavedScenario)
+        saved1 = Mock(spec=Scenario)
         saved1.id = 200
 
         mock_packer = Mock(spec=ScenarioPacker)

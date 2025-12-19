@@ -4,7 +4,7 @@ from os import PathLike
 import logging
 
 from models.session import Session
-from pyetm.models.saved_scenario import SavedScenario
+from models.scenario import Scenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class ScenarioExcelService:
     @classmethod
     def export_to_excel(
         cls,
-        scenarios: List[Union[Session, SavedScenario]],
+        scenarios: List[Union[Session, Scenario]],
         path: PathLike | str,
         *,
         carriers: Optional[Sequence[str]] = None,

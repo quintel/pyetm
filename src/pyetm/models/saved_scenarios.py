@@ -5,7 +5,7 @@ from typing import Iterable, Iterator, List
 from pydantic import Field
 from models.session import Session
 from pyetm.models.base import Base
-from .saved_scenario import SavedScenario, SavedScenarioError
+from .scenario import Scenario, SavedScenarioError
 
 
 class SavedScenarios(Base):
@@ -13,21 +13,21 @@ class SavedScenarios(Base):
     A collection of SavedScenario objects.
     """
 
-    items: List[SavedScenario] = Field(default_factory=list)
+    items: List[Scenario] = Field(default_factory=list)
 
-    def __iter__(self) -> Iterator[SavedScenario]:
+    def __iter__(self) -> Iterator[Scenario]:
         return iter(self.items)
 
     def __len__(self) -> int:
         return len(self.items)
 
-    def __getitem__(self, index: int) -> SavedScenario:
+    def __getitem__(self, index: int) -> Scenario:
         return self.items[index]
 
-    def add(self, *saved_scenarios: SavedScenario) -> None:
+    def add(self, *saved_scenarios: Scenario) -> None:
         self.items.extend(saved_scenarios)
 
-    def extend(self, saved_scenarios: Iterable[SavedScenario]) -> None:
+    def extend(self, saved_scenarios: Iterable[Scenario]) -> None:
         self.items.extend(list(saved_scenarios))
 
     @property
@@ -56,7 +56,7 @@ class SavedScenarios(Base):
         saved_scenarios = []
         for ssid in saved_scenario_ids:
             try:
-                saved_scenarios.append(SavedScenario.load(ssid))
+                saved_scenarios.append(Scenario.load(ssid))
             except SavedScenarioError as e:
                 print(f"Could not load saved scenario {ssid}: {e}")
         return cls(items=saved_scenarios)
@@ -92,7 +92,7 @@ class SavedScenarios(Base):
 
         packer = ScenarioPacker.from_excel(str(resolved_path))
         all_scenarios = list(packer._scenarios())
-        saved_scenarios = [s for s in all_scenarios if isinstance(s, SavedScenario)]
+        saved_scenarios = [s for s in all_scenarios if isinstance(s, Scenario)]
 
         if not saved_scenarios:
             print(f"No SavedScenarios found in Excel file: {resolved_path}")

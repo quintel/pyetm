@@ -97,12 +97,12 @@ class Sessions(Base):
             Scenarios collection containing only Session instances
         """
         from pyetm.models.scenario_packer import ScenarioPacker
-        from pyetm.models.saved_scenario import SavedScenario
+        from models.scenario import Scenario
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
         packer = ScenarioPacker.from_excel(str(resolved_path))
         all_scenarios = list(packer._scenarios())
-        sessions = [s for s in all_scenarios if not isinstance(s, SavedScenario)]
+        sessions = [s for s in all_scenarios if not isinstance(s, Scenario)]
 
         if not sessions:
             print(f"No Sessions found in Excel file: {resolved_path}")

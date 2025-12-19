@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 import pytest
 from datetime import datetime
-from pyetm.models.saved_scenario import SavedScenario, SavedScenarioError
+from models.scenario import Scenario, SavedScenarioError
 from models.session import Session
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
@@ -24,7 +24,7 @@ def test_saved_scenario_session_validation_minimal():
         "scenario_id": 100,
         "title": "Test Scenario",
     }
-    saved_scenario = SavedScenario.model_validate(data)
+    saved_scenario = Scenario.model_validate(data)
     assert saved_scenario.id == 1
     assert saved_scenario.scenario_id == 100
     assert saved_scenario.title == "Test Scenario"
@@ -34,7 +34,7 @@ def test_saved_scenario_session_validation_minimal():
 
 def test_saved_scenario_session_validation_full(saved_scenario_data):
     """Test SavedScenario model validates with all fields."""
-    saved_scenario = SavedScenario.model_validate(saved_scenario_data)
+    saved_scenario = Scenario.model_validate(saved_scenario_data)
     assert saved_scenario.id == 456
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "My Saved Scenario"
@@ -56,7 +56,7 @@ def test_saved_scenario_session_with_nested_scenario():
             "end_year": 2050,
         },
     }
-    saved_scenario = SavedScenario.model_validate(data)
+    saved_scenario = Scenario.model_validate(data)
     assert saved_scenario.scenario is not None
     assert saved_scenario.scenario["id"] == 100
 
@@ -87,7 +87,7 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
         "private": True,
     }
 
-    saved_scenario = SavedScenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(params, client=mock_client)
     assert saved_scenario.id == 789
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "New Saved Scenario"
@@ -118,7 +118,7 @@ def test_create_saved_scenario_with_warnings(
         "invalid_field": "should_be_ignored",
     }
 
-    saved_scenario = SavedScenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(params, client=mock_client)
     assert saved_scenario.id == 790
     base_warnings = saved_scenario.warnings.get_by_field("base")
     assert len(base_warnings) == 1
@@ -136,7 +136,7 @@ def test_create_saved_scenario_failure(monkeypatch, fail_service_result, mock_cl
     params = {"scenario_id": 123}  # Missing title
 
     with pytest.raises(SavedScenarioError, match="Could not create saved scenario"):
-        SavedScenario.create(params, client=mock_client)
+        Scenario.create(params, client=mock_client)
 
 
 def test_create_saved_scenario_preserves_params_not_in_response(
@@ -162,7 +162,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
         "description": "Local description",
     }
 
-    saved_scenario = SavedScenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(params, client=mock_client)
     # description should be set from params since it wasn't in response
     assert saved_scenario.description == "Local description"
 
@@ -190,7 +190,7 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
         lambda client, params: ok_service_result(created_data),
     )
 
-    saved_scenario = SavedScenario.from_scenario(
+    saved_scenario = Scenario.from_scenario(
         scenario,
         title="From Scenario",
         client=mock_client,
@@ -223,7 +223,7 @@ def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
 
     monkeypatch.setattr(CreateSavedScenarioRunner, "run", capture_run)
 
-    SavedScenario.from_scenario(
+    Scenario.from_scenario(
         scenario, title="Private Scenario", client=mock_client, private=True
     )
 

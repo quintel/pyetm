@@ -31,7 +31,7 @@ class SavedScenarioError(Exception):
     """Base saved scenario error"""
 
 
-class SavedScenario(Base):
+class Scenario(Base):
     """
     Pydantic model for a MyETM SavedScenario.
 
@@ -52,7 +52,7 @@ class SavedScenario(Base):
 
     _scenario_session: Optional[Session] = PrivateAttr(None)
 
-    def __eq__(self, other: "SavedScenario"):
+    def __eq__(self, other: "Scenario"):
         return self.id == other.id
 
     def __hash__(self):
@@ -61,7 +61,7 @@ class SavedScenario(Base):
     @classmethod
     def create(
         cls, params: Dict[str, Any], client: Optional[BaseClient] = None
-    ) -> "SavedScenario":
+    ) -> "Scenario":
         """
         Create a new SavedScenario in MyETM from an existing session scenario.
 
@@ -103,7 +103,7 @@ class SavedScenario(Base):
         title: str,
         client: Optional[BaseClient] = None,
         **kwargs,
-    ) -> "SavedScenario":
+    ) -> "Scenario":
         """
         Convenience method to create SavedScenario from a Scenario instance.
 
@@ -122,7 +122,7 @@ class SavedScenario(Base):
     @classmethod
     def load(
         cls, saved_scenario_id: int, client: Optional[BaseClient] = None
-    ) -> "SavedScenario":
+    ) -> "Scenario":
         """
         Load an existing SavedScenario from MyETM by its ID.
 
@@ -161,7 +161,7 @@ class SavedScenario(Base):
         title: str,
         client: Optional[BaseClient] = None,
         **kwargs,
-    ) -> "SavedScenario":
+    ) -> "Scenario":
         """
         Create a new SavedScenario from an ETEngine scenario ID.
 

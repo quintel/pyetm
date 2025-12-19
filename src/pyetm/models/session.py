@@ -191,7 +191,7 @@ class Session(Base):
         Returns:
             SavedScenario instance
         """
-        from pyetm.models.saved_scenario import SavedScenario
+        from models.scenario import Scenario
 
         client = client or BaseClient()
 
@@ -210,7 +210,7 @@ class Session(Base):
         if self.private is not None:
             params.setdefault("private", self.private)
 
-        return SavedScenario.create(params, client=client)
+        return Scenario.create(params, client=client)
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """

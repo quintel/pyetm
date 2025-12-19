@@ -135,10 +135,10 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Load a SavedScenario from MyETM."""
-        from pyetm.models.saved_scenario import SavedScenario
+        from models.scenario import Scenario
 
         try:
-            saved_scenario = SavedScenario.load(scenario_id)
+            saved_scenario = Scenario.load(scenario_id)
             return saved_scenario
         except Exception as e:
             logger.warning(
@@ -156,10 +156,10 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Copy a SavedScenario and save the copy to MyETM."""
-        from pyetm.models.saved_scenario import SavedScenario
+        from models.scenario import Scenario
 
         try:
-            saved_scenario = SavedScenario.load(scenario_id)
+            saved_scenario = Scenario.load(scenario_id)
             copied_session = saved_scenario.session.copy(**metadata_updates)
 
             title = metadata_updates.get("title") or f"Copy of {saved_scenario.title}"
@@ -195,7 +195,7 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Create a new scenario and save it to MyETM."""
-        from pyetm.models.saved_scenario import SavedScenario
+        from models.scenario import Scenario
 
         scenario = self._helper._load_or_create_scenario(
             None, area_code, end_year, row_label, **metadata_updates
