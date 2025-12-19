@@ -11,8 +11,11 @@ def setup_notebook(debug=False):
     import sys
     import builtins
     from pyetm.config.settings import get_settings
+    import warnings
     from IPython import get_ipython
     from IPython.display import display, HTML
+
+    warnings.filterwarnings("ignore", category=FutureWarning)
 
     # Handle traceback display based on debug mode
     ipython = get_ipython()
