@@ -83,33 +83,29 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(
-        cls,
-        xlsx_path: PathLike | str,
-        update: bool | list[str] = False,
-        session: bool = False,
-    ) -> "Scenarios":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
         """
-        Import scenarios from Excel.
+        Import scenarios (Sessions) from Excel file.
+
+        Only loads scenarios where the 'session' column is True.
+        SavedScenarios (session=False or missing) are ignored.
 
         Args:
             xlsx_path: Path to Excel file
-            update: If True, upload all data. If list, upload only specified types. If False (default), skip all uploads.
-                    Valid types: 'user_values', 'custom_curves', 'sortables'
 
         Returns:
-            Scenarios collection
+            Scenarios collection containing only Session instances
         """
         from pyetm.models.scenario_packer import ScenarioPacker
+        from pyetm.models.saved_scenario import SavedScenario
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
-        packer = ScenarioPacker.from_excel(
-            str(resolved_path), update=update, session=session
-        )
-        scenarios = list(packer._scenarios())
+        packer = ScenarioPacker.from_excel(str(resolved_path))
+        all_scenarios = list(packer._scenarios())
+        sessions = [s for s in all_scenarios if not isinstance(s, SavedScenario)]
 
-        if not scenarios:
-            print(f"No scenarios found in Excel file: {resolved_path}")
+        if not sessions:
+            print(f"No Sessions found in Excel file: {resolved_path}")
 
-        scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
-        return cls(items=scenarios)
+        sessions.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
+        return cls(items=sessions)

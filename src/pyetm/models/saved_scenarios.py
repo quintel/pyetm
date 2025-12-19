@@ -3,6 +3,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Iterable, Iterator, List
 from pydantic import Field
+from pyetm.models.scenario import Scenario
 from pyetm.models.base import Base
 from .saved_scenario import SavedScenario, SavedScenarioError
 
@@ -28,6 +29,18 @@ class SavedScenarios(Base):
 
     def extend(self, saved_scenarios: Iterable[SavedScenario]) -> None:
         self.items.extend(list(saved_scenarios))
+
+    @property
+    def sessions(self) -> List["Scenario"]:
+        """
+        Get the underlying ETEngine Scenario objects for all SavedScenarios.
+
+        Returns:
+            List of Scenario instances (the underlying sessions)
+        """
+        from pyetm.models.scenario import Scenario
+
+        return [saved.session for saved in self.items]
 
     @classmethod
     def load_many(cls, saved_scenario_ids: Iterable[int]) -> "SavedScenarios":
@@ -69,17 +82,20 @@ class SavedScenarios(Base):
     def from_excel(cls, xlsx_path: PathLike | str) -> "SavedScenarios":
         """
         Import SavedScenarios from Excel file.
+
+        Only loads scenarios where the 'session' column is False or missing.
+        Scenarios with session=True are ignored.
         """
         from pyetm.models.scenario_packer import ScenarioPacker
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
 
-        # Use session=False to interpret IDs as SavedScenario IDs
-        packer = ScenarioPacker.from_excel(str(resolved_path), session=False)
-        scenarios = list(packer._scenarios())
+        packer = ScenarioPacker.from_excel(str(resolved_path))
+        all_scenarios = list(packer._scenarios())
+        saved_scenarios = [s for s in all_scenarios if isinstance(s, SavedScenario)]
 
-        if not scenarios:
-            print(f"No scenarios found in Excel file: {resolved_path}")
+        if not saved_scenarios:
+            print(f"No SavedScenarios found in Excel file: {resolved_path}")
 
-        scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
-        return cls(items=scenarios)
+        saved_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
+        return cls(items=saved_scenarios)

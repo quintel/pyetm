@@ -290,17 +290,17 @@ class ScenarioPacker(BaseModel):
         return update_set & valid_types
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str, session: bool = False) -> "ScenarioPacker":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
         """
         Import scenarios from Excel file.
 
+        Uses per-row 'session' column to determine loader type for each scenario.
+
         Args:
             xlsx_path: Path to Excel file
-            session: If True, load as Sessions (ETEngine). If False (default), load as SavedScenarios (MyETM).
         """
         packer = cls()
         update_set = cls._normalize_update(True)
-        packer._loader = SessionLoader(packer) if session else SavedScenarioLoader(packer)
 
         # Resolve default location: if a relative path/filename is provided and the
         # file does not exist at that location, look for it in the project /inputs dir.
@@ -411,10 +411,16 @@ class ScenarioPacker(BaseModel):
         """
         Create a scenario from a main sheet row.
 
-        Uses the configured loader to interpret IDs:
-        - SessionLoader: IDs refer to ETEngine Sessions
-        - SavedScenarioLoader: IDs refer to MyETM SavedScenarios
+        Uses per-row 'session' column to determine loader:
+        - session=True: SessionLoader (IDs refer to ETEngine Sessions)
+        - session=False: SavedScenarioLoader (IDs refer to MyETM SavedScenarios)
+        - Default: False (SavedScenarioLoader)
         """
+        is_session = self._safe_get_bool(row_data.get("session"))
+        if is_session is None:
+            is_session = False
+        loader = SessionLoader(self) if is_session else SavedScenarioLoader(self)
+
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
         parent = self._safe_get_int(row_data.get("parent"))
         copy_from = self._safe_get_int(row_data.get("copy_from"))
@@ -431,11 +437,12 @@ class ScenarioPacker(BaseModel):
                 end_year,
                 row_label,
                 metadata_updates,
+                loader,
             )
 
         # Copy if copy_from is provided
         if copy_from:
-            return self._copy_scenario(copy_from, row_label, metadata_updates)
+            return self._copy_scenario(copy_from, row_label, metadata_updates, loader)
 
         # Copy with roles if parent is provided
         if parent:
@@ -443,7 +450,7 @@ class ScenarioPacker(BaseModel):
 
         # Create new scenario
         return self._create_new_scenario(
-            area_code, end_year, row_label, metadata_updates, update_set
+            area_code, end_year, row_label, metadata_updates, update_set, loader
         )
 
     def _load_existing_scenario(
@@ -453,9 +460,10 @@ class ScenarioPacker(BaseModel):
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
+        loader: ScenarioLoader,
     ) -> Optional[Scenario]:
         """Load an existing scenario by ID and apply metadata updates."""
-        return self._loader.load(
+        return loader.load(
             scenario_id, area_code, end_year, row_label, metadata_updates
         )
 
@@ -464,9 +472,10 @@ class ScenarioPacker(BaseModel):
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
+        loader: ScenarioLoader,
     ) -> Optional[Scenario]:
         """Create a deep copy of a scenario (no template link)."""
-        return self._loader.copy(scenario_id, row_label, metadata_updates)
+        return loader.copy(scenario_id, row_label, metadata_updates)
 
     def _copy_with_roles(
         self,
@@ -496,9 +505,10 @@ class ScenarioPacker(BaseModel):
         row_label: str,
         metadata_updates: Dict[str, Any],
         update_set: set[str] = None,
+        loader: ScenarioLoader = None,
     ) -> Optional[Scenario]:
         """Create a brand new scenario."""
-        return self._loader.create_new(area_code, end_year, row_label, metadata_updates)
+        return loader.create_new(area_code, end_year, row_label, metadata_updates)
 
     def _safe_get_int(self, value: Any) -> Optional[int]:
         """Safely convert value to integer."""
