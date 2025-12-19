@@ -1,13 +1,16 @@
 from unittest.mock import Mock, patch
 import pytest
 from datetime import datetime
-from pyetm.models.saved_scenario import SavedScenario, SavedScenarioError
-from pyetm.models.scenario import Scenario
+from pyetm.models.scenario import Scenario, SavedScenarioError
+from pyetm.models.session import Session
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
 from pyetm.services.scenario_runners.update_saved_scenario import (
     UpdateSavedScenarioRunner,
+)
+from pyetm.services.scenario_runners.fetch_saved_scenario import (
+    FetchSavedScenarioRunner,
 )
 
 
@@ -21,7 +24,7 @@ def test_saved_scenario_session_validation_minimal():
         "scenario_id": 100,
         "title": "Test Scenario",
     }
-    saved_scenario = SavedScenario.model_validate(data)
+    saved_scenario = Scenario.model_validate(data)
     assert saved_scenario.id == 1
     assert saved_scenario.scenario_id == 100
     assert saved_scenario.title == "Test Scenario"
@@ -31,7 +34,7 @@ def test_saved_scenario_session_validation_minimal():
 
 def test_saved_scenario_session_validation_full(saved_scenario_data):
     """Test SavedScenario model validates with all fields."""
-    saved_scenario = SavedScenario.model_validate(saved_scenario_data)
+    saved_scenario = Scenario.model_validate(saved_scenario_data)
     assert saved_scenario.id == 456
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "My Saved Scenario"
@@ -53,7 +56,7 @@ def test_saved_scenario_session_with_nested_scenario():
             "end_year": 2050,
         },
     }
-    saved_scenario = SavedScenario.model_validate(data)
+    saved_scenario = Scenario.model_validate(data)
     assert saved_scenario.scenario is not None
     assert saved_scenario.scenario["id"] == 100
 
@@ -84,7 +87,7 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
         "private": True,
     }
 
-    saved_scenario = SavedScenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(params, client=mock_client)
     assert saved_scenario.id == 789
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "New Saved Scenario"
@@ -115,7 +118,7 @@ def test_create_saved_scenario_with_warnings(
         "invalid_field": "should_be_ignored",
     }
 
-    saved_scenario = SavedScenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(params, client=mock_client)
     assert saved_scenario.id == 790
     base_warnings = saved_scenario.warnings.get_by_field("base")
     assert len(base_warnings) == 1
@@ -133,7 +136,7 @@ def test_create_saved_scenario_failure(monkeypatch, fail_service_result, mock_cl
     params = {"scenario_id": 123}  # Missing title
 
     with pytest.raises(SavedScenarioError, match="Could not create saved scenario"):
-        SavedScenario.create(params, client=mock_client)
+        Scenario.create(params, client=mock_client)
 
 
 def test_create_saved_scenario_preserves_params_not_in_response(
@@ -159,7 +162,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
         "description": "Local description",
     }
 
-    saved_scenario = SavedScenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(params, client=mock_client)
     # description should be set from params since it wasn't in response
     assert saved_scenario.description == "Local description"
 
@@ -170,7 +173,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
 def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
     """Test creating SavedScenario from a Scenario instance."""
     # Create a mock scenario
-    scenario = Mock(spec=Scenario)
+    scenario = Mock(spec=Session)
     scenario.id = 999
 
     created_data = {
@@ -187,7 +190,7 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
         lambda client, params: ok_service_result(created_data),
     )
 
-    saved_scenario = SavedScenario.from_scenario(
+    saved_scenario = Scenario.from_scenario(
         scenario,
         title="From Scenario",
         client=mock_client,
@@ -202,7 +205,7 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
 
 def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
     """Test from_scenario passes kwargs correctly."""
-    scenario = Mock(spec=Scenario)
+    scenario = Mock(spec=Session)
     scenario.id = 1000
 
     created_data = {
@@ -220,7 +223,7 @@ def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
 
     monkeypatch.setattr(CreateSavedScenarioRunner, "run", capture_run)
 
-    SavedScenario.from_scenario(
+    Scenario.from_scenario(
         scenario, title="Private Scenario", client=mock_client, private=True
     )
 
@@ -403,7 +406,7 @@ def test_session_property_caches_result(saved_scenario):
 
 def test_session_property_returns_cached_model(saved_scenario):
     """Test session property returns cached model if set."""
-    cached_scenario = Mock(spec=Scenario)
+    cached_scenario = Mock(spec=Session)
     cached_scenario.id = 999
     saved_scenario._scenario_session = cached_scenario
 
@@ -417,11 +420,90 @@ def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario)
     saved_scenario.scenario = None
     saved_scenario._scenario_session = None
 
-    fetched_scenario = Mock(spec=Scenario)
+    fetched_scenario = Mock(spec=Session)
     fetched_scenario.id = 123
 
-    with patch.object(Scenario, "load", return_value=fetched_scenario) as mock_load:
+    with patch.object(Session, "load", return_value=fetched_scenario) as mock_load:
         scenario = saved_scenario.session
 
         mock_load.assert_called_once_with(123)
         assert scenario is fetched_scenario
+
+
+# --- Delegation Tests --- #
+
+
+def test_saved_scenario_delegates_property_access(saved_scenario):
+    """Test SavedScenario delegates property access to underlying session."""
+    # Mock the session
+    mock_session = Mock(spec=Session)
+    mock_session.inputs = Mock()
+    mock_session.sortables = Mock()
+    mock_session.custom_curves = Mock()
+    mock_session.output_curves = Mock()
+    mock_session.couplings = Mock()
+    mock_session.version = "latest"
+    mock_session.start_year = 2020
+    mock_session.url = "http://test.com"
+
+    saved_scenario._scenario_session = mock_session
+
+    # Test property delegation
+    assert saved_scenario.inputs is mock_session.inputs
+    assert saved_scenario.sortables is mock_session.sortables
+    assert saved_scenario.custom_curves is mock_session.custom_curves
+    assert saved_scenario.output_curves is mock_session.output_curves
+    assert saved_scenario.couplings is mock_session.couplings
+    assert saved_scenario.version == "latest"
+    assert saved_scenario.start_year == 2020
+    assert saved_scenario.url == "http://test.com"
+
+
+def test_saved_scenario_delegates_method_calls(saved_scenario):
+    """Test SavedScenario delegates method calls to underlying session."""
+    # Mock the session
+    mock_session = Mock(spec=Session)
+    mock_session.user_values.return_value = {"input1": 42}
+    mock_session.update_user_values = Mock()
+    mock_session.update_sortables = Mock()
+    mock_session.results.return_value = Mock()
+
+    saved_scenario._scenario_session = mock_session
+
+    # Test method delegation
+    values = saved_scenario.user_values()
+    assert values == {"input1": 42}
+    mock_session.user_values.assert_called_once()
+
+    saved_scenario.update_user_values({"input1": 50})
+    mock_session.update_user_values.assert_called_once_with(
+        {"input1": 50}, skip_upload=False
+    )
+
+    saved_scenario.update_sortables({"demand": ["a", "b"]})
+    mock_session.update_sortables.assert_called_once_with({"demand": ["a", "b"]})
+
+    saved_scenario.results()
+    mock_session.results.assert_called_once()
+
+
+def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
+    """Test that SavedScenario and Scenario can be used interchangeably."""
+    # Mock a scenario with some behavior
+    mock_session = Mock(spec=Session)
+    mock_session.inputs = Mock()
+    mock_session.inputs.is_valid_update.return_value = {}
+    mock_session.update_user_values = Mock()
+    mock_session.identifier.return_value = "test_scenario"
+
+    saved_scenario._scenario_session = mock_session
+
+    # User code should work identically whether they have a Scenario or SavedScenario
+    identifier = saved_scenario.identifier()
+    assert identifier == "test_scenario"
+
+    # Both should support the same operations
+    saved_scenario.update_user_values({"test": 123})
+    mock_session.update_user_values.assert_called_once_with(
+        {"test": 123}, skip_upload=False
+    )

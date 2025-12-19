@@ -2,7 +2,7 @@ from unittest.mock import Mock
 import pytest
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
-from pyetm.models.scenario import Scenario, ScenarioError
+from pyetm.models.session import Session, ScenarioError
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )
@@ -34,7 +34,7 @@ def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
         lambda client, data: ok_service_result(created_scenario_data),
     )
 
-    scenario = Scenario.new("nl", 2050)
+    scenario = Session.new("nl", 2050)
     assert scenario.id == 12345
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050
@@ -60,7 +60,7 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
         lambda client, data: ok_service_result(created_scenario_data),
     )
 
-    scenario = Scenario.new(
+    scenario = Session.new(
         area_code="nl",
         end_year=2050,
         private=True,
@@ -87,7 +87,7 @@ def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
         lambda client, data: ok_service_result(created_scenario_data, warnings),
     )
 
-    scenario = Scenario.new("nl", 2050, invalid_field="should_be_ignored")
+    scenario = Session.new("nl", 2050, invalid_field="should_be_ignored")
     assert scenario.id == 12347
     base_warnings = scenario.warnings.get_by_field("base")
     assert len(base_warnings) == 1
@@ -103,7 +103,7 @@ def test_new_scenario_failure(monkeypatch, fail_service_result):
     )
 
     with pytest.raises(ScenarioError, match="Could not create scenario"):
-        Scenario.new("", 2050)  # Invalid area_code
+        Session.new("", 2050)  # Invalid area_code
 
 
 # ------ update_metadata ------ #
@@ -182,7 +182,7 @@ def test_load_success(monkeypatch, full_scenario_metadata, ok_service_result):
         lambda client, stub: ok_service_result(full_scenario_metadata),
     )
 
-    scenario = Scenario.load(1)
+    scenario = Session.load(1)
     for key, val in full_scenario_metadata.items():
         assert getattr(scenario, key) == val
     assert len(scenario.warnings) == 0
@@ -198,7 +198,7 @@ def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_r
         lambda client, stub: ok_service_result(minimal_scenario_metadata, warns),
     )
 
-    scenario = Scenario.load(2)
+    scenario = Session.load(2)
     assert scenario.id == 2
     assert scenario.end_year == 2040
     assert scenario.area_code == "NL"
@@ -216,7 +216,7 @@ def test_load_failure(monkeypatch, fail_service_result):
     )
 
     with pytest.raises(ScenarioError):
-        Scenario.load(3)
+        Session.load(3)
 
 
 def test_load_missing_required_field(monkeypatch, ok_service_result):
@@ -229,7 +229,7 @@ def test_load_missing_required_field(monkeypatch, ok_service_result):
         lambda client, stub: ok_service_result(incomplete_data),
     )
 
-    scenario = Scenario.load(4)
+    scenario = Session.load(4)
     end_year_warnings = scenario.warnings.get_by_field("end_year")
     assert len(end_year_warnings) > 0
     assert any("Field required" in w.message for w in end_year_warnings)
@@ -243,7 +243,7 @@ def test_version_when_no_url_set(scenario):
 
 
 def test_version_when_url_stable():
-    scenario = Scenario(
+    scenario = Session(
         id=4,
         area_code="nl",
         end_year=2050,
@@ -254,7 +254,7 @@ def test_version_when_url_stable():
 
 
 def test_version_when_url_latest():
-    scenario = Scenario(
+    scenario = Session(
         id=4,
         area_code="nl",
         end_year=2050,
@@ -654,7 +654,7 @@ def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
 
 
 def test_to_dataframe(scenario):
-    scenario = Scenario(id=scenario.id, area_code="nl2019", end_year=2050)
+    scenario = Session(id=scenario.id, area_code="nl2019", end_year=2050)
     dataframe = scenario.to_dataframe()
 
     assert dataframe[scenario.id]["end_year"] == 2050
@@ -708,7 +708,7 @@ def test_scenario_update_custom_curves_success(monkeypatch, ok_service_result):
     import pandas as pd
     import numpy as np
 
-    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
     scenario._custom_curves = CustomCurves(curves=[])
 
     # Create valid custom curves (mock file data)
@@ -745,7 +745,7 @@ def test_scenario_update_custom_curves_validation_error():
     from pyetm.models.custom_curves import CustomCurve, CustomCurves
     from pyetm.models.warnings import WarningCollector
 
-    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
 
     # Create custom curves
     curve = CustomCurve(key="invalid_curve", type="profile")
@@ -775,7 +775,7 @@ def test_scenario_update_custom_curves_runner_failure(monkeypatch, fail_service_
         UpdateCustomCurvesRunner,
     )
 
-    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
 
     # Create valid custom curves
     curve = CustomCurve(key="test_curve", type="profile")
@@ -810,7 +810,7 @@ def test_scenario_update_custom_curves_updates_existing_curve(
     )
     from pathlib import Path
 
-    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with existing curve
     existing_curve = CustomCurve(
@@ -859,7 +859,7 @@ def test_scenario_update_custom_curves_adds_new_curve(monkeypatch, ok_service_re
     )
     from pathlib import Path
 
-    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with one existing curve
     existing_curve = CustomCurve(
@@ -904,7 +904,7 @@ def test_scenario_update_custom_curves_multiple_validation_errors():
     from pyetm.models.custom_curves import CustomCurve, CustomCurves
     from pyetm.models.warnings import WarningCollector
 
-    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
 
     # Create custom curves
     curves = [
@@ -1017,7 +1017,9 @@ def test_copy_scenario_with_multiple_overrides(
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy_with_preset(title="Private Copy", private=True, source="test")
+    scenario = original.copy_with_preset(
+        title="Private Copy", private=True, source="test"
+    )
     assert scenario.id == 67892
     assert scenario.title == "Private Copy"
     assert scenario.private is True

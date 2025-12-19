@@ -3,14 +3,14 @@ from os import PathLike
 from pathlib import Path
 from typing import Iterable, Iterator, List
 from pydantic import Field
+from pyetm.models.session import Session
 from pyetm.models.base import Base
-from .scenario import Scenario, ScenarioError
-from pathlib import Path
+from .scenario import Scenario, SavedScenarioError
 
 
 class Scenarios(Base):
     """
-    A collection of Scenario objects
+    A collection of SavedScenario objects.
     """
 
     items: List[Scenario] = Field(default_factory=list)
@@ -24,58 +24,54 @@ class Scenarios(Base):
     def __getitem__(self, index: int) -> Scenario:
         return self.items[index]
 
-    def add(self, *scenarios: Scenario) -> None:
-        self.items.extend(scenarios)
+    def add(self, *saved_scenarios: Scenario) -> None:
+        self.items.extend(saved_scenarios)
 
-    def extend(self, scenarios: Iterable[Scenario]) -> None:
-        self.items.extend(list(scenarios))
+    def extend(self, saved_scenarios: Iterable[Scenario]) -> None:
+        self.items.extend(list(saved_scenarios))
+
+    @property
+    def sessions(self) -> List["Session"]:
+        """
+        Get the underlying ETEngine Scenario objects for all SavedScenarios.
+
+        Returns:
+            List of Scenario instances (the underlying sessions)
+        """
+        from pyetm.models.session import Session
+
+        return [saved.session for saved in self.items]
 
     @classmethod
-    def load_many(cls, scenario_ids: Iterable[int]) -> "Scenarios":
-        scenarios = []
-        for sid in scenario_ids:
-            try:
-                scenarios.append(Scenario.load(sid))
-            except ScenarioError as e:
-                print(f"Could not load scenario {sid}: {e}")
-        return cls(items=scenarios)
+    def load_many(cls, saved_scenario_ids: Iterable[int]) -> "Scenarios":
+        """
+        Load multiple SavedScenario objects by their MyETM saved scenario IDs.
 
-    @classmethod
-    def create_many(
-        cls,
-        scenario_params: Iterable[dict],
-        area_code: str | None = None,
-        end_year: int | None = None,
-    ) -> "Scenarios":
-        """Create multiple Scenario objects from parameter dicts."""
-        scenarios = []
-        for params in scenario_params:
-            area = params.get("area_code") or area_code
-            year = params.get("end_year") or end_year
-            if area is None or year is None:
-                print(
-                    f"Could not create scenario with {params}: Missing area_code or end_year. Provide them in each dict or as defaults."
-                )
-                continue
+        Args:
+            saved_scenario_ids: Iterable of MyETM saved scenario IDs to load
+
+        Returns:
+            SavedScenarios collection containing the loaded SavedScenario objects
+        """
+        saved_scenarios = []
+        for ssid in saved_scenario_ids:
             try:
-                extra = {
-                    k: v
-                    for k, v in params.items()
-                    if k not in ("area_code", "end_year")
-                }
-                scenarios.append(Scenario.new(area, year, **extra))
-            except (ScenarioError, ValueError) as e:
-                print(f"Could not create scenario with {params}: {e}")
-        return cls(items=scenarios)
+                saved_scenarios.append(Scenario.load(ssid))
+            except SavedScenarioError as e:
+                print(f"Could not load saved scenario {ssid}: {e}")
+        return cls(items=saved_scenarios)
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
         """
-        Export all scenarios to Excel.
+        Export all saved scenarios to Excel.
+
+        Note: This exports the underlying session data from each SavedScenario.
+        The scenario_id column will contain SavedScenario IDs (MyETM IDs).
         """
         from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
         if not self.items:
-            raise ValueError("No scenarios to export")
+            raise ValueError("No saved scenarios to export")
 
         resolved_path = Path(path).expanduser().resolve()
         ScenarioExcelService.export_to_excel(
@@ -83,18 +79,23 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str, update: bool | list[str] = False) -> "Scenarios":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
         """
-        Import scenarios from Excel.
+        Import SavedScenarios from Excel file.
 
-        Args:
-            xlsx_path: Path to Excel file
-            update: If True, upload all data. If list, upload only specified types. If False (default), skip all uploads.
-                    Valid types: 'user_values', 'custom_curves', 'sortables'
+        Only loads scenarios where the 'session' column is False or missing.
+        Scenarios with session=True are ignored.
         """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        from pyetm.models.scenario_packer import ScenarioPacker
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
-        scenarios = ScenarioExcelService.import_from_excel(str(resolved_path), update=update)
-        scenarios.sort(key=lambda s: s.id)
-        return cls(items=scenarios)
+
+        packer = ScenarioPacker.from_excel(str(resolved_path))
+        all_scenarios = list(packer._scenarios())
+        saved_scenarios = [s for s in all_scenarios if isinstance(s, Scenario)]
+
+        if not saved_scenarios:
+            print(f"No SavedScenarios found in Excel file: {resolved_path}")
+
+        saved_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
+        return cls(items=saved_scenarios)
