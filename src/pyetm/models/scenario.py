@@ -114,7 +114,7 @@ class Scenario(Base):
             scenario.add_warning("metadata", w)
         return scenario
 
-    def copy(self, **overrides) -> "Scenario":
+    def copy_with_preset(self, **overrides) -> "Scenario":
         """
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
@@ -136,12 +136,12 @@ class Scenario(Base):
 
         return scenario
 
-    def deep_copy(self, **overrides) -> "Scenario":
+    def copy(self, **overrides) -> "Scenario":
         """
-        Create a deep copy with no template link to the original scenario.
+        Create a copy with no template link to the original scenario.
         """
         # Create the copy
-        new_scenario = self.copy(**overrides)
+        new_scenario = self.copy_with_preset(**overrides)
 
         # Break the template link
         result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
