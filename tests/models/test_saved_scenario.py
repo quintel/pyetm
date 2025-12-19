@@ -476,7 +476,7 @@ def test_saved_scenario_delegates_method_calls(saved_scenario):
     mock_session.user_values.assert_called_once()
 
     saved_scenario.update_user_values({"input1": 50})
-    mock_session.update_user_values.assert_called_once_with({"input1": 50})
+    mock_session.update_user_values.assert_called_once_with({"input1": 50}, skip_upload=False)
 
     saved_scenario.update_sortables({"demand": ["a", "b"]})
     mock_session.update_sortables.assert_called_once_with({"demand": ["a", "b"]})
@@ -502,4 +502,4 @@ def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
 
     # Both should support the same operations
     saved_scenario.update_user_values({"test": 123})
-    mock_session.update_user_values.assert_called_once_with({"test": 123})
+    mock_session.update_user_values.assert_called_once_with({"test": 123}, skip_upload=False)

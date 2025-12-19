@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from pyetm.models.scenario_packer import (
     ScenarioPacker,
 )
+from pyetm.models.scenario_loader import SessionLoader, SavedScenarioLoader
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.inputs_pack import InputsPack
 from pyetm.models.packables.output_curves_pack import OutputCurvesPack
@@ -683,7 +684,7 @@ class TestCreateScenarioFromColumn:
     def test_create_scenario_from_row_loads_and_updates(self, monkeypatch):
         """Test _create_scenario_from_row method with loading existing scenario"""
         packer = ScenarioPacker()
-        packer._session_mode = True
+        packer._loader = SessionLoader(packer)
         scenario = Mock(spec=Scenario)
         scenario.identifier = Mock(return_value="SID")
         monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: scenario))
@@ -707,7 +708,7 @@ class TestCreateScenarioFromColumn:
     def test_create_scenario_fromrow_creates(self, monkeypatch):
         """Test _create_scenario_from_row method with creating new scenario"""
         packer = ScenarioPacker()
-        packer._session_mode = True  # Test Session mode (no auto-save)
+        packer._loader = SessionLoader(packer)  # Test Session mode (no auto-save)
         scenario = Mock(spec=Scenario)
         scenario.identifier = Mock(return_value="NEW")
         # Accept *args, **kwargs for compatibility with production code
@@ -731,6 +732,7 @@ class TestCreateScenarioFromColumn:
     def test_create_scenario_from_row_returns_none_on_fail(self, monkeypatch):
         """Test _create_scenario_from_row returns None on failure"""
         packer = ScenarioPacker()
+        packer._loader = SessionLoader(packer)
         monkeypatch.setattr(
             ScenarioPacker, "_load_or_create_scenario", lambda self, *a, **k: None
         )

@@ -291,9 +291,9 @@ class SavedScenario(Base):
         """Get user values from the underlying session."""
         return self.session.user_values()
 
-    def update_user_values(self, update_inputs: Dict[str, Any]) -> None:
+    def update_user_values(self, update_inputs: Dict[str, Any], skip_upload: bool = False) -> None:
         """Update user values on the underlying session."""
-        self.session.update_user_values(update_inputs)
+        self.session.update_user_values(update_inputs, skip_upload=skip_upload)
 
     def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
         """Remove user values on the underlying session."""
@@ -311,13 +311,13 @@ class SavedScenario(Base):
         """Remove sortables on the underlying session."""
         self.session.remove_sortables(sortable_names)
 
-    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame, skip_upload: bool = False) -> None:
         """Set sortables from dataframe on the underlying session."""
-        self.session.set_sortables_from_dataframe(dataframe)
+        self.session.set_sortables_from_dataframe(dataframe, skip_upload=skip_upload)
 
-    def update_custom_curves(self, custom_curves) -> None:
+    def update_custom_curves(self, custom_curves, skip_upload: bool = False) -> None:
         """Update custom curves on the underlying session."""
-        self.session.update_custom_curves(custom_curves)
+        self.session.update_custom_curves(custom_curves, skip_upload=skip_upload)
 
     def custom_curve_series(self, curve_name: str) -> pd.Series:
         """Get a custom curve series from the underlying session."""
