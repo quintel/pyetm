@@ -48,9 +48,9 @@ def client():
 # Lazy‐import Scenario
 @pytest.fixture
 def scenario():
-    from pyetm.models import Scenario
+    from pyetm.models import Session
 
-    return Scenario(id=999)
+    return Session(id=999)
 
 
 # --- Service Result Fixtures --- #

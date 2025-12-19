@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 import pytest
 from datetime import datetime
 from pyetm.models.saved_scenario import SavedScenario, SavedScenarioError
-from pyetm.models.scenario import Scenario
+from models.session import Session
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
@@ -173,7 +173,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
 def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
     """Test creating SavedScenario from a Scenario instance."""
     # Create a mock scenario
-    scenario = Mock(spec=Scenario)
+    scenario = Mock(spec=Session)
     scenario.id = 999
 
     created_data = {
@@ -205,7 +205,7 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
 
 def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
     """Test from_scenario passes kwargs correctly."""
-    scenario = Mock(spec=Scenario)
+    scenario = Mock(spec=Session)
     scenario.id = 1000
 
     created_data = {
@@ -406,7 +406,7 @@ def test_session_property_caches_result(saved_scenario):
 
 def test_session_property_returns_cached_model(saved_scenario):
     """Test session property returns cached model if set."""
-    cached_scenario = Mock(spec=Scenario)
+    cached_scenario = Mock(spec=Session)
     cached_scenario.id = 999
     saved_scenario._scenario_session = cached_scenario
 
@@ -420,10 +420,10 @@ def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario)
     saved_scenario.scenario = None
     saved_scenario._scenario_session = None
 
-    fetched_scenario = Mock(spec=Scenario)
+    fetched_scenario = Mock(spec=Session)
     fetched_scenario.id = 123
 
-    with patch.object(Scenario, "load", return_value=fetched_scenario) as mock_load:
+    with patch.object(Session, "load", return_value=fetched_scenario) as mock_load:
         scenario = saved_scenario.session
 
         mock_load.assert_called_once_with(123)
@@ -436,7 +436,7 @@ def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario)
 def test_saved_scenario_delegates_property_access(saved_scenario):
     """Test SavedScenario delegates property access to underlying session."""
     # Mock the session
-    mock_session = Mock(spec=Scenario)
+    mock_session = Mock(spec=Session)
     mock_session.inputs = Mock()
     mock_session.sortables = Mock()
     mock_session.custom_curves = Mock()
@@ -462,7 +462,7 @@ def test_saved_scenario_delegates_property_access(saved_scenario):
 def test_saved_scenario_delegates_method_calls(saved_scenario):
     """Test SavedScenario delegates method calls to underlying session."""
     # Mock the session
-    mock_session = Mock(spec=Scenario)
+    mock_session = Mock(spec=Session)
     mock_session.user_values.return_value = {"input1": 42}
     mock_session.update_user_values = Mock()
     mock_session.update_sortables = Mock()
@@ -476,7 +476,9 @@ def test_saved_scenario_delegates_method_calls(saved_scenario):
     mock_session.user_values.assert_called_once()
 
     saved_scenario.update_user_values({"input1": 50})
-    mock_session.update_user_values.assert_called_once_with({"input1": 50}, skip_upload=False)
+    mock_session.update_user_values.assert_called_once_with(
+        {"input1": 50}, skip_upload=False
+    )
 
     saved_scenario.update_sortables({"demand": ["a", "b"]})
     mock_session.update_sortables.assert_called_once_with({"demand": ["a", "b"]})
@@ -488,7 +490,7 @@ def test_saved_scenario_delegates_method_calls(saved_scenario):
 def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
     """Test that SavedScenario and Scenario can be used interchangeably."""
     # Mock a scenario with some behavior
-    mock_session = Mock(spec=Scenario)
+    mock_session = Mock(spec=Session)
     mock_session.inputs = Mock()
     mock_session.inputs.is_valid_update.return_value = {}
     mock_session.update_user_values = Mock()
@@ -502,4 +504,6 @@ def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
 
     # Both should support the same operations
     saved_scenario.update_user_values({"test": 123})
-    mock_session.update_user_values.assert_called_once_with({"test": 123}, skip_upload=False)
+    mock_session.update_user_values.assert_called_once_with(
+        {"test": 123}, skip_upload=False
+    )

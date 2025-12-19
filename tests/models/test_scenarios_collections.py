@@ -1,4 +1,5 @@
 """Tests for Scenarios and SavedScenarios collection classes with from_excel filtering."""
+
 import pytest
 import pandas as pd
 import tempfile
@@ -6,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from pyetm.models.scenarios import Scenarios
 from pyetm.models.saved_scenarios import SavedScenarios
-from pyetm.models.scenario import Scenario
+from models.session import Session
 from pyetm.models.saved_scenario import SavedScenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
@@ -17,9 +18,9 @@ class TestScenariosFromExcel:
     def test_from_excel_filters_sessions_only(self, monkeypatch):
         """Test that from_excel only returns Scenario instances (not SavedScenario)."""
         # Create mock scenarios
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 100
-        session2 = Mock(spec=Scenario)
+        session2 = Mock(spec=Session)
         session2.id = 200
         saved1 = Mock(spec=SavedScenario)
         saved1.id = 300
@@ -55,11 +56,11 @@ class TestScenariosFromExcel:
 
     def test_from_excel_all_sessions(self, monkeypatch):
         """Test that from_excel returns all sessions when no SavedScenarios exist."""
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 100
-        session2 = Mock(spec=Scenario)
+        session2 = Mock(spec=Session)
         session2.id = 200
-        session3 = Mock(spec=Scenario)
+        session3 = Mock(spec=Session)
         session3.id = 300
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -76,11 +77,11 @@ class TestScenariosFromExcel:
 
     def test_from_excel_sorts_by_id(self, monkeypatch):
         """Test that scenarios are sorted by ID."""
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 300
-        session2 = Mock(spec=Scenario)
+        session2 = Mock(spec=Session)
         session2.id = 100
-        session3 = Mock(spec=Scenario)
+        session3 = Mock(spec=Session)
         session3.id = 200
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -100,7 +101,7 @@ class TestSavedScenariosFromExcel:
 
     def test_from_excel_filters_saved_scenarios_only(self, monkeypatch):
         """Test that from_excel only returns SavedScenario instances."""
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 100
         saved1 = Mock(spec=SavedScenario)
         saved1.id = 200
@@ -121,9 +122,9 @@ class TestSavedScenariosFromExcel:
 
     def test_from_excel_empty_when_no_saved_scenarios(self, monkeypatch):
         """Test that from_excel returns empty collection when only Sessions exist."""
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 100
-        session2 = Mock(spec=Scenario)
+        session2 = Mock(spec=Session)
         session2.id = 200
 
         mock_packer = Mock(spec=ScenarioPacker)
@@ -183,9 +184,9 @@ class TestSavedScenariosSessionsProperty:
     def test_sessions_property_returns_list_of_scenarios(self):
         """Test that sessions property returns list of underlying Scenario objects."""
         # Create mock SavedScenarios with mock sessions
-        scenario1 = Mock(spec=Scenario)
+        scenario1 = Mock(spec=Session)
         scenario1.id = 100
-        scenario2 = Mock(spec=Scenario)
+        scenario2 = Mock(spec=Session)
         scenario2.id = 200
 
         saved1 = Mock(spec=SavedScenario)
@@ -217,7 +218,7 @@ class TestSavedScenariosSessionsProperty:
 
     def test_sessions_property_single_saved_scenario(self):
         """Test sessions property with single SavedScenario."""
-        scenario = Mock(spec=Scenario)
+        scenario = Mock(spec=Session)
         scenario.id = 100
 
         saved = Mock(spec=SavedScenario)
@@ -237,9 +238,9 @@ class TestMixedScenariosSeparation:
     def test_mixed_excel_separates_correctly(self, monkeypatch):
         """Test that same Excel file returns different results for Scenarios vs SavedScenarios."""
         # Create mixed scenarios
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 100
-        session2 = Mock(spec=Scenario)
+        session2 = Mock(spec=Session)
         session2.id = 200
         saved1 = Mock(spec=SavedScenario)
         saved1.id = 300
@@ -272,7 +273,7 @@ class TestMixedScenariosSeparation:
 
     def test_no_overlap_between_collections(self, monkeypatch):
         """Test that there's no overlap between the two collections."""
-        session1 = Mock(spec=Scenario)
+        session1 = Mock(spec=Session)
         session1.id = 100
         saved1 = Mock(spec=SavedScenario)
         saved1.id = 200

@@ -3,7 +3,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Iterable, Iterator, List
 from pydantic import Field
-from pyetm.models.scenario import Scenario
+from models.session import Session
 from pyetm.models.base import Base
 from .saved_scenario import SavedScenario, SavedScenarioError
 
@@ -31,14 +31,14 @@ class SavedScenarios(Base):
         self.items.extend(list(saved_scenarios))
 
     @property
-    def sessions(self) -> List["Scenario"]:
+    def sessions(self) -> List["Session"]:
         """
         Get the underlying ETEngine Scenario objects for all SavedScenarios.
 
         Returns:
             List of Scenario instances (the underlying sessions)
         """
-        from pyetm.models.scenario import Scenario
+        from models.session import Session
 
         return [saved.session for saved in self.items]
 

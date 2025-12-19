@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, List
 from pydantic import Field
 from pyetm.models.base import Base
-from .scenario import Scenario, ScenarioError
+from .session import Session, ScenarioError
 from pathlib import Path
 
 
@@ -13,21 +13,21 @@ class Scenarios(Base):
     A collection of Scenario objects
     """
 
-    items: List[Scenario] = Field(default_factory=list)
+    items: List[Session] = Field(default_factory=list)
 
-    def __iter__(self) -> Iterator[Scenario]:
+    def __iter__(self) -> Iterator[Session]:
         return iter(self.items)
 
     def __len__(self) -> int:
         return len(self.items)
 
-    def __getitem__(self, index: int) -> Scenario:
+    def __getitem__(self, index: int) -> Session:
         return self.items[index]
 
-    def add(self, *scenarios: Scenario) -> None:
+    def add(self, *scenarios: Session) -> None:
         self.items.extend(scenarios)
 
-    def extend(self, scenarios: Iterable[Scenario]) -> None:
+    def extend(self, scenarios: Iterable[Session]) -> None:
         self.items.extend(list(scenarios))
 
     @classmethod
@@ -35,7 +35,7 @@ class Scenarios(Base):
         scenarios = []
         for sid in scenario_ids:
             try:
-                scenarios.append(Scenario.load(sid))
+                scenarios.append(Session.load(sid))
             except ScenarioError as e:
                 print(f"Could not load scenario {sid}: {e}")
         return cls(items=scenarios)
@@ -63,7 +63,7 @@ class Scenarios(Base):
                     for k, v in params.items()
                     if k not in ("area_code", "end_year")
                 }
-                scenarios.append(Scenario.new(area, year, **extra))
+                scenarios.append(Session.new(area, year, **extra))
             except (ScenarioError, ValueError) as e:
                 print(f"Could not create scenario with {params}: {e}")
         return cls(items=scenarios)

@@ -3,7 +3,7 @@ from typing import List, Optional, Sequence, Union
 from os import PathLike
 import logging
 
-from pyetm.models.scenario import Scenario
+from models.session import Session
 from pyetm.models.saved_scenario import SavedScenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
@@ -18,7 +18,7 @@ class ScenarioExcelService:
     @classmethod
     def export_to_excel(
         cls,
-        scenarios: List[Union[Scenario, SavedScenario]],
+        scenarios: List[Union[Session, SavedScenario]],
         path: PathLike | str,
         *,
         carriers: Optional[Sequence[str]] = None,
@@ -58,7 +58,9 @@ class ScenarioExcelService:
         )
 
     @classmethod
-    def import_from_excel(cls, xlsx_path: PathLike | str, update: bool | List[str] = False) -> List[Scenario]:
+    def import_from_excel(
+        cls, xlsx_path: PathLike | str, update: bool | List[str] = False
+    ) -> List[Session]:
         """
         Import scenarios from Excel file.
 

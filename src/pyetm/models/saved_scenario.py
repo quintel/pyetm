@@ -17,7 +17,7 @@ import pandas as pd
 from os import PathLike
 
 if TYPE_CHECKING:
-    from pyetm.models.scenario import Scenario
+    from models.session import Session
     from pyetm.models.inputs import Inputs
     from pyetm.models.sortables import Sortables
     from pyetm.models.custom_curves import CustomCurves
@@ -50,7 +50,7 @@ class SavedScenario(Base):
     updated_at: Optional[datetime] = None
     scenario: Optional[Dict[str, Any]] = None
 
-    _scenario_session: Optional[Scenario] = PrivateAttr(None)
+    _scenario_session: Optional[Session] = PrivateAttr(None)
 
     def __eq__(self, other: "SavedScenario"):
         return self.id == other.id
@@ -99,7 +99,7 @@ class SavedScenario(Base):
     @classmethod
     def from_scenario(
         cls,
-        scenario: "Scenario",
+        scenario: "Session",
         title: str,
         client: Optional[BaseClient] = None,
         **kwargs,
@@ -181,14 +181,14 @@ class SavedScenario(Base):
         return cls.create(params, client=client)
 
     @property
-    def session(self) -> "Scenario":
+    def session(self) -> "Session":
         """
         Get the current underlying ETEngine Scenario for this SavedScenario.
 
         Returns:
             Scenario: The current ETEngine scenario session (cached after first access)
         """
-        from pyetm.models.scenario import Scenario
+        from models.session import Session
 
         # Return cached if already loaded
         if self._scenario_session is not None:
@@ -196,11 +196,11 @@ class SavedScenario(Base):
 
         # Build from nested data if available (e.g., from SavedScenario.load())
         if self.scenario is not None:
-            self._scenario_session = Scenario.model_validate(self.scenario)
+            self._scenario_session = Session.model_validate(self.scenario)
             return self._scenario_session
 
         # Fetch fresh from ETEngine API
-        self._scenario_session = Scenario.load(self.scenario_id)
+        self._scenario_session = Session.load(self.scenario_id)
         return self._scenario_session
 
     def update(self, client: Optional[BaseClient] = None, **kwargs) -> None:
@@ -291,7 +291,9 @@ class SavedScenario(Base):
         """Get user values from the underlying session."""
         return self.session.user_values()
 
-    def update_user_values(self, update_inputs: Dict[str, Any], skip_upload: bool = False) -> None:
+    def update_user_values(
+        self, update_inputs: Dict[str, Any], skip_upload: bool = False
+    ) -> None:
         """Update user values on the underlying session."""
         self.session.update_user_values(update_inputs, skip_upload=skip_upload)
 
@@ -311,7 +313,9 @@ class SavedScenario(Base):
         """Remove sortables on the underlying session."""
         self.session.remove_sortables(sortable_names)
 
-    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame, skip_upload: bool = False) -> None:
+    def set_sortables_from_dataframe(
+        self, dataframe: pd.DataFrame, skip_upload: bool = False
+    ) -> None:
         """Set sortables from dataframe on the underlying session."""
         self.session.set_sortables_from_dataframe(dataframe, skip_upload=skip_upload)
 
@@ -385,11 +389,11 @@ class SavedScenario(Base):
         """Update metadata on the underlying session."""
         return self.session.update_metadata(**kwargs)
 
-    def copy(self, **overrides) -> "Scenario":
+    def copy(self, **overrides) -> "Session":
         """Create a copy of the underlying session."""
         return self.session.copy(**overrides)
 
-    def deep_copy(self, **overrides) -> "Scenario":
+    def deep_copy(self, **overrides) -> "Session":
         """Create a deep copy of the underlying session."""
         return self.session.deep_copy(**overrides)
 

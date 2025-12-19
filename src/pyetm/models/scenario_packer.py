@@ -11,7 +11,7 @@ from pyetm.models.packables.output_curves_pack import OutputCurvesPack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
-from pyetm.models import Scenario
+from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
 from pyetm.models.scenario_loader import (
     ScenarioLoader,
@@ -387,7 +387,7 @@ class ScenarioPacker(BaseModel):
 
     def _create_scenarios_from_main(
         self, main_df: pd.DataFrame, update_set: set[str] = None
-    ) -> Dict[str, Scenario]:
+    ) -> Dict[str, Session]:
         """Create scenarios from main sheet rows."""
         scenarios_by_row = {}
         for idx, row in main_df.iterrows():
@@ -407,7 +407,7 @@ class ScenarioPacker(BaseModel):
 
     def _create_scenario_from_row(
         self, row_idx, row_data: pd.Series, update_set: set[str] = None
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """
         Create a scenario from a main sheet row.
 
@@ -461,7 +461,7 @@ class ScenarioPacker(BaseModel):
         row_label: str,
         metadata_updates: Dict[str, Any],
         loader: ScenarioLoader,
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Load an existing scenario by ID and apply metadata updates."""
         return loader.load(
             scenario_id, area_code, end_year, row_label, metadata_updates
@@ -473,7 +473,7 @@ class ScenarioPacker(BaseModel):
         row_label: str,
         metadata_updates: Dict[str, Any],
         loader: ScenarioLoader,
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Create a deep copy of a scenario (no template link)."""
         return loader.copy(scenario_id, row_label, metadata_updates)
 
@@ -482,10 +482,10 @@ class ScenarioPacker(BaseModel):
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Copy a scenario with roles preserved (maintains template link)."""
         try:
-            source_scenario = Scenario.load(scenario_id)
+            source_scenario = Session.load(scenario_id)
             copy_metadata = metadata_updates.copy()
             copy_metadata["copy_roles"] = True
             return source_scenario.copy(**copy_metadata)
@@ -506,7 +506,7 @@ class ScenarioPacker(BaseModel):
         metadata_updates: Dict[str, Any],
         update_set: set[str] = None,
         loader: ScenarioLoader = None,
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Create a brand new scenario."""
         return loader.create_new(area_code, end_year, row_label, metadata_updates)
 
@@ -546,11 +546,11 @@ class ScenarioPacker(BaseModel):
         column_name: str,
         is_no_updates: bool = False,
         **kwargs,
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Load existing scenario or create new one. Passes all available kwargs to Scenario.new for full metadata."""
         if scenario_id is not None:
             try:
-                return Scenario.load(scenario_id)
+                return Session.load(scenario_id)
             except Exception as e:
                 logger.warning(
                     "Failed to load scenario %s for column '%s': %s",
@@ -568,7 +568,7 @@ class ScenarioPacker(BaseModel):
 
         if area_code and end_year is not None:
             try:
-                return Scenario.new(str(area_code), int(end_year), **kwargs)
+                return Session.new(str(area_code), int(end_year), **kwargs)
             except Exception as e:
                 logger.warning(
                     "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
@@ -599,7 +599,7 @@ class ScenarioPacker(BaseModel):
 
         return metadata
 
-    def _apply_metadata_to_scenario(self, scenario: Scenario, metadata: Dict[str, Any]):
+    def _apply_metadata_to_scenario(self, scenario: Session, metadata: Dict[str, Any]):
         """Apply metadata updates to scenario."""
         if not metadata:
             return
@@ -614,7 +614,7 @@ class ScenarioPacker(BaseModel):
     def _apply_export_configuration(
         self,
         main_df: pd.DataFrame,
-        scenarios_by_column: Dict[str, Scenario],
+        scenarios_by_column: Dict[str, Session],
         export_config_df: Optional[pd.DataFrame] = None,
     ):
         """Apply export configuration to all scenarios. Requires EXPORT_CONFIG sheet."""
@@ -643,7 +643,7 @@ class ScenarioPacker(BaseModel):
         self,
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
-        scenarios_by_column: Dict[str, Scenario],
+        scenarios_by_column: Dict[str, Session],
         update_set: set[str] = None,
     ):
         """Import scenario-specific sortables and custom curves sheets."""
@@ -677,7 +677,7 @@ class ScenarioPacker(BaseModel):
                     update_set,
                 )
 
-    def _scenarios(self) -> set[Scenario]:
+    def _scenarios(self) -> set[Session]:
         """All scenarios we are packing info for across all packs."""
         all_scenarios = set()
         for pack in self._get_all_packs():
@@ -710,7 +710,7 @@ class ScenarioPacker(BaseModel):
             except Exception:
                 pass
 
-    def remove_scenario(self, scenario: Scenario):
+    def remove_scenario(self, scenario: Session):
         """Remove a specific scenario from all collections."""
         for pack in self._get_all_packs():
             try:

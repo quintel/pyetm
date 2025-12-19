@@ -4,7 +4,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 from xlsxwriter import Workbook
 
-from pyetm.models.scenario import Scenario
+from models.session import Session
 from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,10 @@ class Packable(BaseModel):
         - Any specialized import/export logic
     """
 
-    scenarios: Set["Scenario"] = Field(default_factory=set)
+    scenarios: Set["Session"] = Field(default_factory=set)
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"
-    _scenario_id_cache: Dict[str, "Scenario"] | None = None
+    _scenario_id_cache: Dict[str, "Session"] | None = None
 
     def add(self, *scenarios):
         "Adds one or more scenarios to the packable"
@@ -48,13 +48,13 @@ class Packable(BaseModel):
     def summary(self) -> dict:
         return {self.key: {"scenario_count": len(self.scenarios)}}
 
-    def _key_for(self, scenario: "Scenario") -> Any:
+    def _key_for(self, scenario: "Session") -> Any:
         """Return the identifier used as the top-level column key when packing.
         Subclasses can override (e.g. to use short names)."""
         return scenario.identifier()
 
     def _build_dataframe_for_scenario(
-        self, scenario: "Scenario", columns: str = "", **kwargs
+        self, scenario: "Session", columns: str = "", **kwargs
     ) -> Optional[pd.DataFrame]:
         return None
 
@@ -113,7 +113,7 @@ class Packable(BaseModel):
             self._refresh_cache()
         return self._scenario_id_cache.get(ident_str)
 
-    def resolve_scenario(self, label: Any) -> Optional["Scenario"]:
+    def resolve_scenario(self, label: Any) -> Optional["Session"]:
         if label is None:
             return None
         return self._find_by_identifier(label)
@@ -150,8 +150,8 @@ class Packable(BaseModel):
     def apply_identifier_blocks(
         self,
         df: pd.DataFrame,
-        apply_block: Callable[["Scenario", pd.DataFrame], None],
-        resolve: Optional[Callable[[Any], Optional["Scenario"]]] = None,
+        apply_block: Callable[["Session", pd.DataFrame], None],
+        resolve: Optional[Callable[[Any], Optional["Session"]]] = None,
     ):
         if df is None or not isinstance(df.columns, pd.MultiIndex):
             return
@@ -252,7 +252,7 @@ class Packable(BaseModel):
         self,
         excel_file: pd.ExcelFile,
         main_df: Optional[pd.DataFrame] = None,
-        scenarios_by_column: Optional[Dict[str, "Scenario"]] = None,
+        scenarios_by_column: Optional[Dict[str, "Session"]] = None,
     ):
         """Import pack data from Excel file.
         Subclasses should override this to implement specific import logic."""
@@ -261,7 +261,7 @@ class Packable(BaseModel):
             self.from_dataframe(df)
 
     def log_scenario_warnings(
-        self, scenario: "Scenario", attribute_name: str, context: str
+        self, scenario: "Session", attribute_name: str, context: str
     ):
         """Log warnings from scenario attributes if available."""
         try:

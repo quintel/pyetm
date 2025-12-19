@@ -38,7 +38,7 @@ class ScenarioError(Exception):
 
 
 # TODO: Tidy up the datetime created_at and updated-at fields - they come through like:  'created_at': datetime.datetime(2025, 6, 25, 14, 18, 6, tzinfo=TzInfo(UTC))
-class Scenario(Base):
+class Session(Base):
     """
     Pydantic model for an ETM Scenario, matching the DB schema,
     but with only `id` required so it can be used for API runners.
@@ -72,7 +72,7 @@ class Scenario(Base):
     _couplings: Optional[Couplings] = PrivateAttr(default=None)
 
     @classmethod
-    def new(cls, area_code: str, end_year: int, **kwargs) -> "Scenario":
+    def new(cls, area_code: str, end_year: int, **kwargs) -> "Session":
         """
         Create a new scenario with the specified parameters.
 
@@ -96,7 +96,7 @@ class Scenario(Base):
         return scenario
 
     @classmethod
-    def load(cls, scenario_id: int) -> Scenario:
+    def load(cls, scenario_id: int) -> Session:
         """
         Fetch metadata for scenario_id, return a Scenario (with warnings if any keys missing).
         """
@@ -114,7 +114,7 @@ class Scenario(Base):
             scenario.add_warning("metadata", w)
         return scenario
 
-    def copy_with_preset(self, **overrides) -> "Scenario":
+    def copy_with_preset(self, **overrides) -> "Session":
         """
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
@@ -130,13 +130,13 @@ class Scenario(Base):
             raise ScenarioError(f"Failed to copy scenario: {result.errors}")
 
         # Create and return new scenario
-        scenario = Scenario.model_validate(result.data)
+        scenario = Session.model_validate(result.data)
         for warning in result.errors:
             scenario.add_warning("base", warning)
 
         return scenario
 
-    def copy(self, **overrides) -> "Scenario":
+    def copy(self, **overrides) -> "Session":
         """
         Create a copy with no template link to the original scenario.
         """
@@ -160,7 +160,7 @@ class Scenario(Base):
         return new_scenario
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenario":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "Session":
         """
         Convenience method to load a single scenario from Excel.
         """
@@ -238,7 +238,7 @@ class Scenario(Base):
 
         return result.data
 
-    def __eq__(self, other: "Scenario"):
+    def __eq__(self, other: "Session"):
         return self.id == other.id
 
     def __hash__(self):
@@ -352,7 +352,9 @@ class Scenario(Base):
             series = series.droplevel("unit")
         self.update_user_values(series.fillna("reset").to_dict())
 
-    def update_user_values(self, update_inputs: Dict[str, Any], skip_upload: bool = False) -> None:
+    def update_user_values(
+        self, update_inputs: Dict[str, Any], skip_upload: bool = False
+    ) -> None:
         """
         Args:
             update_inputs: Dictionary of input key-value pairs to update
@@ -404,7 +406,9 @@ class Scenario(Base):
         self._sortables = coll
         return coll
 
-    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame, skip_upload: bool = False) -> None:
+    def set_sortables_from_dataframe(
+        self, dataframe: pd.DataFrame, skip_upload: bool = False
+    ) -> None:
         """
         Extract sortables from dataframe and update them.
         The dataframe should have sortable names as columns and orders as rows.
@@ -418,7 +422,9 @@ class Scenario(Base):
         if updates:
             self.update_sortables(updates, skip_upload=skip_upload)
 
-    def update_sortables(self, update_sortables: Dict[str, List[Any]], skip_upload: bool = False) -> None:
+    def update_sortables(
+        self, update_sortables: Dict[str, List[Any]], skip_upload: bool = False
+    ) -> None:
         """
         Update the order of specified sortables.
 

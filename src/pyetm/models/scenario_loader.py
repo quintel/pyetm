@@ -1,6 +1,6 @@
 import logging
 from typing import Protocol, Optional, Dict, Any
-from pyetm.models.scenario import Scenario
+from models.session import Session
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class ScenarioLoader(Protocol):
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Load an existing scenario by ID and apply metadata updates."""
         ...
 
@@ -30,7 +30,7 @@ class ScenarioLoader(Protocol):
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Create a deep copy of a scenario (no template link)."""
         ...
 
@@ -40,7 +40,7 @@ class ScenarioLoader(Protocol):
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Create a brand new scenario."""
         ...
 
@@ -66,7 +66,7 @@ class SessionLoader:
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Load an ETEngine Session by ID."""
         scenario = self._helper._load_or_create_scenario(
             scenario_id, area_code, end_year, row_label, **metadata_updates
@@ -81,10 +81,10 @@ class SessionLoader:
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Deep copy an ETEngine Session."""
         try:
-            source_scenario = Scenario.load(scenario_id)
+            source_scenario = Session.load(scenario_id)
             return source_scenario.copy(**metadata_updates)
         except Exception as e:
             logger.warning(
@@ -101,7 +101,7 @@ class SessionLoader:
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Create a new ETEngine Session."""
         scenario = self._helper._load_or_create_scenario(
             None, area_code, end_year, row_label, **metadata_updates
@@ -133,7 +133,7 @@ class SavedScenarioLoader:
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Load a SavedScenario from MyETM."""
         from pyetm.models.saved_scenario import SavedScenario
 
@@ -154,7 +154,7 @@ class SavedScenarioLoader:
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Copy a SavedScenario and save the copy to MyETM."""
         from pyetm.models.saved_scenario import SavedScenario
 
@@ -193,7 +193,7 @@ class SavedScenarioLoader:
         end_year: Optional[int],
         row_label: str,
         metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
+    ) -> Optional[Session]:
         """Create a new scenario and save it to MyETM."""
         from pyetm.models.saved_scenario import SavedScenario
 
