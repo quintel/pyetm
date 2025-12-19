@@ -4,6 +4,6 @@ from .inputs import Input, Inputs
 from .saved_scenario import SavedScenario
 from .saved_scenarios import SavedScenarios
 from .session import Session
-from .scenarios import Scenarios
+from .sessions import Sessions
 from .sortables import Sortable, Sortables
 from .scenario_packer import ScenarioPacker

@@ -8,7 +8,7 @@ from .session import Session, ScenarioError
 from pathlib import Path
 
 
-class Scenarios(Base):
+class Sessions(Base):
     """
     A collection of Scenario objects
     """
@@ -31,7 +31,7 @@ class Scenarios(Base):
         self.items.extend(list(scenarios))
 
     @classmethod
-    def load_many(cls, scenario_ids: Iterable[int]) -> "Scenarios":
+    def load_many(cls, scenario_ids: Iterable[int]) -> "Sessions":
         scenarios = []
         for sid in scenario_ids:
             try:
@@ -46,7 +46,7 @@ class Scenarios(Base):
         scenario_params: Iterable[dict],
         area_code: str | None = None,
         end_year: int | None = None,
-    ) -> "Scenarios":
+    ) -> "Sessions":
         """Create multiple Scenario objects from parameter dicts."""
         scenarios = []
         for params in scenario_params:
@@ -83,7 +83,7 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
+    def from_excel(cls, xlsx_path: PathLike | str) -> "Sessions":
         """
         Import scenarios (Sessions) from Excel file.
 

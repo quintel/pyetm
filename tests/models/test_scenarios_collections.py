@@ -5,7 +5,7 @@ import pandas as pd
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
-from pyetm.models.scenarios import Scenarios
+from models.sessions import Sessions
 from pyetm.models.saved_scenarios import SavedScenarios
 from models.session import Session
 from pyetm.models.saved_scenario import SavedScenario
@@ -30,7 +30,7 @@ class TestScenariosFromExcel:
         mock_packer._scenarios.return_value = {session1, session2, saved1}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = Scenarios.from_excel("test.xlsx")
+            result = Sessions.from_excel("test.xlsx")
 
         # Should only include Scenario instances, not SavedScenario
         assert len(result.items) == 2
@@ -49,7 +49,7 @@ class TestScenariosFromExcel:
         mock_packer._scenarios.return_value = {saved1, saved2}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = Scenarios.from_excel("test.xlsx")
+            result = Sessions.from_excel("test.xlsx")
 
         # Should be empty
         assert len(result.items) == 0
@@ -67,7 +67,7 @@ class TestScenariosFromExcel:
         mock_packer._scenarios.return_value = {session1, session2, session3}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = Scenarios.from_excel("test.xlsx")
+            result = Sessions.from_excel("test.xlsx")
 
         # Should include all sessions
         assert len(result.items) == 3
@@ -88,7 +88,7 @@ class TestScenariosFromExcel:
         mock_packer._scenarios.return_value = {session1, session2, session3}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            result = Scenarios.from_excel("test.xlsx")
+            result = Sessions.from_excel("test.xlsx")
 
         # Should be sorted by ID
         assert result.items[0].id == 100
@@ -252,7 +252,7 @@ class TestMixedScenariosSeparation:
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
             # Load as Scenarios (Sessions only)
-            sessions_result = Scenarios.from_excel("test.xlsx")
+            sessions_result = Sessions.from_excel("test.xlsx")
 
             # Load as SavedScenarios (SavedScenarios only)
             saved_result = SavedScenarios.from_excel("test.xlsx")
@@ -282,7 +282,7 @@ class TestMixedScenariosSeparation:
         mock_packer._scenarios.return_value = {session1, saved1}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            sessions_result = Scenarios.from_excel("test.xlsx")
+            sessions_result = Sessions.from_excel("test.xlsx")
             saved_result = SavedScenarios.from_excel("test.xlsx")
 
         # Get all items from both collections
