@@ -395,7 +395,6 @@ class ScenarioPacker(BaseModel):
 
         """
         scenario_id = self._safe_get_int(row_data.get("scenario_id"))
-        parent = self._safe_get_int(row_data.get("parent"))
         copy_from = self._safe_get_int(row_data.get("copy_from"))
         area_code = row_data.get("area_code")
         end_year = self._safe_get_int(row_data.get("end_year"))
@@ -408,13 +407,9 @@ class ScenarioPacker(BaseModel):
                 scenario_id, area_code, end_year, row_label, metadata_updates
             )
 
-        # Deep copy if copy_from is provided
+        # Copy if copy_from is provided
         if copy_from:
-            return self._deep_copy_scenario(copy_from, row_label, metadata_updates)
-
-        # Copy with roles if parent is provided
-        if parent:
-            return self._copy_with_roles(parent, row_label, metadata_updates)
+            return self._copy_scenario(copy_from, row_label, metadata_updates)
 
         # Create new scenario
         return self._create_new_scenario(
@@ -438,40 +433,21 @@ class ScenarioPacker(BaseModel):
         self._apply_metadata_to_scenario(scenario, metadata_updates)
         return scenario
 
-    def _deep_copy_scenario(
+    def _copy_scenario(
         self,
         scenario_id: int,
         row_label: str,
         metadata_updates: Dict[str, Any],
     ) -> Optional[Scenario]:
-        """Create a deep copy of a scenario (no template link)."""
+        """Create a copy of a scenario (no template link)."""
         try:
             source_scenario = Scenario.load(scenario_id)
-            return source_scenario.deep_copy(**metadata_updates)
+            new_scenario = source_scenario.copy(**metadata_updates)
+            self._apply_metadata_to_scenario(new_scenario, metadata_updates)
+            return new_scenario
         except Exception as e:
             logger.warning(
-                "Failed to deep copy from '%s' for row '%s': %s",
-                scenario_id,
-                row_label,
-                e,
-            )
-            return None
-
-    def _copy_with_roles(
-        self,
-        scenario_id: int,
-        row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Scenario]:
-        """Copy a scenario with roles preserved (maintains template link)."""
-        try:
-            source_scenario = Scenario.load(scenario_id)
-            copy_metadata = metadata_updates.copy()
-            copy_metadata["copy_roles"] = True
-            return source_scenario.copy(**copy_metadata)
-        except Exception as e:
-            logger.warning(
-                "Failed to copy from parent '%s' for row '%s': %s",
+                "Failed to copy from '%s' for row '%s': %s",
                 scenario_id,
                 row_label,
                 e,
