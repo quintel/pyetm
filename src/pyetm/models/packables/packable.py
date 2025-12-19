@@ -4,7 +4,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 from xlsxwriter import Workbook
 
-from models.session import Session
+from pyetm.models.session import Session
 from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)

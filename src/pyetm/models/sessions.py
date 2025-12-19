@@ -97,7 +97,7 @@ class Sessions(Base):
             Scenarios collection containing only Session instances
         """
         from pyetm.models.scenario_packer import ScenarioPacker
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
         packer = ScenarioPacker.from_excel(str(resolved_path))

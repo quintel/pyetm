@@ -11,9 +11,9 @@ import pytest
 from datetime import datetime
 from pathlib import Path
 from pyetm.models.sortables import Sortables
-from models.session import Session
+from pyetm.models.session import Session
 from pyetm.models.output_curves import OutputCurves
-from models.scenario import Scenario
+from pyetm.models.scenario import Scenario
 
 
 # --- Scenario Fixtures --- #

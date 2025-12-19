@@ -3,8 +3,8 @@ from typing import List, Optional, Sequence, Union
 from os import PathLike
 import logging
 
-from models.session import Session
-from models.scenario import Scenario
+from pyetm.models.session import Session
+from pyetm.models.scenario import Scenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
 logger = logging.getLogger(__name__)

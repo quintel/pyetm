@@ -191,7 +191,7 @@ class Session(Base):
         Returns:
             SavedScenario instance
         """
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         client = client or BaseClient()
 

@@ -1,8 +1,8 @@
 from unittest.mock import Mock, patch
 import pytest
 from datetime import datetime
-from models.scenario import Scenario, SavedScenarioError
-from models.session import Session
+from pyetm.models.scenario import Scenario, SavedScenarioError
+from pyetm.models.session import Session
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )

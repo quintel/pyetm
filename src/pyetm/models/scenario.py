@@ -17,7 +17,7 @@ import pandas as pd
 from os import PathLike
 
 if TYPE_CHECKING:
-    from models.session import Session
+    from pyetm.models.session import Session
     from pyetm.models.inputs import Inputs
     from pyetm.models.sortables import Sortables
     from pyetm.models.custom_curves import CustomCurves
@@ -188,7 +188,7 @@ class Scenario(Base):
         Returns:
             Scenario: The current ETEngine scenario session (cached after first access)
         """
-        from models.session import Session
+        from pyetm.models.session import Session
 
         # Return cached if already loaded
         if self._scenario_session is not None:

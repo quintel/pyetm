@@ -1051,7 +1051,7 @@ class TestSessionColumnFeature:
 
     def test_create_scenario_from_row_with_session_false(self, monkeypatch):
         """Test that session=False uses SavedScenarioLoader"""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         packer = ScenarioPacker()
         saved_scenario = Mock(spec=Scenario)
@@ -1080,7 +1080,7 @@ class TestSessionColumnFeature:
         self, monkeypatch
     ):
         """Test that missing session column defaults to False (SavedScenarioLoader)"""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         packer = ScenarioPacker()
         saved_scenario = Mock(spec=Scenario)
@@ -1108,7 +1108,7 @@ class TestSessionColumnFeature:
         self, monkeypatch
     ):
         """Test that NaN session value defaults to False"""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         packer = ScenarioPacker()
         saved_scenario = Mock(spec=Scenario)
@@ -1184,7 +1184,7 @@ class TestSessionColumnFeature:
 
     def test_create_scenario_from_row_with_session_int_0(self, monkeypatch):
         """Test that session=0 is parsed as False"""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         packer = ScenarioPacker()
         saved_scenario = Mock(spec=Scenario)

@@ -1,6 +1,6 @@
 import logging
 from typing import Protocol, Optional, Dict, Any
-from models.session import Session
+from pyetm.models.session import Session
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Load a SavedScenario from MyETM."""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         try:
             saved_scenario = Scenario.load(scenario_id)
@@ -156,7 +156,7 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Copy a SavedScenario and save the copy to MyETM."""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         try:
             saved_scenario = Scenario.load(scenario_id)
@@ -195,7 +195,7 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Create a new scenario and save it to MyETM."""
-        from models.scenario import Scenario
+        from pyetm.models.scenario import Scenario
 
         scenario = self._helper._load_or_create_scenario(
             None, area_code, end_year, row_label, **metadata_updates

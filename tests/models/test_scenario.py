@@ -2,7 +2,7 @@ from unittest.mock import Mock
 import pytest
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
-from models.session import Session, ScenarioError
+from pyetm.models.session import Session, ScenarioError
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )

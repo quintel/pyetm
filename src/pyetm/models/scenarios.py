@@ -3,7 +3,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Iterable, Iterator, List
 from pydantic import Field
-from models.session import Session
+from pyetm.models.session import Session
 from pyetm.models.base import Base
 from .scenario import Scenario, SavedScenarioError
 
@@ -38,7 +38,7 @@ class Scenarios(Base):
         Returns:
             List of Scenario instances (the underlying sessions)
         """
-        from models.session import Session
+        from pyetm.models.session import Session
 
         return [saved.session for saved in self.items]
 

@@ -5,10 +5,10 @@ import pandas as pd
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
-from models.sessions import Sessions
-from models.scenarios import Scenarios
-from models.session import Session
-from models.scenario import Scenario
+from pyetm.models.sessions import Sessions
+from pyetm.models.scenarios import Scenarios
+from pyetm.models.session import Session
+from pyetm.models.scenario import Scenario
 from pyetm.models.scenario_packer import ScenarioPacker
 
 
