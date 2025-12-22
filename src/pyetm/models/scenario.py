@@ -409,6 +409,20 @@ class Scenario(Base):
         """Create a deep copy of the underlying session."""
         return self.session.deep_copy(**overrides)
 
+    def interpolate(
+        self, end_year: int, start_scenario: Optional["Scenario"] = None, **kwargs
+    ) -> "Scenario":
+        """
+        Create a new saved scenario by interpolating input values to a target year.
+        """
+        start_session = start_scenario.session if start_scenario else None
+        interpolated_session = self.session.interpolate(
+            end_year, start_session, **kwargs
+        )
+
+        # TODO: Wrap the interpolated session in a new Scenario
+        return interpolated_session
+
     def to_excel(self, path: PathLike | str, **export_options) -> None:
         """Export this saved scenario to Excel."""
         self.session.to_excel(path, **export_options)

@@ -43,6 +43,9 @@ from pyetm.services.scenario_runners.scenario_users_update import (
 from pyetm.services.scenario_runners.scenario_users_destroy import (
     ScenarioUsersDestroyRunner,
 )
+from pyetm.services.scenario_runners.interpolate_scenario import (
+    InterpolateScenarioRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -170,6 +173,29 @@ class Session(Base):
                     setattr(new_scenario, field, value)
 
         return new_scenario
+
+    def interpolate(
+        self, end_year: int, start_session: Optional["Session"] = None, **kwargs
+    ) -> "Session":
+        """
+        Create a new scenario by interpolating input values to a target year.
+        """
+        start_scenario_id = start_session.id if start_session else None
+
+        # Call the interpolation runner
+        result = InterpolateScenarioRunner.run(
+            BaseClient(), self.id, end_year, start_scenario_id
+        )
+
+        if not result.success:
+            raise ScenarioError(f"Failed to interpolate scenario: {result.errors}")
+
+        # Create and return new scenario
+        scenario = Session.model_validate(result.data)
+        for warning in result.errors:
+            scenario.add_warning("base", warning)
+
+        return scenario
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Session":
@@ -705,7 +731,7 @@ class Session(Base):
             raise ScenarioError(f"Could not fetch users: {result.errors}")
 
         for user in result.data:
-            user['role'] = user['role'].replace('scenario_', '', 1)
+            user["role"] = user["role"].replace("scenario_", "", 1)
 
         return result.data
 

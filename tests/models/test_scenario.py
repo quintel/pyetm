@@ -16,6 +16,9 @@ from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
 from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
+from pyetm.services.scenario_runners.interpolate_scenario import (
+    InterpolateScenarioRunner,
+)
 
 
 def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
@@ -1195,3 +1198,119 @@ def test_copy_scenario_deep_false_doesnt_break_link(
     assert len(copy_called) == 1
     assert len(break_link_called) == 0
     assert scenario.id == 67896
+
+
+# ------ interpolate ------ #
+
+
+def test_interpolate_scenario_success_no_start_scenario(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test successful scenario interpolation without start scenario"""
+    interpolated_data = {
+        "id": 88888,
+        "area_code": "nl",
+        "end_year": 2040,
+        "start_year": 2023,
+        "title": "Interpolated to 2040",
+    }
+
+    monkeypatch.setattr(
+        InterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_id, end_year, start_scenario_id: ok_service_result(
+            interpolated_data
+        ),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.interpolate(end_year=2040)
+    assert scenario.id == 88888
+    assert scenario.area_code == "nl"
+    assert scenario.end_year == 2040
+    assert scenario.title == "Interpolated to 2040"
+    assert len(scenario.warnings) == 0
+
+
+def test_interpolate_scenario_with_start_scenario(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test successful scenario interpolation with start scenario"""
+    interpolated_data = {
+        "id": 99999,
+        "area_code": "nl",
+        "end_year": 2040,
+        "start_year": 2023,
+        "title": "Interpolated between 2030 and 2050",
+    }
+
+    monkeypatch.setattr(
+        InterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_id, end_year, start_scenario_id: ok_service_result(
+            interpolated_data
+        ),
+    )
+
+    start = dummy_scenario(67890)
+    end = dummy_scenario(12345)
+    scenario = end.interpolate(end_year=2040, start_session=start)
+    assert scenario.id == 99999
+    assert scenario.end_year == 2040
+    assert len(scenario.warnings) == 0
+
+
+def test_interpolate_scenario_with_warnings(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test scenario interpolation with warnings"""
+    interpolated_data = {"id": 77777, "area_code": "nl", "end_year": 2040}
+    warnings = ["Some input values could not be interpolated"]
+
+    monkeypatch.setattr(
+        InterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_id, end_year, start_scenario_id: ok_service_result(
+            interpolated_data, warnings
+        ),
+    )
+
+    original = dummy_scenario(12345)
+    scenario = original.interpolate(end_year=2040)
+    assert scenario.id == 77777
+    base_warnings = scenario.warnings.get_by_field("base")
+    assert len(base_warnings) == 1
+    assert base_warnings[0].message == warnings[0]
+
+
+def test_interpolate_scenario_failure(monkeypatch, fail_service_result, dummy_scenario):
+    """Test scenario interpolation failure"""
+    monkeypatch.setattr(
+        InterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_id, end_year, start_scenario_id: fail_service_result(
+            ["Start scenario not found"]
+        ),
+    )
+
+    original = dummy_scenario(12345)
+    with pytest.raises(ScenarioError, match="Failed to interpolate scenario"):
+        original.interpolate(end_year=2040, start_session=dummy_scenario(99999))
+
+
+def test_interpolate_scenario_validation_error(
+    monkeypatch, fail_service_result, dummy_scenario
+):
+    """Test scenario interpolation with validation error"""
+    monkeypatch.setattr(
+        InterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_id, end_year, start_scenario_id: fail_service_result(
+            ["Start scenario must have the same area code as the original scenario (nl)"]
+        ),
+    )
+
+    original = dummy_scenario(12345)
+    start = dummy_scenario(67890)
+    with pytest.raises(ScenarioError, match="Failed to interpolate scenario"):
+        original.interpolate(end_year=2040, start_session=start)
