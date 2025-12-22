@@ -1,5 +1,3 @@
-"""Tests for Scenarios and SavedScenarios collection classes with from_excel filtering."""
-
 import pytest
 import pandas as pd
 import tempfile
@@ -96,11 +94,11 @@ class TestScenariosFromExcel:
         assert result.items[2].id == 300
 
 
-class TestSavedScenariosFromExcel:
-    """Test SavedScenarios.from_excel() filtering for SavedScenario instances only."""
+class TestScenariosFromExcelMixed:
+    """Test Scenarios.from_excel() with mixed Scenario and Session instances."""
 
-    def test_from_excel_filters_saved_scenarios_only(self, monkeypatch):
-        """Test that from_excel only returns SavedScenario instances."""
+    def test_from_excel_includes_all_types(self, monkeypatch):
+        """Test that from_excel includes both SavedScenario and Session instances."""
         session1 = Mock(spec=Session)
         session1.id = 100
         saved1 = Mock(spec=Scenario)
@@ -114,14 +112,14 @@ class TestSavedScenariosFromExcel:
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
             result = Scenarios.from_excel("test.xlsx")
 
-        # Should only include SavedScenario instances
-        assert len(result.items) == 2
+        # Should include all types
+        assert len(result.items) == 3
         assert saved1 in result.items
         assert saved2 in result.items
-        assert session1 not in result.items
+        assert session1 in result.items
 
-    def test_from_excel_empty_when_no_saved_scenarios(self, monkeypatch):
-        """Test that from_excel returns empty collection when only Sessions exist."""
+    def test_from_excel_all_sessions(self, monkeypatch):
+        """Test that from_excel returns all Sessions when only Sessions exist."""
         session1 = Mock(spec=Session)
         session1.id = 100
         session2 = Mock(spec=Session)
@@ -133,8 +131,10 @@ class TestSavedScenariosFromExcel:
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
             result = Scenarios.from_excel("test.xlsx")
 
-        # Should be empty
-        assert len(result.items) == 0
+        # Should include all sessions
+        assert len(result.items) == 2
+        assert session1 in result.items
+        assert session2 in result.items
 
     def test_from_excel_all_saved_scenarios(self, monkeypatch):
         """Test that from_excel returns all SavedScenarios when no Sessions exist."""
@@ -158,16 +158,16 @@ class TestSavedScenariosFromExcel:
         assert saved3 in result.items
 
     def test_from_excel_sorts_by_id(self, monkeypatch):
-        """Test that SavedScenarios are sorted by ID."""
+        """Test that mixed scenarios are sorted by ID."""
         saved1 = Mock(spec=Scenario)
         saved1.id = 300
+        session1 = Mock(spec=Session)
+        session1.id = 100
         saved2 = Mock(spec=Scenario)
-        saved2.id = 100
-        saved3 = Mock(spec=Scenario)
-        saved3.id = 200
+        saved2.id = 200
 
         mock_packer = Mock(spec=ScenarioPacker)
-        mock_packer._scenarios.return_value = {saved1, saved2, saved3}
+        mock_packer._scenarios.return_value = {saved1, session1, saved2}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
             result = Scenarios.from_excel("test.xlsx")
@@ -178,35 +178,63 @@ class TestSavedScenariosFromExcel:
         assert result.items[2].id == 300
 
 
-class TestSavedScenariosSessionsProperty:
-    """Test SavedScenarios.sessions property for accessing underlying Scenario objects."""
+class TestScenariosSessionsProperty:
+    """Test Scenarios.sessions property for accessing underlying Session objects."""
 
-    def test_sessions_property_returns_list_of_scenarios(self):
-        """Test that sessions property returns list of underlying Scenario objects."""
+    def test_sessions_property_returns_list_of_sessions(self):
+        """Test that sessions property returns list of underlying Session objects."""
         # Create mock SavedScenarios with mock sessions
-        scenario1 = Mock(spec=Session)
-        scenario1.id = 100
-        scenario2 = Mock(spec=Session)
-        scenario2.id = 200
+        session1 = Mock(spec=Session)
+        session1.id = 100
+        session2 = Mock(spec=Session)
+        session2.id = 200
 
         saved1 = Mock(spec=Scenario)
         saved1.id = 1
-        saved1.session = scenario1
+        saved1.session = session1
 
         saved2 = Mock(spec=Scenario)
         saved2.id = 2
-        saved2.session = scenario2
+        saved2.session = session2
 
         collection = Scenarios(items=[saved1, saved2])
 
         # Access sessions property
         sessions = collection.sessions
 
-        # Should return list of Scenario objects
+        # Should return list of Session objects
         assert isinstance(sessions, list)
         assert len(sessions) == 2
-        assert sessions[0] is scenario1
-        assert sessions[1] is scenario2
+        assert sessions[0] is session1
+        assert sessions[1] is session2
+
+    def test_sessions_property_mixed_types(self):
+        """Test that sessions property handles mixed Scenario and Session instances."""
+        # Create mock instances
+        session1 = Mock(spec=Session)
+        session1.id = 100
+
+        session2 = Mock(spec=Session)
+        session2.id = 200
+
+        saved_session = Mock(spec=Session)
+        saved_session.id = 300
+
+        saved = Mock(spec=Scenario)
+        saved.id = 3
+        saved.session = saved_session
+
+        collection = Scenarios(items=[session1, saved, session2])
+
+        # Access sessions property
+        sessions = collection.sessions
+
+        # Should return all Sessions, unwrapping Scenario instances
+        assert isinstance(sessions, list)
+        assert len(sessions) == 3
+        assert sessions[0] is session1
+        assert sessions[1] is saved_session  # Unwrapped from Scenario
+        assert sessions[2] is session2
 
     def test_sessions_property_empty_collection(self):
         """Test that sessions property returns empty list for empty collection."""
@@ -218,25 +246,39 @@ class TestSavedScenariosSessionsProperty:
 
     def test_sessions_property_single_saved_scenario(self):
         """Test sessions property with single SavedScenario."""
-        scenario = Mock(spec=Session)
-        scenario.id = 100
+        session = Mock(spec=Session)
+        session.id = 100
 
         saved = Mock(spec=Scenario)
         saved.id = 1
-        saved.session = scenario
+        saved.session = session
 
         collection = Scenarios(items=[saved])
         sessions = collection.sessions
 
         assert len(sessions) == 1
-        assert sessions[0] is scenario
+        assert sessions[0] is session
+
+    def test_sessions_property_only_sessions(self):
+        """Test sessions property with only Session instances."""
+        session1 = Mock(spec=Session)
+        session1.id = 100
+        session2 = Mock(spec=Session)
+        session2.id = 200
+
+        collection = Scenarios(items=[session1, session2])
+        sessions = collection.sessions
+
+        assert len(sessions) == 2
+        assert sessions[0] is session1
+        assert sessions[1] is session2
 
 
-class TestMixedScenariosSeparation:
-    """Test that mixed Excel files correctly separate Sessions and SavedScenarios."""
+class TestMixedScenariosHandling:
+    """Test that Scenarios handles mixed types while Sessions filters."""
 
-    def test_mixed_excel_separates_correctly(self, monkeypatch):
-        """Test that same Excel file returns different results for Scenarios vs SavedScenarios."""
+    def test_scenarios_includes_all_sessions_filters(self, monkeypatch):
+        """Test that Scenarios includes all while Sessions filters to Sessions only."""
         # Create mixed scenarios
         session1 = Mock(spec=Session)
         session1.id = 100
@@ -251,28 +293,28 @@ class TestMixedScenariosSeparation:
         mock_packer._scenarios.return_value = {session1, session2, saved1, saved2}
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
-            # Load as Scenarios (Sessions only)
+            # Load as Sessions (Sessions only)
             sessions_result = Sessions.from_excel("test.xlsx")
 
-            # Load as SavedScenarios (SavedScenarios only)
-            saved_result = Scenarios.from_excel("test.xlsx")
+            # Load as Scenarios (all types)
+            scenarios_result = Scenarios.from_excel("test.xlsx")
 
-        # Verify Sessions collection
+        # Verify Sessions collection - only Session instances
         assert len(sessions_result.items) == 2
         assert session1 in sessions_result.items
         assert session2 in sessions_result.items
         assert saved1 not in sessions_result.items
         assert saved2 not in sessions_result.items
 
-        # Verify SavedScenarios collection
-        assert len(saved_result.items) == 2
-        assert saved1 in saved_result.items
-        assert saved2 in saved_result.items
-        assert session1 not in saved_result.items
-        assert session2 not in saved_result.items
+        # Verify Scenarios collection - includes all types
+        assert len(scenarios_result.items) == 4
+        assert saved1 in scenarios_result.items
+        assert saved2 in scenarios_result.items
+        assert session1 in scenarios_result.items
+        assert session2 in scenarios_result.items
 
-    def test_no_overlap_between_collections(self, monkeypatch):
-        """Test that there's no overlap between the two collections."""
+    def test_scenarios_is_superset_of_sessions(self, monkeypatch):
+        """Test that Scenarios contains everything Sessions contains (and more)."""
         session1 = Mock(spec=Session)
         session1.id = 100
         saved1 = Mock(spec=Scenario)
@@ -283,12 +325,13 @@ class TestMixedScenariosSeparation:
 
         with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
             sessions_result = Sessions.from_excel("test.xlsx")
-            saved_result = Scenarios.from_excel("test.xlsx")
+            scenarios_result = Scenarios.from_excel("test.xlsx")
 
         # Get all items from both collections
         all_sessions = set(sessions_result.items)
-        all_saved = set(saved_result.items)
+        all_scenarios = set(scenarios_result.items)
 
-        # Verify no overlap
-        assert len(all_sessions & all_saved) == 0
-        assert len(all_sessions) + len(all_saved) == 2
+        # Verify Sessions is a subset of Scenarios
+        assert all_sessions.issubset(all_scenarios)
+        assert len(all_scenarios) == 2
+        assert len(all_sessions) == 1
