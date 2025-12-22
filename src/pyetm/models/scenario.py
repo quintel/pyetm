@@ -416,12 +416,17 @@ class Scenario(Base):
         Create a new saved scenario by interpolating input values to a target year.
         """
         start_session = start_scenario.session if start_scenario else None
-        interpolated_session = self.session.interpolate(
-            end_year, start_session, **kwargs
-        )
+        interpolated_session = self.session.interpolate(end_year, start_session)
 
-        # TODO: Wrap the interpolated session in a new Scenario
-        return interpolated_session
+        # Generate a default title if not provided in kwargs
+        if 'title' not in kwargs:
+            if start_scenario:
+                kwargs['title'] = f"Interpolated between {start_scenario.end_year} and {self.end_year} to {end_year}"
+            else:
+                kwargs['title'] = f"Interpolated to {end_year}"
+
+        # Save and return as a SavedScenario
+        return interpolated_session.save(**kwargs)
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
         """Export this saved scenario to Excel."""
