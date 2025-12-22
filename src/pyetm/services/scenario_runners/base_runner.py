@@ -48,10 +48,10 @@ class BaseRunner(ABC, Generic[T]):
 
             # Handle payload based on HTTP method
             if payload is not None and "files" not in kwargs:
-                if method.upper() in ["POST", "PUT", "PATCH"]:
+                if method.upper() in ["POST", "PUT", "PATCH", "DELETE"]:
                     request_kwargs["json"] = payload
                 else:
-                    # For GET/DELETE, treat payload as query parameters
+                    # For GET, treat payload as query parameters
                     request_kwargs["params"] = payload
 
             # Make the request
@@ -64,6 +64,49 @@ class BaseRunner(ABC, Generic[T]):
                 except ValueError:
                     # Not JSON, return raw response
                     return ServiceResult.ok(data=resp)
+
+            # Check for partial success pattern (422 with both success and errors)
+            if resp.status_code == 422:
+
+                def _flatten_errors(error_data, errors):
+                    if isinstance(error_data, dict):
+                        for k, v in error_data.items():
+                            if isinstance(v, list):
+                                for msg in v:
+                                    if msg and str(msg).strip():
+                                        errors.append(f"{k}: {msg}")
+                            elif v and str(v).strip():
+                                errors.append(f"{k}: {v}")
+                    elif isinstance(error_data, list):
+                        for msg in error_data:
+                            if msg and str(msg).strip():
+                                errors.append(str(msg))
+                    elif error_data:
+                        errors.append(str(error_data))
+
+                try:
+                    response_data = resp.json()
+                    if (
+                        isinstance(response_data, dict)
+                        and "success" in response_data
+                        and "errors" in response_data
+                    ):
+                        errors = []
+                        successes = response_data.get("success", [])
+                        if successes:
+                            errors.append(
+                                f"Partial success: {len(successes)} operation(s) succeeded"
+                            )
+                            errors.append(f"Successful operations: {successes}")
+                        error_data = response_data.get("errors", {})
+                        _flatten_errors(error_data, errors)
+                        if not errors:
+                            errors.append(
+                                "Operation failed with unknown error (server returned empty error messages)"
+                            )
+                        return ServiceResult.fail(errors)
+                except Exception:
+                    pass
 
             # HTTP-level failure is breaking
             return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
