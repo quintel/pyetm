@@ -248,9 +248,7 @@ def test_update_saved_scenario_success(
         lambda client, id, kwargs: ok_service_result(updated_data),
     )
 
-    saved_scenario.update(
-        mock_client, title="Updated Title", private=True
-    )
+    saved_scenario.update(mock_client, title="Updated Title", private=True)
 
     assert saved_scenario.title == "Updated Title"
     assert saved_scenario.private is True
@@ -506,21 +504,21 @@ def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
     )
 
 
-# ------ batch_interpolate ------ #
+# ------ interpolate ------ #
 
 
-def test_saved_scenario_batch_interpolate_success(monkeypatch, ok_service_result):
+def test_saved_scenario_interpolate_success(monkeypatch, ok_service_result):
     """Test successful batch interpolation of saved scenarios"""
-    # Mock Session.batch_interpolate to return interpolated sessions
+    # Mock Session.interpolate to return interpolated sessions
     interpolated_sessions = [
         Session(id=77771, area_code="nl", end_year=2040, start_year=2023),
         Session(id=77772, area_code="nl", end_year=2060, start_year=2023),
     ]
 
-    def mock_batch_interpolate(sessions, end_years, client):
+    def mock_interpolate(sessions, end_years, client):
         return interpolated_sessions
 
-    monkeypatch.setattr(Session, "batch_interpolate", mock_batch_interpolate)
+    monkeypatch.setattr(Session, "interpolate", mock_interpolate)
 
     # Mock Session.save to return SavedScenario instances
     def mock_save(self, client, title, **kwargs):
@@ -535,15 +533,9 @@ def test_saved_scenario_batch_interpolate_success(monkeypatch, ok_service_result
     monkeypatch.setattr(Session, "save", mock_save)
 
     # Create saved scenarios
-    saved_2030 = Scenario(
-        id=1001, scenario_id=12345, title="Saved 2030", end_year=2030
-    )
-    saved_2050 = Scenario(
-        id=1002, scenario_id=45678, title="Saved 2050", end_year=2050
-    )
-    saved_2070 = Scenario(
-        id=1003, scenario_id=67890, title="Saved 2070", end_year=2070
-    )
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=45678, title="Saved 2050", end_year=2050)
+    saved_2070 = Scenario(id=1003, scenario_id=67890, title="Saved 2070", end_year=2070)
 
     # Mock session property
     for ss in [saved_2030, saved_2050, saved_2070]:
@@ -551,9 +543,7 @@ def test_saved_scenario_batch_interpolate_success(monkeypatch, ok_service_result
             id=ss.scenario_id, area_code="nl", end_year=ss.end_year
         )
 
-    result = Scenario.batch_interpolate(
-        [saved_2030, saved_2050, saved_2070], [2040, 2060]
-    )
+    result = Scenario.interpolate([saved_2030, saved_2050, saved_2070], [2040, 2060])
 
     assert len(result) == 2
     assert all(isinstance(s, Scenario) for s in result)
@@ -561,16 +551,16 @@ def test_saved_scenario_batch_interpolate_success(monkeypatch, ok_service_result
     assert result[1].title == "Interpolated to 2060"
 
 
-def test_saved_scenario_batch_interpolate_with_custom_titles(monkeypatch):
+def test_saved_scenario_interpolate_with_custom_titles(monkeypatch):
     """Test batch interpolation with custom titles"""
     interpolated_sessions = [
         Session(id=88881, area_code="nl", end_year=2040, start_year=2023),
     ]
 
-    def mock_batch_interpolate(sessions, end_years, client):
+    def mock_interpolate(sessions, end_years, client):
         return interpolated_sessions
 
-    monkeypatch.setattr(Session, "batch_interpolate", mock_batch_interpolate)
+    monkeypatch.setattr(Session, "interpolate", mock_interpolate)
 
     saved_titles = []
 
@@ -586,19 +576,15 @@ def test_saved_scenario_batch_interpolate_with_custom_titles(monkeypatch):
 
     monkeypatch.setattr(Session, "save", mock_save)
 
-    saved_2030 = Scenario(
-        id=1001, scenario_id=12345, title="Saved 2030", end_year=2030
-    )
-    saved_2050 = Scenario(
-        id=1002, scenario_id=67890, title="Saved 2050", end_year=2050
-    )
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
 
     for ss in [saved_2030, saved_2050]:
         ss._scenario_session = Session(
             id=ss.scenario_id, area_code="nl", end_year=ss.end_year
         )
 
-    result = Scenario.batch_interpolate(
+    result = Scenario.interpolate(
         [saved_2030, saved_2050], [2040], titles=["Custom Title 2040"]
     )
 
@@ -607,16 +593,16 @@ def test_saved_scenario_batch_interpolate_with_custom_titles(monkeypatch):
     assert result[0].title == "Custom Title 2040"
 
 
-def test_saved_scenario_batch_interpolate_with_save_kwargs(monkeypatch):
+def test_saved_scenario_interpolate_with_save_kwargs(monkeypatch):
     """Test batch interpolation passes kwargs to save()"""
     interpolated_sessions = [
         Session(id=88882, area_code="nl", end_year=2040, start_year=2023),
     ]
 
-    def mock_batch_interpolate(sessions, end_years, client):
+    def mock_interpolate(sessions, end_years, client):
         return interpolated_sessions
 
-    monkeypatch.setattr(Session, "batch_interpolate", mock_batch_interpolate)
+    monkeypatch.setattr(Session, "interpolate", mock_interpolate)
 
     save_calls = []
 
@@ -632,19 +618,15 @@ def test_saved_scenario_batch_interpolate_with_save_kwargs(monkeypatch):
 
     monkeypatch.setattr(Session, "save", mock_save)
 
-    saved_2030 = Scenario(
-        id=1001, scenario_id=12345, title="Saved 2030", end_year=2030
-    )
-    saved_2050 = Scenario(
-        id=1002, scenario_id=67890, title="Saved 2050", end_year=2050
-    )
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
 
     for ss in [saved_2030, saved_2050]:
         ss._scenario_session = Session(
             id=ss.scenario_id, area_code="nl", end_year=ss.end_year
         )
 
-    result = Scenario.batch_interpolate(
+    result = Scenario.interpolate(
         [saved_2030, saved_2050],
         [2040],
         private=True,
@@ -655,18 +637,14 @@ def test_saved_scenario_batch_interpolate_with_save_kwargs(monkeypatch):
     assert result[0].private is True
 
 
-def test_saved_scenario_batch_interpolate_titles_length_mismatch():
+def test_saved_scenario_interpolate_titles_length_mismatch():
     """Test that mismatched titles length raises ValueError"""
-    saved_2030 = Scenario(
-        id=1001, scenario_id=12345, title="Saved 2030", end_year=2030
-    )
-    saved_2050 = Scenario(
-        id=1002, scenario_id=67890, title="Saved 2050", end_year=2050
-    )
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
 
     with pytest.raises(ValueError, match="Length of titles .* must match"):
-        Scenario.batch_interpolate(
+        Scenario.interpolate(
             [saved_2030, saved_2050],
-            [2040, 2060],  # 2 target years
+            2040, 2060,  # 2 target years
             titles=["Only One Title"],  # But only 1 title
         )

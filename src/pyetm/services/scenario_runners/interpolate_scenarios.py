@@ -4,11 +4,13 @@ from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class BatchInterpolateScenarioRunner(BaseRunner[List[Dict[str, Any]]]):
+class InterpolateScenariosRunner(BaseRunner[List[Dict[str, Any]]]):
     """
-    Runner for batch interpolating multiple scenarios to create intermediate year scenarios.
+    Runner for interpolating one or more scenarios to create intermediate year scenarios.
 
     POST /api/v3/scenarios/interpolate
+
+    Supports both single scenario and batch interpolation use cases.
     """
 
     @staticmethod
@@ -23,7 +25,7 @@ class BatchInterpolateScenarioRunner(BaseRunner[List[Dict[str, Any]]]):
             "end_years": end_years,
         }
 
-        result = BatchInterpolateScenarioRunner._make_request(
+        result = InterpolateScenariosRunner._make_request(
             client=client,
             method="post",
             path="/scenarios/interpolate",

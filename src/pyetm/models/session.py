@@ -43,11 +43,8 @@ from pyetm.services.scenario_runners.scenario_users_update import (
 from pyetm.services.scenario_runners.scenario_users_destroy import (
     ScenarioUsersDestroyRunner,
 )
-from pyetm.services.scenario_runners.interpolate_scenario import (
-    InterpolateScenarioRunner,
-)
-from pyetm.services.scenario_runners.batch_interpolate_scenario import (
-    BatchInterpolateScenarioRunner,
+from pyetm.services.scenario_runners.interpolate_scenarios import (
+    InterpolateScenariosRunner,
 )
 
 
@@ -177,46 +174,26 @@ class Session(Base):
 
         return new_scenario
 
-    def interpolate(
-        self, end_year: int, start_session: Optional["Session"] = None, **kwargs
-    ) -> "Session":
-        """
-        Create a new scenario by interpolating input values to a target year.
-        """
-        start_scenario_id = start_session.id if start_session else None
-
-        # Call the interpolation runner
-        result = InterpolateScenarioRunner.run(
-            BaseClient(), self.id, end_year, start_scenario_id
-        )
-
-        if not result.success:
-            raise ScenarioError(f"Failed to interpolate scenario: {result.errors}")
-
-        # Create and return new scenario
-        scenario = Session.model_validate(result.data)
-        for warning in result.errors:
-            scenario.add_warning("base", warning)
-
-        return scenario
-
     @classmethod
-    def batch_interpolate(
+    def interpolate(
         cls,
-        sessions: List["Session"],
-        end_years: List[int],
+        sessions: Union["Session", List["Session"]],
+        *end_years: int,
         client: Optional[BaseClient] = None,
     ) -> List["Session"]:
         """
-        Batch interpolate multiple sessions to create intermediate year scenarios.
+        Interpolate one or more sessions to create scenarios at target years.
         """
         client = client or BaseClient()
-        scenario_ids = [s.id for s in sessions]
 
-        result = BatchInterpolateScenarioRunner.run(client, scenario_ids, end_years)
+        session_list = sessions if isinstance(sessions, list) else [sessions]
+        scenario_ids = [s.id for s in session_list]
+        end_years_list = list(end_years)
+
+        result = InterpolateScenariosRunner.run(client, scenario_ids, end_years_list)
 
         if not result.success:
-            raise ScenarioError(f"Batch interpolation failed: {result.errors}")
+            raise ScenarioError(f"Interpolation failed: {result.errors}")
 
         # Create Session instances from the response data
         interpolated_sessions = []

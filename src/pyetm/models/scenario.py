@@ -409,50 +409,32 @@ class Scenario(Base):
         """Create a deep copy of the underlying session."""
         return self.session.deep_copy(**overrides)
 
-    def interpolate(
-        self, end_year: int, start_scenario: Optional["Scenario"] = None, **kwargs
-    ) -> "Scenario":
-        """
-        Create a new saved scenario by interpolating input values to a target year.
-        """
-        start_session = start_scenario.session if start_scenario else None
-        interpolated_session = self.session.interpolate(end_year, start_session)
-
-        # Generate a default title if not provided in kwargs
-        if "title" not in kwargs:
-            if start_scenario:
-                kwargs["title"] = (
-                    f"Interpolated between {start_scenario.end_year} and {self.end_year} to {end_year}"
-                )
-            else:
-                kwargs["title"] = f"Interpolated to {end_year}"
-
-        # Save and return as a SavedScenario
-        return interpolated_session.save(**kwargs)
-
     @classmethod
-    def batch_interpolate(
+    def interpolate(
         cls,
-        saved_scenarios: List["Scenario"],
-        end_years: List[int],
+        scenarios: Union["Scenario", List["Scenario"]],
+        *end_years: int,
         titles: Optional[List[str]] = None,
         client: Optional[BaseClient] = None,
         **kwargs,
     ) -> List["Scenario"]:
         """
-        Batch interpolate saved scenarios and save results to MyETM.
+        Interpolate one or more saved scenarios to target years and save to MyETM.
         """
-        if titles is not None and len(titles) != len(end_years):
+        end_years_list = list(end_years)
+
+        if titles is not None and len(titles) != len(end_years_list):
             raise ValueError(
                 f"Length of titles ({len(titles)}) must match length of "
-                f"end_years ({len(end_years)})"
+                f"end_years ({len(end_years_list)})"
             )
 
-        # Get underlying sessions and perform batch interpolation
+        # Get underlying sessions and perform interpolation
         from pyetm.models.session import Session
 
-        sessions = [ss.session for ss in saved_scenarios]
-        interpolated_sessions = Session.batch_interpolate(sessions, end_years, client)
+        scenario_list = scenarios if isinstance(scenarios, list) else [scenarios]
+        sessions = [sc.session for sc in scenario_list]
+        interpolated_sessions = Session.interpolate(sessions, *end_years, client=client)
 
         # Save each interpolated session as a SavedScenario
         saved_scenarios_list = []

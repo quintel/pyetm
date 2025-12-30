@@ -1,9 +1,9 @@
-from pyetm.services.scenario_runners.batch_interpolate_scenario import (
-    BatchInterpolateScenarioRunner,
+from pyetm.services.scenario_runners.interpolate_scenarios import (
+    InterpolateScenariosRunner,
 )
 
 
-def test_batch_interpolate_success_two_scenarios(dummy_client, fake_response):
+def test_interpolate_success_two_scenarios(dummy_client, fake_response):
     """Test batch interpolating between two scenarios"""
     body = [
         {
@@ -17,7 +17,7 @@ def test_batch_interpolate_success_two_scenarios(dummy_client, fake_response):
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[2040]
     )
 
@@ -34,7 +34,7 @@ def test_batch_interpolate_success_two_scenarios(dummy_client, fake_response):
     ]
 
 
-def test_batch_interpolate_success_three_scenarios(dummy_client, fake_response):
+def test_interpolate_success_three_scenarios(dummy_client, fake_response):
     """Test batch interpolating with three scenarios and two target years"""
     body = [
         {
@@ -55,7 +55,7 @@ def test_batch_interpolate_success_three_scenarios(dummy_client, fake_response):
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 45678, 67890], end_years=[2040, 2060]
     )
 
@@ -67,7 +67,7 @@ def test_batch_interpolate_success_three_scenarios(dummy_client, fake_response):
     assert result.errors == []
 
 
-def test_batch_interpolate_unordered_scenario_ids(dummy_client, fake_response):
+def test_interpolate_unordered_scenario_ids(dummy_client, fake_response):
     """Test that unordered scenario IDs are handled (server sorts by end_year)"""
     body = [
         {
@@ -82,7 +82,7 @@ def test_batch_interpolate_unordered_scenario_ids(dummy_client, fake_response):
     client = dummy_client(response, method="post")
 
     # Deliberately pass scenario IDs in non-chronological order
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[67890, 12345, 45678], end_years=[2040]
     )
 
@@ -92,15 +92,13 @@ def test_batch_interpolate_unordered_scenario_ids(dummy_client, fake_response):
     assert client.calls[0][1]["json"]["scenario_ids"] == [67890, 12345, 45678]
 
 
-def test_batch_interpolate_failure_too_few_scenarios(dummy_client, fake_response):
+def test_interpolate_failure_too_few_scenarios(dummy_client, fake_response):
     """Test handling of validation error: fewer than 2 scenarios"""
-    error_response = {
-        "errors": {"scenario_ids": ["must contain at least 2 scenarios"]}
-    }
+    error_response = {"errors": {"scenario_ids": ["must contain at least 2 scenarios"]}}
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345], end_years=[2040]
     )
 
@@ -110,13 +108,13 @@ def test_batch_interpolate_failure_too_few_scenarios(dummy_client, fake_response
     assert "422:" in result.errors[0]
 
 
-def test_batch_interpolate_failure_empty_end_years(dummy_client, fake_response):
+def test_interpolate_failure_empty_end_years(dummy_client, fake_response):
     """Test handling of validation error: empty end_years"""
     error_response = {"errors": {"end_years": ["must be filled"]}}
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[]
     )
 
@@ -125,13 +123,13 @@ def test_batch_interpolate_failure_empty_end_years(dummy_client, fake_response):
     assert len(result.errors) > 0
 
 
-def test_batch_interpolate_failure_missing_scenario(dummy_client, fake_response):
+def test_interpolate_failure_missing_scenario(dummy_client, fake_response):
     """Test handling of scenario not found error"""
     error_response = {"errors": {"scenario_ids": ["scenarios not found: 999999"]}}
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 999999], end_years=[2040]
     )
 
@@ -140,7 +138,7 @@ def test_batch_interpolate_failure_missing_scenario(dummy_client, fake_response)
     assert len(result.errors) > 0
 
 
-def test_batch_interpolate_failure_mismatched_area_codes(dummy_client, fake_response):
+def test_interpolate_failure_mismatched_area_codes(dummy_client, fake_response):
     """Test handling of validation error: scenarios with different area codes"""
     error_response = {
         "errors": {"scenario_ids": ["all scenarios must have the same area code"]}
@@ -148,7 +146,7 @@ def test_batch_interpolate_failure_mismatched_area_codes(dummy_client, fake_resp
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[2040]
     )
 
@@ -157,17 +155,15 @@ def test_batch_interpolate_failure_mismatched_area_codes(dummy_client, fake_resp
     assert len(result.errors) > 0
 
 
-def test_batch_interpolate_failure_invalid_target_year(dummy_client, fake_response):
+def test_interpolate_failure_invalid_target_year(dummy_client, fake_response):
     """Test handling of validation error: target year out of bounds"""
     error_response = {
-        "errors": {
-            "end_years": ["2055 must be prior to the latest scenario end year"]
-        }
+        "errors": {"end_years": ["2055 must be prior to the latest scenario end year"]}
     }
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[2055]
     )
 
@@ -176,7 +172,7 @@ def test_batch_interpolate_failure_invalid_target_year(dummy_client, fake_respon
     assert len(result.errors) > 0
 
 
-def test_batch_interpolate_failure_scaled_scenario(dummy_client, fake_response):
+def test_interpolate_failure_scaled_scenario(dummy_client, fake_response):
     """Test handling of validation error: cannot interpolate scaled scenarios"""
     error_response = {
         "errors": {"scenario_ids": ["cannot interpolate scaled scenario 12345"]}
@@ -184,7 +180,7 @@ def test_batch_interpolate_failure_scaled_scenario(dummy_client, fake_response):
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[2040]
     )
 
@@ -193,11 +189,11 @@ def test_batch_interpolate_failure_scaled_scenario(dummy_client, fake_response):
     assert len(result.errors) > 0
 
 
-def test_batch_interpolate_connection_error(dummy_client):
+def test_interpolate_connection_error(dummy_client):
     """Test handling of connection errors"""
     client = dummy_client(ConnectionError("Connection failed"), method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[2040]
     )
 
@@ -206,7 +202,7 @@ def test_batch_interpolate_connection_error(dummy_client):
     assert any("Connection failed" in err for err in result.errors)
 
 
-def test_batch_interpolate_payload_structure(dummy_client, fake_response):
+def test_interpolate_payload_structure(dummy_client, fake_response):
     """Test that the payload is correctly structured for the API"""
     body = [
         {"id": 77771, "area_code": "de", "end_year": 2035},
@@ -215,7 +211,7 @@ def test_batch_interpolate_payload_structure(dummy_client, fake_response):
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response, method="post")
 
-    BatchInterpolateScenarioRunner.run(
+    InterpolateScenariosRunner.run(
         client, scenario_ids=[11111, 22222, 33333], end_years=[2035, 2045]
     )
 
@@ -227,9 +223,7 @@ def test_batch_interpolate_payload_structure(dummy_client, fake_response):
     assert client.calls == [expected_call]
 
 
-def test_batch_interpolate_multiple_target_years_different_order(
-    dummy_client, fake_response
-):
+def test_interpolate_multiple_target_years_different_order(dummy_client, fake_response):
     """Test interpolating to multiple target years in non-sorted order"""
     body = [
         {"id": 88881, "area_code": "nl", "end_year": 2035},
@@ -239,7 +233,7 @@ def test_batch_interpolate_multiple_target_years_different_order(
     client = dummy_client(response, method="post")
 
     # Pass target years in non-sorted order (server will sort them)
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890, 99999], end_years=[2060, 2035]
     )
 
@@ -249,13 +243,13 @@ def test_batch_interpolate_multiple_target_years_different_order(
     assert client.calls[0][1]["json"]["end_years"] == [2060, 2035]
 
 
-def test_batch_interpolate_with_kwargs(dummy_client, fake_response):
+def test_interpolate_with_kwargs(dummy_client, fake_response):
     """Test that additional kwargs are passed through"""
     body = [{"id": 66666, "area_code": "nl", "end_year": 2040}]
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response, method="post")
 
-    result = BatchInterpolateScenarioRunner.run(
+    result = InterpolateScenariosRunner.run(
         client, scenario_ids=[12345, 67890], end_years=[2040], timeout=30
     )
 
