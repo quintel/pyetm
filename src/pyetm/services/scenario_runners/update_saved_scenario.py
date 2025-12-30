@@ -13,7 +13,7 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     Args:
         client: The HTTP client to use
         saved_scenario_id: ID of the SavedScenario to update
-        update_data: Dictionary with fields to update (title, description, private, discarded)
+        update_data: Dictionary with fields to update (title, private, discarded)
         **kwargs: Additional arguments passed to the request
     """
 
@@ -35,7 +35,7 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
                 saved_scenario_id=123,
                 update_data={
                     "title": "Updated Title",
-                    "description": "New description"
+                    "private": False
                 }
             )
         """

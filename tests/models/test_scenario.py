@@ -19,6 +19,9 @@ from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRun
 from pyetm.services.scenario_runners.interpolate_scenario import (
     InterpolateScenarioRunner,
 )
+from pyetm.services.scenario_runners.batch_interpolate_scenario import (
+    BatchInterpolateScenarioRunner,
+)
 
 
 def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
@@ -1314,3 +1317,180 @@ def test_interpolate_scenario_validation_error(
     start = dummy_scenario(67890)
     with pytest.raises(ScenarioError, match="Failed to interpolate scenario"):
         original.interpolate(end_year=2040, start_session=start)
+
+
+# ------ batch_interpolate ------ #
+
+
+def test_batch_interpolate_success_two_scenarios(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test successful batch interpolation with two scenarios"""
+    interpolated_data = [
+        {
+            "id": 88881,
+            "area_code": "nl",
+            "end_year": 2040,
+            "start_year": 2023,
+            "title": "Interpolated to 2040",
+        }
+    ]
+
+    monkeypatch.setattr(
+        BatchInterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_ids, end_years: ok_service_result(interpolated_data),
+    )
+
+    scenario_2030 = dummy_scenario(12345)
+    scenario_2050 = dummy_scenario(67890)
+
+    interpolated = Session.batch_interpolate([scenario_2030, scenario_2050], [2040])
+
+    assert len(interpolated) == 1
+    assert interpolated[0].id == 88881
+    assert interpolated[0].end_year == 2040
+    assert len(interpolated[0].warnings) == 0
+
+
+def test_batch_interpolate_success_three_scenarios(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test batch interpolation with three scenarios and two target years"""
+    interpolated_data = [
+        {
+            "id": 88881,
+            "area_code": "nl",
+            "end_year": 2040,
+            "start_year": 2023,
+            "title": "Interpolated to 2040",
+        },
+        {
+            "id": 88882,
+            "area_code": "nl",
+            "end_year": 2060,
+            "start_year": 2023,
+            "title": "Interpolated to 2060",
+        },
+    ]
+
+    monkeypatch.setattr(
+        BatchInterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_ids, end_years: ok_service_result(interpolated_data),
+    )
+
+    scenario_2030 = dummy_scenario(12345)
+    scenario_2050 = dummy_scenario(45678)
+    scenario_2070 = dummy_scenario(67890)
+
+    interpolated = Session.batch_interpolate(
+        [scenario_2030, scenario_2050, scenario_2070], [2040, 2060]
+    )
+
+    assert len(interpolated) == 2
+    assert interpolated[0].id == 88881
+    assert interpolated[0].end_year == 2040
+    assert interpolated[1].id == 88882
+    assert interpolated[1].end_year == 2060
+    assert all(len(s.warnings) == 0 for s in interpolated)
+
+
+def test_batch_interpolate_with_warnings(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test batch interpolation with warnings"""
+    interpolated_data = [
+        {"id": 88883, "area_code": "nl", "end_year": 2040, "start_year": 2023}
+    ]
+    warnings = ["Some inputs could not be interpolated"]
+
+    monkeypatch.setattr(
+        BatchInterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_ids, end_years: ok_service_result(
+            interpolated_data, warnings
+        ),
+    )
+
+    scenario_2030 = dummy_scenario(12345)
+    scenario_2050 = dummy_scenario(67890)
+
+    interpolated = Session.batch_interpolate([scenario_2030, scenario_2050], [2040])
+
+    assert len(interpolated) == 1
+    assert interpolated[0].id == 88883
+    base_warnings = interpolated[0].warnings.get_by_field("base")
+    assert len(base_warnings) == 1
+    assert base_warnings[0].message == warnings[0]
+
+
+def test_batch_interpolate_failure_too_few_scenarios(
+    monkeypatch, fail_service_result, dummy_scenario
+):
+    """Test batch interpolation failure with too few scenarios"""
+    monkeypatch.setattr(
+        BatchInterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_ids, end_years: fail_service_result(
+            ["must contain at least 2 scenarios"]
+        ),
+    )
+
+    scenario = dummy_scenario(12345)
+
+    with pytest.raises(ScenarioError, match="Batch interpolation failed"):
+        Session.batch_interpolate([scenario], [2040])
+
+
+def test_batch_interpolate_failure_validation_error(
+    monkeypatch, fail_service_result, dummy_scenario
+):
+    """Test batch interpolation with validation error"""
+    monkeypatch.setattr(
+        BatchInterpolateScenarioRunner,
+        "run",
+        lambda client, scenario_ids, end_years: fail_service_result(
+            ["all scenarios must have the same area code"]
+        ),
+    )
+
+    scenario_nl = dummy_scenario(12345)
+    scenario_de = dummy_scenario(67890)
+
+    with pytest.raises(ScenarioError, match="Batch interpolation failed"):
+        Session.batch_interpolate([scenario_nl, scenario_de], [2040])
+
+
+def test_batch_interpolate_with_custom_client(
+    monkeypatch, ok_service_result, dummy_scenario
+):
+    """Test batch interpolation with custom client"""
+    from pyetm.clients import BaseClient
+
+    interpolated_data = [
+        {"id": 88884, "area_code": "nl", "end_year": 2040, "start_year": 2023}
+    ]
+
+    mock_client = BaseClient()
+
+    calls = []
+
+    def mock_run(client, scenario_ids, end_years):
+        calls.append((client, scenario_ids, end_years))
+        return ok_service_result(interpolated_data)
+
+    monkeypatch.setattr(BatchInterpolateScenarioRunner, "run", mock_run)
+
+    scenario_2030 = dummy_scenario(12345)
+    scenario_2050 = dummy_scenario(67890)
+
+    interpolated = Session.batch_interpolate(
+        [scenario_2030, scenario_2050], [2040], client=mock_client
+    )
+
+    assert len(interpolated) == 1
+    assert interpolated[0].id == 88884
+    # Verify custom client was used
+    assert len(calls) == 1
+    assert calls[0][0] is mock_client

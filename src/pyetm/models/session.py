@@ -46,6 +46,9 @@ from pyetm.services.scenario_runners.scenario_users_destroy import (
 from pyetm.services.scenario_runners.interpolate_scenario import (
     InterpolateScenarioRunner,
 )
+from pyetm.services.scenario_runners.batch_interpolate_scenario import (
+    BatchInterpolateScenarioRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -196,6 +199,34 @@ class Session(Base):
             scenario.add_warning("base", warning)
 
         return scenario
+
+    @classmethod
+    def batch_interpolate(
+        cls,
+        sessions: List["Session"],
+        end_years: List[int],
+        client: Optional[BaseClient] = None,
+    ) -> List["Session"]:
+        """
+        Batch interpolate multiple sessions to create intermediate year scenarios.
+        """
+        client = client or BaseClient()
+        scenario_ids = [s.id for s in sessions]
+
+        result = BatchInterpolateScenarioRunner.run(client, scenario_ids, end_years)
+
+        if not result.success:
+            raise ScenarioError(f"Batch interpolation failed: {result.errors}")
+
+        # Create Session instances from the response data
+        interpolated_sessions = []
+        for scenario_data in result.data:
+            scenario = cls.model_validate(scenario_data)
+            for warning in result.errors:
+                scenario.add_warning("base", warning)
+            interpolated_sessions.append(scenario)
+
+        return interpolated_sessions
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Session":

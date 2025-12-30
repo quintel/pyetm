@@ -79,7 +79,7 @@ class Scenario(Base):
 
         Args:
             params: Dictionary with required keys (scenario_id, title) and optional keys
-                   (description, private)
+                   (private)
             client: Optional BaseClient instance
 
         Returns:
@@ -123,7 +123,7 @@ class Scenario(Base):
             scenario: Scenario instance to save
             title: Title for the saved scenario
             client: Optional BaseClient instance
-            **kwargs: Optional params (description, private)
+            **kwargs: Optional params (private)
 
         Returns:
             SavedScenario instance
@@ -181,7 +181,7 @@ class Scenario(Base):
             scenario_id: The ETEngine scenario ID to save
             title: Title for the saved scenario
             client: Optional BaseClient instance
-            **kwargs: Optional params (description, private)
+            **kwargs: Optional params (private)
 
         Returns:
             SavedScenario instance
@@ -221,7 +221,7 @@ class Scenario(Base):
 
         Args:
             client: Optional BaseClient instance
-            **kwargs: Fields to update (title, description, private, discarded)
+            **kwargs: Fields to update (title, private, discarded)
         """
         if client is None:
             client = BaseClient()
@@ -419,14 +419,54 @@ class Scenario(Base):
         interpolated_session = self.session.interpolate(end_year, start_session)
 
         # Generate a default title if not provided in kwargs
-        if 'title' not in kwargs:
+        if "title" not in kwargs:
             if start_scenario:
-                kwargs['title'] = f"Interpolated between {start_scenario.end_year} and {self.end_year} to {end_year}"
+                kwargs["title"] = (
+                    f"Interpolated between {start_scenario.end_year} and {self.end_year} to {end_year}"
+                )
             else:
-                kwargs['title'] = f"Interpolated to {end_year}"
+                kwargs["title"] = f"Interpolated to {end_year}"
 
         # Save and return as a SavedScenario
         return interpolated_session.save(**kwargs)
+
+    @classmethod
+    def batch_interpolate(
+        cls,
+        saved_scenarios: List["Scenario"],
+        end_years: List[int],
+        titles: Optional[List[str]] = None,
+        client: Optional[BaseClient] = None,
+        **kwargs,
+    ) -> List["Scenario"]:
+        """
+        Batch interpolate saved scenarios and save results to MyETM.
+        """
+        if titles is not None and len(titles) != len(end_years):
+            raise ValueError(
+                f"Length of titles ({len(titles)}) must match length of "
+                f"end_years ({len(end_years)})"
+            )
+
+        # Get underlying sessions and perform batch interpolation
+        from pyetm.models.session import Session
+
+        sessions = [ss.session for ss in saved_scenarios]
+        interpolated_sessions = Session.batch_interpolate(sessions, end_years, client)
+
+        # Save each interpolated session as a SavedScenario
+        saved_scenarios_list = []
+        for i, session in enumerate(interpolated_sessions):
+            # Generate title if not provided
+            if titles:
+                title = titles[i]
+            else:
+                title = f"Interpolated to {session.end_year}"
+
+            saved = session.save(client=client, title=title, **kwargs)
+            saved_scenarios_list.append(saved)
+
+        return saved_scenarios_list
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
         """Export this saved scenario to Excel."""

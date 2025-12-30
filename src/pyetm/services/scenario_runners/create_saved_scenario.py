@@ -12,12 +12,12 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     Args:
         client: The HTTP client to use
-        saved_scenario_data: Dictionary with scenario_id, title, description, private
+        saved_scenario_data: Dictionary with scenario_id, title, private
         **kwargs: Additional arguments passed to the request
     """
 
     REQUIRED_KEYS = ["scenario_id", "title"]
-    OPTIONAL_KEYS = ["description", "private"]
+    OPTIONAL_KEYS = ["private"]
 
     @staticmethod
     def run(
@@ -32,7 +32,6 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
                 saved_scenario_data={
                     "scenario_id": 123,
                     "title": "My Saved Scenario",
-                    "description": "Optional description",
                     "private": False
                 }
             )
