@@ -88,13 +88,8 @@ class ETMResponse(BaseModel):
         if self.status_code == 401:
             raise PermissionError("Invalid or missing ETM_API_TOKEN")
 
-        text = info.data.get("text", "")
-
-        if 400 <= value < 500:
-            if value == 422:
-                return value
-            raise ValueError(f"HTTP {value}: {text}")
-
+        if 400 <= self.status_code < 500:
+            raise ValueError(self._format_error_message())
         if 500 <= self.status_code < 600:
             raise ConnectionError(self._format_error_message())
 

@@ -648,3 +648,36 @@ def test_saved_scenario_interpolate_titles_length_mismatch():
             2040, 2060,  # 2 target years
             titles=["Only One Title"],  # But only 1 title
         )
+
+
+def test_saved_scenario_interpolate_rejects_duplicate_end_years():
+    """Test that interpolate raises ValueError when scenarios have duplicate end_years"""
+    saved_2040_a = Scenario(id=1001, scenario_id=12345, title="Saved 2040 A", end_year=2040)
+    saved_2040_b = Scenario(id=1002, scenario_id=67890, title="Saved 2040 B", end_year=2040)
+    saved_2050 = Scenario(id=1003, scenario_id=11111, title="Saved 2050", end_year=2050)
+
+    # Mock session property with matching end_years
+    for ss in [saved_2040_a, saved_2040_b, saved_2050]:
+        ss._scenario_session = Session(
+            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
+        )
+
+    with pytest.raises(ValueError, match="Sessions must have unique end_year values"):
+        Scenario.interpolate([saved_2040_a, saved_2040_b, saved_2050], 2045)
+
+
+def test_saved_scenario_interpolate_rejects_different_area_codes():
+    """Test that interpolate raises ValueError when scenarios have different area_codes"""
+    saved_nl = Scenario(id=1001, scenario_id=12345, title="Saved NL", end_year=2030)
+    saved_de = Scenario(id=1002, scenario_id=67890, title="Saved DE", end_year=2050)
+
+    # Mock session property with different area codes
+    saved_nl._scenario_session = Session(
+        id=saved_nl.scenario_id, area_code="nl", end_year=saved_nl.end_year
+    )
+    saved_de._scenario_session = Session(
+        id=saved_de.scenario_id, area_code="de", end_year=saved_de.end_year
+    )
+
+    with pytest.raises(ValueError, match="All sessions must have the same area_code"):
+        Scenario.interpolate([saved_nl, saved_de], 2040)

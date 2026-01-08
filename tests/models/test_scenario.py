@@ -1225,8 +1225,8 @@ def test_interpolate_success_two_scenarios(
         lambda client, scenario_ids, end_years: ok_service_result(interpolated_data),
     )
 
-    scenario_2030 = dummy_scenario(12345)
-    scenario_2050 = dummy_scenario(67890)
+    scenario_2030 = dummy_scenario(12345, end_year=2030)
+    scenario_2050 = dummy_scenario(67890, end_year=2050)
 
     interpolated = Session.interpolate([scenario_2030, scenario_2050], 2040)
 
@@ -1263,9 +1263,9 @@ def test_interpolate_success_three_scenarios(
         lambda client, scenario_ids, end_years: ok_service_result(interpolated_data),
     )
 
-    scenario_2030 = dummy_scenario(12345)
-    scenario_2050 = dummy_scenario(45678)
-    scenario_2070 = dummy_scenario(67890)
+    scenario_2030 = dummy_scenario(12345, end_year=2030)
+    scenario_2050 = dummy_scenario(45678, end_year=2050)
+    scenario_2070 = dummy_scenario(67890, end_year=2070)
 
     interpolated = Session.interpolate(
         [scenario_2030, scenario_2050, scenario_2070], 2040, 2060
@@ -1294,8 +1294,8 @@ def test_interpolate_with_warnings(monkeypatch, ok_service_result, dummy_scenari
         ),
     )
 
-    scenario_2030 = dummy_scenario(12345)
-    scenario_2050 = dummy_scenario(67890)
+    scenario_2030 = dummy_scenario(12345, end_year=2030)
+    scenario_2050 = dummy_scenario(67890, end_year=2050)
 
     interpolated = Session.interpolate([scenario_2030, scenario_2050], 2040)
 
@@ -1336,8 +1336,8 @@ def test_interpolate_failure_validation_error(
         ),
     )
 
-    scenario_nl = dummy_scenario(12345)
-    scenario_de = dummy_scenario(67890)
+    scenario_nl = dummy_scenario(12345, end_year=2030)
+    scenario_de = dummy_scenario(67890, end_year=2050)
 
     with pytest.raises(ScenarioError, match="Interpolation failed"):
         Session.interpolate([scenario_nl, scenario_de], 2040)
@@ -1361,8 +1361,8 @@ def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_sc
 
     monkeypatch.setattr(InterpolateScenariosRunner, "run", mock_run)
 
-    scenario_2030 = dummy_scenario(12345)
-    scenario_2050 = dummy_scenario(67890)
+    scenario_2030 = dummy_scenario(12345, end_year=2030)
+    scenario_2050 = dummy_scenario(67890, end_year=2050)
 
     interpolated = Session.interpolate(
         [scenario_2030, scenario_2050], 2040, client=mock_client
@@ -1373,3 +1373,22 @@ def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_sc
     # Verify custom client was used
     assert len(calls) == 1
     assert calls[0][0] is mock_client
+
+
+def test_interpolate_rejects_duplicate_end_years(dummy_scenario):
+    """Test that interpolate raises ValueError when sessions have duplicate end_years"""
+    scenario_2040_a = dummy_scenario(12345, end_year=2040)
+    scenario_2040_b = dummy_scenario(67890, end_year=2040)
+    scenario_2050 = dummy_scenario(11111, end_year=2050)
+
+    with pytest.raises(ValueError, match="Sessions must have unique end_year values"):
+        Session.interpolate([scenario_2040_a, scenario_2040_b, scenario_2050], 2045)
+
+
+def test_interpolate_rejects_different_area_codes(dummy_scenario):
+    """Test that interpolate raises ValueError when sessions have different area_codes"""
+    scenario_nl = dummy_scenario(12345, area_code="nl", end_year=2030)
+    scenario_de = dummy_scenario(67890, area_code="de", end_year=2050)
+
+    with pytest.raises(ValueError, match="All sessions must have the same area_code"):
+        Session.interpolate([scenario_nl, scenario_de], 2040)

@@ -187,6 +187,27 @@ class Session(Base):
         client = client or BaseClient()
 
         session_list = sessions if isinstance(sessions, list) else [sessions]
+
+        # Validate area codes are consistent
+        area_codes = [s.area_code for s in session_list]
+        if len(set(area_codes)) > 1:
+            raise ValueError(
+                f"All sessions must have the same area_code. "
+                f"Found: {set(area_codes)}"
+            )
+
+        # Validate no duplicate end years
+        end_years_in_sessions = [s.end_year for s in session_list]
+        duplicates = [
+            year for year in set(end_years_in_sessions)
+            if end_years_in_sessions.count(year) > 1
+        ]
+        if duplicates:
+            raise ValueError(
+                f"Sessions must have unique end_year values. "
+                f"Found duplicate(s): {duplicates}"
+            )
+
         scenario_ids = [s.id for s in session_list]
         end_years_list = list(end_years)
 
