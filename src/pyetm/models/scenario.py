@@ -13,6 +13,18 @@ from pyetm.services.scenario_runners.update_saved_scenario import (
 from pyetm.services.scenario_runners.fetch_saved_scenario import (
     FetchSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.saved_scenario_users_index import (
+    SavedScenarioUsersIndexRunner,
+)
+from pyetm.services.scenario_runners.saved_scenario_users_create import (
+    SavedScenarioUsersCreateRunner,
+)
+from pyetm.services.scenario_runners.saved_scenario_users_update import (
+    SavedScenarioUsersUpdateRunner,
+)
+from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
+    SavedScenarioUsersDestroyRunner,
+)
 import pandas as pd
 from os import PathLike
 
@@ -445,3 +457,80 @@ class Scenario(Base):
 
         col_name = self.identifier() if self.identifier() is not None else self.id
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
+
+    def list_users(self, client: Optional[BaseClient] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch all users with access to this saved scenario.
+        """
+        if client is None:
+            client = BaseClient()
+
+        result = SavedScenarioUsersIndexRunner.run(client, self.id)
+
+        if not result.success:
+            raise SavedScenarioError(f"Could not fetch users: {result.errors}")
+
+        for user in result.data:
+            user['role'] = user['role'].replace('scenario_', '', 1)
+
+        return result.data
+
+    def update_users(
+        self, email: str, role: str, client: Optional[BaseClient] = None
+    ) -> None:
+        """
+        Add, update, or remove a user's access to this saved scenario.
+        """
+        if client is None:
+            client = BaseClient()
+
+        role = self._normalize_role(role)
+
+        if role == "remove":
+            self._remove_user(email, client)
+            return
+
+        if self._user_exists(email, client):
+            self._update_user_role(email, role, client)
+        else:
+            self._add_user(email, role, client)
+
+    def _normalize_role(self, role: str) -> str:
+        role_aliases = {
+            "scenario_owner": {"owner", "scenario_owner"},
+            "scenario_collaborator": {"collaborator", "scenario_collaborator"},
+            "scenario_viewer": {"viewer", "scenario_viewer"},
+            "remove": {"remove"},
+        }
+        role_lower = role.lower() if isinstance(role, str) else None
+        normalized_role = next(
+            (k for k, v in role_aliases.items() if role_lower in v), None
+        )
+        if not normalized_role:
+            valid_roles = ", ".join(role_aliases.keys())
+            raise ValueError(f"Invalid role: {role}. Must be one of: {valid_roles}")
+        return normalized_role
+
+    def _user_exists(self, email: str, client: BaseClient) -> bool:
+        return any(u.get("user_email") == email for u in self.list_users(client))
+
+    def _remove_user(self, email: str, client: BaseClient) -> None:
+        result = SavedScenarioUsersDestroyRunner.run(
+            client, self.id, [{"user_email": email}]
+        )
+        if not result.success:
+            raise SavedScenarioError(f"Could not remove user: {result.errors}")
+
+    def _update_user_role(self, email: str, role: str, client: BaseClient) -> None:
+        result = SavedScenarioUsersUpdateRunner.run(
+            client, self.id, [{"user_email": email, "role": role}]
+        )
+        if not result.success:
+            raise SavedScenarioError(f"Could not update user: {result.errors}")
+
+    def _add_user(self, email: str, role: str, client: BaseClient) -> None:
+        result = SavedScenarioUsersCreateRunner.run(
+            client, self.id, [{"user_email": email, "role": role}]
+        )
+        if not result.success:
+            raise SavedScenarioError(f"Could not add user: {result.errors}")

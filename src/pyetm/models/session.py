@@ -31,6 +31,18 @@ from pyetm.services.scenario_runners.fetch_couplings import FetchCouplingsRunner
 from pyetm.services.scenario_runners.update_couplings import UpdateCouplingsRunner
 from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
 from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
+from pyetm.services.scenario_runners.scenario_users_index import (
+    ScenarioUsersIndexRunner,
+)
+from pyetm.services.scenario_runners.scenario_users_create import (
+    ScenarioUsersCreateRunner,
+)
+from pyetm.services.scenario_runners.scenario_users_update import (
+    ScenarioUsersUpdateRunner,
+)
+from pyetm.services.scenario_runners.scenario_users_destroy import (
+    ScenarioUsersDestroyRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -682,3 +694,72 @@ class Session(Base):
 
         for w in result.errors:
             self.add_warning("couplings", w)
+
+    def list_users(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all users with access to this scenario.
+        """
+        result = ScenarioUsersIndexRunner.run(BaseClient(), self.id)
+
+        if not result.success:
+            raise ScenarioError(f"Could not fetch users: {result.errors}")
+
+        for user in result.data:
+            user['role'] = user['role'].replace('scenario_', '', 1)
+
+        return result.data
+
+    def update_users(self, email: str, role: str) -> None:
+        """
+        Add, update, or remove a user's access to this scenario.
+        """
+        role = self._normalize_role(role)
+
+        if role == "remove":
+            self._remove_user(email)
+            return
+
+        if self._user_exists(email):
+            self._update_user_role(email, role)
+        else:
+            self._add_user(email, role)
+
+    def _normalize_role(self, role: str) -> str:
+        role_aliases = {
+            "scenario_owner": {"owner", "scenario_owner"},
+            "scenario_collaborator": {"collaborator", "scenario_collaborator"},
+            "scenario_viewer": {"viewer", "scenario_viewer"},
+            "remove": {"remove"},
+        }
+        role_lower = role.lower() if isinstance(role, str) else None
+        normalized_role = next(
+            (k for k, v in role_aliases.items() if role_lower in v), None
+        )
+        if not normalized_role:
+            valid_roles = ", ".join(role_aliases.keys())
+            raise ValueError(f"Invalid role: {role}. Must be one of: {valid_roles}")
+        return normalized_role
+
+    def _user_exists(self, email: str) -> bool:
+        return any(u.get("user_email") == email for u in self.list_users())
+
+    def _remove_user(self, email: str) -> None:
+        result = ScenarioUsersDestroyRunner.run(
+            BaseClient(), self.id, [{"user_email": email}]
+        )
+        if not result.success:
+            raise ScenarioError(f"Could not remove user: {result.errors}")
+
+    def _update_user_role(self, email: str, role: str) -> None:
+        result = ScenarioUsersUpdateRunner.run(
+            BaseClient(), self.id, [{"user_email": email, "role": role}]
+        )
+        if not result.success:
+            raise ScenarioError(f"Could not update user: {result.errors}")
+
+    def _add_user(self, email: str, role: str) -> None:
+        result = ScenarioUsersCreateRunner.run(
+            BaseClient(), self.id, [{"user_email": email, "role": role}]
+        )
+        if not result.success:
+            raise ScenarioError(f"Could not add user: {result.errors}")
