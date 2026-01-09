@@ -53,6 +53,8 @@ class ETMResponse(BaseModel):
         text = info.data.get("text", "")
 
         if 400 <= value < 500:
+            if value == 422:
+                return value
             raise ValueError(f"HTTP {value}: {text}")
 
         if 500 <= value < 600:

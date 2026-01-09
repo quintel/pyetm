@@ -232,3 +232,24 @@ def test_concrete_runner_implementation():
 
     assert result.success
     assert result.data == "test_result"
+
+
+def test_make_request_422_with_actual_error_messages():
+    """Test 422 response with actual error messages from Rails"""
+    mock_client = Mock(spec=BaseClient)
+    mock_client.session = Mock()
+    mock_response = Mock()
+    mock_response.ok = False
+    mock_response.status_code = 422
+    mock_response.json.return_value = {
+        "success": [],
+        "errors": {"user@example.com": ["Last owner cannot be altered"]},
+    }
+    mock_client.session.delete.return_value = mock_response
+
+    result = RealRunner._make_request(mock_client, "DELETE", "/test-path")
+
+    assert not result.success
+    assert result.data is None
+    assert len(result.errors) == 1
+    assert "user@example.com: Last owner cannot be altered" in result.errors[0]

@@ -704,6 +704,9 @@ class Session(Base):
         if not result.success:
             raise ScenarioError(f"Could not fetch users: {result.errors}")
 
+        for user in result.data:
+            user['role'] = user['role'].replace('scenario_', '', 1)
+
         return result.data
 
     def update_users(self, email: str, role: str) -> None:

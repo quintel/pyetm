@@ -470,6 +470,9 @@ class Scenario(Base):
         if not result.success:
             raise SavedScenarioError(f"Could not fetch users: {result.errors}")
 
+        for user in result.data:
+            user['role'] = user['role'].replace('scenario_', '', 1)
+
         return result.data
 
     def update_users(
