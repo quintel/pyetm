@@ -409,29 +409,37 @@ class Scenario(Base):
         """
         Create a copy of the underlying session with a linked preset and save it to MyETM.
         """
-        # Copy the underlying session with preset link
-        copied_session = self.session.copy_with_preset()
+        # Separate SavedScenario parameters from Session copy parameters
+        title = overrides.pop("title", f"Copy of {self.title}")
+        private = overrides.pop("private", None)
 
-        # Determine title for the new SavedScenario
-        if "title" not in overrides:
-            overrides["title"] = f"Copy of {self.title}"
+        # Copy the underlying session with preset link, passing session-related overrides
+        copied_session = self.session.copy_with_preset(**overrides)
 
         # Save the copied session to MyETM as a new SavedScenario
-        return copied_session.save(**overrides)
+        save_params = {"title": title}
+        if private is not None:
+            save_params["private"] = private
+
+        return copied_session.save(**save_params)
 
     def copy(self, **overrides) -> "Scenario":
         """
         Create a copy with no template link to the original scenario and save it to MyETM.
         """
-        # Copy the underlying session (no preset link)
-        copied_session = self.session.copy()
+        # Separate SavedScenario parameters from Session copy parameters
+        title = overrides.pop("title", f"Copy of {self.title}")
+        private = overrides.pop("private", None)
 
-        # Determine title for the new SavedScenario
-        if "title" not in overrides:
-            overrides["title"] = f"Copy of {self.title}"
+        # Copy the underlying session (no preset link), passing session-related overrides
+        copied_session = self.session.copy(**overrides)
 
         # Save the copied session to MyETM as a new SavedScenario
-        return copied_session.save(**overrides)
+        save_params = {"title": title}
+        if private is not None:
+            save_params["private"] = private
+
+        return copied_session.save(**save_params)
 
     @classmethod
     def interpolate(
