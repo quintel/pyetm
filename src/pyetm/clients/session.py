@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, field_validator, ValidationInfo
+from pydantic import BaseModel
 
 import aiohttp
 from pyetm.config.settings import get_settings
@@ -43,24 +43,55 @@ class ETMResponse(BaseModel):
         """Get response content as bytes."""
         return self._content or self.text.encode("utf-8")
 
-    @field_validator("status_code", mode="before")
-    @classmethod
-    def raise_for_status(cls, value, info: ValidationInfo) -> None:
+    def _format_error_message(self) -> str:
+        """Format error message from API response in a readable way."""
+        import json
+
+        try:
+            # Try to parse as JSON
+            data = json.loads(self.text)
+
+            # Handle {"errors": {...}} format
+            if isinstance(data, dict) and "errors" in data:
+                errors = data["errors"]
+
+                # Handle {"errors": {"field": ["message1", "message2"]}}
+                if isinstance(errors, dict):
+                    messages = []
+                    for field, field_errors in errors.items():
+                        if isinstance(field_errors, list):
+                            for error in field_errors:
+                                messages.append(f"{field}: {error}")
+                        else:
+                            messages.append(f"{field}: {field_errors}")
+
+                    if messages:
+                        return f"{self.status_code}: {', '.join(messages)}"
+
+                # Handle {"errors": ["message1", "message2"]}
+                elif isinstance(errors, list):
+                    return f"{self.status_code}: {', '.join(str(e) for e in errors)}"
+
+            # Handle {"error": "message"} format
+            if isinstance(data, dict) and "error" in data:
+                return f"{self.status_code}: {data['error']}"
+
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+        # Fall back to raw text (strip to avoid unnecessary whitespace)
+        text = self.text.strip()
+        return f"{self.status_code}: {text}" if text else f"{self.status_code}"
+
+    def raise_for_status(self) -> None:
         """Raise appropriate exception for HTTP errors."""
-        if value == 401:
+        if self.status_code == 401:
             raise PermissionError("Invalid or missing ETM_API_TOKEN")
 
-        text = info.data.get("text", "")
-
-        if 400 <= value < 500:
-            if value == 422:
-                return value
-            raise ValueError(f"HTTP {value}: {text}")
-
-        if 500 <= value < 600:
-            raise ConnectionError(f"HTTP {value}: {text}")
-
-        return value
+        if 400 <= self.status_code < 500:
+            raise ValueError(self._format_error_message())
+        if 500 <= self.status_code < 600:
+            raise ConnectionError(self._format_error_message())
 
 
 # TODO: Extract utils and organise private methods
@@ -174,6 +205,9 @@ class ETMSession:
             else:
                 etm_response.text = await response.text()
                 etm_response._content = await response.read()
+
+            # Check for HTTP errors after response is fully constructed
+            etm_response.raise_for_status()
 
             return etm_response
 

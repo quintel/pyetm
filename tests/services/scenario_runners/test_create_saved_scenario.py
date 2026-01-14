@@ -34,7 +34,6 @@ def test_create_saved_scenario_success_with_optional_fields(
         "id": 457,
         "scenario_id": 123,
         "title": "My Saved Scenario",
-        "description": "A detailed description",
         "private": True,
     }
     response = fake_response(ok=True, status_code=201, json_data=body)
@@ -43,7 +42,6 @@ def test_create_saved_scenario_success_with_optional_fields(
     saved_scenario_data = {
         "scenario_id": 123,
         "title": "My Saved Scenario",
-        "description": "A detailed description",
         "private": True,
     }
 
@@ -117,7 +115,8 @@ def test_create_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
     saved_scenario_data = {
         "scenario_id": 123,
         "title": "My Saved Scenario",
-        "description": "Valid description",  # Valid
+        "private": True,  # Valid
+        "description": "Should be filtered",  # Invalid - should be filtered
         "id": 999,  # Invalid - should be filtered
         "created_at": "2019-01-01",  # Invalid - should be filtered
         "invalid_field": "value",  # Invalid - should be filtered
@@ -129,6 +128,7 @@ def test_create_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
 
     # Should have warnings for filtered fields
     expected_warnings = [
+        "Ignoring invalid field for create saved scenario: 'description'",
         "Ignoring invalid field for create saved scenario: 'id'",
         "Ignoring invalid field for create saved scenario: 'created_at'",
         "Ignoring invalid field for create saved scenario: 'invalid_field'",
@@ -141,7 +141,7 @@ def test_create_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         "saved_scenario": {
             "scenario_id": 123,
             "title": "My Saved Scenario",
-            "description": "Valid description",
+            "private": True,
         }
     }
     assert client.calls == [("/saved_scenarios", {"json": expected_payload})]
@@ -225,7 +225,6 @@ def test_create_saved_scenario_payload_structure(dummy_client, fake_response):
     saved_scenario_data = {
         "scenario_id": 123,
         "title": "Test Scenario",
-        "description": "Test description",
         "private": True,
     }
 

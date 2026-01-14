@@ -43,6 +43,9 @@ from pyetm.services.scenario_runners.scenario_users_update import (
 from pyetm.services.scenario_runners.scenario_users_destroy import (
     ScenarioUsersDestroyRunner,
 )
+from pyetm.services.scenario_runners.interpolate_scenarios import (
+    InterpolateScenariosRunner,
+)
 
 
 class ScenarioError(Exception):
@@ -170,6 +173,58 @@ class Session(Base):
                     setattr(new_scenario, field, value)
 
         return new_scenario
+
+    @classmethod
+    def interpolate(
+        cls,
+        sessions: Union["Session", List["Session"]],
+        *end_years: int,
+        client: Optional[BaseClient] = None,
+    ) -> List["Session"]:
+        """
+        Interpolate one or more sessions to create scenarios at target years.
+        """
+        client = client or BaseClient()
+
+        session_list = sessions if isinstance(sessions, list) else [sessions]
+
+        # Validate area codes are consistent
+        area_codes = [s.area_code for s in session_list]
+        if len(set(area_codes)) > 1:
+            raise ValueError(
+                f"All sessions must have the same area_code. "
+                f"Found: {set(area_codes)}"
+            )
+
+        # Validate no duplicate end years
+        end_years_in_sessions = [s.end_year for s in session_list]
+        duplicates = [
+            year for year in set(end_years_in_sessions)
+            if end_years_in_sessions.count(year) > 1
+        ]
+        if duplicates:
+            raise ValueError(
+                f"Sessions must have unique end_year values. "
+                f"Found duplicate(s): {duplicates}"
+            )
+
+        scenario_ids = [s.id for s in session_list]
+        end_years_list = list(end_years)
+
+        result = InterpolateScenariosRunner.run(client, scenario_ids, end_years_list)
+
+        if not result.success:
+            raise ScenarioError(f"Interpolation failed: {result.errors}")
+
+        # Create Session instances from the response data
+        interpolated_sessions = []
+        for scenario_data in result.data:
+            scenario = cls.model_validate(scenario_data)
+            for warning in result.errors:
+                scenario.add_warning("base", warning)
+            interpolated_sessions.append(scenario)
+
+        return interpolated_sessions
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Session":
@@ -705,7 +760,7 @@ class Session(Base):
             raise ScenarioError(f"Could not fetch users: {result.errors}")
 
         for user in result.data:
-            user['role'] = user['role'].replace('scenario_', '', 1)
+            user["role"] = user["role"].replace("scenario_", "", 1)
 
         return result.data
 

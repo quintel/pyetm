@@ -79,7 +79,7 @@ class Scenario(Base):
 
         Args:
             params: Dictionary with required keys (scenario_id, title) and optional keys
-                   (description, private)
+                   (private)
             client: Optional BaseClient instance
 
         Returns:
@@ -123,7 +123,7 @@ class Scenario(Base):
             scenario: Scenario instance to save
             title: Title for the saved scenario
             client: Optional BaseClient instance
-            **kwargs: Optional params (description, private)
+            **kwargs: Optional params (private)
 
         Returns:
             SavedScenario instance
@@ -181,7 +181,7 @@ class Scenario(Base):
             scenario_id: The ETEngine scenario ID to save
             title: Title for the saved scenario
             client: Optional BaseClient instance
-            **kwargs: Optional params (description, private)
+            **kwargs: Optional params (private)
 
         Returns:
             SavedScenario instance
@@ -221,7 +221,7 @@ class Scenario(Base):
 
         Args:
             client: Optional BaseClient instance
-            **kwargs: Fields to update (title, description, private, discarded)
+            **kwargs: Fields to update (title, private, discarded)
         """
         if client is None:
             client = BaseClient()
@@ -408,6 +408,47 @@ class Scenario(Base):
     def deep_copy(self, **overrides) -> "Session":
         """Create a deep copy of the underlying session."""
         return self.session.deep_copy(**overrides)
+
+    @classmethod
+    def interpolate(
+        cls,
+        scenarios: Union["Scenario", List["Scenario"]],
+        *end_years: int,
+        titles: Optional[List[str]] = None,
+        client: Optional[BaseClient] = None,
+        **kwargs,
+    ) -> List["Scenario"]:
+        """
+        Interpolate one or more saved scenarios to target years and save to MyETM.
+        """
+        end_years_list = list(end_years)
+
+        if titles is not None and len(titles) != len(end_years_list):
+            raise ValueError(
+                f"Length of titles ({len(titles)}) must match length of "
+                f"end_years ({len(end_years_list)})"
+            )
+
+        # Get underlying sessions and perform interpolation
+        from pyetm.models.session import Session
+
+        scenario_list = scenarios if isinstance(scenarios, list) else [scenarios]
+        sessions = [sc.session for sc in scenario_list]
+        interpolated_sessions = Session.interpolate(sessions, *end_years, client=client)
+
+        # Save each interpolated session as a SavedScenario
+        saved_scenarios_list = []
+        for i, session in enumerate(interpolated_sessions):
+            # Generate title if not provided
+            if titles:
+                title = titles[i]
+            else:
+                title = f"Interpolated to {session.end_year}"
+
+            saved = session.save(client=client, title=title, **kwargs)
+            saved_scenarios_list.append(saved)
+
+        return saved_scenarios_list
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
         """Export this saved scenario to Excel."""

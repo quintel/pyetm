@@ -70,7 +70,6 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
         "id": 789,
         "scenario_id": 123,
         "title": "New Saved Scenario",
-        "description": "Created via API",
         "private": True,
     }
 
@@ -83,7 +82,6 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
     params = {
         "scenario_id": 123,
         "title": "New Saved Scenario",
-        "description": "Created via API",
         "private": True,
     }
 
@@ -147,7 +145,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
         "id": 791,
         "scenario_id": 123,
         "title": "Saved Scenario",
-        # description not in response
+        # private not in response
     }
 
     monkeypatch.setattr(
@@ -159,12 +157,12 @@ def test_create_saved_scenario_preserves_params_not_in_response(
     params = {
         "scenario_id": 123,
         "title": "Saved Scenario",
-        "description": "Local description",
+        "private": True,
     }
 
     saved_scenario = Scenario.create(params, client=mock_client)
-    # description should be set from params since it wasn't in response
-    assert saved_scenario.description == "Local description"
+    # private should be set from params since it wasn't in response
+    assert saved_scenario.private is True
 
 
 # --- from_scenario Tests --- #
@@ -180,7 +178,6 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
         "id": 800,
         "scenario_id": 999,
         "title": "From Scenario",
-        "description": "Created from scenario",
         "private": False,
     }
 
@@ -194,13 +191,13 @@ def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
         scenario,
         title="From Scenario",
         client=mock_client,
-        description="Created from scenario",
+        private=False,
     )
 
     assert saved_scenario.id == 800
     assert saved_scenario.scenario_id == 999
     assert saved_scenario.title == "From Scenario"
-    assert saved_scenario.description == "Created from scenario"
+    assert saved_scenario.private is False
 
 
 def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
@@ -242,7 +239,7 @@ def test_update_saved_scenario_success(
     updated_data = {
         "id": 456,
         "title": "Updated Title",
-        "description": "Updated description",
+        "private": True,
     }
 
     monkeypatch.setattr(
@@ -251,12 +248,10 @@ def test_update_saved_scenario_success(
         lambda client, id, kwargs: ok_service_result(updated_data),
     )
 
-    saved_scenario.update(
-        mock_client, title="Updated Title", description="Updated description"
-    )
+    saved_scenario.update(mock_client, title="Updated Title", private=True)
 
     assert saved_scenario.title == "Updated Title"
-    assert saved_scenario.description == "Updated description"
+    assert saved_scenario.private is True
     assert len(saved_scenario.warnings) == 0
 
 
@@ -507,3 +502,182 @@ def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
     mock_session.update_user_values.assert_called_once_with(
         {"test": 123}, skip_upload=False
     )
+
+
+# ------ interpolate ------ #
+
+
+def test_saved_scenario_interpolate_success(monkeypatch, ok_service_result):
+    """Test successful batch interpolation of saved scenarios"""
+    # Mock Session.interpolate to return interpolated sessions
+    interpolated_sessions = [
+        Session(id=77771, area_code="nl", end_year=2040, start_year=2023),
+        Session(id=77772, area_code="nl", end_year=2060, start_year=2023),
+    ]
+
+    def mock_interpolate(sessions, end_years, client):
+        return interpolated_sessions
+
+    monkeypatch.setattr(Session, "interpolate", mock_interpolate)
+
+    # Mock Session.save to return SavedScenario instances
+    def mock_save(self, client, title, **kwargs):
+        saved_data = {
+            "id": self.id + 10000,
+            "scenario_id": self.id,
+            "title": title,
+            **kwargs,
+        }
+        return Scenario.model_validate(saved_data)
+
+    monkeypatch.setattr(Session, "save", mock_save)
+
+    # Create saved scenarios
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=45678, title="Saved 2050", end_year=2050)
+    saved_2070 = Scenario(id=1003, scenario_id=67890, title="Saved 2070", end_year=2070)
+
+    # Mock session property
+    for ss in [saved_2030, saved_2050, saved_2070]:
+        ss._scenario_session = Session(
+            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
+        )
+
+    result = Scenario.interpolate([saved_2030, saved_2050, saved_2070], [2040, 2060])
+
+    assert len(result) == 2
+    assert all(isinstance(s, Scenario) for s in result)
+    assert result[0].title == "Interpolated to 2040"
+    assert result[1].title == "Interpolated to 2060"
+
+
+def test_saved_scenario_interpolate_with_custom_titles(monkeypatch):
+    """Test batch interpolation with custom titles"""
+    interpolated_sessions = [
+        Session(id=88881, area_code="nl", end_year=2040, start_year=2023),
+    ]
+
+    def mock_interpolate(sessions, end_years, client):
+        return interpolated_sessions
+
+    monkeypatch.setattr(Session, "interpolate", mock_interpolate)
+
+    saved_titles = []
+
+    def mock_save(self, client, title, **kwargs):
+        saved_titles.append(title)
+        saved_data = {
+            "id": 99990,
+            "scenario_id": self.id,
+            "title": title,
+            **kwargs,
+        }
+        return Scenario.model_validate(saved_data)
+
+    monkeypatch.setattr(Session, "save", mock_save)
+
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
+
+    for ss in [saved_2030, saved_2050]:
+        ss._scenario_session = Session(
+            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
+        )
+
+    result = Scenario.interpolate(
+        [saved_2030, saved_2050], [2040], titles=["Custom Title 2040"]
+    )
+
+    assert len(result) == 1
+    assert saved_titles[0] == "Custom Title 2040"
+    assert result[0].title == "Custom Title 2040"
+
+
+def test_saved_scenario_interpolate_with_save_kwargs(monkeypatch):
+    """Test batch interpolation passes kwargs to save()"""
+    interpolated_sessions = [
+        Session(id=88882, area_code="nl", end_year=2040, start_year=2023),
+    ]
+
+    def mock_interpolate(sessions, end_years, client):
+        return interpolated_sessions
+
+    monkeypatch.setattr(Session, "interpolate", mock_interpolate)
+
+    save_calls = []
+
+    def mock_save(self, client, title, **kwargs):
+        save_calls.append(kwargs)
+        saved_data = {
+            "id": 99991,
+            "scenario_id": self.id,
+            "title": title,
+            "private": kwargs.get("private", False),
+        }
+        return Scenario.model_validate(saved_data)
+
+    monkeypatch.setattr(Session, "save", mock_save)
+
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
+
+    for ss in [saved_2030, saved_2050]:
+        ss._scenario_session = Session(
+            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
+        )
+
+    result = Scenario.interpolate(
+        [saved_2030, saved_2050],
+        [2040],
+        private=True,
+    )
+
+    assert len(result) == 1
+    assert save_calls[0]["private"] is True
+    assert result[0].private is True
+
+
+def test_saved_scenario_interpolate_titles_length_mismatch():
+    """Test that mismatched titles length raises ValueError"""
+    saved_2030 = Scenario(id=1001, scenario_id=12345, title="Saved 2030", end_year=2030)
+    saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
+
+    with pytest.raises(ValueError, match="Length of titles .* must match"):
+        Scenario.interpolate(
+            [saved_2030, saved_2050],
+            2040, 2060,  # 2 target years
+            titles=["Only One Title"],  # But only 1 title
+        )
+
+
+def test_saved_scenario_interpolate_rejects_duplicate_end_years():
+    """Test that interpolate raises ValueError when scenarios have duplicate end_years"""
+    saved_2040_a = Scenario(id=1001, scenario_id=12345, title="Saved 2040 A", end_year=2040)
+    saved_2040_b = Scenario(id=1002, scenario_id=67890, title="Saved 2040 B", end_year=2040)
+    saved_2050 = Scenario(id=1003, scenario_id=11111, title="Saved 2050", end_year=2050)
+
+    # Mock session property with matching end_years
+    for ss in [saved_2040_a, saved_2040_b, saved_2050]:
+        ss._scenario_session = Session(
+            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
+        )
+
+    with pytest.raises(ValueError, match="Sessions must have unique end_year values"):
+        Scenario.interpolate([saved_2040_a, saved_2040_b, saved_2050], 2045)
+
+
+def test_saved_scenario_interpolate_rejects_different_area_codes():
+    """Test that interpolate raises ValueError when scenarios have different area_codes"""
+    saved_nl = Scenario(id=1001, scenario_id=12345, title="Saved NL", end_year=2030)
+    saved_de = Scenario(id=1002, scenario_id=67890, title="Saved DE", end_year=2050)
+
+    # Mock session property with different area codes
+    saved_nl._scenario_session = Session(
+        id=saved_nl.scenario_id, area_code="nl", end_year=saved_nl.end_year
+    )
+    saved_de._scenario_session = Session(
+        id=saved_de.scenario_id, area_code="de", end_year=saved_de.end_year
+    )
+
+    with pytest.raises(ValueError, match="All sessions must have the same area_code"):
+        Scenario.interpolate([saved_nl, saved_de], 2040)

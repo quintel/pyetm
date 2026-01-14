@@ -218,4 +218,4 @@ class InputsPack(Packable):
                     self.log_scenario_warnings(scenario, "_inputs", "Inputs")
 
         except Exception as e:
-            logger.warning("Failed to parse simplified SLIDER_SETTINGS sheet: %s", e)
+            logger.warning("Failed to parse SLIDER_SETTINGS sheet: %s", e)
