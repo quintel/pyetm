@@ -57,4 +57,4 @@ def test_fetch_saved_scenario_not_found(dummy_client, fake_response, dummy_scena
 
     result = FetchSavedScenarioRunner.run(client, saved_scenario)
     assert result.success is False
-    assert result.errors == ["404: Not Found"]
+    assert result.errors == ["SavedScenario 999 not found on this environment"]

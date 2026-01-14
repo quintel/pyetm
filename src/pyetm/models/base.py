@@ -26,7 +26,16 @@ class Base(BaseModel):
         """
         Initialize the model, converting validation errors to warnings.
         """
-        object.__setattr__(self, "_warning_collector", WarningCollector())
+        super(BaseModel, self).__setattr__("__pydantic_private__", {})
+
+        # Initialize all private attributes with their defaults
+        for attr_name, attr_info in self.__class__.__private_attributes__.items():
+            if hasattr(attr_info, 'default_factory') and attr_info.default_factory is not None:
+                self.__pydantic_private__[attr_name] = attr_info.default_factory()
+            elif hasattr(attr_info, 'default'):
+                self.__pydantic_private__[attr_name] = attr_info.default
+            else:
+                self.__pydantic_private__[attr_name] = None
 
         try:
             super().__init__(**data)

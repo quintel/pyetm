@@ -40,12 +40,17 @@ class FetchSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
         )
 
         if not result.success:
+            for error in result.errors:
+                if "404" in error or "not found" in error.lower():
+                    return ServiceResult.fail(
+                        [
+                            f"SavedScenario {saved_scenario.id} not found on this environment"
+                        ]
+                    )
             return result
 
         _, warnings = FetchSavedScenarioRunner._validate_response_keys(
-            result.data,
-            FetchSavedScenarioRunner.REQUIRED_KEYS,
-            fill_missing=False
+            result.data, FetchSavedScenarioRunner.REQUIRED_KEYS, fill_missing=False
         )
 
         return ServiceResult.ok(data=result.data, errors=warnings)

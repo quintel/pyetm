@@ -313,12 +313,15 @@ class Session(Base):
 
     def _to_dataframe(self, **kwargs) -> pd.DataFrame:
         """
-        Return a single-column DataFrame describing this scenario
-        - Column name is the scenario identifier (short_name/title/id)
+        Return a single-column DataFrame describing this scenario.
+
+        The id field contains the ETEngine session ID.
+        The scenario_id field also contains the ETEngine session ID (for consistency with Scenario exports).
         """
         info: Dict[str, Any] = {
             "title": self.title,
-            "scenario_id": self.id,
+            "id": self.id,
+            "scenario_id": self.id,  # Same as id, shows it's a session in mixed cases
             "template": self.template,
             "area_code": self.area_code,
             "start_year": self.start_year,

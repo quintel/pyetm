@@ -155,6 +155,11 @@ class Scenario(Base):
         result = FetchSavedScenarioRunner.run(client, template)
 
         if not result.success:
+            for error in result.errors:
+                if "not found" in error.lower():
+                    raise SavedScenarioError(
+                        f"Scenario {saved_scenario_id} does not exist on this ETM environment"
+                    )
             raise SavedScenarioError(
                 f"Could not load saved scenario {saved_scenario_id}: {result.errors}"
             )
@@ -401,13 +406,33 @@ class Scenario(Base):
         """Update metadata on the underlying session."""
         return self.session.update_metadata(**kwargs)
 
-    def copy(self, **overrides) -> "Session":
-        """Create a copy of the underlying session."""
-        return self.session.copy(**overrides)
+    def copy_with_preset(self, **overrides) -> "Scenario":
+        """
+        Create a copy of the underlying session with a linked preset and save it to MyETM.
+        """
+        # Copy the underlying session with preset link
+        copied_session = self.session.copy_with_preset()
 
-    def deep_copy(self, **overrides) -> "Session":
-        """Create a deep copy of the underlying session."""
-        return self.session.deep_copy(**overrides)
+        # Determine title for the new SavedScenario
+        if "title" not in overrides:
+            overrides["title"] = f"Copy of {self.title}"
+
+        # Save the copied session to MyETM as a new SavedScenario
+        return copied_session.save(**overrides)
+
+    def copy(self, **overrides) -> "Scenario":
+        """
+        Create a copy with no template link to the original scenario and save it to MyETM.
+        """
+        # Copy the underlying session (no preset link)
+        copied_session = self.session.copy()
+
+        # Determine title for the new SavedScenario
+        if "title" not in overrides:
+            overrides["title"] = f"Copy of {self.title}"
+
+        # Save the copied session to MyETM as a new SavedScenario
+        return copied_session.save(**overrides)
 
     @classmethod
     def interpolate(
@@ -459,13 +484,15 @@ class Scenario(Base):
         Return a single-column DataFrame describing this saved scenario.
 
         Exports SavedScenario metadata merged with underlying session data.
-        The scenario_id field contains the SavedScenario ID (MyETM ID), not the session ID.
+        The id field contains the SavedScenario ID (MyETM ID).
+        The scenario_id field contains the underlying ETEngine session ID.
         """
         # Start with SavedScenario-specific fields
         info: Dict[str, Any] = {
             "title": self.title,
             "description": self.description,
-            "scenario_id": self.id,  # MyETM SavedScenario ID
+            "id": self.id,
+            "scenario_id": self.scenario_id,
             "private": self.private,
         }
 
