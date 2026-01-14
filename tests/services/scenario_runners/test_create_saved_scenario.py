@@ -9,7 +9,6 @@ def test_create_saved_scenario_success_minimal(dummy_client, fake_response):
         "id": 456,
         "scenario_id": 123,
         "title": "My Saved Scenario",
-        "description": None,
         "private": False,
     }
     response = fake_response(ok=True, status_code=201, json_data=body)
@@ -116,7 +115,6 @@ def test_create_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         "scenario_id": 123,
         "title": "My Saved Scenario",
         "private": True,  # Valid
-        "description": "Should be filtered",  # Invalid - should be filtered
         "id": 999,  # Invalid - should be filtered
         "created_at": "2019-01-01",  # Invalid - should be filtered
         "invalid_field": "value",  # Invalid - should be filtered
@@ -128,7 +126,6 @@ def test_create_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
 
     # Should have warnings for filtered fields
     expected_warnings = [
-        "Ignoring invalid field for create saved scenario: 'description'",
         "Ignoring invalid field for create saved scenario: 'id'",
         "Ignoring invalid field for create saved scenario: 'created_at'",
         "Ignoring invalid field for create saved scenario: 'invalid_field'",

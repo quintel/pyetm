@@ -57,7 +57,6 @@ def test_create_scenario_with_metadata(dummy_client, fake_response):
         "area_code": "fr",
         "end_year": 2050,
         "metadata": {
-            "description": "Test scenario",
             "author": "test_user",
             "tags": ["test", "pyetm"],
         },

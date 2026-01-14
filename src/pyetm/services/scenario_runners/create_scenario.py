@@ -48,8 +48,7 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
                 scenario_data={
                     "area_code": "nl",
                     "end_year": 2050,
-                    "private": True,
-                    "metadata": {"description": "My new scenario"}
+                    "private": True
                 }
             )
         """
