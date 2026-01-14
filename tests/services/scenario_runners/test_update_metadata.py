@@ -346,12 +346,10 @@ def test_update_metadata_runner_preserves_existing_metadata_when_merging():
     scenario.id = 123
     scenario.metadata = {
         "author": "original_author",
-        "description": "original_description",
         "tags": ["original"],
     }
 
     metadata = {
-        "description": "updated_description",  # Should override
         "new_field": "new_value",  # Should be added
         "end_year": 2050,  # Direct field
     }
@@ -367,7 +365,6 @@ def test_update_metadata_runner_preserves_existing_metadata_when_merging():
                 "end_year": 2050,
                 "metadata": {
                     "author": "original_author",  # Preserved
-                    "description": "updated_description",  # Updated
                     "tags": ["original"],  # Preserved
                     "new_field": "new_value",  # Added
                 },

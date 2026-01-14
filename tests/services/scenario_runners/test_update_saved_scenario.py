@@ -9,7 +9,6 @@ def test_update_saved_scenario_success_single_field(dummy_client, fake_response)
         "id": 456,
         "scenario_id": 123,
         "title": "Updated Title",
-        "description": None,
         "private": False,
     }
     response = fake_response(ok=True, status_code=200, json_data=body)

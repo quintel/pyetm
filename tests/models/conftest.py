@@ -434,7 +434,6 @@ def saved_scenario_data():
         "id": 456,
         "scenario_id": 123,
         "title": "My Saved Scenario",
-        "description": "A test description",
         "private": False,
         "area_code": "nl",
         "end_year": 2050,

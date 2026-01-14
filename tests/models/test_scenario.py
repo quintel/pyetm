@@ -54,7 +54,6 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
         "private": True,
         "start_year": 2019,
         "source": "pyetm",
-        "metadata": {"description": "Test scenario"},
     }
 
     monkeypatch.setattr(
@@ -69,7 +68,6 @@ def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
         private=True,
         start_year=2019,
         source="pyetm",
-        metadata={"description": "Test scenario"},
     )
     assert scenario.id == 12346
     assert scenario.area_code == "nl"

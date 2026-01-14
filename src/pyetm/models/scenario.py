@@ -54,7 +54,6 @@ class Scenario(Base):
     id: int = Field(..., description="Unique saved scenario identifier in MyETM")
     scenario_id: int = Field(..., description="Reference to ETEngine scenario")
     title: str = Field(..., description="Title of the saved scenario")
-    description: Optional[str] = None
     private: Optional[bool] = False
     area_code: Optional[str] = None
     end_year: Optional[int] = None
@@ -487,10 +486,9 @@ class Scenario(Base):
         The id field contains the SavedScenario ID (MyETM ID).
         The scenario_id field contains the underlying ETEngine session ID.
         """
-        # Start with SavedScenario-specific fields
+        # Start with Scenario specific fields
         info: Dict[str, Any] = {
             "title": self.title,
-            "description": self.description,
             "id": self.id,
             "scenario_id": self.scenario_id,
             "private": self.private,
@@ -539,7 +537,7 @@ class Scenario(Base):
             raise SavedScenarioError(f"Could not fetch users: {result.errors}")
 
         for user in result.data:
-            user['role'] = user['role'].replace('scenario_', '', 1)
+            user["role"] = user["role"].replace("scenario_", "", 1)
 
         return result.data
 

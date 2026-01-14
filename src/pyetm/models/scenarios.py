@@ -84,7 +84,6 @@ class Scenarios(Base):
                   a new Session will be created using area_code and end_year
                 - area_code: (Optional if using defaults) Area code for new session
                 - end_year: (Optional if using defaults) End year for new session
-                - description, private: Optional SavedScenario fields
             area_code: Default area_code for all scenarios (if not in params)
             end_year: Default end_year for all scenarios (if not in params)
             client: Optional BaseClient instance (shared across all creates)
@@ -126,7 +125,6 @@ class Scenarios(Base):
                         if k
                         not in (
                             "title",
-                            "description",
                             "private",
                             "area_code",
                             "end_year",
@@ -138,9 +136,7 @@ class Scenarios(Base):
 
                     # Extract SavedScenario-specific params
                     saved_scenario_params = {
-                        k: v
-                        for k, v in params.items()
-                        if k in ("description", "private")
+                        k: v for k, v in params.items() if k == "private"
                     }
 
                     # Create SavedScenario from the session

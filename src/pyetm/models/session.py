@@ -335,18 +335,10 @@ class Session(Base):
             "updated_at": self.updated_at,
         }
 
-        # Description from metadata (if present)
+        # Flatten metadata keys
         meta = self.metadata if isinstance(self.metadata, dict) else None
         if meta is not None:
-            desc = meta.get("description")
-            if desc is not None:
-                info["description"] = desc
-
-        # Flatten remaining metadata keys
-        if meta is not None:
             for k, v in meta.items():
-                if k == "description":
-                    continue
                 if k not in info:
                     info[k] = v
 

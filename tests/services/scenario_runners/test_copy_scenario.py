@@ -81,12 +81,12 @@ def test_copy_scenario_with_metadata_override(dummy_client, fake_response):
         "id": 67893,
         "area_code": "nl",
         "end_year": 2050,
-        "metadata": {"description": "A test copy", "tags": ["test"]},
+        "metadata": {"tags": ["test"]},
     }
     response = fake_response(ok=True, status_code=201, json_data=body)
     client = dummy_client(response, method="post")
 
-    overrides = {"metadata": {"description": "A test copy", "tags": ["test"]}}
+    overrides = {"metadata": {"tags": ["test"]}}
     result = CopyScenarioRunner.run(client, scenario_id=12345, overrides=overrides)
 
     assert result.success is True
@@ -96,7 +96,7 @@ def test_copy_scenario_with_metadata_override(dummy_client, fake_response):
     expected_payload = {
         "scenario": {
             "scenario_id": 12345,
-            "metadata": {"description": "A test copy", "tags": ["test"]},
+            "metadata": {"tags": ["test"]},
         }
     }
     assert client.calls == [("/scenarios", {"json": expected_payload})]
@@ -303,7 +303,7 @@ def test_copy_scenario_payload_structure(dummy_client, fake_response):
     response = fake_response(ok=True, status_code=201, json_data=body)
     client = dummy_client(response, method="post")
 
-    overrides = {"metadata": {"description": "Test"}, "private": True}
+    overrides = {"private": True}
     CopyScenarioRunner.run(client, scenario_id=12345, overrides=overrides)
 
     # Verify the exact payload structure
@@ -313,7 +313,6 @@ def test_copy_scenario_payload_structure(dummy_client, fake_response):
             "json": {
                 "scenario": {
                     "scenario_id": 12345,
-                    "metadata": {"description": "Test"},
                     "private": True,
                 }
             }
