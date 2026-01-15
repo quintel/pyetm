@@ -23,7 +23,6 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         "source",
         "private",
         "keep_compatible",
-        "set_preset_roles",
         "template",
     ]
 

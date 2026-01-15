@@ -134,17 +134,11 @@ class Session(Base):
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
         """
-        roles = overrides.pop("roles", False)
-        if roles:
-            overrides["set_preset_roles"] = roles
-
-        # Call CopyScenarioRunner
         result = CopyScenarioRunner.run(BaseClient(), self.id, overrides=overrides)
 
         if not result.success:
             raise ScenarioError(f"Failed to copy scenario: {result.errors}")
 
-        # Create and return new scenario
         scenario = Session.model_validate(result.data)
         for warning in result.errors:
             scenario.add_warning("base", warning)
@@ -155,13 +149,8 @@ class Session(Base):
         """
         Create a copy with no template link to the original scenario.
         """
-        # Extract roles parameter to pass it explicitly
-        roles = overrides.pop("roles", False)
+        new_scenario = self.copy_with_preset(**overrides)
 
-        # Create the copy with roles if requested
-        new_scenario = self.copy_with_preset(roles=roles, **overrides)
-
-        # Break the template link
         result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
 
         if not result.success:
