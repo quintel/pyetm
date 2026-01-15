@@ -5,16 +5,16 @@ from typing import Iterable, Iterator, List, Union
 from pydantic import Field
 from pyetm.models.session import Session
 from pyetm.models.base import Base
+from pyetm.clients import BaseClient
 from .scenario import Scenario, SavedScenarioError
 
 
 class Scenarios(Base):
     """
-    A collection of Scenario and Session objects.
+    A collection of SavedScenario and/or Session objects.
 
-    This class can hold both SavedScenario (Scenario) instances from MyETM
-    and Session instances from ETEngine. Since Scenario delegates all operations
-    to its underlying Session, both types can be used interchangeably.
+    Can hold both Scenario and Session objects to support
+    mixed collections loaded from Excel or other sources.
     """
 
     items: List[Union[Scenario, Session]] = Field(default_factory=list)
@@ -37,13 +37,7 @@ class Scenarios(Base):
     @property
     def sessions(self) -> List["Session"]:
         """
-        Get the underlying ETEngine Session objects for all items.
-
-        For Scenario (SavedScenario) instances, returns the underlying session.
-        For Session instances, returns them directly.
-
-        Returns:
-            List of Session instances
+        Get the underlying ETEngine Session objects from all items.
         """
         from pyetm.models.session import Session
 
@@ -70,18 +64,103 @@ class Scenarios(Base):
                 print(f"Could not load saved scenario {ssid}: {e}")
         return cls(items=saved_scenarios)
 
+    @classmethod
+    def create_many(
+        cls,
+        scenario_params: Iterable[dict],
+        area_code: str | None = None,
+        end_year: int | None = None,
+        client: BaseClient | None = None,
+    ) -> "Scenarios":
+        """
+        Create multiple SavedScenario objects from parameter dicts.
+
+        If scenario_id is not provided in params, creates a new Session first.
+
+        Args:
+            scenario_params: Iterable of dicts, each containing at minimum:
+                - title: Title for the saved scenario
+                - scenario_id: (Optional) ETEngine scenario ID to save. If not provided,
+                  a new Session will be created using area_code and end_year
+                - area_code: (Optional if using defaults) Area code for new session
+                - end_year: (Optional if using defaults) End year for new session
+                - description, private: Optional SavedScenario fields
+            area_code: Default area_code for all scenarios (if not in params)
+            end_year: Default end_year for all scenarios (if not in params)
+            client: Optional BaseClient instance (shared across all creates)
+
+        Returns:
+            Scenarios collection containing the created SavedScenario objects
+        """
+        saved_scenarios = []
+        for params in scenario_params:
+            title = params.get("title")
+
+            if title is None:
+                print(
+                    f"Could not create saved scenario with {params}: "
+                    "Missing required 'title'"
+                )
+                continue
+
+            try:
+                # If scenario_id is provided, use existing session
+                if "scenario_id" in params:
+                    saved_scenarios.append(Scenario.create(params, client=client))
+                else:
+                    # Create new session first
+                    area = params.get("area_code") or area_code
+                    year = params.get("end_year") or end_year
+
+                    if area is None or year is None:
+                        print(
+                            f"Could not create saved scenario with {params}: "
+                            "Missing area_code or end_year. Provide them in each dict or as defaults."
+                        )
+                        continue
+
+                    # Extract session creation params
+                    session_params = {
+                        k: v
+                        for k, v in params.items()
+                        if k
+                        not in (
+                            "title",
+                            "description",
+                            "private",
+                            "area_code",
+                            "end_year",
+                        )
+                    }
+
+                    # Create the session
+                    session = Session.new(area, year, **session_params)
+
+                    # Extract SavedScenario-specific params
+                    saved_scenario_params = {
+                        k: v
+                        for k, v in params.items()
+                        if k in ("description", "private")
+                    }
+
+                    # Create SavedScenario from the session
+                    saved_scenarios.append(
+                        Scenario.from_scenario(
+                            session, title, client=client, **saved_scenario_params
+                        )
+                    )
+
+            except (SavedScenarioError, Exception) as e:
+                print(f"Could not create saved scenario with {params}: {e}")
+
+        return cls(items=saved_scenarios)
+
     def to_excel(self, path: PathLike | str, **export_options) -> None:
         """
         Export all scenarios to Excel.
 
-        Exports both Scenario (SavedScenario) and Session instances.
-        For SavedScenario instances, the scenario_id column will contain
-        the MyETM SavedScenario ID. For Session instances, it will contain
-        the ETEngine session ID.
-
-        Args:
-            path: Output path for the Excel file
-            **export_options: Additional export options to pass to ScenarioExcelService
+        Note: This exports the underlying session data from each SavedScenario.
+        The scenario_id column will contain Scenario IDs (MyETM).
         """
         from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
@@ -98,15 +177,12 @@ class Scenarios(Base):
         """
         Import all scenarios from Excel file.
 
-        Loads both SavedScenarios (Scenario instances from MyETM) and Sessions
-        (Session instances from ETEngine) based on the 'session' column value.
-        All scenarios are included regardless of type.
-
-        Args:
-            xlsx_path: Path to Excel file
+        Loads all scenarios from the Excel file, including both:
+        - SavedScenarios (where 'session' column is False or missing)
+        - Sessions (where 'session' column is True)
 
         Returns:
-            Scenarios collection containing all loaded scenarios (both types)
+            Scenarios collection containing mixed Scenario and Session objects
         """
         from pyetm.models.scenario_packer import ScenarioPacker
 
@@ -118,5 +194,5 @@ class Scenarios(Base):
         if not all_scenarios:
             print(f"No scenarios found in Excel file: {resolved_path}")
 
-        all_scenarios.sort(key=lambda s: s.id)
+        all_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
         return cls(items=all_scenarios)

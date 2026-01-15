@@ -113,7 +113,10 @@ class BaseRunner(ABC, Generic[T]):
 
         except (PermissionError, ValueError, ConnectionError) as e:
             # These are HTTP errors from our _handle_errors method
-            return ServiceResult.fail([str(e)])
+            error_msg = str(e)
+            if "404" in error_msg:
+                return ServiceResult.fail([f"Resource not found: {error_msg}"])
+            return ServiceResult.fail([error_msg])
         except Exception as e:
             # Any other unexpected exception is treated as breaking
             return ServiceResult.fail([str(e)])

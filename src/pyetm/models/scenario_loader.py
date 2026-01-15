@@ -141,12 +141,20 @@ class SavedScenarioLoader:
             saved_scenario = Scenario.load(scenario_id)
             return saved_scenario
         except Exception as e:
-            logger.warning(
-                "Could not load SavedScenario %s for row '%s': %s",
-                scenario_id,
-                row_label,
-                e,
-            )
+            error_msg = str(e)
+            if "does not exist" in error_msg or "not found" in error_msg.lower():
+                logger.warning(
+                    "Scenario %s does not exist on this ETM environment (row '%s')",
+                    scenario_id,
+                    row_label,
+                )
+            else:
+                logger.warning(
+                    "Could not load Scenario %s for row '%s': %s",
+                    scenario_id,
+                    row_label,
+                    e,
+                )
             return None
 
     def copy(
@@ -179,12 +187,20 @@ class SavedScenarioLoader:
                 )
                 return copied_session
         except Exception as e:
-            logger.warning(
-                "Failed to copy from SavedScenario '%s' for row '%s': %s",
-                scenario_id,
-                row_label,
-                e,
-            )
+            error_msg = str(e)
+            if "does not exist" in error_msg or "not found" in error_msg.lower():
+                logger.warning(
+                    "Scenario %s does not exist on this ETM environment. Cannot copy for row '%s'",
+                    scenario_id,
+                    row_label,
+                )
+            else:
+                logger.warning(
+                    "Failed to copy from Scenario %s for row '%s': %s",
+                    scenario_id,
+                    row_label,
+                    e,
+                )
             return None
 
     def create_new(

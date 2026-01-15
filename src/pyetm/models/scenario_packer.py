@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Sequence, List
+from typing import Optional, Dict, Any, Sequence, List, Union, TYPE_CHECKING
 from xlsxwriter import Workbook
 
 from pyetm.models.packables.inputs_pack import InputsPack
@@ -13,6 +13,9 @@ from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
+
+if TYPE_CHECKING:
+    from pyetm.models.scenario import Scenario
 from pyetm.models.scenario_loader import (
     ScenarioLoader,
     SessionLoader,
@@ -37,7 +40,7 @@ class ScenarioPacker(BaseModel):
 
     # Scenario management methods
     def add(self, *scenarios):
-        """Add scenarios to all packs."""
+        """Add scenarios to all packs. Supports Sessions and Scenarios"""
         self.add_custom_curves(*scenarios)
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
