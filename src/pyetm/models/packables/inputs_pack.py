@@ -25,57 +25,6 @@ class InputsPack(Packable):
     key: ClassVar[str] = "inputs"
     sheet_name: ClassVar[str] = "SLIDER_SETTINGS"
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        self._scenario_short_names: Dict[str, str] = {}
-
-    def set_scenario_short_names(self, scenario_short_names: Dict[str, str]):
-        """Set mapping of scenario IDs to short names for display purposes."""
-        self._scenario_short_names = scenario_short_names or {}
-
-    def _get_scenario_display_key(self, scenario: "Any") -> Any:
-        """Get the display key for a scenario (short name, identifier, or ID)."""
-        short_name = self._scenario_short_names.get(str(scenario.id))
-        if short_name:
-            return short_name
-
-        try:
-            identifier = scenario.identifier()
-            if isinstance(identifier, (str, int)):
-                return identifier
-        except Exception:
-            pass
-
-        return scenario.id
-
-    def resolve_scenario(self, label: Any):
-        """Resolve a scenario from various label formats (short name, identifier, or numeric ID)."""
-        if label is None:
-            return None
-
-        label_str = str(label).strip()
-
-        # Try short name first
-        for scenario in self.scenarios:
-            if self._scenario_short_names.get(str(scenario.id)) == label_str:
-                return scenario
-
-        # Identifier/title
-        found_scenario = super().resolve_scenario(label_str)
-        if found_scenario is not None:
-            return found_scenario
-
-        # Try numeric ID as fallback
-        try:
-            numeric_id = int(float(label_str))
-            for scenario in self.scenarios:
-                if scenario.id == numeric_id:
-                    return scenario
-        except (ValueError, TypeError):
-            pass
-
-        return None
-
     def to_dataframe(
         self,
         columns: str | List[str] = "user",
@@ -139,18 +88,6 @@ class InputsPack(Packable):
             )
             self._add_dataframe_to_workbook(workbook, name, df)
 
-    def import_from_excel(
-        self,
-        excel_file: pd.ExcelFile,
-        main_df: Optional[pd.DataFrame] = None,
-        scenarios_by_column: Optional[Dict[str, Any]] = None,
-        update_set: set[str] = None,
-    ):
-        """Import inputs sheet from Excel file."""
-        df = excel_utils.parse_excel_sheet(excel_file, self.sheet_name, header=None)
-        if df is not None and not df.empty:
-            self.from_dataframe(df, update_set)
-
     def from_dataframe(self, df, update_set: set[str] = None):
         """Import input values from DataFrame."""
         if df is None or getattr(df, "empty", False):
@@ -159,46 +96,20 @@ class InputsPack(Packable):
         skip_upload = not self._should_include_upload(update_set)
 
         try:
-            df = df.dropna(how="all")
-            if df.empty:
+            # Extract grid data using base class helper
+            data_df = self._extract_grid_data(df)
+            if data_df is None:
                 return
 
-            header_positions = self.first_non_empty_row_positions(df, 1)
-            if not header_positions:
-                return
+            # Prepare grid data using base class helper
+            data_df, input_keys, scenario_columns = self._prepare_grid_data(data_df)
 
-            header_row_index = header_positions[0]
-            header_row = df.iloc[header_row_index].astype(str)
-
-            # Extract data rows
-            data_df = df.iloc[header_row_index + 1 :].copy()
-            data_df.columns = header_row.values
-
-            if data_df.empty or len(data_df.columns) < 2:
-                return
-
-            # Process input data
-            input_column = data_df.columns[0]
-            input_keys = data_df[input_column].astype(str).str.strip()
-
-            # Filter out empty input keys
-            valid_mask = input_keys != ""
-            data_df = data_df.loc[valid_mask]
-            input_keys = input_keys.loc[valid_mask]
-            data_df.index = input_keys
-
-            # Process each scenario column
-            scenario_columns = [col for col in data_df.columns if col != input_column]
-            data_df[scenario_columns] = data_df[scenario_columns].replace(
-                {"": np.nan, "nan": np.nan}
-            )
             for column_name in scenario_columns:
-                scenario = self.resolve_scenario(column_name)
+                # Resolve scenario with automatic warning
+                scenario = self._resolve_scenario_with_warning(
+                    column_name, "SLIDER_SETTINGS sheet"
+                )
                 if scenario is None:
-                    logger.warning(
-                        "Could not find scenario for SLIDER_SETTINGS column label '%s'",
-                        column_name,
-                    )
                     continue
 
                 raw_updates = data_df[column_name].dropna().to_dict()
