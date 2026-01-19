@@ -490,9 +490,7 @@ class Scenario(Base):
         # Start with SavedScenario-specific fields
         info: Dict[str, Any] = {
             "title": self.title,
-            "description": self.description,
             "id": self.id,
-            "scenario_id": self.scenario_id,
             "private": self.private,
         }
 
@@ -500,7 +498,8 @@ class Scenario(Base):
         session = self.session
         info.update(
             {
-                "template": session.template,
+                "session_id": self.scenario_id,
+                "preset": session.template,
                 "area_code": session.area_code,
                 "start_year": session.start_year,
                 "end_year": session.end_year,
@@ -539,7 +538,7 @@ class Scenario(Base):
             raise SavedScenarioError(f"Could not fetch users: {result.errors}")
 
         for user in result.data:
-            user['role'] = user['role'].replace('scenario_', '', 1)
+            user["role"] = user["role"].replace("scenario_", "", 1)
 
         return result.data
 
