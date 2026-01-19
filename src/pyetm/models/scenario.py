@@ -498,7 +498,6 @@ class Scenario(Base):
         info: Dict[str, Any] = {
             "title": self.title,
             "id": self.id,
-            "scenario_id": self.scenario_id,
             "private": self.private,
         }
 
@@ -506,7 +505,8 @@ class Scenario(Base):
         session = self.session
         info.update(
             {
-                "template": session.template,
+                "session_id": self.scenario_id,
+                "preset": session.template,
                 "area_code": session.area_code,
                 "start_year": session.start_year,
                 "end_year": session.end_year,
