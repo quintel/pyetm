@@ -22,6 +22,7 @@ from pyetm.models.scenario_loader import (
     SavedScenarioLoader,
 )
 from pyetm.utils import excel_utils
+from pyetm.utils.safe_cast import cast_bool, cast_int
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class ScenarioPacker(BaseModel):
         return pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
 
     def inputs(self, columns="user") -> pd.DataFrame:
-        return self._inputs._to_dataframe(columns=columns)
+        return self._inputs.to_dataframe(columns=columns)
 
     def gquery_results(self, columns="future") -> pd.DataFrame:
         return self._query_pack.to_dataframe(columns=columns)
@@ -80,6 +81,15 @@ class ScenarioPacker(BaseModel):
 
     def exports(self) -> pd.DataFrame:
         return self._exports.to_dataframe()
+
+    def couplings(self) ->pd.DataFrame:
+        if len(self._scenarios()) == 0:
+            return pd.DataFrame()
+
+        return pd.concat(
+            [scenario.couplings.to_series(scenario.identifier()) for scenario in self._scenarios()],
+            axis=1
+        )
 
     def add_queries(self, gquery_keys: List[str]):
         self._query_pack.add_queries(gquery_keys)
@@ -419,16 +429,16 @@ class ScenarioPacker(BaseModel):
         - session=False: SavedScenarioLoader (IDs refer to MyETM SavedScenarios)
         - Default: False (SavedScenarioLoader)
         """
-        is_session = self._safe_get_bool(row_data.get("session"))
+        is_session = cast_bool(row_data.get("session"))
         if is_session is None:
             is_session = False
         loader = SessionLoader(self) if is_session else SavedScenarioLoader(self)
 
-        scenario_id = self._safe_get_int(row_data.get("scenario_id"))
-        parent = self._safe_get_int(row_data.get("parent"))
-        copy_from = self._safe_get_int(row_data.get("copy_from"))
+        scenario_id = cast_int(row_data.get("scenario_id"))
+        parent = cast_int(row_data.get("parent"))
+        copy_from = cast_int(row_data.get("copy_from"))
         area_code = row_data.get("area_code")
-        end_year = self._safe_get_int(row_data.get("end_year"))
+        end_year = cast_int(row_data.get("end_year"))
         metadata_updates = self._extract_metadata_updates(row_data)
         row_label = str(row_idx)
 
@@ -513,34 +523,6 @@ class ScenarioPacker(BaseModel):
         """Create a brand new scenario."""
         return loader.create_new(area_code, end_year, row_label, metadata_updates)
 
-    def _safe_get_int(self, value: Any) -> Optional[int]:
-        """Safely convert value to integer."""
-        if value is None or (isinstance(value, float) and pd.isna(value)):
-            return None
-        try:
-            return int(float(value))
-        except (ValueError, TypeError):
-            return None
-
-    def _safe_get_bool(self, value: Any) -> Optional[bool]:
-        """Safely convert value to boolean."""
-        if value is None or (isinstance(value, float) and pd.isna(value)):
-            return None
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)):
-            try:
-                return bool(int(value))
-            except Exception:
-                return None
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"true", "yes", "y", "1"}:
-                return True
-            if normalized in {"false", "no", "n", "0"}:
-                return False
-        return None
-
     def _load_or_create_scenario(
         self,
         scenario_id: Optional[int],
@@ -591,7 +573,7 @@ class ScenarioPacker(BaseModel):
         """Extract metadata updates from column data."""
         metadata = {}
 
-        private = self._safe_get_bool(column_data.get("private"))
+        private = cast_bool(column_data.get("private"))
         if private is not None:
             metadata["private"] = private
 
@@ -682,32 +664,21 @@ class ScenarioPacker(BaseModel):
 
     def _scenarios(self) -> set[Session]:
         """All scenarios we are packing info for across all packs."""
-        all_scenarios = set()
-        for pack in self._get_all_packs():
-            scenarios = getattr(pack, "scenarios", None)
-            if scenarios:
-                if isinstance(scenarios, set):
-                    all_scenarios.update(scenarios)
-                else:
-                    try:
-                        all_scenarios.update(set(scenarios))
-                    except Exception:
-                        pass
-        return all_scenarios
+        return set().union(*[pack.scenarios for pack in self._packs()])
 
-    def _get_all_packs(self):
+    def _packs(self):
         """Get all pack instances."""
-        return [
+        yield from (
             self._inputs,
             self._sortables,
             self._custom_curves,
             self._exports,
             self._query_pack,
-        ]
+        )
 
     def clear(self):
         """Clear all scenarios from all packs."""
-        for pack in self._get_all_packs():
+        for pack in self._packs():
             try:
                 pack.clear()
             except Exception:
@@ -715,7 +686,7 @@ class ScenarioPacker(BaseModel):
 
     def remove_scenario(self, scenario: Session):
         """Remove a specific scenario from all collections."""
-        for pack in self._get_all_packs():
+        for pack in self._packs():
             try:
                 pack.discard(scenario)
             except Exception:
