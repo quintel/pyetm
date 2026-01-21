@@ -54,7 +54,6 @@ class Scenario(Base):
     id: int = Field(..., description="Unique saved scenario identifier in MyETM")
     scenario_id: int = Field(..., description="Reference to ETEngine scenario")
     title: str = Field(..., description="Title of the saved scenario")
-    description: Optional[str] = None
     private: Optional[bool] = False
     area_code: Optional[str] = None
     end_year: Optional[int] = None
@@ -411,29 +410,37 @@ class Scenario(Base):
         """
         Create a copy of the underlying session with a linked preset and save it to MyETM.
         """
-        # Copy the underlying session with preset link
-        copied_session = self.session.copy_with_preset()
+        # Separate SavedScenario parameters from Session copy parameters
+        title = overrides.pop("title", f"Copy of {self.title}")
+        private = overrides.pop("private", None)
 
-        # Determine title for the new SavedScenario
-        if "title" not in overrides:
-            overrides["title"] = f"Copy of {self.title}"
+        # Copy the underlying session with preset link, passing session-related overrides
+        copied_session = self.session.copy_with_preset(**overrides)
 
         # Save the copied session to MyETM as a new SavedScenario
-        return copied_session.save(**overrides)
+        save_params = {"title": title}
+        if private is not None:
+            save_params["private"] = private
+
+        return copied_session.save(**save_params)
 
     def copy(self, **overrides) -> "Scenario":
         """
         Create a copy with no template link to the original scenario and save it to MyETM.
         """
-        # Copy the underlying session (no preset link)
-        copied_session = self.session.copy()
+        # Separate SavedScenario parameters from Session copy parameters
+        title = overrides.pop("title", f"Copy of {self.title}")
+        private = overrides.pop("private", None)
 
-        # Determine title for the new SavedScenario
-        if "title" not in overrides:
-            overrides["title"] = f"Copy of {self.title}"
+        # Copy the underlying session (no preset link), passing session-related overrides
+        copied_session = self.session.copy(**overrides)
 
         # Save the copied session to MyETM as a new SavedScenario
-        return copied_session.save(**overrides)
+        save_params = {"title": title}
+        if private is not None:
+            save_params["private"] = private
+
+        return copied_session.save(**save_params)
 
     @classmethod
     def interpolate(
@@ -488,12 +495,10 @@ class Scenario(Base):
         The id field contains the SavedScenario ID (MyETM ID).
         The scenario_id field contains the underlying ETEngine session ID.
         """
-        # Start with SavedScenario-specific fields
+        # Start with Scenario specific fields
         info: Dict[str, Any] = {
             "title": self.title,
-            "description": self.description,
             "id": self.id,
-            "scenario_id": self.scenario_id,
             "private": self.private,
         }
 
@@ -501,7 +506,8 @@ class Scenario(Base):
         session = self.session
         info.update(
             {
-                "template": session.template,
+                "session_id": self.scenario_id,
+                "preset": session.template,
                 "area_code": session.area_code,
                 "start_year": session.start_year,
                 "end_year": session.end_year,

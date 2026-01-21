@@ -23,7 +23,6 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         "source",
         "private",
         "keep_compatible",
-        "set_preset_roles",
         "template",
     ]
 
@@ -43,8 +42,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
                 scenario_id=123456,
                 overrides={
                     "title": "Copy of my scenario",
-                    "private": True,
-                    "metadata": {"description": "A copy with new description"}
+                    "private": True
                 }
             )
         """

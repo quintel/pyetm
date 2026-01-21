@@ -28,7 +28,6 @@ def test_saved_scenario_session_validation_minimal():
     assert saved_scenario.id == 1
     assert saved_scenario.scenario_id == 100
     assert saved_scenario.title == "Test Scenario"
-    assert saved_scenario.description is None
     assert saved_scenario.private is False
 
 
@@ -38,7 +37,6 @@ def test_saved_scenario_session_validation_full(saved_scenario_data):
     assert saved_scenario.id == 456
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "My Saved Scenario"
-    assert saved_scenario.description == "A test description"
     assert saved_scenario.private is False
     assert saved_scenario.area_code == "nl"
     assert saved_scenario.end_year == 2050

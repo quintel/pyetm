@@ -135,17 +135,11 @@ class Session(Base):
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
         """
-        copy_roles = overrides.pop("copy_roles", False)
-        if copy_roles:
-            overrides["set_preset_roles"] = copy_roles
-
-        # Call CopyScenarioRunner
         result = CopyScenarioRunner.run(BaseClient(), self.id, overrides=overrides)
 
         if not result.success:
             raise ScenarioError(f"Failed to copy scenario: {result.errors}")
 
-        # Create and return new scenario
         scenario = Session.model_validate(result.data)
         for warning in result.errors:
             scenario.add_warning("base", warning)
@@ -156,10 +150,8 @@ class Session(Base):
         """
         Create a copy with no template link to the original scenario.
         """
-        # Create the copy
         new_scenario = self.copy_with_preset(**overrides)
 
-        # Break the template link
         result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
 
         if not result.success:
@@ -337,18 +329,10 @@ class Session(Base):
             "updated_at": self.updated_at,
         }
 
-        # Description from metadata (if present)
+        # Flatten metadata keys
         meta = self.metadata if isinstance(self.metadata, dict) else None
         if meta is not None:
-            desc = meta.get("description")
-            if desc is not None:
-                info["description"] = desc
-
-        # Flatten remaining metadata keys
-        if meta is not None:
             for k, v in meta.items():
-                if k == "description":
-                    continue
                 if k not in info:
                     info[k] = v
 
