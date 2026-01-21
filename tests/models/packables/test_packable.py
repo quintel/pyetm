@@ -8,10 +8,10 @@ from pyetm.models.packables.sortable_pack import SortablePack
 
 class MockScenario:
     def __init__(self, id):
-        self._id = id
+        self.id = id
 
     def identifier(self):
-        return self._id
+        return self.id
 
 
 @pytest.fixture

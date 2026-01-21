@@ -62,6 +62,7 @@ class Scenario(Base):
     scenario: Optional[Dict[str, Any]] = None
 
     _scenario_session: Optional[Session] = PrivateAttr(None)
+    _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
 
     def __eq__(self, other: "Scenario"):
         return self.id == other.id
@@ -550,15 +551,24 @@ class Scenario(Base):
         return result.data
 
     def update_users(
-        self, email: str, role: str, client: Optional[BaseClient] = None
+        self,
+        email: str,
+        role: str,
+        client: Optional[BaseClient] = None,
+        skip_upload: bool = False,
     ) -> None:
         """
         Add, update, or remove a user's access to this saved scenario.
+        - skip_upload: If True, store data locally without uploading (can be applied later)
         """
         if client is None:
             client = BaseClient()
 
         role = self._normalize_role(role)
+
+        if skip_upload:
+            self._pending_users[email] = role
+            return
 
         if role == "remove":
             self._remove_user(email, client)
@@ -568,6 +578,36 @@ class Scenario(Base):
             self._update_user_role(email, role, client)
         else:
             self._add_user(email, role, client)
+
+    def apply_pending_users(self, client: Optional[BaseClient] = None) -> int:
+        """
+        Apply all pending user updates that were loaded with skip_upload=True.
+        """
+        if not self._pending_users:
+            return 0
+
+        if client is None:
+            client = BaseClient()
+
+        count = 0
+        for email, role in list(self._pending_users.items()):
+            try:
+                self.update_users(email, role, client=client, skip_upload=False)
+                count += 1
+            except Exception as e:
+                from pyetm.models.scenario import SavedScenarioError
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Failed to apply pending user '%s' with role '%s': %s",
+                    email,
+                    role,
+                    e,
+                )
+
+        # Clear pending users after applying
+        self._pending_users.clear()
+        return count
 
     def _normalize_role(self, role: str) -> str:
         role_aliases = {
