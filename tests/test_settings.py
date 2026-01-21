@@ -25,11 +25,13 @@ def clean_settings_env(monkeypatch, tmp_path):
     for var in etm_vars:
         monkeypatch.delenv(var, raising=False)
 
-    # Create isolated config file path
-    test_config_file = tmp_path / "isolated_config.env"
-    monkeypatch.setattr(settings_module, "ENV_FILE", test_config_file)
+    # Create isolated .env file in temp directory
+    test_env_file = tmp_path / ".env"
 
-    return test_config_file
+    # Change to the temp directory so AppConfig finds our test .env file
+    monkeypatch.chdir(tmp_path)
+
+    return test_env_file
 
 
 # Helper to write a .env file
@@ -147,7 +149,7 @@ def test_get_settings_missing_token_raises_runtime_error(clean_settings_env):
         in msg
     )
     assert "• etm_api_token: Field required" in msg
-    assert str(env_file) in msg
+    assert "environment variables" in msg
 
 
 # Test defaults when no configuration provided
