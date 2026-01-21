@@ -85,6 +85,7 @@ class Session(Base):
     _queries: Optional[Gqueries] = PrivateAttr(None)
     _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
     _couplings: Optional[Couplings] = PrivateAttr(default=None)
+    _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
 
     @classmethod
     def new(cls, area_code: str, end_year: int, **kwargs) -> "Session":
@@ -191,7 +192,8 @@ class Session(Base):
         # Validate no duplicate end years
         end_years_in_sessions = [s.end_year for s in session_list]
         duplicates = [
-            year for year in set(end_years_in_sessions)
+            year
+            for year in set(end_years_in_sessions)
             if end_years_in_sessions.count(year) > 1
         ]
         if duplicates:
@@ -751,11 +753,16 @@ class Session(Base):
 
         return result.data
 
-    def update_users(self, email: str, role: str) -> None:
+    def update_users(self, email: str, role: str, skip_upload: bool = False) -> None:
         """
         Add, update, or remove a user's access to this scenario.
+        - skip_upload: If True, store data locally without uploading (can be applied later)
         """
         role = self._normalize_role(role)
+
+        if skip_upload:
+            self._pending_users[email] = role
+            return
 
         if role == "remove":
             self._remove_user(email)
@@ -765,6 +772,30 @@ class Session(Base):
             self._update_user_role(email, role)
         else:
             self._add_user(email, role)
+
+    def apply_pending_users(self) -> int:
+        """
+        Apply all pending user updates that were loaded with skip_upload=True.
+        """
+        if not self._pending_users:
+            return 0
+
+        count = 0
+        for email, role in list(self._pending_users.items()):
+            try:
+                self.update_users(email, role, skip_upload=False)
+                count += 1
+            except Exception as e:
+                logger.warning(
+                    "Failed to apply pending user '%s' with role '%s': %s",
+                    email,
+                    role,
+                    e,
+                )
+
+        # Clear pending users after applying
+        self._pending_users.clear()
+        return count
 
     def _normalize_role(self, role: str) -> str:
         role_aliases = {

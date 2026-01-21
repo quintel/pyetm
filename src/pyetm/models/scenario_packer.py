@@ -11,6 +11,7 @@ from pyetm.models.packables.output_curves_pack import OutputCurvesPack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
+from pyetm.models.packables.users_pack import UsersPack
 from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
 
@@ -38,6 +39,7 @@ class ScenarioPacker(BaseModel):
     _sortables: SortablePack = SortablePack()
     _exports: OutputCurvesPack = OutputCurvesPack()
     _query_pack: QueryPack = QueryPack()
+    _users: UsersPack = UsersPack()
 
     # Scenario management methods
     def add(self, *scenarios):
@@ -47,6 +49,7 @@ class ScenarioPacker(BaseModel):
         self.add_sortables(*scenarios)
         self.add_exports(*scenarios)
         self._query_pack.add(*scenarios)
+        self._users.add(*scenarios)
 
     def add_custom_curves(self, *scenarios):
         self._custom_curves.add(*scenarios)
@@ -82,13 +85,16 @@ class ScenarioPacker(BaseModel):
     def exports(self) -> pd.DataFrame:
         return self._exports.to_dataframe()
 
-    def couplings(self) ->pd.DataFrame:
+    def couplings(self) -> pd.DataFrame:
         if len(self._scenarios()) == 0:
             return pd.DataFrame()
 
         return pd.concat(
-            [scenario.couplings.to_series(scenario.identifier()) for scenario in self._scenarios()],
-            axis=1
+            [
+                scenario.couplings.to_series(scenario.identifier())
+                for scenario in self._scenarios()
+            ],
+            axis=1,
         )
 
     def add_queries(self, gquery_keys: List[str]):
@@ -105,6 +111,7 @@ class ScenarioPacker(BaseModel):
         include_gqueries: Optional[bool] = None,
         include_exports: Optional[bool] = None,
         include_input_details: Optional[bool] = None,
+        include_users: Optional[bool] = None,
     ):
         """Export scenarios to Excel file."""
         if not self._scenarios():
@@ -118,6 +125,7 @@ class ScenarioPacker(BaseModel):
             include_custom_curves,
             include_gqueries,
             include_exports,
+            include_users,
         )
 
         # Ensure destination directory exists
@@ -166,6 +174,7 @@ class ScenarioPacker(BaseModel):
         include_custom_curves: Optional[bool],
         include_gqueries: Optional[bool],
         include_exports: Optional[bool],
+        include_users: Optional[bool],
     ) -> Dict[str, Any]:
         """Resolve all export flags from parameters and configuration."""
         resolver = excel_utils.ExportConfigResolver()
@@ -226,6 +235,15 @@ class ScenarioPacker(BaseModel):
                 if global_config
                 else False
             ),
+            "include_users": resolver.resolve_boolean(
+                include_users,
+                (
+                    getattr(global_config, "include_users", None)
+                    if global_config
+                    else None
+                ),
+                False,
+            ),
         }
 
     def _add_main_sheet(self, workbook: Workbook):
@@ -259,6 +277,9 @@ class ScenarioPacker(BaseModel):
         if flags["include_custom_curves"]:
             self._custom_curves.add_to_workbook(workbook)
 
+        if flags.get("include_users"):
+            self._users.add_to_workbook(workbook)
+
     def _export_output_curves_if_needed(
         self,
         main_path: str,
@@ -290,7 +311,7 @@ class ScenarioPacker(BaseModel):
     @staticmethod
     def _normalize_update(update: bool | List[str]) -> set[str]:
         """Normalize update parameter to a set of type names."""
-        valid_types = {"user_values", "custom_curves", "sortables"}
+        valid_types = {"user_values", "custom_curves", "sortables", "users"}
         if isinstance(update, bool):
             return valid_types if update else set()
 
@@ -303,7 +324,9 @@ class ScenarioPacker(BaseModel):
         return update_set & valid_types
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "ScenarioPacker":
+    def from_excel(
+        cls, xlsx_path: PathLike | str, update: bool | List[str] = False
+    ) -> "ScenarioPacker":
         """
         Import scenarios from Excel file.
 
@@ -311,9 +334,13 @@ class ScenarioPacker(BaseModel):
 
         Args:
             xlsx_path: Path to Excel file
+            update: Whether to upload data to ETM. Can be:
+                - False (default): Load data locally without uploading
+                - True: Upload all data types (user_values, custom_curves, sortables, users)
+                - List of types: Upload only specified types (e.g., ['user_values', 'users'])
         """
         packer = cls()
-        update_set = cls._normalize_update(True)
+        update_set = cls._normalize_update(update)
 
         # Resolve default location: if a relative path/filename is provided and the
         # file does not exist at that location, look for it in the project /inputs dir.
@@ -382,6 +409,11 @@ class ScenarioPacker(BaseModel):
         )
 
         packer._import_scenario_specific_sheets(
+            excel_file, main_df, scenarios_by_column, update_set
+        )
+
+        # Import users sheet if present
+        packer._users.import_from_excel(
             excel_file, main_df, scenarios_by_column, update_set
         )
 
@@ -674,6 +706,7 @@ class ScenarioPacker(BaseModel):
             self._custom_curves,
             self._exports,
             self._query_pack,
+            self._users,
         )
 
     def clear(self):

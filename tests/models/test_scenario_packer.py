@@ -971,7 +971,7 @@ class TestNormalizeUpdate:
     def test_normalize_update_true(self):
         """Test normalizing update=True returns all types"""
         result = ScenarioPacker._normalize_update(True)
-        assert result == {"user_values", "custom_curves", "sortables"}
+        assert result == {"user_values", "custom_curves", "sortables", "users"}
 
     def test_normalize_update_list(self):
         """Test normalizing list of types"""

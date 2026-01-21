@@ -135,10 +135,10 @@ def test_resolve_scenario_by_numeric_id():
 
     pack = InputsPack()
     pack.add(s1, s2)
-    # Mock parent resolve to return None (not found by identifier)
+    # Mock _find_by_identifier to return None (not found by identifier)
     with pytest.MonkeyPatch().context() as m:
         m.setattr(
-            "pyetm.models.packables.packable.Packable.resolve_scenario",
+            "pyetm.models.packables.packable.Packable._find_by_identifier",
             Mock(return_value=None),
         )
 

@@ -186,7 +186,9 @@ class Scenarios(Base):
         )
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Scenarios":
+    def from_excel(
+        cls, xlsx_path: PathLike | str, update: bool | List[str] = False
+    ) -> "Scenarios":
         """
         Import all scenarios from Excel file.
 
@@ -201,7 +203,7 @@ class Scenarios(Base):
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
 
-        packer = ScenarioPacker.from_excel(str(resolved_path))
+        packer = ScenarioPacker.from_excel(str(resolved_path), update=update)
         all_scenarios = list(packer._scenarios())
 
         if not all_scenarios:
