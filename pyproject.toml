@@ -45,7 +45,11 @@ pyetm = "pyetm.__main__:main"
 
 [tool.poetry]
 packages = [{ include = "pyetm", from = "src" }]
-include = ["LICENSE"]
+include = [
+  "LICENSE",
+  "src/pyetm/config/*.yml",
+  "src/pyetm/config/*.yaml"
+]
 
 
 [tool.poetry.group.dev.dependencies]

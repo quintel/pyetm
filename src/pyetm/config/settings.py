@@ -1,11 +1,9 @@
 from pathlib import Path
 import re
+import tempfile
 from typing import Optional, ClassVar, List, Annotated
 from pydantic import Field, ValidationError, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-ENV_FILE = PROJECT_ROOT / "config.env"
 
 
 class AppConfig(BaseSettings):
@@ -56,19 +54,11 @@ class AppConfig(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         case_sensitive=False,
         extra="ignore",
+        env_file=".env",
+        env_file_encoding="utf-8",
     )
 
-    temp_folder: Optional[Path] = PROJECT_ROOT / "tmp"
-
-    def __init__(self, **values):
-        """
-        This ensures tests can monkeypatch `pyetm.config.settings.ENV_FILE`
-        """
-        super().__init__(
-            _env_file=ENV_FILE,
-            _env_file_encoding="utf-8",
-            **values,
-        )
+    temp_folder: Optional[Path] = Path(tempfile.gettempdir()) / "pyetm"
 
     @field_validator("etm_api_token")
     @classmethod
@@ -142,7 +132,7 @@ def get_settings() -> AppConfig:
         raise RuntimeError(
             f"\nConfiguration error: one or more required settings are missing or invalid:\n\n"
             f"{detail}\n\n"
-            f"Please set them via environment variables or in `{ENV_FILE}`."
+            f"Please set them via environment variables (e.g., ETM_API_TOKEN=...) or in a .env file in your working directory."
         ) from exc
 
 

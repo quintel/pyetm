@@ -111,11 +111,14 @@ You can either:
 
 ## Configuring Your Settings
 
-You can configure your API token and base URL either with a **config.env** file or environment variables. You can simply set an `environment` and the base URL will be inferred for you.
+You can configure your API token and base URL using environment variables or a `.env` file. You can simply set an `environment` and the base URL will be inferred for you.
 
-### Option 1: `config.env` (Recommended)
-1. Copy the example file (`example.config.env`) and rename it to `config.env`.
-2. Edit `config.env`:
+### Option 1: `.env` File (Recommended)
+1. Copy the example file (`.env.example`) and rename it to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit `.env` with your settings:
    ```bash
    # Your ETM API token (required)
    ETM_API_TOKEN=your.token.here
@@ -127,15 +130,17 @@ You can configure your API token and base URL either with a **config.env** file 
    # BASE_URL=https://engine.energytransitionmodel.com/api/v3
 
    # Optional: Proxy settings
-   # PROXY_SERVERS_HTTP=http://user:pass@proxy.example.com:8080
-   # PROXY_SERVERS_HTTPS=http://user:pass@secureproxy.example.com:8080
+   # PROXY_SERVERS_HTTP=http://proxy.example.com:8080
+   # PROXY_SERVERS_HTTPS=http://secureproxy.example.com:8080
 
    # CSV settings (optional)
    CSV_SEPARATOR=,
    DECIMAL_SEPARATOR=.
    ```
 
-Place `config.env` in the project root (`pyetm/` folder).
+**For development**: Place `.env` in the repository root (`pyetm/` folder).
+
+**For installed package**: Place `.env` in your project's working directory (where you run your Python scripts).
 
 **Environment Options:**
 - `pro` (default): Production environment
@@ -144,13 +149,44 @@ Place `config.env` in the project root (`pyetm/` folder).
 - `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
 
 ### Option 2: Environment Variables
-If you prefer, set these environment variables directly:
+Set these environment variables directly in your shell:
 ```bash
 ETM_API_TOKEN=<your token>
 ENVIRONMENT=<pro|beta|local|YYYY-MM>
 # or provide a direct override instead of ENVIRONMENT
 BASE_URL=<api url>
 ```
+
+**Note**: Environment variables take precedence over values in `.env` files.
+
+---
+
+### Temporary File Storage
+
+The package stores temporary files (cached output curves and custom curves) in your system's temporary directory:
+- **macOS/Linux**: `/tmp/pyetm/`
+- **Windows**: `%TEMP%\pyetm\`
+
+Files are organized by scenario ID to enable efficient caching across requests.
+
+---
+
+### Running Examples
+
+The example notebooks in the `examples/` directory are designed for development and **require the repository to be cloned**. They use repository-relative paths and sample input files that are not included when installing via pip.
+
+To run the examples:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/quintel/pyetm.git
+   cd pyetm
+   ```
+2. Install with development dependencies:
+   ```bash
+   poetry install --with dev
+   ```
+3. Configure your settings (see "Configuring Your Settings" above)
+4. Open the notebooks in Jupyter or VS Code
 
 ---
 
