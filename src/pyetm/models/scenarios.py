@@ -39,11 +39,28 @@ class Scenarios(Base):
         """
         Get the underlying ETEngine Session objects from all items.
         """
-        from pyetm.models.session import Session
-
         return [
             item.session if isinstance(item, Scenario) else item for item in self.items
         ]
+
+    @property
+    def combine(self) -> "ScenarioPacker":
+        """
+        Helps users with quick access to a packer. The combine keyword makes
+        sense when spelling out method calls to scenarios.
+
+        E.g. scenarios.combine.inputs.to_dataframe()
+        or   scenarios.combine.to_excel()
+        """
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        if self._packer is not None:
+            return self._packer
+
+        self._packer = ScenarioPacker()
+        self._packer.add(*self.items)
+
+        return self._packer
 
     @classmethod
     def load_many(cls, saved_scenario_ids: Iterable[int]) -> "Scenarios":
@@ -193,4 +210,7 @@ class Scenarios(Base):
             print(f"No scenarios found in Excel file: {resolved_path}")
 
         all_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
-        return cls(items=all_scenarios)
+
+        scenarios = cls(items=all_scenarios)
+        scenarios._packer = packer
+        return scenarios

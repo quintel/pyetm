@@ -35,7 +35,7 @@ class TestScenarioPackerAdd:
         packer.add(sample_scenario)
 
         # Should be added to all collections
-        for pack in packer._get_all_packs():
+        for pack in packer._packs():
             assert sample_scenario in pack.scenarios
 
     def test_add_multiple_scenarios(self, multiple_scenarios):
@@ -44,7 +44,7 @@ class TestScenarioPackerAdd:
         packer.add(*multiple_scenarios)
 
         # All scenarios should be in all collections
-        for pack in packer._get_all_packs():
+        for pack in packer._packs():
             assert len(pack.scenarios) == 3
             for scenario in multiple_scenarios:
                 assert scenario in pack.scenarios
@@ -170,6 +170,14 @@ class TestMainInfo:
         for scenario in multiple_scenarios:
             assert scenario.id in result.columns
 
+class TestCouplings:
+    def test_couplings_empty(self):
+        """Test couplings with no scenarios"""
+        packer = ScenarioPacker()
+        result = packer.couplings()
+
+        assert isinstance(result, pd.DataFrame)
+        assert result.empty
 
 class TestInputs:
 
@@ -511,7 +519,7 @@ class TestUtilityMethods:
 
         # Verify all collections are empty
         assert len(packer._scenarios()) == 0
-        for pack in packer._get_all_packs():
+        for pack in packer._packs():
             assert len(pack.scenarios) == 0
 
     def test_remove_scenario(self, multiple_scenarios):
@@ -581,32 +589,6 @@ class TestExportConfigResolver:
 
 
 class TestScenarioPackerHelpers:
-
-    def test_safe_get_bool(self):
-        """Test _safe_get_bool method"""
-        packer = ScenarioPacker()
-        na = float("nan")
-        assert packer._safe_get_bool(None) is None
-        assert packer._safe_get_bool(na) is None
-        assert packer._safe_get_bool(True) is True
-        assert packer._safe_get_bool(False) is False
-        assert packer._safe_get_bool(1) is True
-        assert packer._safe_get_bool(0.0) is False
-        assert packer._safe_get_bool("yes") is True
-        assert packer._safe_get_bool("No") is False
-        assert packer._safe_get_bool("1") is True
-        assert packer._safe_get_bool("maybe") is None
-
-    def test_safe_get_int(self):
-        """Test _safe_get_int method"""
-        packer = ScenarioPacker()
-        na = float("nan")
-        assert packer._safe_get_int(None) is None
-        assert packer._safe_get_int(na) is None
-        assert packer._safe_get_int(5) == 5
-        assert packer._safe_get_int(5.9) == 5
-        assert packer._safe_get_int("7") == 7
-        assert packer._safe_get_int("abc") is None
 
     def test_load_or_create_scenario_load_new_and_failures(self, monkeypatch):
         """Test _load_or_create_scenario method"""
@@ -972,7 +954,7 @@ def test_clear_and_remove_scenario_swallow_errors():
     fake_pack2.discard.return_value = None
 
     with patch.object(
-        ScenarioPacker, "_get_all_packs", return_value=[fake_pack1, fake_pack2]
+        ScenarioPacker, "_packs", return_value=[fake_pack1, fake_pack2]
     ):
         packer.clear()  # should not raise
         sc = Mock(spec=Session)
