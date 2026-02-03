@@ -5,13 +5,13 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "pyetm"
-version = "2.0.0b2"
+version = "2.0.0b3"
 description = "Python-ETM Connector"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
   { name = "Nora Schinkel", email = "nora.schinkel@quintel.com" },
-  { name = "Louis Parkes-Talbo", email = "louis.parkestalbot@quintel.com" }
+  { name = "Louis Parkes-Talbot", email = "louis.parkestalbot@quintel.com" }
 ]
 keywords = ["energy", "transition", "modeling", "api", "ETM"]
 requires-python = ">=3.12,<4.0"
