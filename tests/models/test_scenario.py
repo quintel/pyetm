@@ -1390,3 +1390,91 @@ def test_interpolate_rejects_different_area_codes(dummy_scenario):
 
     with pytest.raises(ValueError, match="All sessions must have the same area_code"):
         Session.interpolate([scenario_nl, scenario_de], 2040)
+
+
+# ------ set_short_name ------ #
+
+
+def test_set_short_name_persists_by_default(monkeypatch, scenario, ok_service_result):
+    """set_short_name calls update_metadata when persist=True (default)."""
+    update_calls = []
+
+    def capture_update(client, scen, metadata):
+        update_calls.append(metadata)
+        return ok_service_result({"scenario": {"id": scen.id}})
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", capture_update)
+
+    scenario.set_short_name("my_scenario")
+
+    # Local state updated
+    assert scenario.short_name == "my_scenario"
+    assert scenario.metadata == {"short_name": "my_scenario"}
+
+    # API was called with the short_name inside metadata
+    assert len(update_calls) == 1
+    assert update_calls[0] == {"metadata": {"short_name": "my_scenario"}}
+
+
+def test_set_short_name_no_persist(monkeypatch, scenario, ok_service_result):
+    """set_short_name with persist=False does NOT call the API."""
+    update_calls = []
+
+    def capture_update(client, scen, metadata):
+        update_calls.append(metadata)
+        return ok_service_result({"scenario": {"id": scen.id}})
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", capture_update)
+
+    scenario.set_short_name("local_only", persist=False)
+
+    # Local state updated
+    assert scenario.short_name == "local_only"
+    assert scenario.metadata == {"short_name": "local_only"}
+
+    # No API call was made
+    assert len(update_calls) == 0
+
+
+def test_set_short_name_merges_existing_metadata(
+    monkeypatch, ok_service_result
+):
+    """short_name is added alongside existing metadata keys before the API call."""
+    scenario = Session(
+        id=42, area_code="nl", end_year=2050, metadata={"custom_key": "value"}
+    )
+
+    # Capture the local metadata state at the moment update_metadata is invoked
+    captured_local_metadata = []
+
+    def capture_update(client, scen, metadata):
+        # At call time the local metadata dict already has both keys
+        captured_local_metadata.append(dict(scen.metadata))
+        return ok_service_result({"scenario": {"id": scen.id}})
+
+    monkeypatch.setattr(UpdateMetadataRunner, "run", capture_update)
+
+    scenario.set_short_name("merged")
+
+    # The metadata payload sent to the runner contains the short_name key
+    assert len(captured_local_metadata) == 1
+    assert captured_local_metadata[0] == {"custom_key": "value", "short_name": "merged"}
+    assert scenario.short_name == "merged"
+
+
+def test_set_short_name_identifier_returns_short_name(scenario):
+    """identifier() returns short_name when set."""
+    scenario.set_short_name("quick", persist=False)
+    assert scenario.identifier() == "quick"
+
+
+def test_set_short_name_identifier_falls_back_to_title():
+    """identifier() falls back to title when short_name is unset."""
+    scenario = Session(id=1, area_code="nl", end_year=2050, title="My Title")
+    assert scenario.identifier() == "My Title"
+
+
+def test_set_short_name_identifier_falls_back_to_id():
+    """identifier() falls back to id when both short_name and title are unset."""
+    scenario = Session(id=7, area_code="nl", end_year=2050)
+    assert scenario.identifier() == 7

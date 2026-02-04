@@ -24,17 +24,32 @@ class OutputCurvesPack(Packable):
     sheet_name: ClassVar[str] = "OUTPUT_CURVES"
 
     def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
+        """
+        Build a DataFrame for one scenario with a two-level column MultiIndex:
+            (curve_type, original_column)
+        """
         try:
-            series_list = list(scenario.all_output_curves())
+            frames: list[pd.DataFrame] = []
+            keys: list[str] = []
+
+            for curve_name in scenario.output_curves.attached_keys():
+                df = scenario.output_curve(curve_name)
+                if df is None or df.empty:
+                    continue
+                frames.append(df)
+                keys.append(curve_name)
+
             self.log_scenario_warnings(scenario, "_output_curves", "Output curves")
         except Exception as e:
             logger.warning(
                 "Failed extracting output curves for %s: %s", scenario.identifier(), e
             )
             return None
-        if not series_list:
+
+        if not frames:
             return None
-        return pd.concat(series_list, axis=1)
+
+        return pd.concat(frames, axis=1, keys=keys, names=["curve_type"])
 
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs)

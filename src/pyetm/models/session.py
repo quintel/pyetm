@@ -339,13 +339,25 @@ class Session(Base):
         col_name = self.identifier() if self.identifier() is not None else self.id
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
-    def set_short_name(self, short_name: str):
-        """Set the short_name attribute and persist in metadata."""
+    def set_short_name(self, short_name: str, persist: bool = True):
+        """
+        Set the short_name attribute and update the local metadata dict.
+
+        Args:
+            short_name: The short name to assign.
+            persist: If True (default), flush the change to the server via
+                update_metadata so it survives across sessions.  Pass False
+                when the value is already present on the server (e.g. when
+                re-hydrating from an Excel import).
+        """
         self.short_name = str(short_name)
         if self.metadata is not None:
             self.metadata["short_name"] = str(short_name)
         else:
             self.metadata = {"short_name": str(short_name)}
+
+        if persist:
+            self.update_metadata(metadata={"short_name": str(short_name)})
 
     def identifier(self):
         if self.short_name:

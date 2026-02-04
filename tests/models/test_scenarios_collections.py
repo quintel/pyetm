@@ -329,3 +329,161 @@ class TestMixedScenariosSeparation:
         assert len(sessions_result.items) == 1
         assert session1 in sessions_result.items
         assert saved1 not in sessions_result.items
+
+
+class TestSessionsList:
+    """Integration tests for Sessions.list() DataFrame construction."""
+
+    def test_list_returns_dataframe_from_runner(self, monkeypatch):
+        """Runner data is turned into a DataFrame with one row per session."""
+        from pyetm.services import scenario_runners as runners_pkg
+        from pyetm.services.scenario_runners import list_sessions
+
+        sample = [
+            {"id": 1, "title": "Base", "area_code": "nl", "end_year": 2050},
+            {"id": 2, "title": "Wind", "area_code": "nl", "end_year": 2040},
+        ]
+
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.data = sample
+
+        monkeypatch.setattr(
+            list_sessions.ListSessionsRunner, "run", staticmethod(lambda *a, **kw: mock_result)
+        )
+
+        df = Sessions.list(client=Mock())
+
+        assert len(df) == 2
+        assert list(df.columns) == ["id", "title", "area_code", "end_year"]
+        assert df["id"].tolist() == [1, 2]
+        assert df["title"].tolist() == ["Base", "Wind"]
+
+    def test_list_returns_empty_dataframe_on_failure(self, monkeypatch):
+        """Failed runner result yields an empty DataFrame."""
+        from pyetm.services.scenario_runners import list_sessions
+
+        mock_result = Mock()
+        mock_result.success = False
+        mock_result.errors = ["401 Unauthorized"]
+
+        monkeypatch.setattr(
+            list_sessions.ListSessionsRunner, "run", staticmethod(lambda *a, **kw: mock_result)
+        )
+
+        df = Sessions.list(client=Mock())
+
+        assert df.empty
+
+    def test_list_empty_data_yields_empty_dataframe(self, monkeypatch):
+        """An empty data array from the API produces an empty DataFrame."""
+        from pyetm.services.scenario_runners import list_sessions
+
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.data = []
+
+        monkeypatch.setattr(
+            list_sessions.ListSessionsRunner, "run", staticmethod(lambda *a, **kw: mock_result)
+        )
+
+        df = Sessions.list(client=Mock())
+
+        assert df.empty
+
+
+class TestScenariosList:
+    """Integration tests for Scenarios.list() DataFrame construction and flattening."""
+
+    def test_list_flattens_nested_scenario_key(self, monkeypatch):
+        """The nested 'scenario' dict is flattened into session_* columns."""
+        from pyetm.services.scenario_runners import list_saved_scenarios
+
+        sample = [
+            {
+                "id": 10,
+                "scenario_id": 1,
+                "title": "Saved base",
+                "scenario": {"id": 1, "area_code": "nl", "end_year": 2050},
+            },
+            {
+                "id": 11,
+                "scenario_id": 2,
+                "title": "Saved wind",
+                "scenario": {"id": 2, "area_code": "nl", "end_year": 2040},
+            },
+        ]
+
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.data = sample
+
+        monkeypatch.setattr(
+            list_saved_scenarios.ListSavedScenariosRunner,
+            "run",
+            staticmethod(lambda *a, **kw: mock_result),
+        )
+
+        df = Scenarios.list(client=Mock())
+
+        # Top-level keys are present directly
+        assert "id" in df.columns
+        assert "title" in df.columns
+        assert "scenario_id" in df.columns
+
+        # Nested scenario key is removed; its contents are prefixed
+        assert "scenario" not in df.columns
+        assert "session_id" in df.columns
+        assert "session_area_code" in df.columns
+        assert "session_end_year" in df.columns
+
+        # Values are correct
+        assert df["session_id"].tolist() == [1, 2]
+        assert df["session_area_code"].tolist() == ["nl", "nl"]
+        assert df["session_end_year"].tolist() == [2050, 2040]
+        assert df["title"].tolist() == ["Saved base", "Saved wind"]
+
+    def test_list_handles_missing_nested_scenario(self, monkeypatch):
+        """A missing or None 'scenario' key does not crash; session_* columns are absent."""
+        from pyetm.services.scenario_runners import list_saved_scenarios
+
+        sample = [
+            {"id": 10, "scenario_id": 1, "title": "No nested"},
+            {"id": 11, "scenario_id": 2, "title": "Null nested", "scenario": None},
+        ]
+
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.data = sample
+
+        monkeypatch.setattr(
+            list_saved_scenarios.ListSavedScenariosRunner,
+            "run",
+            staticmethod(lambda *a, **kw: mock_result),
+        )
+
+        df = Scenarios.list(client=Mock())
+
+        assert len(df) == 2
+        assert "scenario" not in df.columns
+        # No session_* columns should appear since nested dicts are empty/missing
+        session_cols = [c for c in df.columns if c.startswith("session_")]
+        assert session_cols == []
+
+    def test_list_returns_empty_dataframe_on_failure(self, monkeypatch):
+        """Failed runner result yields an empty DataFrame."""
+        from pyetm.services.scenario_runners import list_saved_scenarios
+
+        mock_result = Mock()
+        mock_result.success = False
+        mock_result.errors = ["403 Forbidden"]
+
+        monkeypatch.setattr(
+            list_saved_scenarios.ListSavedScenariosRunner,
+            "run",
+            staticmethod(lambda *a, **kw: mock_result),
+        )
+
+        df = Scenarios.list(client=Mock())
+
+        assert df.empty

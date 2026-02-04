@@ -1,11 +1,12 @@
 from __future__ import annotations
+import pandas as pd
 from os import PathLike
 from pathlib import Path
 from typing import Iterable, Iterator, List
 from pydantic import Field
 from pyetm.models.base import Base
+from pyetm.clients import BaseClient
 from .session import Session, ScenarioError
-from pathlib import Path
 
 
 class Sessions(Base):
@@ -39,6 +40,30 @@ class Sessions(Base):
             except ScenarioError as e:
                 print(f"Could not load scenario {sid}: {e}")
         return cls(items=scenarios)
+
+    @classmethod
+    def list(
+        cls,
+        page: int = 1,
+        limit: int = 25,
+        client: BaseClient | None = None,
+    ) -> pd.DataFrame:
+        """
+        List ETEngine sessions belonging to the authenticated user as a DataFrame.
+
+        Returns:
+            DataFrame with one row per session
+        """
+        from pyetm.services.scenario_runners.list_sessions import ListSessionsRunner
+
+        client = client or BaseClient()
+        result = ListSessionsRunner.run(client, page=page, limit=limit)
+
+        if not result.success:
+            print(f"Could not list sessions: {result.errors}")
+            return pd.DataFrame()
+
+        return pd.DataFrame(result.data)
 
     @classmethod
     def create_many(

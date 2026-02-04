@@ -398,9 +398,9 @@ class Scenario(Base):
         """Get identifier (short_name, title, or id) from the underlying session."""
         return self.session.identifier()
 
-    def set_short_name(self, short_name: str) -> None:
+    def set_short_name(self, short_name: str, persist: bool = True) -> None:
         """Set short name on the underlying session."""
-        self.session.set_short_name(short_name)
+        self.session.set_short_name(short_name, persist=persist)
 
     def update_metadata(self, **kwargs) -> Dict[str, Any]:
         """Update metadata on the underlying session."""

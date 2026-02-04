@@ -1,4 +1,5 @@
 from __future__ import annotations
+import pandas as pd
 from os import PathLike
 from pathlib import Path
 from typing import Iterable, Iterator, List, Union
@@ -80,6 +81,52 @@ class Scenarios(Base):
             except SavedScenarioError as e:
                 print(f"Could not load saved scenario {ssid}: {e}")
         return cls(items=saved_scenarios)
+
+    @classmethod
+    def list(
+        cls,
+        page: int = 1,
+        limit: int = 25,
+        client: BaseClient | None = None,
+    ) -> pd.DataFrame:
+        """
+        List saved scenarios belonging to the authenticated user as a DataFrame.
+
+        Each row is one saved scenario; columns come from the API response
+        fields (id, scenario_id, title, area_code, end_year, …).  The nested
+        ``scenario`` key (the hydrated ETEngine session) is flattened into
+        columns prefixed with ``session_``.
+
+        Args:
+            page: Page number (1-based).
+            limit: Results per page (1–100).
+            client: Optional BaseClient instance.
+
+        Returns:
+            DataFrame with one row per saved scenario, or an empty DataFrame
+            on failure.
+        """
+        from pyetm.services.scenario_runners.list_saved_scenarios import (
+            ListSavedScenariosRunner,
+        )
+
+        client = client or BaseClient()
+        result = ListSavedScenariosRunner.run(client, page=page, limit=limit)
+
+        if not result.success:
+            print(f"Could not list saved scenarios: {result.errors}")
+            return pd.DataFrame()
+
+        # Flatten the nested 'scenario' dict into session_* columns
+        rows = []
+        for item in result.data:
+            row = {k: v for k, v in item.items() if k != "scenario"}
+            nested = item.get("scenario") or {}
+            for k, v in nested.items():
+                row[f"session_{k}"] = v
+            rows.append(row)
+
+        return pd.DataFrame(rows)
 
     @classmethod
     def create_many(

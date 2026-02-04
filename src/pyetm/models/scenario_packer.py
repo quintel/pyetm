@@ -443,7 +443,7 @@ class ScenarioPacker(BaseModel):
                     if short_name is not None and not (
                         isinstance(short_name, float) and pd.isna(short_name)
                     ):
-                        scenario.set_short_name(short_name)
+                        scenario.set_short_name(short_name, persist=False)
                     self.add(scenario)
                     scenarios_by_row[idx] = scenario
             except Exception as e:

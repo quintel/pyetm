@@ -13,24 +13,38 @@ def make_scenario(id_val="S"):
     return s
 
 
+def _attach_output_curves(scenario, curve_dict: dict):
+    """
+    Wire up scenario.output_curves.attached_keys() and scenario.output_curve()
+    to return data from curve_dict, keyed by curve name.
+    """
+    scenario.output_curves = Mock()
+    scenario.output_curves.attached_keys = Mock(return_value=list(curve_dict.keys()))
+    scenario.output_curve = Mock(side_effect=lambda name: curve_dict.get(name))
+
+
 def test_to_dataframe_collects_series():
     s = make_scenario()
-    s.all_output_curves.return_value = [
-        pd.Series([1, 2], name="c1"),
-        pd.Series([3, 4], name="c2"),
-    ]
+    _attach_output_curves(s, {
+        "merit_order": pd.DataFrame({"wind": [1, 2], "solar": [3, 4]}),
+        "electricity_price": pd.DataFrame({"value": [10, 20]}),
+    })
 
     pack = OutputCurvesPack()
     pack.add(s)
 
     df = pack.to_dataframe()
     assert not df.empty
-    assert "c1" in df.columns.get_level_values(1) or "c1" in df.columns
+    # Level 0 is the scenario identifier; level 1 is curve_type
+    assert "merit_order" in df.columns.get_level_values(1)
+    assert "electricity_price" in df.columns.get_level_values(1)
 
 
 def test_to_dataframe_handles_exception_and_empty(caplog):
     s = make_scenario()
-    s.all_output_curves.side_effect = RuntimeError("fail")
+    # Force the output_curves accessor to raise
+    s.output_curves = Mock()
+    s.output_curves.attached_keys = Mock(side_effect=RuntimeError("fail"))
 
     pack = OutputCurvesPack()
     pack.add(s)
@@ -40,8 +54,8 @@ def test_to_dataframe_handles_exception_and_empty(caplog):
         assert df.empty
         assert "Failed extracting output curves" in caplog.text
 
-    s.all_output_curves.side_effect = None
-    s.all_output_curves.return_value = []
+    # Now wire up an empty set of curves
+    _attach_output_curves(s, {})
     df2 = pack.to_dataframe()
     assert df2.empty
 
@@ -49,7 +63,7 @@ def test_to_dataframe_handles_exception_and_empty(caplog):
 def test_build_dataframe_with_warnings(caplog):
     """Test the warning logging branch when scenario has _output_curves."""
     s = make_scenario()
-    s.all_output_curves.return_value = [pd.Series([1, 2], name="test")]
+    _attach_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
 
     # Mock _output_curves with log_warnings method
     mock_output_curves = Mock()
@@ -69,7 +83,7 @@ def test_build_dataframe_with_warnings(caplog):
 def test_build_dataframe_warning_logging_exception():
     """Test exception handling in warning logging branch."""
     s = make_scenario()
-    s.all_output_curves.return_value = [pd.Series([1, 2], name="test")]
+    _attach_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
 
     # Mock _output_curves that raises exception during log_warnings
     mock_output_curves = Mock()
@@ -86,7 +100,7 @@ def test_build_dataframe_warning_logging_exception():
 def test_build_dataframe_no_output_curves_attr():
     """Test scenario without _output_curves attribute."""
     s = make_scenario()
-    s.all_output_curves.return_value = [pd.Series([1, 2], name="test")]
+    _attach_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
     # Don't set _output_curves attribute
 
     pack = OutputCurvesPack()
@@ -98,13 +112,53 @@ def test_build_dataframe_no_output_curves_attr():
 def test_build_dataframe_output_curves_none():
     """Test scenario with _output_curves = None."""
     s = make_scenario()
-    s.all_output_curves.return_value = [pd.Series([1, 2], name="test")]
+    _attach_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
     s._output_curves = None
 
     pack = OutputCurvesPack()
     df = pack._build_dataframe_for_scenario(s)
 
     assert not df.empty
+
+
+def test_build_dataframe_curve_type_multiindex():
+    """Verify the (curve_type, column) MultiIndex structure on the result."""
+    s = make_scenario()
+    _attach_output_curves(s, {
+        "merit_order": pd.DataFrame({"wind": [10, 20], "solar": [5, 15]}),
+        "electricity_price": pd.DataFrame({"value": [100, 200]}),
+    })
+
+    pack = OutputCurvesPack()
+    df = pack._build_dataframe_for_scenario(s)
+
+    # Two-level column MultiIndex: (curve_type, original_column)
+    assert df.columns.nlevels == 2
+    assert df.columns.names[0] == "curve_type"
+
+    # Can slice by curve_type
+    merit = df["merit_order"]
+    assert list(merit.columns) == ["wind", "solar"]
+    assert list(merit["wind"]) == [10, 20]
+
+    price = df["electricity_price"]
+    assert list(price.columns) == ["value"]
+    assert list(price["value"]) == [100, 200]
+
+
+def test_build_dataframe_skips_none_and_empty_curves():
+    """Curves that return None or empty DataFrames are excluded."""
+    s = make_scenario()
+    _attach_output_curves(s, {
+        "merit_order": pd.DataFrame({"wind": [1]}),
+        "empty_curve": pd.DataFrame(),           # empty
+        "none_curve": None,                      # None
+    })
+
+    pack = OutputCurvesPack()
+    df = pack._build_dataframe_for_scenario(s)
+
+    assert df.columns.get_level_values(0).tolist() == ["merit_order"]
 
 
 def test_to_excel_per_carrier_no_scenarios(carrier_mappings):
@@ -352,7 +406,7 @@ def test_class_variables():
 def test_to_dataframe_with_kwargs():
     """Test _to_dataframe passes kwargs correctly by checking it calls the base implementation."""
     s = make_scenario()
-    s.all_output_curves.return_value = [pd.Series([1, 2], name="test")]
+    _attach_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
 
     pack = OutputCurvesPack()
     pack.add(s)
@@ -365,7 +419,7 @@ def test_to_dataframe_with_kwargs():
 def test_build_dataframe_with_columns_kwargs():
     """Test _build_dataframe_for_scenario with columns parameter."""
     s = make_scenario()
-    s.all_output_curves.return_value = [pd.Series([1, 2], name="test")]
+    _attach_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
 
     pack = OutputCurvesPack()
     df = pack._build_dataframe_for_scenario(s, columns="test_columns", extra="param")

@@ -159,9 +159,9 @@ class OutputCurves(Base):
         """Returns true if that curve is attached"""
         return any((curve_name == key for key in self.attached_keys()))
 
-    def attached_keys(self):
-        """Returns the keys of attached curves"""
-        yield from (curve.key for curve in self.curves)
+    def attached_keys(self) -> list[str]:
+        """Returns the keys of attached curves."""
+        return [curve.key for curve in self.curves]
 
     def get_contents(self, scenario, curve_name: str) -> Optional[pd.DataFrame]:
         curve = self._find(curve_name)
