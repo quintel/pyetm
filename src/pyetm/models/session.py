@@ -85,7 +85,7 @@ class Session(Base):
     _queries: Optional[Gqueries] = PrivateAttr(None)
     _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
     _couplings: Optional[Couplings] = PrivateAttr(default=None)
-    _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
+    _pending_users: Dict[Union[str, int], str] = PrivateAttr(default_factory=dict)
 
     @classmethod
     def new(cls, area_code: str, end_year: int, **kwargs) -> "Session":
@@ -765,25 +765,42 @@ class Session(Base):
 
         return result.data
 
-    def update_users(self, email: str, role: str, skip_upload: bool = False) -> None:
+    def update_users(
+        self, user: Union[str, int], role: str, skip_upload: bool = False
+    ) -> None:
         """
         Add, update, or remove a user's access to this scenario.
-        - skip_upload: If True, store data locally without uploading (can be applied later)
+
+        Args:
+            user: User email (str) or user ID (int)
+            role: User role (owner, collaborator, viewer, or remove)
+            skip_upload: If True, store data locally without uploading (can be applied later)
         """
+        # Determine if user is email or user_id based on type
+        if isinstance(user, str):
+            email = user
+            user_id = None
+        elif isinstance(user, int):
+            email = None
+            user_id = user
+        else:
+            raise ValueError("user must be either a string (email) or int (user_id)")
+
         role = self._normalize_role(role)
+        user_identifier = email if email is not None else user_id
 
         if skip_upload:
-            self._pending_users[email] = role
+            self._pending_users[user_identifier] = role
             return
 
         if role == "remove":
-            self._remove_user(email)
+            self._remove_user(email, user_id)
             return
 
-        if self._user_exists(email):
-            self._update_user_role(email, role)
+        if self._user_exists(email, user_id):
+            self._update_user_role(email, user_id, role)
         else:
-            self._add_user(email, role)
+            self._add_user(email, user_id, role)
 
     def apply_pending_users(self) -> int:
         """
@@ -793,9 +810,9 @@ class Session(Base):
             return 0
 
         count = 0
-        for email, role in list(self._pending_users.items()):
+        for user_identifier, role in list(self._pending_users.items()):
             try:
-                self.update_users(email, role, skip_upload=False)
+                self.update_users(user_identifier, role, skip_upload=False)
                 count += 1
             except Exception as e:
                 logger.warning(
@@ -825,26 +842,44 @@ class Session(Base):
             raise ValueError(f"Invalid role: {role}. Must be one of: {valid_roles}")
         return normalized_role
 
-    def _user_exists(self, email: str) -> bool:
-        return any(u.get("user_email") == email for u in self.list_users())
+    def _user_exists(self, email: Optional[str], user_id: Optional[int]) -> bool:
+        users = self.list_users()
+        if email is not None:
+            return any(u.get("user_email") == email for u in users)
+        else:
+            return any(u.get("user_id") == user_id for u in users)
 
-    def _remove_user(self, email: str) -> None:
-        result = ScenarioUsersDestroyRunner.run(
-            BaseClient(), self.id, [{"user_email": email}]
-        )
+    def _remove_user(self, email: Optional[str], user_id: Optional[int]) -> None:
+        user_params = {}
+        if email is not None:
+            user_params["user_email"] = email
+        else:
+            user_params["user_id"] = user_id
+
+        result = ScenarioUsersDestroyRunner.run(BaseClient(), self.id, [user_params])
         if not result.success:
             raise ScenarioError(f"Could not remove user: {result.errors}")
 
-    def _update_user_role(self, email: str, role: str) -> None:
-        result = ScenarioUsersUpdateRunner.run(
-            BaseClient(), self.id, [{"user_email": email, "role": role}]
-        )
+    def _update_user_role(
+        self, email: Optional[str], user_id: Optional[int], role: str
+    ) -> None:
+        user_params = {"role": role}
+        if email is not None:
+            user_params["user_email"] = email
+        else:
+            user_params["user_id"] = user_id
+
+        result = ScenarioUsersUpdateRunner.run(BaseClient(), self.id, [user_params])
         if not result.success:
             raise ScenarioError(f"Could not update user: {result.errors}")
 
-    def _add_user(self, email: str, role: str) -> None:
-        result = ScenarioUsersCreateRunner.run(
-            BaseClient(), self.id, [{"user_email": email, "role": role}]
-        )
+    def _add_user(self, email: Optional[str], user_id: Optional[int], role: str) -> None:
+        user_params = {"role": role}
+        if email is not None:
+            user_params["user_email"] = email
+        else:
+            user_params["user_id"] = user_id
+
+        result = ScenarioUsersCreateRunner.run(BaseClient(), self.id, [user_params])
         if not result.success:
             raise ScenarioError(f"Could not add user: {result.errors}")

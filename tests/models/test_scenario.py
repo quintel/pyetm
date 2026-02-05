@@ -1478,3 +1478,90 @@ def test_set_short_name_identifier_falls_back_to_id():
     """identifier() falls back to id when both short_name and title are unset."""
     scenario = Session(id=7, area_code="nl", end_year=2050)
     assert scenario.identifier() == 7
+
+
+def test_update_users_with_user_id(monkeypatch):
+    """Test updating users by user_id instead of email"""
+    from pyetm.services.scenario_runners.scenario_users_destroy import (
+        ScenarioUsersDestroyRunner,
+    )
+    from pyetm.services.service_result import ServiceResult
+
+    scenario = Session(id=123, area_code="nl", end_year=2050)
+
+    # Mock the destroy runner
+    mock_result = ServiceResult(success=True, data=[{"user_id": 42}], errors=[])
+    monkeypatch.setattr(
+        ScenarioUsersDestroyRunner,
+        "run",
+        lambda client, scenario_id, users: mock_result,
+    )
+
+    # Remove user by user_id (new signature)
+    scenario.update_users(42, "remove")
+
+    # Verify the call was made (implicitly tested by not raising an error)
+    assert True
+
+
+def test_update_users_with_email_backward_compat(monkeypatch):
+    """Test backward compatibility - updating users by email still works"""
+    from pyetm.services.scenario_runners.scenario_users_destroy import (
+        ScenarioUsersDestroyRunner,
+    )
+    from pyetm.services.service_result import ServiceResult
+
+    scenario = Session(id=123, area_code="nl", end_year=2050)
+
+    # Mock the destroy runner
+    mock_result = ServiceResult(success=True, data=[{"user_email": "test@test.com"}], errors=[])
+    monkeypatch.setattr(
+        ScenarioUsersDestroyRunner,
+        "run",
+        lambda client, scenario_id, users: mock_result,
+    )
+
+    # Remove user by email (backward compatible signature)
+    scenario.update_users("test@test.com", "remove")
+
+    # Verify the call was made (implicitly tested by not raising an error)
+    assert True
+
+
+def test_update_users_requires_valid_type():
+    """Test that update_users requires valid user type (str or int)"""
+    scenario = Session(id=123, area_code="nl", end_year=2050)
+
+    with pytest.raises(ValueError, match="user must be either a string .* or int"):
+        scenario.update_users(None, "viewer")
+
+    with pytest.raises(ValueError, match="user must be either a string .* or int"):
+        scenario.update_users(42.5, "viewer")
+
+
+def test_pending_users_with_user_id(monkeypatch):
+    """Test pending users with user_id"""
+    from pyetm.services.scenario_runners.scenario_users_destroy import (
+        ScenarioUsersDestroyRunner,
+    )
+    from pyetm.services.service_result import ServiceResult
+
+    scenario = Session(id=123, area_code="nl", end_year=2050)
+
+    # Add pending user with user_id
+    scenario.update_users(42, "remove", skip_upload=True)
+    assert 42 in scenario._pending_users
+    assert scenario._pending_users[42] == "remove"
+
+    # Mock the runner
+    mock_result = ServiceResult(success=True, data=[{"user_id": 42}], errors=[])
+    monkeypatch.setattr(
+        ScenarioUsersDestroyRunner,
+        "run",
+        lambda client, scenario_id, users: mock_result,
+    )
+
+    # Apply pending users
+    count = scenario.apply_pending_users()
+    assert count == 1
+    assert len(scenario._pending_users) == 0
