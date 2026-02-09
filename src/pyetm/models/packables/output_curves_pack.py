@@ -23,21 +23,112 @@ class OutputCurvesPack(Packable):
     key: ClassVar[str] = "output_curves"
     sheet_name: ClassVar[str] = "OUTPUT_CURVES"
 
-    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
+    def _build_dataframe_for_scenario(
+        self,
+        scenario: Any,
+        columns: str = "",
+        curves: Optional[Sequence[str]] = None,
+        **kwargs,
+    ):
+        """
+        Build a DataFrame for one scenario with a two-level column MultiIndex:
+            (curve_type, original_column)
+        """
         try:
-            series_list = list(scenario.all_output_curves())
+            frames: list[pd.DataFrame] = []
+            keys: list[str] = []
+
+            # Determine which curves to fetch
+            if curves is not None:
+                # Only fetch specified curves
+                curves_to_fetch = [
+                    c for c in curves if scenario.output_curves.is_attached(c)
+                ]
+            else:
+                # Fetch all attached curves
+                curves_to_fetch = scenario.output_curves.attached_keys()
+
+            for curve_name in curves_to_fetch:
+                df = scenario.output_curve(curve_name)
+                if df is None or df.empty:
+                    continue
+                frames.append(df)
+                keys.append(curve_name)
+
             self.log_scenario_warnings(scenario, "_output_curves", "Output curves")
         except Exception as e:
             logger.warning(
                 "Failed extracting output curves for %s: %s", scenario.identifier(), e
             )
             return None
-        if not series_list:
-            return None
-        return pd.concat(series_list, axis=1)
 
-    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
-        return self.build_pack_dataframe(columns=columns, **kwargs)
+        if not frames:
+            return None
+
+        return pd.concat(frames, axis=1, keys=keys, names=["curve_type"])
+
+    def to_dataframe(
+        self, columns="", curves: Optional[Sequence[str]] = None, **kwargs
+    ) -> pd.DataFrame:
+        """
+        Build a DataFrame with optional curve filtering.
+        """
+        if len(self.scenarios) == 0:
+            return pd.DataFrame()
+
+        df = self._to_dataframe(columns=columns, curves=curves, **kwargs)
+
+        if df.empty:
+            return df
+
+        # Filter curves if specified
+        if curves is not None and df.columns.nlevels >= 2:
+            # Get available curve types from the MultiIndex
+            available_curves = df.columns.get_level_values(1).unique()
+            # Filter to only requested curves that exist
+            valid_curves = [c for c in curves if c in available_curves]
+            if valid_curves:
+                # Select columns where level 1 matches
+                mask = df.columns.get_level_values(1).isin(valid_curves)
+                df = df.loc[:, mask]
+            else:
+                # No valid curves found, return empty
+                return pd.DataFrame()
+
+        return df
+
+    def _to_dataframe(
+        self, columns="", curves: Optional[Sequence[str]] = None, **kwargs
+    ) -> pd.DataFrame:
+        return self.build_pack_dataframe(columns=columns, curves=curves, **kwargs)
+
+    def build_pack_dataframe(
+        self, columns: str = "", curves: Optional[Sequence[str]] = None, **kwargs
+    ) -> pd.DataFrame:
+        """
+        Override base build_pack_dataframe to pass curves filter to _build_dataframe_for_scenario.
+        """
+        frames: list[pd.DataFrame] = []
+        keys: list[Any] = []
+        for scenario in self.scenarios:
+            try:
+                df = self._build_dataframe_for_scenario(
+                    scenario, columns=columns, curves=curves, **kwargs
+                )
+                self.log_scenario_warnings(scenario, self.key, self.sheet_name)
+            except Exception as e:
+                logger.warning(
+                    "Failed building frame for scenario %s in %s: %s",
+                    scenario.identifier(),
+                    self.__class__.__name__,
+                    e,
+                )
+                continue
+            if df is None or df.empty:
+                continue
+            frames.append(df)
+            keys.append(self._key_for(scenario))
+        return self._concat_frames(frames, keys)
 
     def to_excel_per_carrier(
         self, path: str, carriers: Optional[Sequence[str]] = None

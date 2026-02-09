@@ -82,8 +82,8 @@ class ScenarioPacker(BaseModel):
     def custom_curves(self) -> pd.DataFrame:
         return self._custom_curves.to_dataframe()
 
-    def exports(self) -> pd.DataFrame:
-        return self._exports.to_dataframe()
+    def exports(self, curves: Optional[Sequence[str]] = None) -> pd.DataFrame:
+        return self._exports.to_dataframe(curves=curves)
 
     def couplings(self) -> pd.DataFrame:
         if len(self._scenarios()) == 0:
