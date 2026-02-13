@@ -42,11 +42,11 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
         s.inputs.__iter__ = Mock(return_value=iter(input_objects))
 
         # Set up to_dataframe method
-        def mock_to_dataframe(columns=None):
-            if isinstance(columns, list):
-                cols = columns
+        def mock_to_dataframe(fields=None):
+            if isinstance(fields, list):
+                cols = fields
             else:
-                cols = [columns] if columns else ["user"]
+                cols = [fields] if fields else ["user"]
 
             data = {}
             for col in cols:

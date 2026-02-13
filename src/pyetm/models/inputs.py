@@ -257,13 +257,13 @@ class Inputs(Base):
             if input_obj.key in key_vals:
                 input_obj.user = key_vals[input_obj.key]
 
-    def _to_dataframe(self, columns="user", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, fields="user", **kwargs) -> pd.DataFrame:
         """
         Serialize the Inputs collection to DataFrame.
         """
-        if not isinstance(columns, list):
-            columns = [columns]
-        columns = ["unit"] + columns
+        if not isinstance(fields, list):
+            fields = [fields]
+        columns = ["unit"] + fields
         try:
             df = pd.DataFrame.from_dict(
                 {

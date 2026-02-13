@@ -313,7 +313,7 @@ class Session(Base):
         The scenario_id field also contains the ETEngine session ID (for consistency with Scenario exports).
         """
         info: Dict[str, Any] = {
-            "title": self.title,
+            "title": self.identifier(),
             "id": self.id,
             "scenario_id": self.id,  # Same as id, shows it's a session in mixed cases
             "template": self.template,
