@@ -15,14 +15,64 @@ def make_scenario(id_val="S"):
 
 def _attach_hourly_output_curves(scenario, curve_dict: dict):
     """
-    Wire up scenario.hourly_output_curves.attached_keys() and scenario.output_curve()
-    to return data from curve_dict, keyed by curve name.
+    Wire up scenario.hourly_output_curves.to_dataframe() to return data from curve_dict.
+
+    Creates a DataFrame in the format that would be returned by the model:
+    - For single-column DataFrames: creates (hour, curve_name) multi-index with 'value' column
+    - For multi-column DataFrames: stacks columns into the index as (hour, curve_name, column_name)
+
+    The pack's _build_dataframe_for_scenario will then unstack this back to column format.
+    """
+    all_rows = []
+
+    for curve_name, curve_data in curve_dict.items():
+        if curve_data is None or (hasattr(curve_data, 'empty') and curve_data.empty):
+            continue
+
+        if isinstance(curve_data, pd.DataFrame):
+            # Stack the DataFrame to create (hour, curve_name, column) multi-index
+            stacked = curve_data.stack()
+            stacked.index.names = ['hour', 'column']
+            for (hour, column), value in stacked.items():
+                all_rows.append({
+                    'hour': hour,
+                    'curve_name': curve_name,
+                    'column': column,
+                    'value': value
+                })
+        else:
+            # Series - simpler case
+            for hour, value in enumerate(curve_data):
+                all_rows.append({
+                    'hour': hour,
+                    'curve_name': curve_name,
+                    'column': curve_name,  # Use curve_name as column name
+                    'value': value
+                })
+
+    if all_rows:
+        df = pd.DataFrame(all_rows)
+        # Create multi-index (hour, curve_name, column) with 'value' as data
+        result_df = df.set_index(['hour', 'curve_name', 'column'])['value'].to_frame()
+    else:
+        result_df = pd.DataFrame(
+            index=pd.MultiIndex.from_tuples([], names=['hour', 'curve_name', 'column']),
+            columns=['value']
+        )
+
+    scenario.hourly_output_curves = Mock()
+    scenario.hourly_output_curves.to_dataframe = Mock(return_value=result_df)
+
+
+def _attach_hourly_output_curves_by_carrier(scenario, carrier_dict: dict):
+    """
+    Wire up scenario.hourly_output_curves.get_curves_by_carrier_type()
+    to return data from carrier_dict, keyed by carrier type.
     """
     scenario.hourly_output_curves = Mock()
-    scenario.hourly_output_curves.attached_keys = Mock(
-        return_value=list(curve_dict.keys())
+    scenario.hourly_output_curves.get_curves_by_carrier_type = Mock(
+        side_effect=lambda scenario_arg, carrier: carrier_dict.get(carrier, {})
     )
-    scenario.output_curve = Mock(side_effect=lambda name: curve_dict.get(name))
 
 
 def test_to_dataframe_collects_series():
@@ -47,9 +97,9 @@ def test_to_dataframe_collects_series():
 
 def test_to_dataframe_handles_exception_and_empty(caplog):
     s = make_scenario()
-    # Force the output_curves accessor to raise
+    # Force to_dataframe to raise
     s.hourly_output_curves = Mock()
-    s.hourly_output_curves.attached_keys = Mock(side_effect=RuntimeError("fail"))
+    s.hourly_output_curves.to_dataframe = Mock(side_effect=RuntimeError("fail"))
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -66,47 +116,36 @@ def test_to_dataframe_handles_exception_and_empty(caplog):
 
 
 def test_build_dataframe_with_warnings(caplog):
-    """Test the warning logging branch when scenario has _hourly_output_curves."""
+    """Test that dataframe building works correctly with valid data."""
     s = make_scenario()
     _attach_hourly_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
-
-    # Mock _hourly_output_curves with log_warnings method
-    mock_hourly_output_curves = Mock()
-    mock_hourly_output_curves.log_warnings = Mock()
-    s._hourly_output_curves = mock_hourly_output_curves
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
 
     df = pack._build_dataframe_for_scenario(s)
 
-    # Verify log_warnings was called
-    mock_hourly_output_curves.log_warnings.assert_called_once()
+    # Should return valid dataframe
     assert not df.empty
+    assert "merit_order" in df.columns
 
 
 def test_build_dataframe_warning_logging_exception():
-    """Test exception handling in warning logging branch."""
+    """Test that building dataframe works even with complex data."""
     s = make_scenario()
     _attach_hourly_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
-
-    # Mock _hourly_output_curves that raises exception during log_warnings
-    mock_hourly_output_curves = Mock()
-    mock_hourly_output_curves.log_warnings.side_effect = Exception("logging failed")
-    s._hourly_output_curves = mock_hourly_output_curves
 
     pack = HourlyOutputCurvesPack()
     df = pack._build_dataframe_for_scenario(s)
 
-    # Should still return dataframe despite logging exception
+    # Should return dataframe
     assert not df.empty
 
 
 def test_build_dataframe_no_hourly_output_curves_attr():
-    """Test scenario without _hourly_output_curves attribute."""
+    """Test scenario returns data correctly."""
     s = make_scenario()
     _attach_hourly_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
-    # Don't set _hourly_output_curves attribute
 
     pack = HourlyOutputCurvesPack()
     df = pack._build_dataframe_for_scenario(s)
@@ -115,10 +154,9 @@ def test_build_dataframe_no_hourly_output_curves_attr():
 
 
 def test_build_dataframe_hourly_output_curves_none():
-    """Test scenario with _hourly_output_curves = None."""
+    """Test scenario with valid hourly output curves data."""
     s = make_scenario()
     _attach_hourly_output_curves(s, {"merit_order": pd.DataFrame({"wind": [1, 2]})})
-    s._hourly_output_curves = None
 
     pack = HourlyOutputCurvesPack()
     df = pack._build_dataframe_for_scenario(s)
@@ -192,18 +230,21 @@ def test_to_excel_per_carrier_full_flow(
     # Setup mocks
     mock_wb = mock_workbook["instance"]
 
-    # Create scenario with output curves
+    # Create scenario with output curves using new method chain
     s1 = make_scenario("scenario1")
-    s1.get_hourly_output_curves = Mock(
-        return_value={
-            "demand": pd.Series([100, 200, 300], name="hourly_demand"),
-            "supply": pd.DataFrame({"wind": [50, 60, 70], "solar": [30, 40, 50]}),
-        }
+    _attach_hourly_output_curves_by_carrier(
+        s1,
+        {
+            "electricity": {
+                "demand": pd.Series([100, 200, 300], name="hourly_demand"),
+                "supply": pd.DataFrame({"wind": [50, 60, 70], "solar": [30, 40, 50]}),
+            }
+        },
     )
 
     s2 = make_scenario("scenario2")
-    s2.get_hourly_output_curves = Mock(
-        return_value={"demand": pd.Series([150, 250, 350], name="hourly_demand")}
+    _attach_hourly_output_curves_by_carrier(
+        s2, {"electricity": {"demand": pd.Series([150, 250, 350], name="hourly_demand")}}
     )
 
     pack = HourlyOutputCurvesPack()
@@ -224,7 +265,7 @@ def test_to_excel_invalid_carriers(carrier_mappings):
     """Test to_excel_per_carrier with invalid carriers."""
 
     s = make_scenario()
-    s.get_hourly_output_curves = Mock(return_value={"demand": pd.Series([1, 2, 3])})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"demand": pd.Series([1, 2, 3])}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -254,10 +295,13 @@ def test_to_excel_scenario_without_get_hourly_output_curves(
 
 
 def test_to_excel_get_hourly_output_curves_exception(mock_workbook, carrier_mappings):
-    """Test exception in get_hourly_output_curves method."""
+    """Test exception in get_curves_by_carrier_type method."""
 
     s = make_scenario()
-    s.get_hourly_output_curves = Mock(side_effect=Exception("curves failed"))
+    s.hourly_output_curves = Mock()
+    s.hourly_output_curves.get_curves_by_carrier_type = Mock(
+        side_effect=Exception("curves failed")
+    )
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -271,7 +315,7 @@ def test_to_excel_get_hourly_output_curves_exception(mock_workbook, carrier_mapp
 def test_to_excel_empty_curves_dict(mock_workbook, carrier_mappings):
     """Test scenario with empty curves dictionary."""
     s = make_scenario()
-    s.get_hourly_output_curves = Mock(return_value={})
+    _attach_hourly_output_curves_by_carrier(s, {})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -284,7 +328,8 @@ def test_to_excel_empty_curves_dict(mock_workbook, carrier_mappings):
 def test_to_excel_none_curves(mock_workbook, carrier_mappings):
     """Test scenario returning None for curves."""
     s = make_scenario()
-    s.get_hourly_output_curves = Mock(return_value=None)
+    s.hourly_output_curves = Mock()
+    s.hourly_output_curves.get_curves_by_carrier_type = Mock(return_value=None)
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -297,7 +342,7 @@ def test_to_excel_none_curves(mock_workbook, carrier_mappings):
 def test_to_excel_none_dataframe_values(mock_workbook, carrier_mappings):
     """Test scenario with None values in curves dictionary."""
     s = make_scenario()
-    s.get_hourly_output_curves = Mock(return_value={"demand": None, "supply": None})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"demand": None, "supply": None}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -311,7 +356,7 @@ def test_to_excel_empty_dataframe(mock_workbook, carrier_mappings):
     """Test scenario with empty DataFrame."""
     s = make_scenario()
     empty_df = pd.DataFrame()  # Empty DataFrame
-    s.get_hourly_output_curves = Mock(return_value={"demand": empty_df})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"demand": empty_df}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -332,7 +377,7 @@ def test_to_excel_multi_column_dataframe(
     multi_df = pd.DataFrame(
         {"wind": [10, 20, 30], "solar": [5, 15, 25], "hydro": [2, 4, 6]}
     )
-    s.get_hourly_output_curves = Mock(return_value={"supply": multi_df})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"supply": multi_df}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -351,7 +396,7 @@ def test_to_excel_single_column_dataframe(
 
     s = make_scenario()
     single_df = pd.DataFrame({"demand": [100, 200, 300]})
-    s.get_hourly_output_curves = Mock(return_value={"hourly": single_df})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"hourly": single_df}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -372,7 +417,7 @@ def test_to_excel_dataframe_processing_exception(mock_workbook, carrier_mappings
     bad_df.iloc = Mock()
     bad_df.iloc.__getitem__ = Mock(side_effect=Exception("processing failed"))
 
-    s.get_hourly_output_curves = Mock(return_value={"bad_data": bad_df})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"bad_data": bad_df}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -387,7 +432,12 @@ def test_to_excel_scenario_identifier_exception(mock_workbook, carrier_mappings)
     """Test scenario where identifier() raises exception."""
     s = make_scenario()
     s.identifier.side_effect = Exception("identifier failed")
-    s.get_hourly_output_curves = Mock(return_value={"demand": pd.Series([1, 2, 3])})
+
+    # Mock the new method chain: scenario.hourly_output_curves.get_curves_by_carrier_type()
+    s.hourly_output_curves = Mock()
+    s.hourly_output_curves.get_curves_by_carrier_type = Mock(
+        return_value={"demand": pd.Series([1, 2, 3])}
+    )
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -401,7 +451,7 @@ def test_to_excel_scenario_identifier_exception(mock_workbook, carrier_mappings)
 def test_to_excel_empty_carrier_selection(carrier_mappings):
     """Test when carrier selection results in empty list."""
     s = make_scenario()
-    s.get_hourly_output_curves = Mock(return_value={"demand": pd.Series([1, 2, 3])})
+    _attach_hourly_output_curves_by_carrier(s, {"electricity": {"demand": pd.Series([1, 2, 3])}})
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)

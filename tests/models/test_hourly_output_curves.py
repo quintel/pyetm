@@ -296,3 +296,79 @@ def test_hourly_output_curves_create_empty_collection():
         assert curves.curves[0].key == "curve1"
         assert curves.curves[1].key == "curve2"
         assert all(not curve.available() for curve in curves.curves)
+
+
+def test_hourly_output_curves_to_dataframe_empty():
+    """Test to_dataframe with no curves"""
+    curves = HourlyOutputCurves(curves=[])
+    df = curves.to_dataframe()
+
+    assert isinstance(df, pd.DataFrame)
+    assert df.empty
+    assert list(df.index.names) == ["hour", "curve_name"]
+    assert "value" in df.columns
+
+
+def test_hourly_output_curves_to_dataframe_with_curves():
+    """Test to_dataframe with available curves"""
+    # Create mock curves with data
+    curve1 = HourlyOutputCurve(key="curve1", type="output", file_path=Path("/tmp/curve1.csv"))
+    curve2 = HourlyOutputCurve(key="curve2", type="output", file_path=Path("/tmp/curve2.csv"))
+
+    # Mock the contents method to return test data
+    curve1_data = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
+    curve2_data = pd.DataFrame({"value": [4.0, 5.0, 6.0]})
+
+    with (
+        patch.object(curve1, "contents", return_value=curve1_data),
+        patch.object(curve2, "contents", return_value=curve2_data),
+    ):
+        curves = HourlyOutputCurves(curves=[curve1, curve2])
+        df = curves.to_dataframe()
+
+        # Check structure
+        assert isinstance(df, pd.DataFrame)
+        assert not df.empty
+        assert list(df.index.names) == ["hour", "curve_name"]
+        assert "value" in df.columns
+
+        # Check data
+        assert len(df) == 6  # 3 hours * 2 curves
+        assert df.loc[(0, "curve1"), "value"] == 1.0
+        assert df.loc[(2, "curve2"), "value"] == 6.0
+
+
+def test_hourly_output_curves_to_dataframe_filtered():
+    """Test to_dataframe with curve filtering"""
+    curve1 = HourlyOutputCurve(key="curve1", type="output", file_path=Path("/tmp/curve1.csv"))
+    curve2 = HourlyOutputCurve(key="curve2", type="output", file_path=Path("/tmp/curve2.csv"))
+
+    curve1_data = pd.DataFrame({"value": [1.0, 2.0]})
+    curve2_data = pd.DataFrame({"value": [3.0, 4.0]})
+
+    with (
+        patch.object(curve1, "contents", return_value=curve1_data),
+        patch.object(curve2, "contents", return_value=curve2_data),
+    ):
+        curves = HourlyOutputCurves(curves=[curve1, curve2])
+        df = curves.to_dataframe(curves=["curve1"])
+
+        # Only curve1 should be included
+        assert len(df) == 2
+        assert df.index.get_level_values("curve_name").unique().tolist() == ["curve1"]
+
+
+def test_hourly_output_curves_to_dataframe_unavailable_skipped():
+    """Test to_dataframe skips unavailable curves"""
+    curve1 = HourlyOutputCurve(key="curve1", type="output")  # No file_path
+    curve2 = HourlyOutputCurve(key="curve2", type="output", file_path=Path("/tmp/curve2.csv"))
+
+    curve2_data = pd.DataFrame({"value": [1.0, 2.0]})
+
+    with patch.object(curve2, "contents", return_value=curve2_data):
+        curves = HourlyOutputCurves(curves=[curve1, curve2])
+        df = curves.to_dataframe()
+
+        # Only curve2 should be included
+        assert len(df) == 2
+        assert df.index.get_level_values("curve_name").unique().tolist() == ["curve2"]

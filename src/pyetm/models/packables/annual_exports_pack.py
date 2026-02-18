@@ -24,28 +24,22 @@ class AnnualExportsPack(Packable):
         **kwargs,
     ):
         """
-        Build a DataFrame for one scenario with annual export data.
+        Build a DataFrame for one scenario by delegating to the model's to_dataframe() method.
 
-        For annual exports, we return a dict of {export_name: DataFrame}
+        Returns a DataFrame with export_name as part of the multi-index.
+        If no exports specified, returns None (opt-in only).
         """
         try:
-            export_data = {}
-
-            # Determine which exports to fetch
-            if exports is not None:
-                exports_to_fetch = list(exports)
-            else:
-                # If not specified, don't fetch any (opt-in only)
+            # If not specified, don't fetch any (opt-in only)
+            if exports is None:
                 return None
 
-            for export_name in exports_to_fetch:
-                df = scenario.export(export_name)
-                if df is not None and not df.empty:
-                    export_data[export_name] = df
+            # Delegate to the model's to_dataframe() method
+            df = scenario.annual_exports.to_dataframe(exports=exports, **kwargs)
 
-            self.log_scenario_warnings(scenario, "_annual_exports", "Annual exports")
+            self.log_scenario_warnings(scenario, "annual_exports", "Annual exports")
 
-            return export_data if export_data else None
+            return df if not df.empty else None
 
         except Exception as e:
             logger.warning(
@@ -60,23 +54,27 @@ class AnnualExportsPack(Packable):
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
         Build a dict organized by export type, then by scenario.
+
+        Returns dict[export_name][scenario_id] = DataFrame for that export and scenario.
         """
         result = {}
 
         for scenario in self.scenarios:
             try:
-                scenario_data = self._build_dataframe_for_scenario(
-                    scenario, exports=exports
-                )
-                if not scenario_data:
+                # Get multi-index dataframe from model
+                df = scenario.annual_exports.to_dataframe(exports=exports)
+
+                if df is None or df.empty:
                     continue
 
                 scenario_key = self._key_for(scenario)
 
-                for export_name, df in scenario_data.items():
+                for export_name in df.index.get_level_values("export_name").unique():
+                    export_df = df.xs(export_name, level="export_name")
+
                     if export_name not in result:
                         result[export_name] = {}
-                    result[export_name][scenario_key] = df
+                    result[export_name][scenario_key] = export_df
 
             except Exception as e:
                 logger.warning(
