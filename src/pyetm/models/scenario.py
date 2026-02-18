@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from pyetm.models.sortables import Sortables
     from pyetm.models.custom_curves import CustomCurves
     from pyetm.models.hourly_output_curves import HourlyOutputCurves
+    from pyetm.models.annual_exports import AnnualExports
     from pyetm.models.couplings import Couplings
     from pyetm.models.gqueries import Gqueries
     from pyetm.models.export_config import ExportConfig
@@ -270,6 +271,11 @@ class Scenario(Base):
         return self.session.hourly_output_curves
 
     @property
+    def annual_exports(self) -> "AnnualExports":
+        """Get annual exports from the underlying session."""
+        return self.session.annual_exports
+
+    @property
     def couplings(self) -> "Couplings":
         """Get couplings from the underlying session."""
         return self.session.couplings
@@ -359,6 +365,14 @@ class Scenario(Base):
     def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
         """Get output curves by carrier type from the underlying session."""
         return self.session.get_hourly_output_curves(carrier_type)
+
+    def export(self, export_name: str) -> pd.DataFrame:
+        """Get an annual export from the underlying session."""
+        return self.session.export(export_name)
+
+    def get_annual_exports(self, export_names: list[str]) -> dict[str, pd.DataFrame]:
+        """Get multiple annual exports from the underlying session."""
+        return self.session.get_annual_exports(export_names)
 
     def update_couplings(
         self, coupling_groups: List[str], action: str = "couple", force: bool = False

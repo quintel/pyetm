@@ -8,6 +8,7 @@ from xlsxwriter import Workbook
 
 from pyetm.models.packables.inputs_pack import InputsPack
 from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
+from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
@@ -38,6 +39,7 @@ class ScenarioPacker(BaseModel):
     _inputs: InputsPack = InputsPack()
     _sortables: SortablePack = SortablePack()
     _hourly_output_curves: HourlyOutputCurvesPack = HourlyOutputCurvesPack()
+    _annual_exports: AnnualExportsPack = AnnualExportsPack()
     _query_pack: QueryPack = QueryPack()
     _users: UsersPack = UsersPack()
 
@@ -48,6 +50,7 @@ class ScenarioPacker(BaseModel):
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
         self.add_hourly_output_curves(*scenarios)
+        self.add_annual_exports(*scenarios)
         self._query_pack.add(*scenarios)
         self._users.add(*scenarios)
 
@@ -62,6 +65,9 @@ class ScenarioPacker(BaseModel):
 
     def add_hourly_output_curves(self, *scenarios):
         self._hourly_output_curves.add(*scenarios)
+
+    def add_annual_exports(self, *scenarios):
+        self._annual_exports.add(*scenarios)
 
     def main_info(self) -> pd.DataFrame:
         """Create main info DataFrame by concatenating scenario dataframes."""
@@ -79,13 +85,42 @@ class ScenarioPacker(BaseModel):
     def sortables(self) -> pd.DataFrame:
         return self._sortables.to_dataframe()
 
-    def custom_curves(self) -> pd.DataFrame:
+    def custom_curves(
+        self, as_dict: bool = False, curves: Optional[Sequence[str]] = None
+    ) -> Union[pd.DataFrame, dict[str, dict[str, pd.Series]]]:
+        """
+        Get custom curves for all scenarios.
+
+        Args:
+            as_dict: If True, returns dict[curve_name, dict[scenario_id, Series]].
+                     If False (default), returns concatenated DataFrame for backward compatibility.
+            curves: Optional filter for specific curve names (only used when as_dict=True)
+
+        Returns:
+            DataFrame (default) or dict depending on as_dict parameter
+        """
+        if as_dict:
+            return self._custom_curves.to_dict_per_curve(curves=curves)
         return self._custom_curves.to_dataframe()
 
     def hourly_output_curves(
         self, curves: Optional[Sequence[str]] = None
-    ) -> pd.DataFrame:
-        return self._hourly_output_curves.to_dataframe(curves=curves)
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        """
+        Get hourly output curves for all scenarios, organized by curve name.
+
+        Note:
+            For concatenated DataFrame format, use: packer._hourly_output_curves.to_dataframe(curves)
+        """
+        return self._hourly_output_curves.to_dict_per_curve(curves=curves)
+
+    def annual_exports(
+        self, exports: Optional[Sequence[str]] = None
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        """
+        Get annual exports for all scenarios, organized by export type.
+        """
+        return self._annual_exports.to_dict_per_export(exports=exports)
 
     def couplings(self) -> pd.DataFrame:
         if len(self._scenarios()) == 0:
@@ -114,6 +149,7 @@ class ScenarioPacker(BaseModel):
         include_hourly_output_curves: Optional[bool] = None,
         include_input_details: Optional[bool] = None,
         include_users: Optional[bool] = None,
+        include_annual_exports: Optional[Sequence[str]] = None,
     ):
         """Export scenarios to Excel file."""
         if not self._scenarios():
@@ -128,6 +164,7 @@ class ScenarioPacker(BaseModel):
             include_gqueries,
             include_hourly_output_curves,
             include_users,
+            include_annual_exports,
         )
 
         # Ensure destination directory exists
@@ -163,6 +200,13 @@ class ScenarioPacker(BaseModel):
             global_config,
         )
 
+        # Handle annual exports separately
+        self._export_annual_exports_if_needed(
+            path,
+            resolved_flags.get("include_annual_exports"),
+            global_config,
+        )
+
     def _get_global_export_config(self) -> Optional[ExportConfig]:
         """Get global export configuration from first scenario that has one."""
         for scenario in self._scenarios():
@@ -180,6 +224,7 @@ class ScenarioPacker(BaseModel):
         include_gqueries: Optional[bool],
         include_hourly_output_curves: Optional[bool],
         include_users: Optional[bool],
+        include_annual_exports: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """Resolve all export flags from parameters and configuration."""
         resolver = excel_utils.ExportConfigResolver()
@@ -249,6 +294,16 @@ class ScenarioPacker(BaseModel):
                 ),
                 False,
             ),
+            "include_annual_exports": (
+                list(include_annual_exports)
+                if include_annual_exports
+                else (
+                    list(getattr(global_config, "include_annual_exports", []))
+                    if global_config
+                    and getattr(global_config, "include_annual_exports", None)
+                    else None
+                )
+            ),
         }
 
     def _add_main_sheet(self, workbook: Workbook):
@@ -316,6 +371,36 @@ class ScenarioPacker(BaseModel):
             )
         except Exception as e:
             logger.warning("Failed exporting output curves workbook: %s", e)
+
+    def _export_annual_exports_if_needed(
+        self,
+        main_path: str,
+        include_annual_exports: Optional[Sequence[str]],
+        global_config: Optional[ExportConfig],
+    ):
+        """Export annual exports to separate file if needed."""
+        # Determine which exports to include
+        exports_to_include = None
+        if include_annual_exports:
+            exports_to_include = list(include_annual_exports)
+        elif global_config is not None:
+            config_exports = getattr(global_config, "include_annual_exports", None)
+            if config_exports:
+                exports_to_include = list(config_exports)
+
+        if not exports_to_include:
+            return
+
+        # Determine output file path
+        base_path = Path(main_path)
+        output_path = str(
+            base_path.with_name(f"{base_path.stem}_annual_exports{base_path.suffix}")
+        )
+
+        try:
+            self._annual_exports.to_excel(output_path, exports=exports_to_include)
+        except Exception as e:
+            logger.warning("Failed exporting annual exports workbook: %s", e)
 
     @staticmethod
     def _normalize_update(update: bool | List[str]) -> set[str]:
@@ -714,6 +799,7 @@ class ScenarioPacker(BaseModel):
             self._sortables,
             self._custom_curves,
             self._hourly_output_curves,
+            self._annual_exports,
             self._query_pack,
             self._users,
         )

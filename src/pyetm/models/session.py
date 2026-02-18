@@ -8,6 +8,7 @@ from os import PathLike
 from pyetm.models.couplings import Couplings
 from pyetm.models.inputs import Inputs
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
+from pyetm.models.annual_exports import AnnualExports
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
@@ -82,6 +83,7 @@ class Session(Base):
     _sortables: Optional[Sortables] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
     _hourly_output_curves: Optional[HourlyOutputCurves] = PrivateAttr(default=None)
+    _annual_exports: Optional[AnnualExports] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
     _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
     _couplings: Optional[Couplings] = PrivateAttr(default=None)
@@ -616,6 +618,23 @@ class Session(Base):
     def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
         return self.hourly_output_curves.get_curves_by_carrier_type(self, carrier_type)
 
+    @property
+    def annual_exports(self) -> AnnualExports:
+        if self._annual_exports is not None:
+            return self._annual_exports
+
+        # Create empty collection
+        self._annual_exports = AnnualExports.create_empty_collection()
+        return self._annual_exports
+
+    def export(self, export_name: str) -> pd.DataFrame:
+        """Get a single annual export by name."""
+        return self.annual_exports.retrieve(BaseClient(), self, export_name)
+
+    def get_annual_exports(self, export_names: list[str]) -> dict[str, pd.DataFrame]:
+        """Get multiple annual exports by name."""
+        return self.annual_exports.retrieve_multiple(BaseClient(), self, export_names)
+
     def set_export_config(self, config: ExportConfig | None) -> None:
         self._export_config = config
 
@@ -677,6 +696,7 @@ class Session(Base):
             ("Sortables", self._sortables),
             ("Custom Curves", self._custom_curves),
             ("Hourly Output Curves", self._hourly_output_curves),
+            ("Annual Exports", self._annual_exports),
             ("Queries", self._queries),
             ("Couplings", self._couplings),
         ]
