@@ -3,7 +3,7 @@ name: Test application
 agent:
   machine:
     type: e1-standard-2
-    os_image: ubuntu2004
+    os_image: ubuntu2404
 
 blocks:
   - name: Test
@@ -16,8 +16,8 @@ blocks:
           - poetry config virtualenvs.in-project true
           - export PATH="$HOME/.local/bin:$PATH"
           - checkout
-          - cache restore poetry-cache-$SEMAPHORE_GIT_BRANCH,poetry-cache-master
-          - cache restore poetry-venv-$SEMAPHORE_GIT_BRANCH-$(checksum poetry.lock),poetry-venv-$SEMAPHORE_GIT_BRANCH
+          - cache clear
+          - rm -rf .venv ~/.cache/pypoetry
           - poetry install --with dev
           - cache store poetry-cache-$SEMAPHORE_GIT_BRANCH ~/.cache/pypoetry
           - cache store poetry-venv-$SEMAPHORE_GIT_BRANCH-$(checksum poetry.lock) .venv
