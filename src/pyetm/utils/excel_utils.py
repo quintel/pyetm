@@ -63,8 +63,8 @@ class ExportConfigResolver:
             rb = ExportConfigResolver.resolve_boolean
             get = row.get
 
-            # Exports/output_carriers logic
-            exports_val = get("exports")
+            # Hourly output curves / output_carriers logic
+            exports_val = get("hourly_output_curves")
             output_carriers = None
             if rb(exports_val, None, False) is True:
                 output_carriers = ["electricity", "hydrogen", "heat", "methane"]
@@ -158,7 +158,7 @@ class ExportConfigResolver:
                 return None
             return [carrier.strip() for carrier in value.split(",") if carrier.strip()]
 
-        exports_val = get_cell_value("exports")
+        exports_val = get_cell_value("hourly_output_curves")
         carriers_val = get_cell_value("output_carriers")
 
         exports_bool = parse_bool(exports_val)

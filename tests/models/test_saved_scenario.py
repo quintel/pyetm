@@ -433,7 +433,7 @@ def test_saved_scenario_delegates_property_access(saved_scenario):
     mock_session.inputs = Mock()
     mock_session.sortables = Mock()
     mock_session.custom_curves = Mock()
-    mock_session.output_curves = Mock()
+    mock_session.hourly_output_curves = Mock()
     mock_session.couplings = Mock()
     mock_session.version = "latest"
     mock_session.start_year = 2020
@@ -445,7 +445,7 @@ def test_saved_scenario_delegates_property_access(saved_scenario):
     assert saved_scenario.inputs is mock_session.inputs
     assert saved_scenario.sortables is mock_session.sortables
     assert saved_scenario.custom_curves is mock_session.custom_curves
-    assert saved_scenario.output_curves is mock_session.output_curves
+    assert saved_scenario.hourly_output_curves is mock_session.hourly_output_curves
     assert saved_scenario.couplings is mock_session.couplings
     assert saved_scenario.version == "latest"
     assert saved_scenario.start_year == 2020

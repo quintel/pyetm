@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from pyetm.models.inputs import Inputs
     from pyetm.models.sortables import Sortables
     from pyetm.models.custom_curves import CustomCurves
-    from pyetm.models.output_curves import OutputCurves
+    from pyetm.models.hourly_output_curves import HourlyOutputCurves
     from pyetm.models.couplings import Couplings
     from pyetm.models.gqueries import Gqueries
     from pyetm.models.export_config import ExportConfig
@@ -265,9 +265,9 @@ class Scenario(Base):
         return self.session.custom_curves
 
     @property
-    def output_curves(self) -> "OutputCurves":
+    def hourly_output_curves(self) -> "HourlyOutputCurves":
         """Get output curves from the underlying session."""
-        return self.session.output_curves
+        return self.session.hourly_output_curves
 
     @property
     def couplings(self) -> "Couplings":
@@ -352,13 +352,13 @@ class Scenario(Base):
         """Get an output curve from the underlying session."""
         return self.session.output_curve(curve_name)
 
-    def all_output_curves(self):
+    def all_hourly_output_curves(self):
         """Yield all output curves from the underlying session."""
-        return self.session.all_output_curves()
+        return self.session.all_hourly_output_curves()
 
-    def get_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+    def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
         """Get output curves by carrier type from the underlying session."""
-        return self.session.get_output_curves(carrier_type)
+        return self.session.get_hourly_output_curves(carrier_type)
 
     def update_couplings(
         self, coupling_groups: List[str], action: str = "couple", force: bool = False

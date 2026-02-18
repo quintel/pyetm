@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from pyetm.models.sortables import Sortables
 from pyetm.models.session import Session
-from pyetm.models.output_curves import OutputCurves
+from pyetm.models.hourly_output_curves import HourlyOutputCurves
 from pyetm.models.scenario import Scenario
 
 
@@ -135,7 +135,7 @@ def sample_scenario():
 
     # Default mock methods that return empty lists/DataFrames
     scenario.custom_curves_series = Mock(return_value=[])
-    scenario.all_output_curves = Mock(return_value=[])
+    scenario.all_hourly_output_curves = Mock(return_value=[])
     scenario.queries_requested = Mock(return_value=False)
     scenario.results = Mock(return_value=pd.DataFrame())
 
@@ -159,7 +159,7 @@ def scenario_with_inputs():
 
     # Set up default mock methods
     scenario.custom_curves_series = Mock(return_value=[])
-    scenario.all_output_curves = Mock(return_value=[])
+    scenario.all_hourly_output_curves = Mock(return_value=[])
     scenario.queries_requested = Mock(return_value=False)
     scenario.results = Mock(return_value=pd.DataFrame())
 
@@ -194,7 +194,7 @@ def scenario_with_queries():
 
     # Set up default mock methods
     scenario.custom_curves_series = Mock(return_value=[])
-    scenario.all_output_curves = Mock(return_value=[])
+    scenario.all_hourly_output_curves = Mock(return_value=[])
 
     # Mock sortables
     scenario.sortables = Mock()
@@ -218,7 +218,7 @@ def multiple_scenarios():
 
         # Set up default mock methods
         scenario.custom_curves_series = Mock(return_value=[])
-        scenario.all_output_curves = Mock(return_value=[])
+        scenario.all_hourly_output_curves = Mock(return_value=[])
         scenario.queries_requested = Mock(return_value=False)
         scenario.results = Mock(return_value=pd.DataFrame())
 
@@ -393,7 +393,7 @@ def interconnector_csv_path(fixture_path):
 def carrier_mappings(monkeypatch):
     mapping = {"electricity": {}, "gas": {}}
     monkeypatch.setattr(
-        OutputCurves,
+        HourlyOutputCurves,
         "_load_carrier_mappings",
         staticmethod(lambda: mapping),
         raising=True,
@@ -406,7 +406,7 @@ def mock_workbook(monkeypatch):
     instance = Mock()
     cls = Mock(return_value=instance)
     monkeypatch.setattr(
-        "pyetm.models.packables.output_curves_pack.Workbook",
+        "pyetm.models.packables.hourly_output_curves_pack.Workbook",
         cls,
         raising=True,
     )

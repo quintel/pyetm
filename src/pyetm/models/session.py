@@ -7,7 +7,7 @@ from pydantic import Field, PrivateAttr
 from os import PathLike
 from pyetm.models.couplings import Couplings
 from pyetm.models.inputs import Inputs
-from pyetm.models.output_curves import OutputCurves
+from pyetm.models.hourly_output_curves import HourlyOutputCurves
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
@@ -81,7 +81,7 @@ class Session(Base):
     _inputs: Optional[Inputs] = PrivateAttr(None)
     _sortables: Optional[Sortables] = PrivateAttr(None)
     _custom_curves: Optional[CustomCurves] = PrivateAttr(default=None)
-    _output_curves: Optional[OutputCurves] = PrivateAttr(default=None)
+    _hourly_output_curves: Optional[HourlyOutputCurves] = PrivateAttr(default=None)
     _queries: Optional[Gqueries] = PrivateAttr(None)
     _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
     _couplings: Optional[Couplings] = PrivateAttr(default=None)
@@ -598,23 +598,23 @@ class Session(Base):
             pass
 
     @property
-    def output_curves(self) -> OutputCurves:
-        if self._output_curves is not None:
-            return self._output_curves
+    def hourly_output_curves(self) -> HourlyOutputCurves:
+        if self._hourly_output_curves is not None:
+            return self._hourly_output_curves
 
         # Create collection with all known curve types
-        self._output_curves = OutputCurves.create_empty_collection()
-        return self._output_curves
+        self._hourly_output_curves = HourlyOutputCurves.create_empty_collection()
+        return self._hourly_output_curves
 
     def output_curve(self, curve_name: str) -> pd.DataFrame:
-        return self.output_curves.get_contents(self, curve_name)
+        return self.hourly_output_curves.get_contents(self, curve_name)
 
-    def all_output_curves(self):
-        for key in self.output_curves.attached_keys():
+    def all_hourly_output_curves(self):
+        for key in self.hourly_output_curves.attached_keys():
             yield self.output_curve(key)
 
-    def get_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
-        return self.output_curves.get_curves_by_carrier_type(self, carrier_type)
+    def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+        return self.hourly_output_curves.get_curves_by_carrier_type(self, carrier_type)
 
     def set_export_config(self, config: ExportConfig | None) -> None:
         self._export_config = config
@@ -676,7 +676,7 @@ class Session(Base):
             ("Inputs", self._inputs),
             ("Sortables", self._sortables),
             ("Custom Curves", self._custom_curves),
-            ("Output Curves", self._output_curves),
+            ("Hourly Output Curves", self._hourly_output_curves),
             ("Queries", self._queries),
             ("Couplings", self._couplings),
         ]

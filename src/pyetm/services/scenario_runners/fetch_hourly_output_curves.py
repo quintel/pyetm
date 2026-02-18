@@ -9,8 +9,8 @@ from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class DownloadOutputCurveRunner(BaseRunner[io.StringIO]):
-    """Download a specific output curve."""
+class DownloadHourlyOutputCurveRunner(BaseRunner[io.StringIO]):
+    """Download a specific hourly output curve."""
 
     @staticmethod
     def run(
@@ -23,8 +23,8 @@ class DownloadOutputCurveRunner(BaseRunner[io.StringIO]):
         )
 
 
-class FetchAllOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
-    """Download all known output curves."""
+class FetchAllHourlyOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
+    """Download all known hourly output curves."""
 
     # Known curve types from the Rails controller
     CURVE_TYPES = [
@@ -49,7 +49,7 @@ class FetchAllOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
         return GenericCurveBulkRunner.run(
             client,
             scenario,
-            FetchAllOutputCurvesRunner.CURVE_TYPES,
+            FetchAllHourlyOutputCurvesRunner.CURVE_TYPES,
             curve_type="output",
             batch_size=batch_size,
         )

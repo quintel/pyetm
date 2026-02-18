@@ -1,7 +1,7 @@
 import logging
 from typing import ClassVar, Any, Optional, Sequence, Tuple
 from xlsxwriter import Workbook
-from pyetm.models.output_curves import OutputCurves
+from pyetm.models.hourly_output_curves import HourlyOutputCurves
 import pandas as pd
 from pyetm.models.packables.packable import Packable
 from pyetm.utils import excel_utils
@@ -9,19 +9,19 @@ from pyetm.utils import excel_utils
 logger = logging.getLogger(__name__)
 
 
-class OutputCurvesPack(Packable):
+class HourlyOutputCurvesPack(Packable):
     """
-    A packable for managing output curves (exports) data across scenarios.
+    A packable for managing hourly output curves across scenarios.
 
-    OutputCurvesPack handles the extraction and export of output curves from
+    HourlyOutputCurvesPack handles the extraction and export of hourly output curves from
     scenarios.
 
-    The class supports carrier-based organization of output curves, allowing
+    The class supports carrier-based organization of hourly output curves, allowing
     users to export specific carriers or all available carriers.
     """
 
-    key: ClassVar[str] = "output_curves"
-    sheet_name: ClassVar[str] = "OUTPUT_CURVES"
+    key: ClassVar[str] = "hourly_output_curves"
+    sheet_name: ClassVar[str] = "HOURLY_OUTPUT_CURVES"
 
     def _build_dataframe_for_scenario(
         self,
@@ -42,11 +42,11 @@ class OutputCurvesPack(Packable):
             if curves is not None:
                 # Only fetch specified curves
                 curves_to_fetch = [
-                    c for c in curves if scenario.output_curves.is_attached(c)
+                    c for c in curves if scenario.hourly_output_curves.is_attached(c)
                 ]
             else:
                 # Fetch all attached curves
-                curves_to_fetch = scenario.output_curves.attached_keys()
+                curves_to_fetch = scenario.hourly_output_curves.attached_keys()
 
             for curve_name in curves_to_fetch:
                 df = scenario.output_curve(curve_name)
@@ -55,10 +55,14 @@ class OutputCurvesPack(Packable):
                 frames.append(df)
                 keys.append(curve_name)
 
-            self.log_scenario_warnings(scenario, "_output_curves", "Output curves")
+            self.log_scenario_warnings(
+                scenario, "_hourly_output_curves", "Hourly output curves"
+            )
         except Exception as e:
             logger.warning(
-                "Failed extracting output curves for %s: %s", scenario.identifier(), e
+                "Failed extracting hourly output curves for %s: %s",
+                scenario.identifier(),
+                e,
             )
             return None
 
@@ -133,10 +137,10 @@ class OutputCurvesPack(Packable):
     def to_excel_per_carrier(
         self, path: str, carriers: Optional[Sequence[str]] = None
     ) -> None:
-        """Export output curves to Excel file organized by carrier."""
+        """Export hourly output curves to Excel file organized by carrier."""
 
         # Determine carrier selection
-        carrier_map = OutputCurves._load_carrier_mappings()
+        carrier_map = HourlyOutputCurves._load_carrier_mappings()
         valid_carriers = list(carrier_map.keys())
         selected = list(valid_carriers if carriers is None else carriers)
         selected = [c for c in selected if c in valid_carriers]
@@ -165,11 +169,11 @@ class OutputCurvesPack(Packable):
 
                     # Fetch curves mapping safely
                     curves = None
-                    if hasattr(scenario, "get_output_curves") and callable(
-                        getattr(scenario, "get_output_curves")
+                    if hasattr(scenario, "get_hourly_output_curves") and callable(
+                        getattr(scenario, "get_hourly_output_curves")
                     ):
                         try:
-                            curves = scenario.get_output_curves(carrier)
+                            curves = scenario.get_hourly_output_curves(carrier)
                         except Exception:
                             curves = None
                     if not isinstance(curves, dict) or not curves:

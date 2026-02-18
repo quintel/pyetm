@@ -9,7 +9,7 @@ from pyetm.models.scenario_packer import (
 from pyetm.models.scenario_loader import SessionLoader, SavedScenarioLoader
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.inputs_pack import InputsPack
-from pyetm.models.packables.output_curves_pack import OutputCurvesPack
+from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models import Session
@@ -57,7 +57,7 @@ class TestScenarioPackerAdd:
         assert sample_scenario in packer._custom_curves.scenarios
         assert sample_scenario not in packer._inputs.scenarios
         assert sample_scenario not in packer._sortables.scenarios
-        assert sample_scenario not in packer._exports.scenarios
+        assert sample_scenario not in packer._hourly_output_curves.scenarios
 
     def test_add_inputs(self, sample_scenario):
         """Test adding scenarios to inputs only"""
@@ -75,12 +75,12 @@ class TestScenarioPackerAdd:
         assert sample_scenario in packer._sortables.scenarios
         assert sample_scenario not in packer._inputs.scenarios
 
-    def test_add_exports(self, sample_scenario):
+    def test_hourly_output_curves(self, sample_scenario):
         """Test adding scenarios to output_curves only"""
         packer = ScenarioPacker()
-        packer.add_exports(sample_scenario)
+        packer.add_hourly_output_curves(sample_scenario)
 
-        assert sample_scenario in packer._exports.scenarios
+        assert sample_scenario in packer._hourly_output_curves.scenarios
         assert sample_scenario not in packer._inputs.scenarios
 
 
@@ -170,6 +170,7 @@ class TestMainInfo:
         for scenario in multiple_scenarios:
             assert scenario.id in result.columns
 
+
 class TestCouplings:
     def test_couplings_empty(self):
         """Test couplings with no scenarios"""
@@ -178,6 +179,7 @@ class TestCouplings:
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
+
 
 class TestInputs:
 
@@ -391,10 +393,10 @@ class TestDataExtractionMethods:
             assert "curve1" in result.columns
             assert "curve2" in result.columns
 
-    def test_exports_empty(self):
+    def test_hourly_output_curves_empty(self):
         """Test output_curves with no scenarios"""
         packer = ScenarioPacker()
-        result = packer.exports()
+        result = packer.hourly_output_curves()
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
@@ -444,7 +446,9 @@ class TestExcelExport:
             patch.object(ScenarioPacker, "gquery_results", return_value=dummy_empty_df),
             patch.object(SortablePack, "to_dataframe", return_value=dummy_empty_df),
             patch.object(CustomCurvesPack, "to_dataframe", return_value=dummy_empty_df),
-            patch.object(OutputCurvesPack, "to_dataframe", return_value=dummy_empty_df),
+            patch.object(
+                HourlyOutputCurvesPack, "to_dataframe", return_value=dummy_empty_df
+            ),
         ):
 
             file_path = os.path.join(self.temp_dir, "test_export.xlsx")
@@ -488,7 +492,7 @@ class TestExcelExport:
         scenario.custom_curves_series = Mock(
             return_value=[pd.Series([1, 2], name="curve1")]
         )
-        scenario.all_exports = Mock(
+        scenario.all_hourly_output_curves = Mock(
             return_value=[
                 pd.Series([1, 2], name="curve1"),
                 pd.Series([3, 4], name="carrier1"),
@@ -575,7 +579,7 @@ class TestExportConfigResolver:
                 "sortables": "no",
                 "defaults": "1",
                 "min_max": "0",
-                "exports": "electricity,gas",
+                "hourly_output_curves": "electricity,gas",
             }
         )
 
@@ -746,7 +750,7 @@ class TestExportConfigResolverExtras:
                     "gqueries": "1",
                     "defaults": "1",
                     "min_max": "0",
-                    "exports": "electricity, gas ",
+                    "hourly_output_curves": "electricity, gas ",
                 },
             }
         )
@@ -806,7 +810,7 @@ class TestScenarioPackerExtras:
                     "gquery_results": "yes",
                     "defaults": 1,
                     "min_max": 0,
-                    "exports": "hydrogen",
+                    "hourly_output_curves": "hydrogen",
                 }
             }
         )
@@ -865,7 +869,7 @@ class TestScenarioPackerExtras:
             assert "CUSTOM_CURVES" in sheet_names
             assert "GQUERIES_OUT" in sheet_names
 
-    def test_export_exports_with_params_and_config(self):
+    def test_hourly_output_curves_with_params_and_config(self):
         packer = ScenarioPacker()
         s = Mock(spec=Session)
         s.id = "S"
@@ -875,14 +879,16 @@ class TestScenarioPackerExtras:
 
         # Case 1: carriers explicitly provided
         with (
-            patch.object(OutputCurvesPack, "to_excel_per_carrier") as toe,
+            patch.object(HourlyOutputCurvesPack, "to_excel_per_carrier") as toe,
             patch("pyetm.models.scenario_packer.Workbook") as mock_wb,
         ):
             mock_wb.return_value = Mock()
             tmp = os.path.join(tempfile.gettempdir(), "export1.xlsx")
-            packer.to_excel(tmp, include_exports=True, carriers=["el", "gas"])
+            packer.to_excel(
+                tmp, include_hourly_output_curves=True, carriers=["el", "gas"]
+            )
             args, _ = toe.call_args
-            assert args[0].endswith("_exports.xlsx")
+            assert args[0].endswith("_hourly_output_curves.xlsx")
             assert args[1] == ["el", "gas"]
 
         # Case 2: carriers from global config
@@ -895,17 +901,17 @@ class TestScenarioPackerExtras:
         packer2 = ScenarioPacker()
         packer2.add(s2)
         with (
-            patch.object(OutputCurvesPack, "to_excel_per_carrier") as toe2,
+            patch.object(HourlyOutputCurvesPack, "to_excel_per_carrier") as toe2,
             patch("pyetm.models.scenario_packer.Workbook") as mock_wb2,
         ):
             mock_wb2.return_value = Mock()
             tmp2 = os.path.join(tempfile.gettempdir(), "export2.xlsx")
-            packer2.to_excel(tmp2, include_exports=True)
+            packer2.to_excel(tmp2, include_hourly_output_curves=True)
             args2, _ = toe2.call_args
             assert args2[1] == ["h2"]
 
 
-def test_export_exports_if_needed_false():
+def test_hourly_output_curves_if_needed_false():
     packer = ScenarioPacker()
     s = Mock(spec=Session)
     s.id = "S"
@@ -914,11 +920,11 @@ def test_export_exports_if_needed_false():
     packer.add(s)
 
     with (
-        patch.object(OutputCurvesPack, "to_excel_per_carrier") as toe,
+        patch.object(HourlyOutputCurvesPack, "to_excel_per_carrier") as toe,
         patch("pyetm.models.scenario_packer.Workbook") as wb,
     ):
         wb.return_value = Mock()
-        packer.to_excel("/tmp/x.xlsx", include_exports=False)
+        packer.to_excel("/tmp/x.xlsx", include_hourly_output_curves=False)
         toe.assert_not_called()
 
 
@@ -953,9 +959,7 @@ def test_clear_and_remove_scenario_swallow_errors():
     fake_pack1.discard.side_effect = RuntimeError("bad")
     fake_pack2.discard.return_value = None
 
-    with patch.object(
-        ScenarioPacker, "_packs", return_value=[fake_pack1, fake_pack2]
-    ):
+    with patch.object(ScenarioPacker, "_packs", return_value=[fake_pack1, fake_pack2]):
         packer.clear()  # should not raise
         sc = Mock(spec=Session)
         packer.remove_scenario(sc)  # should not raise
