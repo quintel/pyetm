@@ -27,7 +27,7 @@ class InputsPack(Packable):
 
     def to_dataframe(
         self,
-        columns: str | List[str] = "user",
+        fields: str | List[str] = "user",
         *,
         include_defaults: bool = False,
         include_min_max: bool = False,
@@ -35,26 +35,23 @@ class InputsPack(Packable):
         if not self.scenarios:
             return pd.DataFrame()
 
-        if isinstance(columns, str):
-            cols = [columns] if columns else []
+        if isinstance(fields, str):
+            fields = [fields] if fields else []
         else:
-            cols = [c for c in columns if c]
-        if "user" in cols:
-            cols.remove("user")
-        cols.insert(0, "user")
+            fields = [c for c in fields if c]
 
         if include_defaults:
             for col in ("default", "permitted_values"):
-                if col not in cols:
-                    cols.append(col)
+                if col not in fields:
+                    fields.append(col)
         if include_min_max:
             for col in ("min", "max"):
-                if col not in cols:
-                    cols.append(col)
+                if col not in fields:
+                    fields.append(col)
 
         frames, labels = [], []
         for scenario in self.scenarios:
-            df = scenario.inputs.to_dataframe(columns=cols)
+            df = scenario.inputs.to_dataframe(fields=fields)
             if df is not None and not df.empty:
                 frames.append(df)
                 labels.append(self._get_scenario_display_key(scenario))
@@ -65,8 +62,8 @@ class InputsPack(Packable):
             else pd.DataFrame()
         )
 
-    def _to_dataframe(self, columns="user", **kwargs):
-        return self.to_dataframe(columns=columns)
+    def _to_dataframe(self, fields="user", **kwargs):
+        return self.to_dataframe(fields=fields)
 
     def add_to_workbook(
         self,

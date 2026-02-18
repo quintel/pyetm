@@ -18,14 +18,14 @@ def test_to_dataframe(inputs_json):
     input_collection = Inputs.from_json(inputs_json)
 
     df_standard = input_collection.to_dataframe()
-    df_with_defaults = input_collection.to_dataframe(columns=["user", "default"])
+    df_with_defaults = input_collection.to_dataframe(fields=["user", "default"])
 
     assert "user" in df_standard.columns
     assert "user" in df_with_defaults.columns
     assert "default" not in df_standard.columns
     assert "default" in df_with_defaults.columns
 
-    df_with_non_existing = input_collection.to_dataframe(columns="foo")
+    df_with_non_existing = input_collection.to_dataframe(fields="foo")
 
     assert df_with_non_existing["foo"].isnull().all()
 
