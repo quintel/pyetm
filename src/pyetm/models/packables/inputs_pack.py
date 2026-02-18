@@ -36,22 +36,22 @@ class InputsPack(Packable):
             return pd.DataFrame()
 
         if isinstance(fields, str):
-            cols = [fields] if fields else []
+            fields = [fields] if fields else []
         else:
-            cols = [c for c in fields if c]
+            fields = [c for c in fields if c]
 
         if include_defaults:
             for col in ("default", "permitted_values"):
-                if col not in cols:
-                    cols.append(col)
+                if col not in fields:
+                    fields.append(col)
         if include_min_max:
             for col in ("min", "max"):
-                if col not in cols:
-                    cols.append(col)
+                if col not in fields:
+                    fields.append(col)
 
         frames, labels = [], []
         for scenario in self.scenarios:
-            df = scenario.inputs.to_dataframe(fields=cols)
+            df = scenario.inputs.to_dataframe(fields=fields)
             if df is not None and not df.empty:
                 frames.append(df)
                 labels.append(self._get_scenario_display_key(scenario))

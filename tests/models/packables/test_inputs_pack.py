@@ -44,13 +44,15 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
         # Set up to_dataframe method
         def mock_to_dataframe(fields=None):
             if isinstance(fields, list):
-                cols = fields
+                fields = fields
             else:
-                cols = [fields] if fields else ["user"]
+                fields = [fields] if fields else ["user"]
 
             data = {}
-            for col in cols:
-                data[col] = [inputs_data[key].get(col) for key in inputs_data.keys()]
+            for field in fields:
+                data[field] = [
+                    inputs_data[key].get(field) for key in inputs_data.keys()
+                ]
 
             df = pd.DataFrame(data, index=list(inputs_data.keys()))
             return df
