@@ -10,9 +10,9 @@ from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.warnings import WarningCollector
 from pyetm.config.settings import get_settings
-from pyetm.services.scenario_runners.fetch_output_curves import (
-    DownloadOutputCurveRunner,
-    FetchAllOutputCurvesRunner,
+from pyetm.services.scenario_runners.fetch_hourly_output_curves import (
+    DownloadHourlyOutputCurveRunner,
+    FetchAllHourlyOutputCurvesRunner,
 )
 
 
@@ -28,13 +28,13 @@ def _read_csv_cached_impl(path_str: str, mtime: float) -> pd.DataFrame:
     return df.dropna(how="all")
 
 
-class OutputCurveError(Exception):
-    """Base carrier curve error"""
+class HourlyOutputCurveError(Exception):
+    """Base hourly output curve error"""
 
 
-class OutputCurve(Base):
+class HourlyOutputCurve(Base):
     """
-    Wrapper around a single carrier curve (output curve / export in the front end).
+    Wrapper around a single hourly output curve (export in the front end).
     Curves are getting saved to the filesystem, as bulk processing of scenarios
     could end up with several 100 MBs of curves, which we don't want to keep in
     memory.
@@ -68,7 +68,7 @@ class OutputCurve(Base):
                     f"Failed to read cached curve file for {self.key}: {e}; refetching",
                 )
         try:
-            result = DownloadOutputCurveRunner.run(client, scenario, self.key)
+            result = DownloadHourlyOutputCurveRunner.run(client, scenario, self.key)
             if result.success:
                 try:
                     result.data.seek(0)
@@ -124,9 +124,9 @@ class OutputCurve(Base):
             return False
 
     @classmethod
-    def from_json(cls, data: dict) -> OutputCurve:
+    def from_json(cls, data: dict) -> "HourlyOutputCurve":
         """
-        Initialize a OutputCurve from JSON data
+        Initialize a HourlyOutputCurve from JSON data
         """
         try:
             curve = cls.model_validate(data)
@@ -142,12 +142,12 @@ class OutputCurve(Base):
             return curve
 
 
-class OutputCurves(Base):
+class HourlyOutputCurves(Base):
     """
-    Collection of Output Curves (exports).
+    Collection of Hourly Output Curves.
     """
 
-    curves: list[OutputCurve]
+    curves: list[HourlyOutputCurve]
 
     def __len__(self) -> int:
         return len(self.curves)
@@ -195,7 +195,7 @@ class OutputCurves(Base):
     def _load_carrier_mappings() -> dict:
         """Load carrier mappings from YAML config file"""
         config_path = (
-            Path(__file__).parent.parent / "config" / "output_curve_mappings.yml"
+            Path(__file__).parent.parent / "config" / "hourly_output_curve_mappings.yml"
         )
         try:
             with open(config_path, "r") as file:
@@ -246,24 +246,24 @@ class OutputCurves(Base):
 
         return results
 
-    def _find(self, curve_name: str) -> Optional[OutputCurve]:
+    def _find(self, curve_name: str) -> Optional[HourlyOutputCurve]:
         return next((c for c in self.curves if c.key == curve_name), None)
 
     @classmethod
-    def from_json(cls, data: list[dict]) -> OutputCurves:
+    def from_json(cls, data: list[dict]) -> HourlyOutputCurves:
         """
-        Initialize OutputCurves collection from JSON data
+        Initialize HourlyOutputCurves collection from JSON data
         """
         curves = []
 
         for curve_data in data:
             try:
-                curve = OutputCurve.from_json(curve_data)
+                curve = HourlyOutputCurve.from_json(curve_data)
                 curves.append(curve)
             except Exception as e:
                 # Create a basic curve and continue processing
                 key = curve_data.get("key", "unknown")
-                basic_curve = OutputCurve.model_construct(key=key, type="unknown")
+                basic_curve = HourlyOutputCurve.model_construct(key=key, type="unknown")
                 basic_curve.add_warning(key, f"Skipped invalid curve data: {e}")
                 curves.append(basic_curve)
 
@@ -277,8 +277,8 @@ class OutputCurves(Base):
     @classmethod
     def from_service_result(
         cls, service_result, scenario, cache_curves: bool = True
-    ) -> "OutputCurves":
-        """Create OutputCurves instance from service result"""
+    ) -> "HourlyOutputCurves":
+        """Create HourlyOutputCurves instance from service result"""
         if not service_result.success or not service_result.data:
             empty_curves = cls(curves=[])
             for error in service_result.errors:
@@ -293,7 +293,7 @@ class OutputCurves(Base):
 
         for curve_name, curve_data in service_result.data.items():
             try:
-                curve = OutputCurve.model_validate(
+                curve = HourlyOutputCurve.model_validate(
                     {"key": curve_name, "type": cls._infer_curve_type(curve_name)}
                 )
 
@@ -308,7 +308,7 @@ class OutputCurves(Base):
                 curves_list.append(curve)
 
             except Exception as e:
-                basic_curve = OutputCurve.model_construct(
+                basic_curve = HourlyOutputCurve.model_construct(
                     key=curve_name, type="unknown"
                 )
                 basic_curve.add_warning("base", f"Failed to process curve data: {e}")
@@ -341,26 +341,26 @@ class OutputCurves(Base):
         return type_mapping.get(curve_name, "output_curve")
 
     @classmethod
-    def fetch_all(cls, scenario, cache_curves: bool = True) -> "OutputCurves":
+    def fetch_all(cls, scenario, cache_curves: bool = True) -> "HourlyOutputCurves":
         """
         Convenience method to fetch all carrier curves for a scenario.
         """
-        service_result = FetchAllOutputCurvesRunner.run(BaseClient(), scenario)
+        service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), scenario)
         return cls.from_service_result(service_result, scenario, cache_curves)
 
     @classmethod
-    def create_empty_collection(cls) -> "OutputCurves":
+    def create_empty_collection(cls) -> "HourlyOutputCurves":
         """
-        Create a collection with all known carrier curve types but no data.
+        Create a collection with all known hourly output curve types but no data.
         This allows is_attached() to work before data is retrieved.
         """
-        from pyetm.services.scenario_runners.fetch_output_curves import (
-            FetchAllOutputCurvesRunner,
+        from pyetm.services.scenario_runners.fetch_hourly_output_curves import (
+            FetchAllHourlyOutputCurvesRunner,
         )
 
         curves_list = []
-        for curve_name in FetchAllOutputCurvesRunner.CURVE_TYPES:
-            curve = OutputCurve.model_validate(
+        for curve_name in FetchAllHourlyOutputCurvesRunner.CURVE_TYPES:
+            curve = HourlyOutputCurve.model_validate(
                 {"key": curve_name, "type": cls._infer_curve_type(curve_name)}
             )
             curves_list.append(curve)

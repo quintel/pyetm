@@ -18,7 +18,7 @@ class ExportConfig(BaseModel):
     inputs_defaults: Optional[bool] = None
     inputs_min_max: Optional[bool] = None
 
-    # Select which output carriers to include; None means don't include carriers
+    # Select which carriers to include in hourly output curves export; None means don't include hourly output curves
     output_carriers: Optional[Sequence[str]] = None
 
     def effective_bool(self, value: Optional[bool], default: bool) -> bool:

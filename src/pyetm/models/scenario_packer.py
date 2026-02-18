@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, Sequence, List, Union, TYPE_CHECKING
 from xlsxwriter import Workbook
 
 from pyetm.models.packables.inputs_pack import InputsPack
-from pyetm.models.packables.output_curves_pack import OutputCurvesPack
+from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
 from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
@@ -37,7 +37,7 @@ class ScenarioPacker(BaseModel):
     _custom_curves: CustomCurvesPack = CustomCurvesPack()
     _inputs: InputsPack = InputsPack()
     _sortables: SortablePack = SortablePack()
-    _exports: OutputCurvesPack = OutputCurvesPack()
+    _hourly_output_curves: HourlyOutputCurvesPack = HourlyOutputCurvesPack()
     _query_pack: QueryPack = QueryPack()
     _users: UsersPack = UsersPack()
 
@@ -47,7 +47,7 @@ class ScenarioPacker(BaseModel):
         self.add_custom_curves(*scenarios)
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
-        self.add_exports(*scenarios)
+        self.add_hourly_output_curves(*scenarios)
         self._query_pack.add(*scenarios)
         self._users.add(*scenarios)
 
@@ -60,8 +60,8 @@ class ScenarioPacker(BaseModel):
     def add_sortables(self, *scenarios):
         self._sortables.add(*scenarios)
 
-    def add_exports(self, *scenarios):
-        self._exports.add(*scenarios)
+    def add_hourly_output_curves(self, *scenarios):
+        self._hourly_output_curves.add(*scenarios)
 
     def main_info(self) -> pd.DataFrame:
         """Create main info DataFrame by concatenating scenario dataframes."""
@@ -82,8 +82,10 @@ class ScenarioPacker(BaseModel):
     def custom_curves(self) -> pd.DataFrame:
         return self._custom_curves.to_dataframe()
 
-    def exports(self, curves: Optional[Sequence[str]] = None) -> pd.DataFrame:
-        return self._exports.to_dataframe(curves=curves)
+    def hourly_output_curves(
+        self, curves: Optional[Sequence[str]] = None
+    ) -> pd.DataFrame:
+        return self._hourly_output_curves.to_dataframe(curves=curves)
 
     def couplings(self) -> pd.DataFrame:
         if len(self._scenarios()) == 0:
@@ -109,7 +111,7 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool] = None,
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
-        include_exports: Optional[bool] = None,
+        include_hourly_output_curves: Optional[bool] = None,
         include_input_details: Optional[bool] = None,
         include_users: Optional[bool] = None,
     ):
@@ -124,7 +126,7 @@ class ScenarioPacker(BaseModel):
             include_sortables,
             include_custom_curves,
             include_gqueries,
-            include_exports,
+            include_hourly_output_curves,
             include_users,
         )
 
@@ -154,8 +156,11 @@ class ScenarioPacker(BaseModel):
             workbook.close()
 
         # Handle output curves separately
-        self._export_output_curves_if_needed(
-            path, carriers, resolved_flags["include_exports"], global_config
+        self._export_hourly_output_curves_if_needed(
+            path,
+            carriers,
+            resolved_flags["include_hourly_output_curves"],
+            global_config,
         )
 
     def _get_global_export_config(self) -> Optional[ExportConfig]:
@@ -173,7 +178,7 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool],
         include_custom_curves: Optional[bool],
         include_gqueries: Optional[bool],
-        include_exports: Optional[bool],
+        include_hourly_output_curves: Optional[bool],
         include_users: Optional[bool],
     ) -> Dict[str, Any]:
         """Resolve all export flags from parameters and configuration."""
@@ -216,8 +221,8 @@ class ScenarioPacker(BaseModel):
                 ),
                 False,
             ),
-            "include_exports": resolver.resolve_boolean(
-                include_exports,
+            "include_hourly_output_curves": resolver.resolve_boolean(
+                include_hourly_output_curves,
                 (
                     (getattr(global_config, "output_carriers", None) is not None)
                     if global_config
@@ -280,21 +285,23 @@ class ScenarioPacker(BaseModel):
         if flags.get("include_users"):
             self._users.add_to_workbook(workbook)
 
-    def _export_output_curves_if_needed(
+    def _export_hourly_output_curves_if_needed(
         self,
         main_path: str,
         carriers: Optional[Sequence[str]],
-        include_exports: bool,
+        include_hourly_output_curves: bool,
         global_config: Optional[ExportConfig],
     ):
         """Export output curves to separate file if needed."""
-        if not include_exports:
+        if not include_hourly_output_curves:
             return
 
         # Determine output file path
         base_path = Path(main_path)
         output_path = str(
-            base_path.with_name(f"{base_path.stem}_exports{base_path.suffix}")
+            base_path.with_name(
+                f"{base_path.stem}_hourly_output_curves{base_path.suffix}"
+            )
         )
 
         # Determine carriers to export
@@ -304,7 +311,9 @@ class ScenarioPacker(BaseModel):
             chosen_carriers = list(config_carriers) if config_carriers else None
 
         try:
-            self._exports.to_excel_per_carrier(output_path, chosen_carriers)
+            self._hourly_output_curves.to_excel_per_carrier(
+                output_path, chosen_carriers
+            )
         except Exception as e:
             logger.warning("Failed exporting output curves workbook: %s", e)
 
@@ -704,7 +713,7 @@ class ScenarioPacker(BaseModel):
             self._inputs,
             self._sortables,
             self._custom_curves,
-            self._exports,
+            self._hourly_output_curves,
             self._query_pack,
             self._users,
         )

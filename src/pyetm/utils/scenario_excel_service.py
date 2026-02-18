@@ -26,7 +26,7 @@ class ScenarioExcelService:
         include_sortables: bool | None = None,
         include_custom_curves: bool | None = None,
         include_gqueries: bool | None = None,
-        include_exports: bool | None = None,
+        include_hourly_output_curves: bool | None = None,
     ) -> None:
         """
         Export scenarios to Excel file.
@@ -54,7 +54,7 @@ class ScenarioExcelService:
             include_sortables=include_sortables,
             include_custom_curves=include_custom_curves,
             include_gqueries=include_gqueries,
-            include_exports=include_exports,
+            include_hourly_output_curves=include_hourly_output_curves,
         )
 
     @classmethod
