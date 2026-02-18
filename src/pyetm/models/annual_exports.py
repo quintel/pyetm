@@ -164,6 +164,62 @@ class AnnualExports(Base):
                 results[name] = data
         return results
 
+    def _to_dataframe(
+        self, exports: Optional[list[str]] = None, **kwargs
+    ) -> pd.DataFrame:
+        """
+        Serialize AnnualExports collection to DataFrame with multi-index format.
+        Returns a DataFrame with export_name as an additional index level.
+
+        Since exports have different shapes, this uses an outer join
+        which may result in NaN values where columns don't exist for specific exports.
+        """
+        if not self.exports:
+            return pd.DataFrame()
+
+        # Filter exports if specific ones requested
+        exports_to_process = self.exports
+        if exports is not None:
+            exports_to_process = {
+                name: exp for name, exp in self.exports.items() if name in exports
+            }
+
+        dataframes_to_concat = []
+
+        for export_name, export in exports_to_process.items():
+            try:
+                export_df = export.contents()
+                if export_df is not None and not export_df.empty:
+                    export_df_copy = export_df.copy()
+                    export_df_copy.insert(0, "export_name", export_name)
+
+                    # If the dataframe has a meaningful index, preserve it
+                    # Otherwise, create a simple numeric index
+                    if export_df_copy.index.name is None:
+                        export_df_copy.index.name = "row"
+
+                    export_df_copy = export_df_copy.set_index(
+                        "export_name", append=True
+                    )
+                    # Reorder index levels so export_name is first
+                    export_df_copy = export_df_copy.reorder_levels(
+                        ["export_name"]
+                        + [n for n in export_df_copy.index.names if n != "export_name"]
+                    )
+                    dataframes_to_concat.append(export_df_copy)
+
+            except Exception as e:
+                self.add_warning(
+                    "exports", f"Failed to serialize export {export_name}: {e}"
+                )
+
+        if dataframes_to_concat:
+            # Concatenate with outer join to handle different schemas
+            result_df = pd.concat(dataframes_to_concat, axis=0, join="outer")
+            return result_df
+        else:
+            return pd.DataFrame()
+
     @classmethod
     def create_empty_collection(cls) -> "AnnualExports":
         exports = {name: AnnualExport.from_name(name) for name in ANNUAL_EXPORT_TYPES}

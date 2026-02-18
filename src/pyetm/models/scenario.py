@@ -354,9 +354,9 @@ class Scenario(Base):
         """Yield all custom curve series from the underlying session."""
         return self.session.custom_curves_series()
 
-    def output_curve(self, curve_name: str) -> pd.DataFrame:
-        """Get an output curve from the underlying session."""
-        return self.session.output_curve(curve_name)
+    def get_output_curve(self, curve_name: str) -> pd.DataFrame:
+        """Get a single hourly output curve by name from the underlying session."""
+        return self.session.get_output_curve(curve_name)
 
     def all_hourly_output_curves(self):
         """Yield all output curves from the underlying session."""
@@ -366,9 +366,9 @@ class Scenario(Base):
         """Get output curves by carrier type from the underlying session."""
         return self.session.get_hourly_output_curves(carrier_type)
 
-    def export(self, export_name: str) -> pd.DataFrame:
-        """Get an annual export from the underlying session."""
-        return self.session.export(export_name)
+    def get_annual_export(self, export_name: str) -> pd.DataFrame:
+        """Get a single annual export by name from the underlying session."""
+        return self.session.get_annual_export(export_name)
 
     def get_annual_exports(self, export_names: list[str]) -> dict[str, pd.DataFrame]:
         """Get multiple annual exports from the underlying session."""

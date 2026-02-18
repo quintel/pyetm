@@ -348,6 +348,54 @@ class HourlyOutputCurves(Base):
         service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), scenario)
         return cls.from_service_result(service_result, scenario, cache_curves)
 
+    def _to_dataframe(
+        self, curves: Optional[list[str]] = None, **kwargs
+    ) -> pd.DataFrame:
+        """
+        Serialize HourlyOutputCurves collection to DataFrame with multi-index format.
+        Returns a DataFrame with MultiIndex (hour, curve_name) containing curve values.
+        """
+        if not self.curves:
+            return pd.DataFrame(
+                index=pd.MultiIndex.from_tuples([], names=["hour", "curve_name"]),
+                columns=["value"],
+            )
+
+        # Filter curves if specific ones requested
+        curves_to_process = self.curves
+        if curves is not None:
+            curves_to_process = [c for c in self.curves if c.key in curves]
+
+        all_curve_data = []
+
+        for curve in curves_to_process:
+            try:
+                if not curve.available():
+                    # Skip unavailable curves
+                    continue
+
+                curve_df = curve.contents()
+                if curve_df is not None and not curve_df.empty:
+                    for hour, value in curve_df.iloc[:, 0].items():
+                        all_curve_data.append(
+                            {"hour": hour, "curve_name": curve.key, "value": value}
+                        )
+
+            except Exception as e:
+                self.add_warning(
+                    "curves", f"Failed to serialize curve {curve.key}: {e}"
+                )
+
+        if all_curve_data:
+            result_df = pd.DataFrame(all_curve_data)
+            result_df = result_df.set_index(["hour", "curve_name"])
+            return result_df
+        else:
+            return pd.DataFrame(
+                index=pd.MultiIndex.from_tuples([], names=["hour", "curve_name"]),
+                columns=["value"],
+            )
+
     @classmethod
     def create_empty_collection(cls) -> "HourlyOutputCurves":
         """

@@ -31,33 +31,51 @@ class HourlyOutputCurvesPack(Packable):
         **kwargs,
     ):
         """
-        Build a DataFrame for one scenario with a two-level column MultiIndex:
-            (curve_type, original_column)
+        Build a DataFrame for one scenario by delegating to the model's to_dataframe() method.
+
+        Transforms the model's multi-index format into column-based format for concatenation.
         """
         try:
-            frames: list[pd.DataFrame] = []
-            keys: list[str] = []
-
-            # Determine which curves to fetch
-            if curves is not None:
-                # Only fetch specified curves
-                curves_to_fetch = [
-                    c for c in curves if scenario.hourly_output_curves.is_attached(c)
-                ]
-            else:
-                # Fetch all attached curves
-                curves_to_fetch = scenario.hourly_output_curves.attached_keys()
-
-            for curve_name in curves_to_fetch:
-                df = scenario.output_curve(curve_name)
-                if df is None or df.empty:
-                    continue
-                frames.append(df)
-                keys.append(curve_name)
+            # Delegate to the model's to_dataframe() method
+            df = scenario.hourly_output_curves.to_dataframe(curves=curves, **kwargs)
 
             self.log_scenario_warnings(
-                scenario, "_hourly_output_curves", "Hourly output curves"
+                scenario, "hourly_output_curves", "Hourly output curves"
             )
+
+            if df.empty:
+                return None
+
+            # Transform from row-based multi-index to column-based format
+            # The model returns either (hour, curve_name) or (hour, curve_name, column) multi-index
+            # We need to unstack to get columns
+
+            # Check the number of index levels
+            if df.index.nlevels == 2:
+                # Simple case: (hour, curve_name) -> unstack curve_name
+                df_unstacked = df.unstack(level="curve_name")
+                # Remove the 'value' level from column multi-index
+                if isinstance(df_unstacked.columns, pd.MultiIndex):
+                    df_unstacked.columns = df_unstacked.columns.droplevel(0)
+                df_unstacked.columns.name = "curve_type"
+            elif df.index.nlevels == 3:
+                # hour, curve_name, column -> unstack both curve_name and column
+                df_unstacked = df.unstack(level=["curve_name", "column"])
+                # Remove the 'value' level
+                if (
+                    isinstance(df_unstacked.columns, pd.MultiIndex)
+                    and df_unstacked.columns.nlevels > 2
+                ):
+                    df_unstacked.columns = df_unstacked.columns.droplevel(0)
+                # Set the names
+                if isinstance(df_unstacked.columns, pd.MultiIndex):
+                    df_unstacked.columns.names = ["curve_type", None]
+            else:
+                # Unexpected format, return as-is
+                df_unstacked = df
+
+            return df_unstacked
+
         except Exception as e:
             logger.warning(
                 "Failed extracting hourly output curves for %s: %s",
@@ -65,11 +83,6 @@ class HourlyOutputCurvesPack(Packable):
                 e,
             )
             return None
-
-        if not frames:
-            return None
-
-        return pd.concat(frames, axis=1, keys=keys, names=["curve_type"])
 
     def to_dataframe(
         self, columns="", curves: Optional[Sequence[str]] = None, **kwargs
@@ -139,6 +152,8 @@ class HourlyOutputCurvesPack(Packable):
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
         Build a dict organized by curve type, then by scenario.
+
+        Returns dict[curve_name][scenario_id] = DataFrame for that curve and scenario.
         """
         result = {}
 
@@ -146,25 +161,20 @@ class HourlyOutputCurvesPack(Packable):
             try:
                 scenario_key = self._key_for(scenario)
 
-                # Determine which curves to fetch
-                if curves is not None:
-                    curves_to_fetch = [
-                        c
-                        for c in curves
-                        if scenario.hourly_output_curves.is_attached(c)
-                    ]
-                else:
-                    # Fetch all attached curves
-                    curves_to_fetch = scenario.hourly_output_curves.attached_keys()
+                # Get multi-index dataframe from model
+                df = scenario.hourly_output_curves.to_dataframe(curves=curves)
 
-                for curve_name in curves_to_fetch:
-                    df = scenario.output_curve(curve_name)
-                    if df is None or df.empty:
-                        continue
+                if df.empty:
+                    continue
+
+                # Unstack the multi-index to separate by curve_name
+                for curve_name in df.index.get_level_values("curve_name").unique():
+                    # Extract data for this specific curve
+                    curve_df = df.xs(curve_name, level="curve_name")
 
                     if curve_name not in result:
                         result[curve_name] = {}
-                    result[curve_name][scenario_key] = df
+                    result[curve_name][scenario_key] = curve_df
 
                 self.log_scenario_warnings(scenario, self.key, self.sheet_name)
 
@@ -211,15 +221,16 @@ class HourlyOutputCurvesPack(Packable):
                     except Exception:
                         scenario_name = str(getattr(scenario, "id", "scenario"))
 
-                    # Fetch curves mapping safely
+                    # Fetch curves by carrier type using the model's method
                     curves = None
-                    if hasattr(scenario, "get_hourly_output_curves") and callable(
-                        getattr(scenario, "get_hourly_output_curves")
-                    ):
-                        try:
-                            curves = scenario.get_hourly_output_curves(carrier)
-                        except Exception:
-                            curves = None
+                    try:
+                        curves = (
+                            scenario.hourly_output_curves.get_curves_by_carrier_type(
+                                scenario, carrier
+                            )
+                        )
+                    except Exception:
+                        curves = None
                     if not isinstance(curves, dict) or not curves:
                         continue
 

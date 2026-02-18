@@ -608,12 +608,13 @@ class Session(Base):
         self._hourly_output_curves = HourlyOutputCurves.create_empty_collection()
         return self._hourly_output_curves
 
-    def output_curve(self, curve_name: str) -> pd.DataFrame:
+    def get_output_curve(self, curve_name: str) -> pd.DataFrame:
+        """Get a single hourly output curve by name."""
         return self.hourly_output_curves.get_contents(self, curve_name)
 
     def all_hourly_output_curves(self):
         for key in self.hourly_output_curves.attached_keys():
-            yield self.output_curve(key)
+            yield self.get_output_curve(key)
 
     def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
         return self.hourly_output_curves.get_curves_by_carrier_type(self, carrier_type)
@@ -627,7 +628,7 @@ class Session(Base):
         self._annual_exports = AnnualExports.create_empty_collection()
         return self._annual_exports
 
-    def export(self, export_name: str) -> pd.DataFrame:
+    def get_annual_export(self, export_name: str) -> pd.DataFrame:
         """Get a single annual export by name."""
         return self.annual_exports.retrieve(BaseClient(), self, export_name)
 
