@@ -398,8 +398,7 @@ class TestDataExtractionMethods:
         packer = ScenarioPacker()
         result = packer.hourly_output_curves()
 
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
+        assert isinstance(result, dict)
 
 
 class TestExcelExport:

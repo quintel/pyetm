@@ -75,6 +75,9 @@ class ExportConfigResolver:
                     get("output_carriers")
                 ) or parse_carriers(exports_val)
 
+            # Annual exports parsing (comma-separated list)
+            include_annual_exports = parse_carriers(get("include_annual_exports"))
+
             config = ExportConfig(
                 include_inputs=rb(get("include_inputs"), get("inputs"), False),
                 include_sortables=rb(get("include_sortables"), get("sortables"), False),
@@ -88,6 +91,7 @@ class ExportConfigResolver:
                 inputs_defaults=rb(get("defaults"), None, False),
                 inputs_min_max=rb(get("min_max"), None, False),
                 output_carriers=output_carriers,
+                include_annual_exports=include_annual_exports,
             )
             return config
         except Exception as e:

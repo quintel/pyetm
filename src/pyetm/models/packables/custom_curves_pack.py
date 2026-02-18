@@ -34,7 +34,56 @@ class CustomCurvesPack(Packable):
     def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs).rename_axis("hour")
 
-    def load_from_dataframe(self, df: pd.DataFrame, scenario: "Any", update_set: set[str] = None):
+    def to_dict_per_curve(
+        self, curves: "Optional[Sequence[str]]" = None
+    ) -> "dict[str, dict[str, pd.DataFrame]]":
+        """
+        Build dict organized by curve name, then by scenario.
+        """
+        from typing import Optional, Sequence
+
+        result = {}
+
+        for scenario in self.scenarios:
+            try:
+                scenario_key = self._key_for(scenario)
+
+                # Determine which curves to fetch
+                if curves is not None:
+                    # Filter to requested curves that exist
+                    curves_to_fetch = [
+                        c
+                        for c in curves
+                        if c in list(scenario.custom_curves.attached_keys())
+                    ]
+                else:
+                    # Fetch all attached curves
+                    curves_to_fetch = list(scenario.custom_curves.attached_keys())
+
+                for curve_name in curves_to_fetch:
+                    curve_data = scenario.custom_curve_series(curve_name)
+                    if curve_data is None or curve_data.empty:
+                        continue
+
+                    if curve_name not in result:
+                        result[curve_name] = {}
+                    result[curve_name][scenario_key] = curve_data
+
+                self.log_scenario_warnings(scenario, self.key, self.sheet_name)
+
+            except Exception as e:
+                logger.warning(
+                    "Failed building curves dict for scenario %s: %s",
+                    scenario.identifier(),
+                    e,
+                )
+                continue
+
+        return result
+
+    def load_from_dataframe(
+        self, df: pd.DataFrame, scenario: "Any", update_set: set[str] = None
+    ):
         """
         Loads from a dataframe for a single scenario
         """
@@ -47,7 +96,9 @@ class CustomCurvesPack(Packable):
 
         self.apply_custom_curves_to_scenario(scenario, normalized_data, update_set)
 
-    def apply_custom_curves_to_scenario(self, scenario: "Any", data: pd.DataFrame, update_set: set[str] = None):
+    def apply_custom_curves_to_scenario(
+        self, scenario: "Any", data: pd.DataFrame, update_set: set[str] = None
+    ):
         """Apply custom curves to scenario with validation and error handling."""
         skip_upload = not self._should_include_upload(update_set)
 

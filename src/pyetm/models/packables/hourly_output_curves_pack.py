@@ -134,6 +134,50 @@ class HourlyOutputCurvesPack(Packable):
             keys.append(self._key_for(scenario))
         return self._concat_frames(frames, keys)
 
+    def to_dict_per_curve(
+        self, curves: Optional[Sequence[str]] = None
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        """
+        Build a dict organized by curve type, then by scenario.
+        """
+        result = {}
+
+        for scenario in self.scenarios:
+            try:
+                scenario_key = self._key_for(scenario)
+
+                # Determine which curves to fetch
+                if curves is not None:
+                    curves_to_fetch = [
+                        c
+                        for c in curves
+                        if scenario.hourly_output_curves.is_attached(c)
+                    ]
+                else:
+                    # Fetch all attached curves
+                    curves_to_fetch = scenario.hourly_output_curves.attached_keys()
+
+                for curve_name in curves_to_fetch:
+                    df = scenario.output_curve(curve_name)
+                    if df is None or df.empty:
+                        continue
+
+                    if curve_name not in result:
+                        result[curve_name] = {}
+                    result[curve_name][scenario_key] = df
+
+                self.log_scenario_warnings(scenario, self.key, self.sheet_name)
+
+            except Exception as e:
+                logger.warning(
+                    "Failed building curves dict for scenario %s: %s",
+                    scenario.identifier(),
+                    e,
+                )
+                continue
+
+        return result
+
     def to_excel_per_carrier(
         self, path: str, carriers: Optional[Sequence[str]] = None
     ) -> None:
