@@ -15,6 +15,8 @@ from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.users_pack import UsersPack
 from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
+from pyetm.types import AnnualExportType, HourlyCurveType
+from pyetm.validators import validate_hourly_curve_names, validate_export_names
 
 if TYPE_CHECKING:
     from pyetm.models.scenario import Scenario
@@ -104,22 +106,27 @@ class ScenarioPacker(BaseModel):
         return self._custom_curves.to_dataframe()
 
     def hourly_output_curves(
-        self, curves: Optional[Sequence[str]] = None
+        self,
+        curves: Optional[HourlyCurveType | Sequence[HourlyCurveType]] = None,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
         Get hourly output curves for all scenarios, organized by curve name.
-
         Note:
             For concatenated DataFrame format, use: packer._hourly_output_curves.to_dataframe(curves)
         """
+        if curves is not None:
+            curves = validate_hourly_curve_names(curves)
         return self._hourly_output_curves.to_dict_per_curve(curves=curves)
 
     def annual_exports(
-        self, exports: Optional[Sequence[str]] = None
+        self,
+        exports: Optional[AnnualExportType | Sequence[AnnualExportType]] = None,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
         Get annual exports for all scenarios, organized by export type.
         """
+        if exports is not None:
+            exports = validate_export_names(exports)
         return self._annual_exports.to_dict_per_export(exports=exports)
 
     def couplings(self) -> pd.DataFrame:

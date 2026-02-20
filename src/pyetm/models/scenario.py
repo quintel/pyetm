@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient
+from pyetm.types import AnnualExportType, CarrierType
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
@@ -362,7 +363,9 @@ class Scenario(Base):
         """Yield all output curves from the underlying session."""
         return self.session.all_hourly_output_curves()
 
-    def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+    def get_hourly_output_curves(
+        self, carrier_type: CarrierType
+    ) -> dict[str, pd.DataFrame]:
         """Get output curves by carrier type from the underlying session."""
         return self.session.get_hourly_output_curves(carrier_type)
 
@@ -370,7 +373,9 @@ class Scenario(Base):
         """Get a single annual export by name from the underlying session."""
         return self.session.get_annual_export(export_name)
 
-    def get_annual_exports(self, export_names: list[str]) -> dict[str, pd.DataFrame]:
+    def get_annual_exports(
+        self, export_names: AnnualExportType | list[AnnualExportType]
+    ) -> dict[str, pd.DataFrame]:
         """Get multiple annual exports from the underlying session."""
         return self.session.get_annual_exports(export_names)
 

@@ -15,6 +15,8 @@ from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.models.export_config import ExportConfig
+from pyetm.types import AnnualExportType, CarrierType
+from pyetm.validators import validate_carrier_type, validate_export_names
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
@@ -616,7 +618,11 @@ class Session(Base):
         for key in self.hourly_output_curves.attached_keys():
             yield self.get_output_curve(key)
 
-    def get_hourly_output_curves(self, carrier_type: str) -> dict[str, pd.DataFrame]:
+    def get_hourly_output_curves(
+        self, carrier_type: CarrierType
+    ) -> dict[str, pd.DataFrame]:
+        """Get hourly output curves for a specific carrier type."""
+        validate_carrier_type(carrier_type)
         return self.hourly_output_curves.get_curves_by_carrier_type(self, carrier_type)
 
     @property
@@ -632,9 +638,14 @@ class Session(Base):
         """Get a single annual export by name."""
         return self.annual_exports.retrieve(BaseClient(), self, export_name)
 
-    def get_annual_exports(self, export_names: list[str]) -> dict[str, pd.DataFrame]:
+    def get_annual_exports(
+        self, export_names: AnnualExportType | list[AnnualExportType]
+    ) -> dict[str, pd.DataFrame]:
         """Get multiple annual exports by name."""
-        return self.annual_exports.retrieve_multiple(BaseClient(), self, export_names)
+        validated_names = validate_export_names(export_names)
+        return self.annual_exports.retrieve_multiple(
+            BaseClient(), self, validated_names
+        )
 
     def set_export_config(self, config: ExportConfig | None) -> None:
         self._export_config = config
