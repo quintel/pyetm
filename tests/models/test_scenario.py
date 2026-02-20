@@ -1390,3 +1390,62 @@ def test_interpolate_rejects_different_area_codes(dummy_scenario):
 
     with pytest.raises(ValueError, match="All sessions must have the same area_code"):
         Session.interpolate([scenario_nl, scenario_de], 2040)
+
+
+# ------ Validation tests ------ #
+
+
+def test_get_hourly_output_curves_invalid_carrier_type(scenario):
+    """Test that get_hourly_output_curves raises ValueError for invalid carrier type"""
+    with pytest.raises(ValueError) as exc_info:
+        scenario.get_hourly_output_curves("invalid_carrier")
+
+    assert "Invalid carrier type 'invalid_carrier'" in str(exc_info.value)
+    assert "electricity" in str(exc_info.value)
+    assert "heat" in str(exc_info.value)
+
+
+def test_get_annual_exports_invalid_export_name(scenario):
+    """Test that get_annual_exports raises ValueError for invalid export name"""
+    with pytest.raises(ValueError) as exc_info:
+        scenario.get_annual_exports("invalid_export")
+
+    assert "Invalid export names: ['invalid_export']" in str(exc_info.value)
+    assert "production_parameters" in str(exc_info.value)
+
+
+def test_get_annual_exports_mixed_valid_and_invalid(scenario):
+    """Test that get_annual_exports raises ValueError when some names are invalid"""
+    with pytest.raises(ValueError) as exc_info:
+        scenario.get_annual_exports(["energy_flow", "bad_export", "sankey"])
+
+    error_message = str(exc_info.value)
+    assert "Invalid export names" in error_message
+    assert "bad_export" in error_message
+
+
+def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, ok_service_result):
+    """Test that get_annual_exports auto-converts single string to list"""
+    # Mock the retrieve_multiple method to capture the arguments
+    calls = []
+
+    def mock_retrieve_multiple(client, session, export_names):
+        calls.append(export_names)
+        return {}
+
+    # Need to mock at the Session level since Scenario delegates to Session
+    original_method = Session.get_annual_exports
+
+    def mock_session_get_annual_exports(self, export_names):
+        from pyetm.validators import validate_export_names
+        validated_names = validate_export_names(export_names)
+        calls.append(validated_names)
+        return {}
+
+    monkeypatch.setattr(Session, "get_annual_exports", mock_session_get_annual_exports)
+
+    # Call with a single string
+    scenario.get_annual_exports("energy_flow")
+
+    # Verify it was converted to a list
+    assert calls[-1] == ["energy_flow"]

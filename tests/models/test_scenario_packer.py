@@ -1243,3 +1243,65 @@ class TestSessionColumnFeature:
                 # Should use SessionLoader for new scenario
                 assert mock_session_create.called
                 assert not mock_saved_create.called
+
+
+class TestPackerValidation:
+    """Test validation for packer curve and export methods"""
+
+    def test_hourly_output_curves_invalid_curve_name(self):
+        """Test that hourly_output_curves raises ValueError for invalid curve name"""
+        packer = ScenarioPacker()
+
+        with pytest.raises(ValueError) as exc_info:
+            packer.hourly_output_curves(curves="invalid_curve")
+
+        assert "Invalid curve names: ['invalid_curve']" in str(exc_info.value)
+        assert "merit_order" in str(exc_info.value)
+
+    def test_hourly_output_curves_mixed_valid_invalid(self):
+        """Test that hourly_output_curves raises ValueError for mixed valid/invalid"""
+        packer = ScenarioPacker()
+
+        with pytest.raises(ValueError) as exc_info:
+            packer.hourly_output_curves(curves=["merit_order", "bad_curve"])
+
+        error_message = str(exc_info.value)
+        assert "Invalid curve names" in error_message
+        assert "bad_curve" in error_message
+
+    def test_annual_exports_invalid_export_name(self):
+        """Test that annual_exports raises ValueError for invalid export name"""
+        packer = ScenarioPacker()
+
+        with pytest.raises(ValueError) as exc_info:
+            packer.annual_exports(exports="invalid_export")
+
+        assert "Invalid export names: ['invalid_export']" in str(exc_info.value)
+        assert "production_parameters" in str(exc_info.value)
+
+    def test_annual_exports_mixed_valid_invalid(self):
+        """Test that annual_exports raises ValueError for mixed valid/invalid"""
+        packer = ScenarioPacker()
+
+        with pytest.raises(ValueError) as exc_info:
+            packer.annual_exports(exports=["energy_flow", "bad_export"])
+
+        error_message = str(exc_info.value)
+        assert "Invalid export names" in error_message
+        assert "bad_export" in error_message
+
+    def test_hourly_output_curves_valid_list(self):
+        """Test that valid curve lists work without errors"""
+        packer = ScenarioPacker()
+
+        # Should not raise - just verify it doesn't error
+        result = packer.hourly_output_curves(curves=["merit_order", "electricity_price"])
+        assert isinstance(result, dict)
+
+    def test_annual_exports_valid_list(self):
+        """Test that valid export lists work without errors"""
+        packer = ScenarioPacker()
+
+        # Should not raise - just verify it doesn't error
+        result = packer.annual_exports(exports=["energy_flow", "sankey"])
+        assert isinstance(result, dict)
