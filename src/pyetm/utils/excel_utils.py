@@ -384,8 +384,11 @@ def add_frame(
                 is_grey = scenario_idx % 2 == 1
                 data_format = formats["grey_data"] if is_grey else formats["white_data"]
 
+                # Convert list values (e.g. curve results) to string representation
+                write_value = str(value) if isinstance(value, list) else value
+
                 worksheet.write(
-                    row_num + row_offset, col_num + col_offset, value, data_format
+                    row_num + row_offset, col_num + col_offset, write_value, data_format
                 )
 
     else:
@@ -407,7 +410,11 @@ def add_frame(
             # Write data without styling
             for row_num, row_data in enumerate(frame.values):
                 for col_num, value in enumerate(row_data):
-                    worksheet.write(row_num + row_offset, col_num + col_offset, value)
+                    # Convert list values (e.g., curve results) to string representation
+                    write_value = str(value) if isinstance(value, list) else value
+                    worksheet.write(
+                        row_num + row_offset, col_num + col_offset, write_value
+                    )
         else:
             # Single-level columns
             if scenario_styling:
@@ -428,10 +435,12 @@ def add_frame(
                         data_format = (
                             formats["grey_data"] if is_grey else formats["white_data"]
                         )
+                        # Convert list values (e.g., curve results) to string representation
+                        write_value = str(value) if isinstance(value, list) else value
                         worksheet.write(
                             row_num + row_offset,
                             col_num + col_offset,
-                            value,
+                            write_value,
                             data_format,
                         )
             else:
@@ -443,8 +452,10 @@ def add_frame(
 
                 for row_num, row_data in enumerate(frame.values):
                     for col_num, value in enumerate(row_data):
+                        # Convert list values (e.g., curve results) to string representation
+                        write_value = str(value) if isinstance(value, list) else value
                         worksheet.write(
-                            row_num + row_offset, col_num + col_offset, value
+                            row_num + row_offset, col_num + col_offset, write_value
                         )
 
     # Set column widths

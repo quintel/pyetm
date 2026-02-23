@@ -903,6 +903,54 @@ class TestIntegration:
         assert worksheet is not None
         workbook.close()
 
+    def test_dataframe_with_list_values(self):
+        """Test DataFrame with list values (e.g., curve results from gqueries)"""
+        # Simulate curve results
+        curve_data = [1.5, 2.5, 3.5] * 2920  # 8760 values
+        df = pd.DataFrame(
+            {
+                "scalar_value": [20.5, 30.2, 40.1],
+                "curve_value": [curve_data, [0.0] * 8760, [1.0, 2.0, 3.0]],
+                "another_scalar": [100, 200, 300],
+            }
+        )
+
+        file_path = os.path.join(self.temp_dir, "list_values.xlsx")
+        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
+
+        # Should not raise TypeError - lists should be converted to strings
+        worksheet = add_frame("ListValues", df, workbook)
+
+        assert worksheet is not None
+        workbook.close()
+
+        # Verify file was created successfully
+        assert os.path.exists(file_path)
+        assert os.path.getsize(file_path) > 0
+
+    def test_dataframe_with_list_values_scenario_styling(self):
+        """Test DataFrame with list values and scenario styling enabled"""
+        curve_data = list(range(100))  # Shorter for test
+        columns = pd.MultiIndex.from_tuples(
+            [
+                ("Scenario1", "scalar"),
+                ("Scenario1", "curve"),
+                ("Scenario2", "scalar"),
+                ("Scenario2", "curve"),
+            ]
+        )
+        df = pd.DataFrame(
+            [[10.5, curve_data, 20.5, [0.0] * 100]], columns=columns, index=["row1"]
+        )
+
+        file_path = os.path.join(self.temp_dir, "list_values_scenario.xlsx")
+        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
+
+        worksheet = add_frame("ListScenario", df, workbook, scenario_styling=True)
+
+        assert worksheet is not None
+        workbook.close()
+
     def test_very_large_precision_values(self):
         """Test with very large numbers and high precision"""
         df = pd.DataFrame(

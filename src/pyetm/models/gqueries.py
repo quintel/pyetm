@@ -2,6 +2,8 @@
 Wraps a dict of queries and answers
 """
 
+from typing import Any
+
 import pandas as pd
 
 from pyetm.models.base import Base
@@ -14,7 +16,7 @@ class Gqueries(Base):
     gquery endpoint
     """
 
-    query_dict: dict
+    query_dict: dict[str, Any]
 
     def query_keys(self) -> list[str]:
         return list(self.query_dict.keys())
@@ -24,11 +26,16 @@ class Gqueries(Base):
 
     def update(self, json):
         """
-        Updates the values with a JSON response from the API
+        Updates the values with a JSON response from the API.
         """
-        self.query_dict.update(json)
+        processed_json = {}
 
-    def get(self, key):
+        for key, value in json.items():
+            processed_json[key] = value
+
+        self.query_dict.update(processed_json)
+
+    def get(self, key) -> Any:
         """
         Returns the query value if set, otherwise returns None
         """
