@@ -125,6 +125,20 @@ class Scenario(Base):
         return saved_scenario
 
     @staticmethod
+    def _apply_submodel(
+        scenario: "Scenario",
+        data: Any,
+        runner_class: type,
+        warning_key: str,
+        client: BaseClient,
+    ) -> None:
+        """Apply a single data type to scenario with error handling."""
+        try:
+            runner_class.run(client, scenario.session.id, data)
+        except Exception as e:
+            scenario.add_warning(warning_key, f"Failed to apply {warning_key}: {e}")
+
+    @staticmethod
     def _apply_data_to_scenario(
         scenario: "Scenario",
         inputs: Optional[Dict[str, Any]],
@@ -150,30 +164,17 @@ class Scenario(Base):
             UpdateSortablesRunner,
         )
 
-        # Apply inputs
-        if inputs:
-            try:
-                UpdateInputsRunner.run(client, scenario.session.id, inputs)
-            except Exception as e:
-                scenario.add_warning("inputs", f"Failed to apply inputs: {e}")
+        submodels = [
+            (inputs, UpdateInputsRunner, "inputs"),
+            (custom_curves, UpdateCustomCurvesRunner, "custom_curves"),
+            (sortables, UpdateSortablesRunner, "sortables"),
+        ]
 
-        # Apply custom curves
-        if custom_curves:
-            try:
-                UpdateCustomCurvesRunner.run(
-                    client, scenario.session.id, custom_curves
+        for data, runner_class, warning_key in submodels:
+            if data:
+                Scenario._apply_submodel(
+                    scenario, data, runner_class, warning_key, client
                 )
-            except Exception as e:
-                scenario.add_warning(
-                    "custom_curves", f"Failed to apply custom curves: {e}"
-                )
-
-        # Apply sortables
-        if sortables:
-            try:
-                UpdateSortablesRunner.run(client, scenario.session.id, sortables)
-            except Exception as e:
-                scenario.add_warning("sortables", f"Failed to apply sortables: {e}")
 
     @classmethod
     def from_scenario(

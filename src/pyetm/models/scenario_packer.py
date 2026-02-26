@@ -109,6 +109,31 @@ class ScenarioPacker(BaseModel):
             return self._custom_curves.to_dict_per_curve(curves=curves)
         return self._custom_curves.to_dataframe()
 
+    @staticmethod
+    def _validate_curve_params(
+        curves: Optional[Sequence[str]], carrier_type: Optional[CarrierType]
+    ) -> None:
+        """Validate curve parameters are mutually exclusive and at least one is provided."""
+        if curves is not None and carrier_type is not None:
+            raise ValueError("Specify either 'curves' or 'carrier_type', not both")
+        if curves is None and carrier_type is None:
+            raise ValueError("Must specify either 'curves' or 'carrier_type'")
+
+    @staticmethod
+    def _resolve_curve_names(
+        curves: Optional[Sequence[str]], carrier_type: Optional[CarrierType]
+    ) -> List[str]:
+        """Resolve curve names from curves parameter or carrier type mapping."""
+        if carrier_type is not None:
+            validate_carrier_type(carrier_type)
+            from pyetm.models.hourly_output_curves import HourlyOutputCurves
+
+            carrier_mappings = HourlyOutputCurves._load_carrier_mappings()
+            return carrier_mappings.get(carrier_type, [])
+        else:
+            validate_hourly_curve_names(curves)
+            return list(curves)
+
     def hourly_output_curves(
         self,
         curves: Optional[Sequence[str]] = None,
@@ -128,23 +153,9 @@ class ScenarioPacker(BaseModel):
         Note:
             For concatenated DataFrame format, use: packer._hourly_output_curves.to_dataframe(curves)
         """
-        if curves is not None and carrier_type is not None:
-            raise ValueError("Specify either 'curves' or 'carrier_type', not both")
-
-        if curves is None and carrier_type is None:
-            raise ValueError("Must specify either 'curves' or 'carrier_type'")
-
-        if carrier_type is not None:
-            validate_carrier_type(carrier_type)
-            from pyetm.models.hourly_output_curves import HourlyOutputCurves
-
-            carrier_mappings = HourlyOutputCurves._load_carrier_mappings()
-            curve_names = carrier_mappings.get(carrier_type, [])
-            return self._hourly_output_curves.to_dict_per_curve(curves=curve_names)
-        else:
-            # curves is not None
-            validate_hourly_curve_names(curves)
-            return self._hourly_output_curves.to_dict_per_curve(curves=list(curves))
+        self._validate_curve_params(curves, carrier_type)
+        curve_names = self._resolve_curve_names(curves, carrier_type)
+        return self._hourly_output_curves.to_dict_per_curve(curves=curve_names)
 
     def annual_exports(
         self,
