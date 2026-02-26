@@ -15,8 +15,12 @@ from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.users_pack import UsersPack
 from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
-from pyetm.types import AnnualExportType, HourlyCurveType
-from pyetm.validators import validate_hourly_curve_names, validate_export_names
+from pyetm.types import AnnualExportType, HourlyCurveType, CarrierType
+from pyetm.validators import (
+    validate_hourly_curve_names,
+    validate_export_names,
+    validate_carrier_type,
+)
 
 if TYPE_CHECKING:
     from pyetm.models.scenario import Scenario
@@ -107,16 +111,40 @@ class ScenarioPacker(BaseModel):
 
     def hourly_output_curves(
         self,
-        curves: Optional[HourlyCurveType | Sequence[HourlyCurveType]] = None,
+        curves: Optional[Sequence[str]] = None,
+        carrier_type: Optional[CarrierType] = None,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
         Get hourly output curves for all scenarios, organized by curve name.
+
+        Args:
+            curves: Specific curve names to retrieve. If provided, carrier_type is ignored.
+            carrier_type: Carrier type to get all associated curves for.
+                         One of: "electricity", "heat", "hydrogen", "methane"
+
+        Returns:
+            Dict mapping curve names to dicts of {scenario_title: DataFrame}
+
         Note:
             For concatenated DataFrame format, use: packer._hourly_output_curves.to_dataframe(curves)
         """
-        if curves is not None:
-            curves = validate_hourly_curve_names(curves)
-        return self._hourly_output_curves.to_dict_per_curve(curves=curves)
+        if curves is not None and carrier_type is not None:
+            raise ValueError("Specify either 'curves' or 'carrier_type', not both")
+
+        if curves is None and carrier_type is None:
+            raise ValueError("Must specify either 'curves' or 'carrier_type'")
+
+        if carrier_type is not None:
+            validate_carrier_type(carrier_type)
+            from pyetm.models.hourly_output_curves import HourlyOutputCurves
+
+            carrier_mappings = HourlyOutputCurves._load_carrier_mappings()
+            curve_names = carrier_mappings.get(carrier_type, [])
+            return self._hourly_output_curves.to_dict_per_curve(curves=curve_names)
+        else:
+            # curves is not None
+            validate_hourly_curve_names(curves)
+            return self._hourly_output_curves.to_dict_per_curve(curves=list(curves))
 
     def annual_exports(
         self,

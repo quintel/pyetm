@@ -273,3 +273,135 @@ def test_update_custom_curves_empty_curves_list():
         call_client, reqs = mock_batch.call_args[0]
         assert call_client == mock_client
         assert reqs == []
+
+
+def test_build_requests_with_series():
+    """Test build_requests() with pandas Series"""
+    mock_scenario = Mock()
+    mock_scenario.id = 100
+
+    series_data = pd.Series(np.random.uniform(0, 100, 8760))
+    custom_curves = {"solar_pv": series_data}
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert len(requests) == 1
+    assert requests[0]["method"] == "put"
+    assert requests[0]["path"] == "/scenarios/100/custom_curves/solar_pv"
+    assert requests[0]["payload"] is None
+    assert "files" in requests[0]["kwargs"]
+    assert requests[0]["kwargs"]["headers"]["Content-Type"] is None
+    # Check file tuple structure
+    file_tuple = requests[0]["kwargs"]["files"]["file"]
+    assert file_tuple[0] == "solar_pv.csv"
+    assert isinstance(file_tuple[1], str)  # CSV content
+    assert file_tuple[2] == "application/octet-stream"
+
+
+def test_build_requests_with_dataframe():
+    """Test build_requests() with pandas DataFrame"""
+    mock_scenario = Mock()
+    mock_scenario.id = 200
+
+    df_data = pd.DataFrame({"values": np.random.uniform(0, 100, 8760)})
+    custom_curves = {"wind_offshore": df_data}
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert len(requests) == 1
+    assert requests[0]["method"] == "put"
+    assert requests[0]["path"] == "/scenarios/200/custom_curves/wind_offshore"
+    assert "files" in requests[0]["kwargs"]
+
+
+def test_build_requests_with_list():
+    """Test build_requests() with list of values"""
+    mock_scenario = Mock()
+    mock_scenario.id = 300
+
+    list_data = list(range(8760))
+    custom_curves = {"electricity_demand": list_data}
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert len(requests) == 1
+    assert requests[0]["method"] == "put"
+    assert requests[0]["path"] == "/scenarios/300/custom_curves/electricity_demand"
+    assert "files" in requests[0]["kwargs"]
+    # Content should be newline-separated values
+    file_content = requests[0]["kwargs"]["files"]["file"][1]
+    lines = file_content.strip().split("\n")
+    assert len(lines) == 8760
+
+
+def test_build_requests_with_file_path(temp_curve_files):
+    """Test build_requests() with file path"""
+    mock_scenario = Mock()
+    mock_scenario.id = 400
+
+    custom_curves = {"heat_demand": str(temp_curve_files["valid"])}
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert len(requests) == 1
+    assert requests[0]["method"] == "put"
+    assert requests[0]["path"] == "/scenarios/400/custom_curves/heat_demand"
+    assert "files" in requests[0]["kwargs"]
+    # Content should be read from file
+    file_content = requests[0]["kwargs"]["files"]["file"][1]
+    assert isinstance(file_content, str)
+    assert len(file_content) > 0
+
+
+def test_build_requests_with_string_content():
+    """Test build_requests() with direct string content (non-file path)"""
+    mock_scenario = Mock()
+    mock_scenario.id = 500
+
+    # Use a string that won't be mistaken for a file path
+    string_data = "\n".join(str(i) for i in range(100))  # Short list that won't be a path
+    custom_curves = {"custom_profile": string_data}
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert len(requests) == 1
+    assert requests[0]["path"] == "/scenarios/500/custom_curves/custom_profile"
+    # String content should be used directly when file doesn't exist
+    assert string_data in requests[0]["kwargs"]["files"]["file"][1]
+
+
+def test_build_requests_multiple_curves(temp_curve_files):
+    """Test build_requests() with multiple curves"""
+    mock_scenario = Mock()
+    mock_scenario.id = 600
+
+    custom_curves = {
+        "solar_pv": pd.Series(np.random.uniform(0, 100, 8760)),
+        "wind_offshore": list(range(8760)),
+        "heat_demand": str(temp_curve_files["valid"]),
+    }
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert len(requests) == 3
+    paths = [req["path"] for req in requests]
+    assert "/scenarios/600/custom_curves/solar_pv" in paths
+    assert "/scenarios/600/custom_curves/wind_offshore" in paths
+    assert "/scenarios/600/custom_curves/heat_demand" in paths
+    # All should have correct structure
+    for req in requests:
+        assert req["method"] == "put"
+        assert "files" in req["kwargs"]
+        assert req["kwargs"]["headers"]["Content-Type"] is None
+
+
+def test_build_requests_empty_dict():
+    """Test build_requests() with empty custom_curves dict"""
+    mock_scenario = Mock()
+    mock_scenario.id = 700
+
+    custom_curves = {}
+
+    requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
+
+    assert requests == []

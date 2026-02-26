@@ -329,3 +329,195 @@ class TestMixedScenariosSeparation:
         assert len(sessions_result.items) == 1
         assert session1 in sessions_result.items
         assert saved1 not in sessions_result.items
+
+
+class TestScenariosGetMethods:
+    """Test Scenarios convenience methods for accessing packer data."""
+
+    def test_get_hourly_output_curves_delegates_to_packer(self):
+        """Test that get_hourly_output_curves delegates to the packer."""
+        # Create mock scenarios
+        scenario1 = Mock(spec=Scenario)
+        scenario1.id = 1
+        scenario1.identifier.return_value = "scenario_1"
+        scenario1.get_hourly_output_curves.return_value = {}
+
+        scenario2 = Mock(spec=Scenario)
+        scenario2.id = 2
+        scenario2.identifier.return_value = "scenario_2"
+        scenario2.get_hourly_output_curves.return_value = {}
+
+        collection = Scenarios(items=[scenario1, scenario2])
+
+        # Mock the packer
+        mock_packer = Mock(spec=ScenarioPacker)
+        expected_result = {
+            "merit_order": {
+                "Scenario 1": pd.DataFrame(),
+                "Scenario 2": pd.DataFrame(),
+            }
+        }
+        mock_packer.hourly_output_curves.return_value = expected_result
+        collection._packer = mock_packer
+
+        # Call the method
+        result = collection.get_hourly_output_curves("electricity")
+
+        # Verify fetch was called on scenarios
+        scenario1.get_hourly_output_curves.assert_called_once_with("electricity")
+        scenario2.get_hourly_output_curves.assert_called_once_with("electricity")
+
+        # Verify delegation to packer
+        mock_packer.hourly_output_curves.assert_called_once_with("electricity")
+        assert result == expected_result
+
+    def test_get_hourly_output_curves_with_filter(self):
+        """Test that get_hourly_output_curves passes carrier type to packer."""
+        scenario1 = Mock(spec=Scenario)
+        scenario1.id = 1
+
+        collection = Scenarios(items=[scenario1])
+
+        # Mock the packer
+        mock_packer = Mock(spec=ScenarioPacker)
+        expected_result = {
+            "merit_order": {
+                "Scenario 1": pd.DataFrame(),
+            },
+            "electricity_price": {
+                "Scenario 1": pd.DataFrame(),
+            },
+            "residual_load": {
+                "Scenario 1": pd.DataFrame(),
+            }
+        }
+        mock_packer.hourly_output_curves.return_value = expected_result
+        collection._packer = mock_packer
+
+        # Call with carrier type
+        result = collection.get_hourly_output_curves("electricity")
+
+        # Verify carrier type was passed
+        mock_packer.hourly_output_curves.assert_called_once_with("electricity")
+        assert result == expected_result
+
+    def test_get_hourly_output_curves_triggers_fetch(self):
+        """Test that get_hourly_output_curves triggers fetch on each scenario if not cached."""
+        # Create mock scenarios
+        scenario1 = Mock(spec=Scenario)
+        scenario1.id = 1
+        scenario1.identifier.return_value = "scenario_1"
+        scenario1.get_hourly_output_curves.return_value = {
+            'merit_order': pd.DataFrame({'hour': [0, 1], 'value': [100, 200]}),
+            'electricity_price': pd.DataFrame({'hour': [0, 1], 'price': [0.12, 0.13]}),
+            'residual_load': pd.DataFrame({'hour': [0, 1], 'load': [500, 600]})
+        }
+
+        scenario2 = Mock(spec=Scenario)
+        scenario2.id = 2
+        scenario2.identifier.return_value = "scenario_2"
+        scenario2.get_hourly_output_curves.return_value = {
+            'merit_order': pd.DataFrame({'hour': [0, 1], 'value': [150, 250]}),
+            'electricity_price': pd.DataFrame({'hour': [0, 1], 'price': [0.14, 0.15]}),
+            'residual_load': pd.DataFrame({'hour': [0, 1], 'load': [550, 650]})
+        }
+
+        collection = Scenarios(items=[scenario1, scenario2])
+
+        # Mock the packer to return organized data
+        mock_packer = Mock(spec=ScenarioPacker)
+        mock_packer.hourly_output_curves.return_value = {
+            "merit_order": {
+                "scenario_1": pd.DataFrame(),
+                "scenario_2": pd.DataFrame(),
+            }
+        }
+        collection._packer = mock_packer
+
+        # Call get_hourly_output_curves
+        result = collection.get_hourly_output_curves("electricity")
+
+        # Verify it triggered fetch on each individual scenario
+        scenario1.get_hourly_output_curves.assert_called_once_with("electricity")
+        scenario2.get_hourly_output_curves.assert_called_once_with("electricity")
+
+        # Verify packer was called
+        mock_packer.hourly_output_curves.assert_called_once_with("electricity")
+
+        # Verify result structure
+        assert isinstance(result, dict)
+
+    def test_get_annual_exports_delegates_to_packer(self):
+        """Test that get_annual_exports delegates to the packer."""
+        # Create mock scenarios
+        scenario1 = Mock(spec=Scenario)
+        scenario1.id = 1
+        scenario2 = Mock(spec=Scenario)
+        scenario2.id = 2
+
+        collection = Scenarios(items=[scenario1, scenario2])
+
+        # Mock the packer
+        mock_packer = Mock(spec=ScenarioPacker)
+        expected_result = {
+            "total_co2_emissions": {
+                "Scenario 1": pd.DataFrame(),
+                "Scenario 2": pd.DataFrame(),
+            }
+        }
+        mock_packer.annual_exports.return_value = expected_result
+        collection._packer = mock_packer
+
+        # Call the method
+        result = collection.get_annual_exports()
+
+        # Verify delegation
+        mock_packer.annual_exports.assert_called_once_with(None)
+        assert result == expected_result
+
+    def test_get_annual_exports_with_filter(self):
+        """Test that get_annual_exports passes export filter to packer."""
+        scenario1 = Mock(spec=Scenario)
+        scenario1.id = 1
+
+        collection = Scenarios(items=[scenario1])
+
+        # Mock the packer
+        mock_packer = Mock(spec=ScenarioPacker)
+        expected_result = {
+            "total_co2_emissions": {
+                "Scenario 1": pd.DataFrame(),
+            }
+        }
+        mock_packer.annual_exports.return_value = expected_result
+        collection._packer = mock_packer
+
+        # Call with specific export
+        result = collection.get_annual_exports("total_co2_emissions")
+
+        # Verify filter was passed
+        mock_packer.annual_exports.assert_called_once_with("total_co2_emissions")
+        assert result == expected_result
+
+    def test_get_methods_work_through_combine_property(self):
+        """Test that methods work even when packer is created via combine property."""
+        scenario1 = Mock(spec=Scenario)
+        scenario1.id = 1
+        scenario1.identifier.return_value = "scenario_1"
+        scenario1.get_hourly_output_curves.return_value = {}
+
+        collection = Scenarios(items=[scenario1])
+
+        # Don't pre-create packer - let combine property create it
+        with patch.object(ScenarioPacker, "hourly_output_curves") as mock_curves:
+            expected = {"merit_order": {"Scenario 1": pd.DataFrame()}}
+            mock_curves.return_value = expected
+
+            # This should work even though _packer is None
+            with patch.object(ScenarioPacker, "add"):
+                result = collection.get_hourly_output_curves("electricity")
+
+            # Packer should have been created and method called
+            assert collection._packer is not None
+            # Verify fetch was triggered
+            scenario1.get_hourly_output_curves.assert_called_once_with("electricity")

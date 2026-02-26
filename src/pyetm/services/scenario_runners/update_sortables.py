@@ -21,6 +21,33 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
     """
 
     @staticmethod
+    def build_request(
+        scenario: Any, sortable_type: str, order: List[Any], subtype: str = None
+    ) -> Dict[str, Any]:
+        """
+        Build sortables update request for concurrent batching.
+
+        Args:
+            scenario: The scenario object (must have an 'id' attribute)
+            sortable_type: The type of sortable
+            order: The new order for the sortable
+            subtype: Optional subtype for heat_network
+
+        Returns:
+            Request dict ready for AsyncBatchRunner
+        """
+        path = f"/scenarios/{scenario.id}/user_sortables/{sortable_type}"
+        if subtype:
+            path += f"?subtype={subtype}"
+
+        return {
+            "method": "put",
+            "path": path,
+            "payload": {"order": order},
+            "kwargs": {}
+        }
+
+    @staticmethod
     def run(
         client: BaseClient,
         scenario: Any,

@@ -396,9 +396,10 @@ class TestDataExtractionMethods:
     def test_hourly_output_curves_empty(self):
         """Test output_curves with no scenarios"""
         packer = ScenarioPacker()
-        result = packer.hourly_output_curves()
+        result = packer.hourly_output_curves(carrier_type="electricity")
 
         assert isinstance(result, dict)
+        assert result == {}  # Should be empty dict when no scenarios
 
 
 class TestExcelExport:
@@ -1248,26 +1249,23 @@ class TestSessionColumnFeature:
 class TestPackerValidation:
     """Test validation for packer curve and export methods"""
 
-    def test_hourly_output_curves_invalid_curve_name(self):
-        """Test that hourly_output_curves raises ValueError for invalid curve name"""
+    def test_hourly_output_curves_invalid_carrier_type(self):
+        """Test that hourly_output_curves raises ValueError for invalid carrier type"""
         packer = ScenarioPacker()
 
         with pytest.raises(ValueError) as exc_info:
-            packer.hourly_output_curves(curves="invalid_curve")
+            packer.hourly_output_curves(carrier_type="invalid_carrier")
 
-        assert "Invalid curve names: ['invalid_curve']" in str(exc_info.value)
-        assert "merit_order" in str(exc_info.value)
+        assert "Invalid carrier type" in str(exc_info.value)
+        assert "electricity" in str(exc_info.value)
 
-    def test_hourly_output_curves_mixed_valid_invalid(self):
-        """Test that hourly_output_curves raises ValueError for mixed valid/invalid"""
+    def test_hourly_output_curves_valid_carrier_type(self):
+        """Test that valid carrier types work without errors"""
         packer = ScenarioPacker()
 
-        with pytest.raises(ValueError) as exc_info:
-            packer.hourly_output_curves(curves=["merit_order", "bad_curve"])
-
-        error_message = str(exc_info.value)
-        assert "Invalid curve names" in error_message
-        assert "bad_curve" in error_message
+        # Should not raise - just verify it doesn't error
+        result = packer.hourly_output_curves(carrier_type="electricity")
+        assert isinstance(result, dict)
 
     def test_annual_exports_invalid_export_name(self):
         """Test that annual_exports raises ValueError for invalid export name"""
@@ -1290,13 +1288,6 @@ class TestPackerValidation:
         assert "Invalid export names" in error_message
         assert "bad_export" in error_message
 
-    def test_hourly_output_curves_valid_list(self):
-        """Test that valid curve lists work without errors"""
-        packer = ScenarioPacker()
-
-        # Should not raise - just verify it doesn't error
-        result = packer.hourly_output_curves(curves=["merit_order", "electricity_price"])
-        assert isinstance(result, dict)
 
     def test_annual_exports_valid_list(self):
         """Test that valid export lists work without errors"""

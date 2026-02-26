@@ -443,3 +443,100 @@ def test_update_sortables_complex_order_data(
     assert client.calls == [
         ("/scenarios/23/user_sortables/demand", {"json": {"order": order}})
     ]
+
+
+def test_build_request(dummy_scenario):
+    """Test build_request() method returns correct structure for batching"""
+    scenario = dummy_scenario(100)
+    order = ["item_1", "item_2", "item_3"]
+
+    request = UpdateSortablesRunner.build_request(scenario, "demand", order)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/100/user_sortables/demand"
+    assert request["payload"] == {"order": order}
+    assert request["kwargs"] == {}
+
+
+def test_build_request_with_subtype(dummy_scenario):
+    """Test build_request() with subtype parameter"""
+    scenario = dummy_scenario(200)
+    order = ["heat_item_1", "heat_item_2"]
+
+    request = UpdateSortablesRunner.build_request(
+        scenario, "heat_network", order, subtype="lt"
+    )
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/200/user_sortables/heat_network?subtype=lt"
+    assert request["payload"] == {"order": order}
+    assert request["kwargs"] == {}
+
+
+def test_build_request_with_subtype_none(dummy_scenario):
+    """Test build_request() with subtype explicitly None"""
+    scenario = dummy_scenario(300)
+    order = ["item_1", "item_2"]
+
+    request = UpdateSortablesRunner.build_request(
+        scenario, "demand", order, subtype=None
+    )
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/300/user_sortables/demand"
+    assert request["payload"] == {"order": order}
+
+
+def test_build_request_empty_order(dummy_scenario):
+    """Test build_request() with empty order list"""
+    scenario = dummy_scenario(400)
+    order = []
+
+    request = UpdateSortablesRunner.build_request(scenario, "supply", order)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/400/user_sortables/supply"
+    assert request["payload"] == {"order": []}
+
+
+def test_build_request_numeric_order(dummy_scenario):
+    """Test build_request() with numeric items in order"""
+    scenario = dummy_scenario(500)
+    order = [1, 2, 3, 4]
+
+    request = UpdateSortablesRunner.build_request(scenario, "demand", order)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/500/user_sortables/demand"
+    assert request["payload"] == {"order": [1, 2, 3, 4]}
+
+
+def test_build_request_different_sortable_types(dummy_scenario):
+    """Test build_request() with various sortable types"""
+    scenario = dummy_scenario(600)
+    order = ["item_1", "item_2"]
+
+    sortable_types = ["demand", "supply", "heat_network", "storage", "conversion"]
+
+    for sortable_type in sortable_types:
+        request = UpdateSortablesRunner.build_request(scenario, sortable_type, order)
+        assert request["path"] == f"/scenarios/600/user_sortables/{sortable_type}"
+        assert request["payload"] == {"order": order}
+
+
+def test_build_request_heat_network_subtypes(dummy_scenario):
+    """Test build_request() with all heat network subtypes"""
+    scenario = dummy_scenario(700)
+    order = ["source_1", "source_2"]
+
+    subtypes = ["lt", "mt", "ht"]
+
+    for subtype in subtypes:
+        request = UpdateSortablesRunner.build_request(
+            scenario, "heat_network", order, subtype=subtype
+        )
+        assert (
+            request["path"]
+            == f"/scenarios/700/user_sortables/heat_network?subtype={subtype}"
+        )
+        assert request["payload"] == {"order": order}

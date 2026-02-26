@@ -18,6 +18,25 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
     """
 
     @staticmethod
+    def build_request(scenario: Any, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Build input update request for concurrent batching.
+
+        Args:
+            scenario: The scenario object (must have an 'id' attribute)
+            inputs: Dictionary of input updates to apply
+
+        Returns:
+            Request dict ready for AsyncBatchRunner
+        """
+        return {
+            "method": "put",
+            "path": f"/scenarios/{scenario.id}",
+            "payload": {"scenario": {"user_values": inputs}},
+            "kwargs": {}
+        }
+
+    @staticmethod
     def run(
         client: BaseClient, scenario: Any, inputs: Dict[str, Any], **kwargs
     ) -> ServiceResult[Dict[str, Any]]:
