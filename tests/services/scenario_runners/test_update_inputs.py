@@ -171,3 +171,58 @@ def test_update_inputs_numeric_scenario_id(dummy_client, fake_response, dummy_sc
     result = UpdateInputsRunner.run(client, scenario, inputs)
     assert result.success is True
     assert client.calls[0][0] == "/scenarios/12345"
+
+
+def test_build_request(dummy_scenario):
+    """Test build_request() method returns correct structure for batching"""
+    scenario = dummy_scenario(100)
+    inputs = {"input_1": 42.5, "input_2": 100.0}
+
+    request = UpdateInputsRunner.build_request(scenario, inputs)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/100"
+    assert request["payload"] == {"scenario": {"user_values": inputs}}
+    assert request["kwargs"] == {}
+
+
+def test_build_request_single_input(dummy_scenario):
+    """Test build_request() with single input"""
+    scenario = dummy_scenario(200)
+    inputs = {"co_firing_biocoal_share": 80}
+
+    request = UpdateInputsRunner.build_request(scenario, inputs)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/200"
+    assert request["payload"] == {"scenario": {"user_values": {"co_firing_biocoal_share": 80}}}
+
+
+def test_build_request_empty_inputs(dummy_scenario):
+    """Test build_request() with empty inputs dict"""
+    scenario = dummy_scenario(300)
+    inputs = {}
+
+    request = UpdateInputsRunner.build_request(scenario, inputs)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/300"
+    assert request["payload"] == {"scenario": {"user_values": {}}}
+
+
+def test_build_request_multiple_inputs(dummy_scenario):
+    """Test build_request() with many inputs"""
+    scenario = dummy_scenario(400)
+    inputs = {
+        "capacity_of_solar_pv": 5000,
+        "capacity_of_wind": 3000,
+        "households_number_of_inhabitants": 2500000,
+        "transport_car_using_electricity_share": 50,
+    }
+
+    request = UpdateInputsRunner.build_request(scenario, inputs)
+
+    assert request["method"] == "put"
+    assert request["path"] == "/scenarios/400"
+    assert request["payload"]["scenario"]["user_values"] == inputs
+    assert len(request["payload"]["scenario"]["user_values"]) == 4

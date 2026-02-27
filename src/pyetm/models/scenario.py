@@ -74,7 +74,12 @@ class Scenario(Base):
 
     @classmethod
     def create(
-        cls, params: Dict[str, Any], client: Optional[BaseClient] = None
+        cls,
+        params: Dict[str, Any],
+        client: Optional[BaseClient] = None,
+        user_values: Optional[Dict[str, Any]] = None,
+        custom_curves: Optional[Dict[str, Any]] = None,
+        sortables: Optional[Dict[str, Any]] = None,
     ) -> "Scenario":
         """
         Create a new SavedScenario in MyETM from an existing session scenario.
@@ -83,6 +88,9 @@ class Scenario(Base):
             params: Dictionary with required keys (scenario_id, title) and optional keys
                    (private)
             client: Optional BaseClient instance
+            user_values: Optional dict of user input values to apply after creation
+            custom_curves: Optional dict of custom curves to upload after creation
+            sortables: Optional dict of sortables to apply after creation
 
         Returns:
             SavedScenario instance
@@ -108,7 +116,65 @@ class Scenario(Base):
             if hasattr(saved_scenario, field) and field not in result.data:
                 setattr(saved_scenario, field, value)
 
+        # Apply data parameters if provided
+        if user_values or custom_curves or sortables:
+            cls._apply_data_to_scenario(
+                saved_scenario, user_values, custom_curves, sortables, client
+            )
+
         return saved_scenario
+
+    @staticmethod
+    def _apply_submodel(
+        scenario: "Scenario",
+        data: Any,
+        runner_class: type,
+        warning_key: str,
+        client: BaseClient,
+    ) -> None:
+        """Apply a single data type to scenario with error handling."""
+        try:
+            runner_class.run(client, scenario.session.id, data)
+        except Exception as e:
+            scenario.add_warning(warning_key, f"Failed to apply {warning_key}: {e}")
+
+    @staticmethod
+    def _apply_data_to_scenario(
+        scenario: "Scenario",
+        user_values: Optional[Dict[str, Any]],
+        custom_curves: Optional[Dict[str, Any]],
+        sortables: Optional[Dict[str, Any]],
+        client: BaseClient,
+    ) -> None:
+        """
+        Apply user_values, custom curves, and sortables to a scenario.
+
+        Args:
+            scenario: The scenario to apply data to
+            user_values: Optional dict of user input values
+            custom_curves: Optional dict of custom curves
+            sortables: Optional dict of sortables
+            client: BaseClient instance for API calls
+        """
+        from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+        from pyetm.services.scenario_runners.update_custom_curves import (
+            UpdateCustomCurvesRunner,
+        )
+        from pyetm.services.scenario_runners.update_sortables import (
+            UpdateSortablesRunner,
+        )
+
+        submodels = [
+            (user_values, UpdateInputsRunner, "user_values"),
+            (custom_curves, UpdateCustomCurvesRunner, "custom_curves"),
+            (sortables, UpdateSortablesRunner, "sortables"),
+        ]
+
+        for data, runner_class, warning_key in submodels:
+            if data:
+                Scenario._apply_submodel(
+                    scenario, data, runner_class, warning_key, client
+                )
 
     @classmethod
     def from_scenario(
@@ -443,9 +509,24 @@ class Scenario(Base):
 
         return copied_session.save(**save_params)
 
-    def copy(self, **overrides) -> "Scenario":
+    def copy(
+        self,
+        user_values: Optional[Dict[str, Any]] = None,
+        custom_curves: Optional[Dict[str, Any]] = None,
+        sortables: Optional[Dict[str, Any]] = None,
+        **overrides,
+    ) -> "Scenario":
         """
         Create a copy with no template link to the original scenario and save it to MyETM.
+
+        Args:
+            user_values: Optional dict of user input values to apply after copying
+            custom_curves: Optional dict of custom curves to upload after copying
+            sortables: Optional dict of sortables to apply after copying
+            **overrides: Additional parameters to override (title, private, etc.)
+
+        Returns:
+            Copied SavedScenario instance
         """
         # Separate SavedScenario parameters from Session copy parameters
         title = overrides.pop("title", f"Copy of {self.title}")
@@ -459,7 +540,18 @@ class Scenario(Base):
         if private is not None:
             save_params["private"] = private
 
-        return copied_session.save(**save_params)
+        copied_scenario = copied_session.save(**save_params)
+
+        # Apply data parameters if provided
+        if user_values or custom_curves or sortables:
+            from pyetm.clients import BaseClient
+
+            client = BaseClient()
+            Scenario._apply_data_to_scenario(
+                copied_scenario, user_values, custom_curves, sortables, client
+            )
+
+        return copied_scenario
 
     @classmethod
     def interpolate(

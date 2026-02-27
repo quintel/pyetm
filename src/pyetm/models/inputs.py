@@ -220,6 +220,12 @@ class Inputs(Base):
     def __iter__(self):
         yield from iter(self.inputs)
 
+    def __getitem__(self, key: str) -> Input:
+        result = self.get_input_by_key(key)
+        if result is None:
+            raise KeyError(f"Input '{key}' not found")
+        return result
+
     def keys(self):
         return [input.key for input in self.inputs]
 
