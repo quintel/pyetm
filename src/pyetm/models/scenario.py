@@ -77,7 +77,7 @@ class Scenario(Base):
         cls,
         params: Dict[str, Any],
         client: Optional[BaseClient] = None,
-        inputs: Optional[Dict[str, Any]] = None,
+        user_values: Optional[Dict[str, Any]] = None,
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
     ) -> "Scenario":
@@ -88,7 +88,7 @@ class Scenario(Base):
             params: Dictionary with required keys (scenario_id, title) and optional keys
                    (private)
             client: Optional BaseClient instance
-            inputs: Optional dict of input values to apply after creation
+            user_values: Optional dict of user input values to apply after creation
             custom_curves: Optional dict of custom curves to upload after creation
             sortables: Optional dict of sortables to apply after creation
 
@@ -117,9 +117,9 @@ class Scenario(Base):
                 setattr(saved_scenario, field, value)
 
         # Apply data parameters if provided
-        if inputs or custom_curves or sortables:
+        if user_values or custom_curves or sortables:
             cls._apply_data_to_scenario(
-                saved_scenario, inputs, custom_curves, sortables, client
+                saved_scenario, user_values, custom_curves, sortables, client
             )
 
         return saved_scenario
@@ -141,17 +141,17 @@ class Scenario(Base):
     @staticmethod
     def _apply_data_to_scenario(
         scenario: "Scenario",
-        inputs: Optional[Dict[str, Any]],
+        user_values: Optional[Dict[str, Any]],
         custom_curves: Optional[Dict[str, Any]],
         sortables: Optional[Dict[str, Any]],
         client: BaseClient,
     ) -> None:
         """
-        Apply inputs, custom curves, and sortables to a scenario.
+        Apply user_values, custom curves, and sortables to a scenario.
 
         Args:
             scenario: The scenario to apply data to
-            inputs: Optional dict of input values
+            user_values: Optional dict of user input values
             custom_curves: Optional dict of custom curves
             sortables: Optional dict of sortables
             client: BaseClient instance for API calls
@@ -165,7 +165,7 @@ class Scenario(Base):
         )
 
         submodels = [
-            (inputs, UpdateInputsRunner, "inputs"),
+            (user_values, UpdateInputsRunner, "user_values"),
             (custom_curves, UpdateCustomCurvesRunner, "custom_curves"),
             (sortables, UpdateSortablesRunner, "sortables"),
         ]
@@ -511,7 +511,7 @@ class Scenario(Base):
 
     def copy(
         self,
-        inputs: Optional[Dict[str, Any]] = None,
+        user_values: Optional[Dict[str, Any]] = None,
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
         **overrides,
@@ -520,7 +520,7 @@ class Scenario(Base):
         Create a copy with no template link to the original scenario and save it to MyETM.
 
         Args:
-            inputs: Optional dict of input values to apply after copying
+            user_values: Optional dict of user input values to apply after copying
             custom_curves: Optional dict of custom curves to upload after copying
             sortables: Optional dict of sortables to apply after copying
             **overrides: Additional parameters to override (title, private, etc.)
@@ -543,12 +543,12 @@ class Scenario(Base):
         copied_scenario = copied_session.save(**save_params)
 
         # Apply data parameters if provided
-        if inputs or custom_curves or sortables:
+        if user_values or custom_curves or sortables:
             from pyetm.clients import BaseClient
 
             client = BaseClient()
             Scenario._apply_data_to_scenario(
-                copied_scenario, inputs, custom_curves, sortables, client
+                copied_scenario, user_values, custom_curves, sortables, client
             )
 
         return copied_scenario

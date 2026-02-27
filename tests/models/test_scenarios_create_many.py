@@ -1,5 +1,5 @@
 """
-Integration tests for Scenarios.create_many() with inputs, custom_curves, and sortables parameters.
+Integration tests for Scenarios.create_many() with user_values, custom_curves, and sortables parameters.
 """
 
 import pytest
@@ -11,8 +11,8 @@ from pyetm.models.session import Session
 from pyetm.clients import BaseClient
 
 
-class TestCreateManyWithInputs:
-    """Test create_many() with inputs parameter."""
+class TestCreateManyWithUserValues:
+    """Test create_many() with user_values parameter."""
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
     @patch("pyetm.models.scenario.Scenario.from_scenario")
@@ -20,7 +20,7 @@ class TestCreateManyWithInputs:
     def test_create_many_with_inputs(
         self, mock_session_new, mock_from_scenario, mock_apply_data
     ):
-        """Test that inputs are passed to concurrent data application."""
+        """Test that user_values are passed to concurrent data application."""
         # Mock Session.new to return mock sessions
         mock_session_1 = Mock()
         mock_session_1.id = 1
@@ -43,19 +43,19 @@ class TestCreateManyWithInputs:
         # Create scenarios collection
         scenarios = Scenarios(client=Mock())
 
-        # Call create_many with inputs
+        # Call create_many with user_values
         params: list[ScenarioCreationParams] = [
             {
                 "title": "Scenario 1",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"capacity_of_solar_pv": 1000},
+                "user_values": {"capacity_of_solar_pv": 1000},
             },
             {
                 "title": "Scenario 2",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"capacity_of_solar_pv": 2000},
+                "user_values": {"capacity_of_solar_pv": 2000},
             },
         ]
 
@@ -73,9 +73,9 @@ class TestCreateManyWithInputs:
         assert len(data_to_apply) == 2
         # data_to_apply is list of (index, data_dict) tuples
         assert data_to_apply[0][0] == 0  # index
-        assert data_to_apply[0][1]["inputs"] == {"capacity_of_solar_pv": 1000}
+        assert data_to_apply[0][1]["user_values"] == {"capacity_of_solar_pv": 1000}
         assert data_to_apply[1][0] == 1  # index
-        assert data_to_apply[1][1]["inputs"] == {"capacity_of_solar_pv": 2000}
+        assert data_to_apply[1][1]["user_values"] == {"capacity_of_solar_pv": 2000}
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
     @patch("pyetm.models.scenario.Scenario.from_scenario")
@@ -83,7 +83,7 @@ class TestCreateManyWithInputs:
     def test_create_many_with_mixed_inputs(
         self, mock_session_new, mock_from_scenario, mock_apply_data
     ):
-        """Test create_many where only some scenarios have inputs."""
+        """Test create_many where only some scenarios have user_values."""
         mock_session_1 = Mock()
         mock_session_1.id = 1
         mock_session_2 = Mock()
@@ -109,19 +109,19 @@ class TestCreateManyWithInputs:
                 "title": "Scenario 1",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"capacity_of_solar_pv": 1000},
+                "user_values": {"capacity_of_solar_pv": 1000},
             },
             {
                 "title": "Scenario 2",
                 "area_code": "nl",
                 "end_year": 2050,
-                # No inputs for this one
+                # No user_values for this one
             },
             {
                 "title": "Scenario 3",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"capacity_of_solar_pv": 3000},
+                "user_values": {"capacity_of_solar_pv": 3000},
             },
         ]
 
@@ -129,15 +129,15 @@ class TestCreateManyWithInputs:
 
         assert len(result.items) == 3
 
-        # Verify data application includes only scenarios with inputs
+        # Verify data application includes only scenarios with user_values
         call_args = mock_apply_data.call_args[0]
         data_to_apply = call_args[1]
         # Only 2 scenarios have data to apply
         assert len(data_to_apply) == 2
         assert data_to_apply[0][0] == 0  # First scenario
-        assert data_to_apply[0][1]["inputs"] == {"capacity_of_solar_pv": 1000}
+        assert data_to_apply[0][1]["user_values"] == {"capacity_of_solar_pv": 1000}
         assert data_to_apply[1][0] == 2  # Third scenario (index 2)
-        assert data_to_apply[1][1]["inputs"] == {"capacity_of_solar_pv": 3000}
+        assert data_to_apply[1][1]["user_values"] == {"capacity_of_solar_pv": 3000}
 
 
 class TestCreateManyWithCustomCurves:
@@ -309,7 +309,7 @@ class TestCreateManyCombined:
     def test_create_many_with_all_parameters(
         self, mock_session_new, mock_from_scenario, mock_apply_data
     ):
-        """Test create_many with inputs, curves, and sortables combined."""
+        """Test create_many with user_values, curves, and sortables combined."""
         mock_session = Mock()
         mock_session.id = 1
         mock_session_new.return_value = mock_session
@@ -330,7 +330,7 @@ class TestCreateManyCombined:
                 "title": "Scenario 1",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"capacity_of_solar_pv": 1000},
+                "user_values": {"capacity_of_solar_pv": 1000},
                 "custom_curves": {"solar_profile": curve},
                 "sortables": sortables,
             },
@@ -343,7 +343,7 @@ class TestCreateManyCombined:
         call_args = mock_apply_data.call_args[0]
         data_to_apply = call_args[1]
         data = data_to_apply[0][1]
-        assert "inputs" in data
+        assert "user_values" in data
         assert "custom_curves" in data
         assert "sortables" in data
 
@@ -372,7 +372,7 @@ class TestCreateManyErrorHandling:
 
         # Mock data application to return warnings
         mock_apply_data.return_value = [
-            "Failed to apply inputs to scenario 1: Invalid input",
+            "Failed to apply user_values to scenario 1: Invalid input",
             "Failed to upload curve to scenario 2: Invalid curve",
         ]
 
@@ -383,7 +383,7 @@ class TestCreateManyErrorHandling:
                 "title": "Scenario 1",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"invalid_input": 999},
+                "user_values": {"invalid_input": 999},
             },
             {
                 "title": "Scenario 2",
@@ -428,7 +428,7 @@ class TestCreateManyErrorHandling:
                 "title": "Scenario 1",
                 "area_code": "nl",
                 "end_year": 2050,
-                "inputs": {"invalid_input": 999},
+                "user_values": {"invalid_input": 999},
             },
         ]
 

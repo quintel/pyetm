@@ -39,7 +39,7 @@ class ScenarioCreationParams(TypedDict, total=False):
     area_code: Optional[str]
     end_year: Optional[int]
     private: Optional[bool]
-    inputs: Optional[dict[str, Any]]
+    user_values: Optional[dict[str, Any]]
     custom_curves: Optional[dict[str, Any]]
     sortables: Optional[dict[str, list[Any]]]
 
@@ -182,7 +182,7 @@ class Scenarios(Base):
                   a new Session will be created using area_code and end_year
                 - area_code: (Optional if using defaults) Area code for new session
                 - end_year: (Optional if using defaults) End year for new session
-                - inputs: (Optional) Dict of input values to apply after creation
+                - user_values: (Optional) Dict of user input values to apply after creation
                 - custom_curves: (Optional) Dict of custom curves to upload after creation
                 - sortables: (Optional) Dict of sortables to apply after creation
             area_code: Default area_code for all scenarios (if not in params)
@@ -195,7 +195,7 @@ class Scenarios(Base):
             client = BaseClient()
 
         # Separate data parameters from creation parameters
-        DATA_PARAMS = ["inputs", "custom_curves", "sortables"]
+        DATA_PARAMS = ["user_values", "custom_curves", "sortables"]
         creation_params_list = []
         data_to_apply = []  # List of (scenario_index, data_dict)
 
@@ -371,7 +371,7 @@ class Scenarios(Base):
         scenarios: List[Scenario], data_to_apply: List[tuple], client: BaseClient
     ) -> List[str]:
         """
-        Apply inputs/curves/sortables to scenarios concurrently using runners.
+        Apply user_values/curves/sortables to scenarios concurrently using runners.
 
         Args:
             scenarios: List of scenarios
@@ -400,15 +400,15 @@ class Scenarios(Base):
             scenario = scenarios[scenario_idx]
             session = Scenarios._get_session(scenario)
 
-            # Use UpdateInputsRunner to build input requests
-            if data.get("inputs"):
+            # Use UpdateInputsRunner to build user_values requests
+            if data.get("user_values"):
                 try:
-                    request = UpdateInputsRunner.build_request(session, data["inputs"])
+                    request = UpdateInputsRunner.build_request(session, data["user_values"])
                     requests.append(request)
-                    request_metadata.append(("inputs", scenario_idx, scenario.title))
+                    request_metadata.append(("user_values", scenario_idx, scenario.title))
                 except Exception as e:
                     warnings.append(
-                        f"Failed to build input request for scenario '{scenario.title}': {e}"
+                        f"Failed to build user_values request for scenario '{scenario.title}': {e}"
                     )
 
             # Use UpdateCustomCurvesRunner to build curve requests
