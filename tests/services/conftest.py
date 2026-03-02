@@ -94,7 +94,7 @@ def dummy_scenario():
 
 @pytest.fixture
 def custom_curves_json():
-    """JSON data for custom curves"""
+    """JSON data for custom curves (includes internal curves)"""
     return [
         {
             "attached": True,
@@ -103,4 +103,14 @@ def custom_curves_json():
         },
         {"attached": True, "key": "solar_pv_profile_1", "type": "profile"},
         {"attached": False, "key": "wind_profile_1", "type": "profile"},
+        {
+            "attached": False,
+            "key": "weather-insulation_terraced_houses_low",
+            "type": "weather_curve",
+        },
+        {
+            "attached": False,
+            "key": "weather-insulation_apartments_medium",
+            "type": "weather_curve",
+        },
     ]
