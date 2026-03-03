@@ -8,6 +8,7 @@ from pyetm.services.service_result import ServiceResult
 from .session import ETMSession
 from pyetm.config.settings import get_settings
 
+MAX_CONCURRENT = 5
 
 # TODO: like this it feels unnecessary
 class BaseClient(metaclass=SingletonMeta):
@@ -52,7 +53,7 @@ class AsyncBatchRunner:
     # Can't we yield what is done somehow?
     @staticmethod
     async def batch_requests(
-        session: ETMSession, requests: List[dict]
+        session: ETMSession, requests: List[dict], max_concurrent: int = 10
     ) -> List[ServiceResult]:
         """
         Execute multiple requests concurrently using asyncio.
@@ -61,6 +62,8 @@ class AsyncBatchRunner:
         same order as the input requests. Each result is wrapped in a ServiceResult
         for consistent error handling.
         """
+        # Controls how many requests are in flight at the same time at the application level.
+        semaphore = asyncio.Semaphore(max_concurrent)
 
         async def make_single_request(req: dict) -> ServiceResult:
             """
@@ -72,32 +75,33 @@ class AsyncBatchRunner:
             Returns:
                 ServiceResult: Wrapped result with either success data or error details.
             """
-            try:
-                response = await session.async_request(
-                    req["method"], req["url"], **req.get("kwargs", {})
-                )
-
-                # Success - wrap response data in ServiceResult
-                if response.ok:
-                    try:
-                        data = response.json()
-                    except Exception:
-                        data = response
-
-                    return ServiceResult.ok(data=data)
-                else:
-                    return ServiceResult.fail(
-                        errors=[f"HTTP {response.status_code}: {response.text}"]
+            async with semaphore:
+                try:
+                    response = await session.async_request(
+                        req["method"], req["url"], **req.get("kwargs", {})
                     )
 
-            except PermissionError as e:
-                return ServiceResult.fail(errors=[f"Authentication error: {str(e)}"])
-            except ValueError as e:
-                return ServiceResult.fail(errors=[f"Client error: {str(e)}"])
-            except ConnectionError as e:
-                return ServiceResult.fail(errors=[f"Server error: {str(e)}"])
-            except Exception as e:
-                return ServiceResult.fail(errors=[f"Unexpected error: {str(e)}"])
+                    # Success - wrap response data in ServiceResult
+                    if response.ok:
+                        try:
+                            data = response.json()
+                        except Exception:
+                            data = response
+
+                        return ServiceResult.ok(data=data)
+                    else:
+                        return ServiceResult.fail(
+                            errors=[f"HTTP {response.status_code}: {response.text}"]
+                        )
+
+                except PermissionError as e:
+                    return ServiceResult.fail(errors=[f"Authentication error: {str(e)}"])
+                except ValueError as e:
+                    return ServiceResult.fail(errors=[f"Client error: {str(e)}"])
+                except ConnectionError as e:
+                    return ServiceResult.fail(errors=[f"Server error: {str(e)}"])
+                except Exception as e:
+                    return ServiceResult.fail(errors=[f"Unexpected error: {str(e)}"])
 
         # Execute all requests concurrently
         # TODO: yes, but they are still in a list, which is a predetermined structure
@@ -107,7 +111,7 @@ class AsyncBatchRunner:
 
     @staticmethod
     def batch_requests_sync(
-        session: ETMSession, requests: List[dict]
+        session: ETMSession, requests: List[dict], max_concurrent: int = 10
     ) -> List[ServiceResult]:
         """
         Synchronous wrapper for batch_requests method.
@@ -129,7 +133,7 @@ class AsyncBatchRunner:
             This method blocks until all requests are completed and should only
             be used when async/await syntax is not available in the calling context.
         """
-        coro = AsyncBatchRunner.batch_requests(session, requests)
+        coro = AsyncBatchRunner.batch_requests(session, requests, max_concurrent)
         future = asyncio.run_coroutine_threadsafe(coro, session._loop)
         return future.result()
 
@@ -145,4 +149,4 @@ def make_batch_requests(
     This helper function extracts the session from a BaseClient and delegates
     to AsyncBatchRunner.batch_requests_sync for execution.
     """
-    return AsyncBatchRunner.batch_requests_sync(client.session, requests)
+    return AsyncBatchRunner.batch_requests_sync(client.session, requests, MAX_CONCURRENT)

@@ -139,8 +139,8 @@ class ETMSession:
     async def _create_session(self):
         """Create aiohttp session."""
         connector_kwargs = {
-            "limit": 100,
-            "limit_per_host": 30,
+            "limit": 10,
+            "limit_per_host": 4,
             "keepalive_timeout": 30,
         }
 

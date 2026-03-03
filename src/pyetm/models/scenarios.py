@@ -17,7 +17,7 @@ from pydantic import Field, PrivateAttr
 from pyetm.models.session import Session
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient
-from pyetm.clients.base_client import AsyncBatchRunner
+from pyetm.clients.base_client import AsyncBatchRunner, MAX_CONCURRENT
 from pyetm.types import AnnualExportType, HourlyCurveType, CarrierType
 from .scenario import Scenario, SavedScenarioError
 import pandas as pd
@@ -457,7 +457,7 @@ class Scenarios(Base):
                 formatted_requests.append(formatted)
 
             results = AsyncBatchRunner.batch_requests_sync(
-                client.session, formatted_requests
+                client.session, formatted_requests, MAX_CONCURRENT
             )
 
             # Collect errors from failed updates
