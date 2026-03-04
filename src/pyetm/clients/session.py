@@ -140,12 +140,12 @@ class ETMSession:
         """Create aiohttp session."""
         connector_kwargs = {
             "limit": 10,
-            "limit_per_host": 4,
-            "keepalive_timeout": 30,
+            "limit_per_host": 2,
+            "keepalive_timeout": 120,
         }
 
         connector = aiohttp.TCPConnector(**connector_kwargs)
-        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        timeout = aiohttp.ClientTimeout(total=120, connect=120)
 
         self._session = aiohttp.ClientSession(
             headers=self.headers, connector=connector, timeout=timeout

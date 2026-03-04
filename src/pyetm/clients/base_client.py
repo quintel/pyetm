@@ -8,7 +8,7 @@ from pyetm.services.service_result import ServiceResult
 from .session import ETMSession
 from pyetm.config.settings import get_settings
 
-MAX_CONCURRENT = 5
+MAX_CONCURRENT = 2
 
 # TODO: like this it feels unnecessary
 class BaseClient(metaclass=SingletonMeta):
