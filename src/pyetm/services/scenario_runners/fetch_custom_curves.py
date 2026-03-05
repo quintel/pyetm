@@ -48,5 +48,5 @@ class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
             client=client,
             method="get",
             path=f"/scenarios/{scenario.id}/custom_curves",
-            payload={"include_internal": True},
+            payload={"include_internal": "true"},
         )
