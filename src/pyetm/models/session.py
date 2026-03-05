@@ -102,6 +102,13 @@ class Session(Base):
         """
         Create a new scenario with the specified parameters.
 
+        Args:
+            area_code: Area code for the scenario (optional if template_id is provided)
+            end_year: End year for the scenario (optional if template_id is provided)
+            **kwargs: Additional parameters including:
+                - template_id: Session ID to use as template
+                - private, keep_compatible, source, title, metadata, start_year, scaling, url
+
         Returns:
             A new Scenario instance
         """
