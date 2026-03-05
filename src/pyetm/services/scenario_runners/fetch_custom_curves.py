@@ -34,6 +34,10 @@ class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
     Runner for fetching metadata for all custom curves on a scenario.
     GET /api/v3/scenarios/{scenario_id}/custom_curves
 
+    Args:
+        include_internal: If True, includes internal curves in the response.
+        include_unattached: If True, includes unattached curves in the response.
+
     Returns:
         ServiceResult.ok(data) where `data` is a dict containing curve metadata.
         ServiceResult.fail(errors) on any breaking error.
@@ -43,7 +47,20 @@ class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
     def run(
         client: BaseClient,
         scenario: Any,
+        include_internal: bool = True,
+        include_unattached: bool = False,
     ) -> ServiceResult[Dict[str, Any]]:
+        # Convert Python booleans to strings for aiohttp compatibility
+        # aiohttp/yarl only accepts str, int, or float in query parameters
+        payload = {}
+        if include_internal:
+            payload["include_internal"] = "true"
+        if include_unattached:
+            payload["include_unattached"] = "true"
+
         return FetchAllCustomCurveDataRunner._make_request(
-            client=client, method="get", path=f"/scenarios/{scenario.id}/custom_curves"
+            client=client,
+            method="get",
+            path=f"/scenarios/{scenario.id}/custom_curves",
+            payload=payload if payload else None,
         )

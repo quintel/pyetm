@@ -542,10 +542,20 @@ class Session(Base):
 
     @property
     def custom_curves(self) -> CustomCurves:
+        """
+        Get custom curves for this scenario (includes internal curves by default).
+
+        This property is cached. For custom filtering options, use get_custom_curves().
+        """
         if self._custom_curves is not None:
             return self._custom_curves
 
-        result = FetchAllCustomCurveDataRunner.run(BaseClient(), self)
+        result = FetchAllCustomCurveDataRunner.run(
+            BaseClient(),
+            self,
+            include_internal=True,
+            include_unattached=False,
+        )
         if not result.success:
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
@@ -556,10 +566,41 @@ class Session(Base):
             pass
         for w in result.errors:
             self.add_warning("custom_curves", w)
-        # Merge submodel warnings with a simple, clean prefix
         self._merge_submodel_warnings(coll)
 
         self._custom_curves = coll
+        return coll
+
+    def get_custom_curves(
+        self,
+        include_internal: bool = True,
+        include_unattached: bool = False,
+    ) -> CustomCurves:
+        """
+        Args:
+            include_internal: If True, includes internal curves (weather/insulation).
+                Defaults to True.
+            include_unattached: If True, includes unattached curves. Defaults to False.
+        """
+        result = FetchAllCustomCurveDataRunner.run(
+            BaseClient(),
+            self,
+            include_internal=include_internal,
+            include_unattached=include_unattached,
+        )
+        if not result.success:
+            raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
+
+        coll = CustomCurves.from_json(result.data)
+        try:
+            coll._scenario = self
+        except Exception:
+            pass
+        for w in result.errors:
+            self.add_warning("custom_curves", w)
+        self._merge_submodel_warnings(coll)
+
+        # Do not cache non-default fetches
         return coll
 
     def custom_curve_series(self, curve_name: str) -> pd.Series:

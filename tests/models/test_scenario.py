@@ -615,7 +615,7 @@ def test_custom_curves_success(
     monkeypatch.setattr(
         FetchAllCustomCurveDataRunner,
         "run",
-        lambda client, scen: ok_service_result(curves_data),
+        lambda client, scen, **kwargs: ok_service_result(curves_data),
     )
 
     coll = scenario.custom_curves
@@ -633,7 +633,7 @@ def test_custom_curves_with_warnings(
     monkeypatch.setattr(
         FetchAllCustomCurveDataRunner,
         "run",
-        lambda client, scen: ok_service_result(curves_data, warns),
+        lambda client, scen, **kwargs: ok_service_result(curves_data, warns),
     )
 
     coll = scenario.custom_curves
@@ -647,7 +647,7 @@ def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
     monkeypatch.setattr(
         FetchAllCustomCurveDataRunner,
         "run",
-        lambda client, scen: fail_service_result(["custom curves fetch failed"]),
+        lambda client, scen, **kwargs: fail_service_result(["custom curves fetch failed"]),
     )
 
     with pytest.raises(ScenarioError):
@@ -1449,3 +1449,71 @@ def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, o
 
     # Verify it was converted to a list
     assert calls[-1] == ["energy_flow"]
+
+
+
+
+def test_custom_curves_caching_behavior(monkeypatch):
+    """Test that custom_curves property caches correctly"""
+    from pyetm.services.scenario_runners.fetch_custom_curves import (
+        FetchAllCustomCurveDataRunner,
+    )
+    from pyetm.services.service_result import ServiceResult
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    call_count = {"count": 0}
+
+    def mock_runner(client, scenario_obj, include_internal=True, include_unattached=False):
+        call_count["count"] += 1
+        return ServiceResult.ok([])
+
+    monkeypatch.setattr(FetchAllCustomCurveDataRunner, "run", mock_runner)
+
+    # First access of property should fetch
+    result1 = scenario.custom_curves
+    assert call_count["count"] == 1
+
+    # Second access of property should use cache
+    result2 = scenario.custom_curves
+    assert call_count["count"] == 1  # Should not increment
+
+    # Third access should still use cache
+    result3 = scenario.custom_curves
+    assert call_count["count"] == 1  # Should not increment
+
+
+def test_get_custom_curves_bypasses_cache(monkeypatch):
+    """Test that get_custom_curves() always fetches fresh data"""
+    from pyetm.services.scenario_runners.fetch_custom_curves import (
+        FetchAllCustomCurveDataRunner,
+    )
+    from pyetm.services.service_result import ServiceResult
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    call_count = {"count": 0}
+
+    def mock_runner(client, scenario_obj, include_internal=True, include_unattached=False):
+        call_count["count"] += 1
+        return ServiceResult.ok([])
+
+    monkeypatch.setattr(FetchAllCustomCurveDataRunner, "run", mock_runner)
+
+    # First call to get_custom_curves() should fetch
+    result1 = scenario.get_custom_curves()
+    assert call_count["count"] == 1
+
+    # Second call should fetch again (no caching)
+    result2 = scenario.get_custom_curves()
+    assert call_count["count"] == 2
+
+    # Call with include_internal=False should also fetch
+    result3 = scenario.get_custom_curves(include_internal=False)
+    assert call_count["count"] == 3
+
+    # Call with include_unattached=True should also fetch
+    result4 = scenario.get_custom_curves(include_unattached=True)
+    assert call_count["count"] == 4
+
+
