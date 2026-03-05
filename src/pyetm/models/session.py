@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, ConfigDict
 from os import PathLike
 from pyetm.models.couplings import Couplings
 from pyetm.models.inputs import Inputs
@@ -62,6 +62,8 @@ class Session(Base):
     but with only `id` required so it can be used for API runners.
     """
 
+    model_config = ConfigDict(validate_assignment=True, populate_by_name=True)
+
     id: int = Field(..., description="Unique scenario identifier")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -75,8 +77,10 @@ class Session(Base):
     short_name: Optional[str] = None
     start_year: Optional[int] = None
     scaling: Optional[Any] = None
-    template: Optional[int] = Field(
-        None, description="ID of the preset scenario this was copied from"
+    template_id: Optional[int] = Field(
+        None,
+        alias="preset_scenario_id",
+        description="ID of the preset scenario this was copied from",
     )
     url: Optional[str] = None
 
@@ -92,14 +96,21 @@ class Session(Base):
     _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
 
     @classmethod
-    def new(cls, area_code: str, end_year: int, **kwargs) -> "Session":
+    def new(
+        cls, area_code: str | None = None, end_year: int | None = None, **kwargs
+    ) -> "Session":
         """
         Create a new scenario with the specified parameters.
 
         Returns:
             A new Scenario instance
         """
-        scenario_data = {"area_code": area_code, "end_year": end_year, **kwargs}
+        scenario_data = {**kwargs}
+        if area_code is not None:
+            scenario_data["area_code"] = area_code
+        if end_year is not None:
+            scenario_data["end_year"] = end_year
+
         result = CreateScenarioRunner.run(BaseClient(), scenario_data)
 
         if not result.success:
@@ -166,8 +177,10 @@ class Session(Base):
         if result.data and "scenario" in result.data:
             scenario_data = result.data["scenario"]
             for field, value in scenario_data.items():
-                if hasattr(new_scenario, field):
-                    setattr(new_scenario, field, value)
+                # Handle alias: preset_scenario_id → template_id
+                attr_name = "template_id" if field == "preset_scenario_id" else field
+                if hasattr(new_scenario, attr_name):
+                    setattr(new_scenario, attr_name, value)
 
         return new_scenario
 
@@ -320,7 +333,7 @@ class Session(Base):
             "title": self.identifier(),
             "id": self.id,
             "scenario_id": self.id,  # Same as id, shows it's a session in mixed cases
-            "template": self.template,
+            "template_id": self.template_id,
             "area_code": self.area_code,
             "start_year": self.start_year,
             "end_year": self.end_year,
@@ -868,3 +881,8 @@ class Session(Base):
         )
         if not result.success:
             raise ScenarioError(f"Could not add user: {result.errors}")
+
+    @property
+    def preset_scenario_id(self) -> Optional[int]:
+        """Backward-compatible property for template_id (API field name)."""
+        return self.template_id

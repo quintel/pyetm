@@ -295,7 +295,7 @@ def test_update_metadata_runner_meta_keys_constants():
         "metadata",
         "end_year",
         "title",
-        "template",
+        "template_id",
     ]
 
     expected_unsettable_keys = [

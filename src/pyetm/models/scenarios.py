@@ -233,7 +233,10 @@ class Scenarios(Base):
                     area = params.get("area_code") or area_code
                     year = params.get("end_year") or end_year
 
-                    if area is None or year is None:
+                    # Check if template_id is provided (allows inheriting area_code/end_year)
+                    has_template = "template_id" in params
+
+                    if not has_template and (area is None or year is None):
                         print(
                             f"Could not create saved scenario with {params}: "
                             "Missing area_code or end_year. Provide them in each dict or as defaults."

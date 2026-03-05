@@ -358,9 +358,9 @@ class Scenario(Base):
         return self.session.start_year
 
     @property
-    def template(self) -> Optional[int]:
+    def template_id(self) -> Optional[int]:
         """Get template ID from the underlying session."""
-        return self.session.template
+        return self.session.template_id
 
     @property
     def keep_compatible(self) -> Optional[bool]:
@@ -618,7 +618,7 @@ class Scenario(Base):
         info.update(
             {
                 "session_id": self.scenario_id,
-                "preset": session.template,
+                "preset": session.template_id,
                 "area_code": session.area_code,
                 "start_year": session.start_year,
                 "end_year": session.end_year,

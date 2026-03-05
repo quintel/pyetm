@@ -25,7 +25,7 @@ class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
         "title",
         "start_year",
         "scaling",
-        "template",
+        "preset_scenario_id",  # aliased to template_id in Session
         "url",
     ]
 
@@ -42,9 +42,7 @@ class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
             return result
 
         validated_data, warnings = FetchMetadataRunner._validate_response_keys(
-            result.data,
-            FetchMetadataRunner.META_KEYS,
-            fill_missing=True
+            result.data, FetchMetadataRunner.META_KEYS, fill_missing=True
         )
 
         return ServiceResult.ok(data=validated_data, errors=warnings)

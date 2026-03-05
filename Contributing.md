@@ -111,7 +111,7 @@ Basic usage to create + run a scenario and fetch results:
 from pyetm import Scenario
 
 # Create a scenario from a template / region code (example numbers are illustrative)
-scen = Scenario.create(region=205, end_year=2050, template=12345)
+scen = Scenario.create(region=205, end_year=2050, template_id=12345)
 
 # Update some inputs
 scen.update_inputs({

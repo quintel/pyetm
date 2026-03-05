@@ -24,7 +24,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         "metadata",
         "end_year",
         "title",
-        "template",
+        "template_id",
     ]
     UNSETTABLE_META_KEYS = [
         "id",
@@ -98,8 +98,8 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         if final_metadata or nested_metadata or "metadata" in direct_fields:
             direct_fields["metadata"] = final_metadata
 
-        if "template" in direct_fields:
-            direct_fields["preset_scenario_id"] = direct_fields.pop("template")
+        if "template_id" in direct_fields:
+            direct_fields["preset_scenario_id"] = direct_fields.pop("template_id")
 
         # Transform metadata to the API format
         payload = {"scenario": direct_fields}

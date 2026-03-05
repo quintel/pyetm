@@ -1072,7 +1072,7 @@ def test_copy_scenario_with_preset_scenario_id(
         "id": 67894,
         "area_code": "nl",
         "end_year": 2050,
-        "template": 12345,
+        "preset_scenario_id": 12345,
     }
 
     monkeypatch.setattr(
@@ -1084,7 +1084,7 @@ def test_copy_scenario_with_preset_scenario_id(
     original = dummy_scenario(12345)
     scenario = original.copy_with_preset()
     assert scenario.id == 67894
-    assert scenario.template == 12345
+    assert scenario.template_id == 12345
     assert len(scenario.warnings) == 0
 
 
@@ -1096,7 +1096,7 @@ def test_copy_scenario_deep_copy_success(
         "id": 67894,
         "area_code": "nl",
         "end_year": 2050,
-        "template": 12345,  # Initially linked
+        "preset_scenario_id": 12345,  # Initially linked
     }
 
     break_link_response = {
@@ -1104,7 +1104,7 @@ def test_copy_scenario_deep_copy_success(
             "id": 67894,
             "area_code": "nl",
             "end_year": 2050,
-            "template": None,  # Link broken
+            "preset_scenario_id": None,  # Link broken
         }
     }
 
@@ -1132,7 +1132,7 @@ def test_copy_scenario_deep_copy_success(
 
     # Verify the scenario is correct and preset link was broken
     assert scenario.id == 67894
-    assert scenario.template is None
+    assert scenario.template_id is None
     assert len(scenario.warnings) == 0
 
 
