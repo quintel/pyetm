@@ -477,3 +477,109 @@ class TestCreateManyErrorHandling:
 
         # Should only have the successful scenarios
         assert len(result.items) == 2
+
+
+class TestCreateManyWithTemplateId:
+    """Test create_many() with template_id parameter."""
+
+    @patch("pyetm.models.scenario.Scenario.from_scenario")
+    @patch("pyetm.models.session.Session.new")
+    def test_create_many_with_template_id_only(
+        self, mock_session_new, mock_from_scenario
+    ):
+        """Test that template_id allows creating scenarios without area_code and end_year."""
+        # Mock Session.new to return mock session
+        mock_session = Mock()
+        mock_session.id = 1
+        mock_session_new.return_value = mock_session
+
+        # Mock Scenario.from_scenario to return mock saved scenario
+        mock_saved = Mock(spec=Scenario)
+        mock_saved.id = 10
+        mock_saved.session = mock_session
+        mock_from_scenario.return_value = mock_saved
+
+        scenarios = Scenarios(client=Mock())
+
+        # Create scenario with only template_id (no area_code or end_year)
+        params: list[ScenarioCreationParams] = [
+            {
+                "title": "Scenario from template",
+                "template_id": 100000,
+            },
+        ]
+
+        result = scenarios.create_many(params)
+
+        # Verify scenario was created successfully
+        assert len(result.items) == 1
+
+        # Verify Session.new was called with None for area_code and end_year
+        # and template_id parameter passed through
+        mock_session_new.assert_called_once_with(None, None, template_id=100000)
+
+    @patch("pyetm.models.scenario.Scenario.from_scenario")
+    @patch("pyetm.models.session.Session.new")
+    def test_create_many_with_template_id_and_explicit_area_year(
+        self, mock_session_new, mock_from_scenario
+    ):
+        """Test that template_id works with explicit area_code and end_year too."""
+        mock_session = Mock()
+        mock_session.id = 1
+        mock_session_new.return_value = mock_session
+
+        mock_saved = Mock(spec=Scenario)
+        mock_saved.session = mock_session
+        mock_from_scenario.return_value = mock_saved
+
+        scenarios = Scenarios(client=Mock())
+
+        # Create scenario with template_id AND explicit area_code/end_year
+        params: list[ScenarioCreationParams] = [
+            {
+                "title": "Scenario with template and overrides",
+                "template_id": 100000,
+                "area_code": "de",
+                "end_year": 2040,
+            },
+        ]
+
+        result = scenarios.create_many(params)
+
+        assert len(result.items) == 1
+
+        # Verify Session.new was called with explicit values
+        mock_session_new.assert_called_once_with("de", 2040, template_id=100000)
+
+    @patch("pyetm.models.scenario.Scenario.from_scenario")
+    @patch("pyetm.models.session.Session.new")
+    def test_create_many_with_default_area_year_and_template(
+        self, mock_session_new, mock_from_scenario
+    ):
+        """Test that default area_code/end_year are used when template_id is present."""
+        mock_session = Mock()
+        mock_session.id = 1
+        mock_session_new.return_value = mock_session
+
+        mock_saved = Mock(spec=Scenario)
+        mock_saved.session = mock_session
+        mock_from_scenario.return_value = mock_saved
+
+        scenarios = Scenarios(client=Mock())
+
+        # Create scenario with template_id and default area_code/end_year
+        params: list[ScenarioCreationParams] = [
+            {
+                "title": "Scenario with defaults and template",
+                "template_id": 100000,
+            },
+        ]
+
+        result = scenarios.create_many(
+            params, area_code="nl", end_year=2050
+        )
+
+        assert len(result.items) == 1
+
+        # Verify Session.new was called with defaults (not None)
+        mock_session_new.assert_called_once_with("nl", 2050, template_id=100000)

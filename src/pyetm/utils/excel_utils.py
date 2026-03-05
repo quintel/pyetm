@@ -599,7 +599,7 @@ def apply_field_ordering(df: pd.DataFrame) -> pd.DataFrame:
         "title",
         "description",
         "scenario_id",
-        "template",
+        "template_id",
         "area_code",
         "start_year",
         "end_year",

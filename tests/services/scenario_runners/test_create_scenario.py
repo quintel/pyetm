@@ -156,7 +156,7 @@ def test_create_scenario_all_optional_fields(dummy_client, fake_response):
         "metadata": {"test": "data"},
         "start_year": 2024,
         "scaling": {"factor": 1.5},
-        "template": 123,
+        "template_id": 123,
         "url": "https://example.com",
     }
 
@@ -165,9 +165,9 @@ def test_create_scenario_all_optional_fields(dummy_client, fake_response):
     assert result.data == body
     assert result.errors == []
 
-    # Verify template was transformed to preset_scenario_id
+    # Verify template_id was transformed to preset_scenario_id
     expected_data = scenario_data.copy()
-    expected_data["preset_scenario_id"] = expected_data.pop("template")
+    expected_data["preset_scenario_id"] = expected_data.pop("template_id")
     assert client.calls == [("/scenarios", {"json": {"scenario": expected_data}})]
 
 
@@ -241,3 +241,93 @@ def test_create_scenario_payload_structure(dummy_client, fake_response):
     # Verify the exact payload structure
     expected_call = ("/scenarios", {"json": {"scenario": scenario_data}})
     assert client.calls == [expected_call]
+
+
+def test_create_scenario_with_template_only(dummy_client, fake_response):
+    """Test that scenario can be created with only template_id (no area_code/end_year)."""
+    body = {
+        "id": 99999,
+        "area_code": "nl",  # Inherited from template
+        "end_year": 2050,   # Inherited from template
+        "preset_scenario_id": 100000,
+    }
+    response = fake_response(ok=True, status_code=201, json_data=body)
+    client = dummy_client(response, method="post")
+
+    scenario_data = {"template_id": 100000}  # No area_code or end_year
+
+    result = CreateScenarioRunner.run(client, scenario_data)
+    assert result.success is True
+    assert result.data == body
+    assert result.errors == []
+
+    # Verify template_id was transformed to preset_scenario_id
+    expected_payload = {"scenario": {"preset_scenario_id": 100000}}
+    assert client.calls == [("/scenarios", {"json": expected_payload})]
+
+
+def test_create_scenario_with_template_and_overrides(dummy_client, fake_response):
+    """Test that template_id can be used with explicit area_code/end_year overrides."""
+    body = {
+        "id": 99998,
+        "area_code": "de",
+        "end_year": 2040,
+        "preset_scenario_id": 100000,
+    }
+    response = fake_response(ok=True, status_code=201, json_data=body)
+    client = dummy_client(response, method="post")
+
+    scenario_data = {
+        "template_id": 100000,
+        "area_code": "de",
+        "end_year": 2040,
+    }
+
+    result = CreateScenarioRunner.run(client, scenario_data)
+    assert result.success is True
+    assert result.data == body
+    assert result.errors == []
+
+    # Verify template_id was transformed and area/year included
+    expected_payload = {
+        "scenario": {
+            "preset_scenario_id": 100000,
+            "area_code": "de",
+            "end_year": 2040,
+        }
+    }
+    assert client.calls == [("/scenarios", {"json": expected_payload})]
+
+
+def test_create_scenario_with_template_and_metadata(dummy_client, fake_response):
+    """Test that template_id works with other optional fields like metadata."""
+    body = {
+        "id": 99997,
+        "area_code": "nl",
+        "end_year": 2050,
+        "preset_scenario_id": 100000,
+        "metadata": {"source": "research"},
+    }
+    response = fake_response(ok=True, status_code=201, json_data=body)
+    client = dummy_client(response, method="post")
+
+    scenario_data = {
+        "template_id": 100000,
+        "metadata": {"source": "research"},
+        "private": True,
+    }
+
+    result = CreateScenarioRunner.run(client, scenario_data)
+    assert result.success is True
+    assert result.data == body
+    assert result.errors == []
+
+    # Verify all fields were sent correctly
+    expected_payload = {
+        "scenario": {
+            "preset_scenario_id": 100000,
+            "metadata": {"source": "research"},
+            "private": True,
+        }
+    }
+    assert client.calls == [("/scenarios", {"json": expected_payload})]

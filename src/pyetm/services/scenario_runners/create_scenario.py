@@ -31,7 +31,7 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
         "metadata",
         "start_year",
         "scaling",
-        "template",
+        "template_id",
         "url",
     ]
 
@@ -53,9 +53,11 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
             )
         """
         # Validate required fields
+        has_template = "template_id" in scenario_data
+
         missing_required = []
         for key in CreateScenarioRunner.REQUIRED_KEYS:
-            if key not in scenario_data:
+            if key not in scenario_data and not has_template:
                 missing_required.append(key)
 
         if missing_required:
@@ -76,8 +78,8 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
         for key in filtered_keys:
             warnings.append(f"Ignoring invalid field for scenario creation: {key!r}")
 
-        if "template" in filtered_data:
-            filtered_data["preset_scenario_id"] = filtered_data.pop("template")
+        if "template_id" in filtered_data:
+            filtered_data["preset_scenario_id"] = filtered_data.pop("template_id")
 
         payload = {"scenario": filtered_data}
 

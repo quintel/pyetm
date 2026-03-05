@@ -91,7 +91,7 @@ def full_scenario_metadata():
         "metadata": {"foo": "bar"},
         "start_year": 2020,
         "scaling": None,
-        "template": 5,
+        "preset_scenario_id": 5,
         "url": "http://example.com",
     }
 

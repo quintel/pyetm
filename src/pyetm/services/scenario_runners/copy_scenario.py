@@ -23,7 +23,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         "source",
         "private",
         "keep_compatible",
-        "template",
+        "template_id",
     ]
 
     @staticmethod
@@ -66,9 +66,9 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
 
             scenario_data.update(filtered_overrides)
 
-        # Transform template → preset_scenario_id for ETEngine API
-        if "template" in scenario_data:
-            scenario_data["preset_scenario_id"] = scenario_data.pop("template")
+        # Transform template_id → preset_scenario_id for ETEngine API
+        if "template_id" in scenario_data:
+            scenario_data["preset_scenario_id"] = scenario_data.pop("template_id")
 
         payload = {"scenario": scenario_data}
 

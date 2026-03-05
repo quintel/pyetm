@@ -681,7 +681,7 @@ class TestCreateScenarioFromColumn:
                 "area_code": "nl2015",
                 "end_year": 2050,
                 "private": "yes",
-                "template": "7",
+                "template_id": "7",
                 "source": " src ",
                 "title": " title ",
             }
@@ -708,7 +708,7 @@ class TestCreateScenarioFromColumn:
                 "area_code": "de",
                 "end_year": 2030,
                 "private": 0,
-                "template": None,
+                "template_id": None,
             }
         )
 
