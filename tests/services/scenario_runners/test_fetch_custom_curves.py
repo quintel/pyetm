@@ -112,7 +112,7 @@ def test_fetch_all_curves_includes_internal_parameter(
     assert url == "/scenarios/12345/custom_curves"
     assert params is not None
     assert "params" in params
-    assert params["params"]["include_internal"] is True
+    assert params["params"]["include_internal"] == "true"
 
     # Verify internal curves are in the response
     curve_keys = [curve["key"] for curve in result.data]
