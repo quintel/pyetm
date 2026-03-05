@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 class ScenarioCreationParams(TypedDict, total=False):
     """
     Type definition for create_many parameter dicts.
+
+    Note: template_id must be a Session ID (ETEngine), not a SavedScenario ID (MyETM).
     """
 
     title: Optional[str]
@@ -180,8 +182,10 @@ class Scenarios(Base):
                 - title: Title for the saved scenario (required)
                 - scenario_id: (Optional) ETEngine scenario ID to save. If not provided,
                   a new Session will be created using area_code and end_year
-                - area_code: (Optional if using defaults) Area code for new session
-                - end_year: (Optional if using defaults) End year for new session
+                - template_id: (Optional) Session ID to use as template. Inherits area_code
+                  and end_year from the template.
+                - area_code: (Optional if using defaults or template_id) Area code for new session
+                - end_year: (Optional if using defaults or template_id) End year for new session
                 - user_values: (Optional) Dict of user input values to apply after creation
                 - custom_curves: (Optional) Dict of custom curves to upload after creation
                 - sortables: (Optional) Dict of sortables to apply after creation
@@ -406,9 +410,13 @@ class Scenarios(Base):
             # Use UpdateInputsRunner to build user_values requests
             if data.get("user_values"):
                 try:
-                    request = UpdateInputsRunner.build_request(session, data["user_values"])
+                    request = UpdateInputsRunner.build_request(
+                        session, data["user_values"]
+                    )
                     requests.append(request)
-                    request_metadata.append(("user_values", scenario_idx, scenario.title))
+                    request_metadata.append(
+                        ("user_values", scenario_idx, scenario.title)
+                    )
                 except Exception as e:
                     warnings.append(
                         f"Failed to build user_values request for scenario '{scenario.title}': {e}"

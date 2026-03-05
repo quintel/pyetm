@@ -111,6 +111,7 @@ Basic usage to create + run a scenario and fetch results:
 from pyetm import Scenario
 
 # Create a scenario from a template / region code (example numbers are illustrative)
+# Note: template_id expects Session ID (ETEngine), not SavedScenario ID (MyETM)
 scen = Scenario.create(region=205, end_year=2050, template_id=12345)
 
 # Update some inputs
