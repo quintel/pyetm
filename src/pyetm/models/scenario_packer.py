@@ -131,8 +131,7 @@ class ScenarioPacker(BaseModel):
             carrier_mappings = HourlyOutputCurves._load_carrier_mappings()
             return carrier_mappings.get(carrier_type, [])
         else:
-            validate_hourly_curve_names(curves)
-            return list(curves)
+            return validate_hourly_curve_names(curves)
 
     def hourly_output_curves(
         self,

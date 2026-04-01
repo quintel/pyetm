@@ -100,9 +100,7 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
             )
             curve_keys.append(curve.key)
 
-        results = UpdateCustomCurvesRunner._make_batch_requests(
-            client, requests, batch_size=10
-        )
+        results = UpdateCustomCurvesRunner._make_batch_requests(client, requests)
         successful_uploads = []
         all_errors = []
 
