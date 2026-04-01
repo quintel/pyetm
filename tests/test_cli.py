@@ -241,7 +241,10 @@ class TestCliInit:
             assert "Initialization complete" in result.output
             assert "Created files:" in result.output
             assert "Never commit your .env file" in result.output
-            assert "basic_features.ipynb" in result.output or "example" in result.output.lower()
+            assert (
+                "basic_features.ipynb" in result.output
+                or "example" in result.output.lower()
+            )
 
 
 class TestCliVersion:
