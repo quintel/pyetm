@@ -25,6 +25,44 @@ cd pyetm
 
 ---
 
+## Quick Start
+
+After installing pyetm, initialize your project with:
+
+```bash
+pyetm init
+```
+
+This interactive command will:
+- Prompt you for your ETM API token
+- Ask which environment you want to use (production, beta, or local)
+- Create a `.env` configuration file
+- Generate a `quickstart.py` template with examples to get you started
+
+You can then run the quickstart template:
+```bash
+python quickstart.py
+```
+
+**Get your API token**: Visit the [ETM API authentication docs](https://docs.energytransitionmodel.com/api/authentication) to obtain your personal API token.
+
+### Non-Interactive Setup
+
+You can also provide options directly to skip the prompts:
+
+```bash
+pyetm init --token etm_your.token.here --environment pro --log-level INFO
+```
+
+Options:
+- `--token`: Your ETM API token
+- `--environment`: Target environment (`pro`, `beta`, or `local`)
+- `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
+- `--force`: Overwrite existing files without prompting
+- `--no-quickstart`: Skip creating the quickstart.py template
+
+---
+
 ## Running Jupyter Notebooks (Beginner Friendly)
 
 If you only want to open and run our Jupyter notebooks in VS Code without developing the package,
@@ -113,7 +151,14 @@ You can either:
 
 You can configure your API token and base URL using environment variables or a `.env` file. You can simply set an `environment` and the base URL will be inferred for you.
 
-### Option 1: `.env` File (Recommended)
+### Option 1: Using `pyetm init` (Easiest)
+Run the initialization command to interactively set up your configuration:
+```bash
+pyetm init
+```
+This will create a `.env` file with your settings. See the "Quick Start" section above for more details.
+
+### Option 2: Manual `.env` File
 1. Copy the example file (`.env.example`) and rename it to `.env`:
    ```bash
    cp .env.example .env
@@ -148,7 +193,7 @@ You can configure your API token and base URL using environment variables or a `
 - `local`: Local development environment
 - `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
 
-### Option 2: Environment Variables
+### Option 3: Environment Variables
 Set these environment variables directly in your shell:
 ```bash
 ETM_API_TOKEN=<your token>

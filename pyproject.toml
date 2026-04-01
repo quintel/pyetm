@@ -33,6 +33,9 @@ dependencies = [
   # Configuration and utilities
   "python-dotenv>=1.0.0",
   "pyyaml>=6.0.0",
+
+  # CLI framework
+  "click>=8.0.0",
 ]
 
 [project.scripts]
@@ -48,7 +51,8 @@ packages = [{ include = "pyetm", from = "src" }]
 include = [
   "LICENSE",
   "src/pyetm/config/*.yml",
-  "src/pyetm/config/*.yaml"
+  "src/pyetm/config/*.yaml",
+  "src/pyetm/templates/*"
 ]
 
 
