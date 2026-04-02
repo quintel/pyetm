@@ -99,8 +99,8 @@ class TestCliInit:
             assert "ENVIRONMENT=pro" in env_content
             assert "LOG_LEVEL=INFO" in env_content
 
-    def test_init_creates_quickstart(self, runner, temp_dir):
-        """Test that init creates quickstart.py"""
+    def test_init_copies_example_files(self, runner, temp_dir):
+        """Test that init copies example files"""
         with runner.isolated_filesystem(temp_dir=temp_dir):
             result = runner.invoke(
                 cli,
@@ -109,11 +109,15 @@ class TestCliInit:
             )
 
             assert result.exit_code == 0
-            assert Path("quickstart.py").exists()
 
-            # Check it's a Python file
-            quickstart_content = Path("quickstart.py").read_text()
-            assert "from pyetm.models import Scenario" in quickstart_content
+            # Check example files are copied
+            assert Path("basic_features.ipynb").exists()
+            assert Path("advanced_features.ipynb").exists()
+            assert Path("example_helpers.py").exists()
+            assert Path("inputs/example_input_excel.xlsx").exists()
+
+            # Check inputs directory was created
+            assert Path("inputs").is_dir()
 
     def test_init_with_cli_options(self, runner, temp_dir):
         """Test init with command-line options instead of prompts"""
@@ -149,25 +153,6 @@ class TestCliInit:
             assert result.exit_code != 0
             assert "Invalid API token" in result.output
 
-    def test_init_no_quickstart_flag(self, runner, temp_dir):
-        """Test --no-quickstart flag"""
-        with runner.isolated_filesystem(temp_dir=temp_dir):
-            result = runner.invoke(
-                cli,
-                [
-                    "init",
-                    "--token",
-                    "etm_test.token.here",
-                    "--environment",
-                    "pro",
-                    "--no-quickstart",
-                ],
-            )
-
-            assert result.exit_code == 0
-            assert Path(".env").exists()
-            assert not Path("quickstart.py").exists()
-
     def test_init_prompts_overwrite(self, runner, temp_dir):
         """Test that init prompts before overwriting existing files"""
         with runner.isolated_filesystem(temp_dir=temp_dir):
@@ -196,8 +181,8 @@ class TestCliInit:
             env_path = Path(".env")
             env_path.write_text("OLD_CONTENT=true")
 
-            quickstart_path = Path("quickstart.py")
-            quickstart_path.write_text("# Old quickstart")
+            example_path = Path("basic_features.ipynb")
+            example_path.write_text("# Old notebook")
 
             # Run init with --force
             result = runner.invoke(
@@ -219,9 +204,29 @@ class TestCliInit:
             assert "OLD_CONTENT" not in env_content
             assert "ETM_API_TOKEN=etm_test.token.here" in env_content
 
-            quickstart_content = quickstart_path.read_text()
-            assert "# Old quickstart" not in quickstart_content
-            assert "from pyetm.models import Scenario" in quickstart_content
+            example_content = example_path.read_text()
+            assert "# Old notebook" not in example_content
+
+    def test_init_prompts_for_example_overwrite(self, runner, temp_dir):
+        """Test that init prompts before overwriting existing example files"""
+        with runner.isolated_filesystem(temp_dir=temp_dir):
+            # Create existing example file
+            example_path = Path("basic_features.ipynb")
+            example_path.write_text("# Old notebook")
+
+            # Run init and decline overwrite for the example file
+            result = runner.invoke(
+                cli,
+                ["init"],
+                input="etm_test.token.here\npro\nINFO\nn\n",  # 'n' = no to overwrite
+            )
+
+            assert result.exit_code == 0
+            assert "already exists" in result.output
+            assert "Skipped basic_features.ipynb" in result.output
+
+            # Old content should be preserved
+            assert "# Old notebook" in example_path.read_text()
 
     def test_init_success_message(self, runner, temp_dir):
         """Test that success message is shown"""
@@ -236,6 +241,7 @@ class TestCliInit:
             assert "Initialization complete" in result.output
             assert "Created files:" in result.output
             assert "Never commit your .env file" in result.output
+            assert "basic_features.ipynb" in result.output or "example" in result.output.lower()
 
 
 class TestCliVersion:

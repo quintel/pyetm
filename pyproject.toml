@@ -52,7 +52,10 @@ include = [
   "LICENSE",
   "src/pyetm/config/*.yml",
   "src/pyetm/config/*.yaml",
-  "src/pyetm/templates/*"
+  "src/pyetm/templates/*",
+  "examples/*.ipynb",
+  "examples/*.py",
+  "examples/inputs/*.xlsx"
 ]
 
 

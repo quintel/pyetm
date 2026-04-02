@@ -6,6 +6,7 @@ Provides CLI commands for managing pyetm projects.
 import sys
 from pathlib import Path
 from importlib.metadata import version
+import shutil
 import click
 import re
 
@@ -79,6 +80,72 @@ def write_file_safely(path: Path, content: str, force: bool = False) -> bool:
     return True
 
 
+def get_examples_path() -> Path:
+    """Get the path to the examples directory in the package."""
+    package_dir = Path(__file__).parent.parent.parent
+    examples_path = package_dir / "examples"
+    return examples_path
+
+
+def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str], list[str]]:
+    """
+    Copy example files from the package to the target directory.
+
+    Files are copied with a flat structure:
+    - Notebooks and .py files go to the root of target_dir
+    - Excel files go to target_dir/inputs/
+
+    Args:
+        target_dir: Directory to copy files into
+        force: If True, overwrite existing files without prompting
+
+    Returns:
+        Tuple of (created_files, skipped_files)
+    """
+    examples_path = get_examples_path()
+
+    if not examples_path.exists():
+        raise FileNotFoundError(
+            f"Examples directory not found: {examples_path}\n"
+            "This may indicate an incomplete package installation."
+        )
+
+    created_files = []
+    skipped_files = []
+
+    # Files to copy with their target paths
+    files_to_copy = [
+        (examples_path / "advanced_features.ipynb", target_dir / "advanced_features.ipynb"),
+        (examples_path / "basic_features.ipynb", target_dir / "basic_features.ipynb"),
+        (examples_path / "example_helpers.py", target_dir / "example_helpers.py"),
+        (examples_path / "inputs" / "example_input_excel.xlsx", target_dir / "inputs" / "example_input_excel.xlsx"),
+    ]
+
+    for source_path, dest_path in files_to_copy:
+        if not source_path.exists():
+            click.echo(f"  ⚠ Warning: Source file not found: {source_path.name}")
+            continue
+
+        # Create parent directory if needed (for inputs folder)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Check if file already exists
+        if dest_path.exists() and not force:
+            overwrite = click.confirm(
+                f"  {dest_path.name} already exists. Overwrite?", default=False
+            )
+            if not overwrite:
+                click.echo(f"  ⊗ Skipped {dest_path.name}")
+                skipped_files.append(dest_path.name)
+                continue
+
+        # Copy the file
+        shutil.copy2(source_path, dest_path)
+        created_files.append(dest_path.name)
+
+    return created_files, skipped_files
+
+
 @click.group()
 @click.version_option(version=version("pyetm"), prog_name="pyetm")
 def cli():
@@ -115,16 +182,11 @@ def cli():
     is_flag=True,
     help="Overwrite existing files without prompting",
 )
-@click.option(
-    "--no-quickstart",
-    is_flag=True,
-    help="Skip creating quickstart.py template",
-)
-def init(token, environment, log_level, force, no_quickstart):
+def init(token, environment, log_level, force):
     """
     Initialize a new pyetm project.
 
-    Creates .env configuration file and quickstart.py template in the current directory.
+    Creates .env configuration file and copies example notebooks and files to the current directory.
     """
     click.echo("\n" + "=" * 60)
     click.echo("PyETM Project Initialization")
@@ -175,23 +237,20 @@ def init(token, environment, log_level, force, no_quickstart):
         click.echo(f"  ✗ Failed to create .env: {e}", err=True)
         sys.exit(1)
 
-    # 2. Create quickstart.py (unless --no-quickstart)
-    if not no_quickstart:
-        click.echo("\nCreating quickstart template...")
-        try:
-            quickstart_template = read_template("quickstart.py.template")
+    # 2. Copy example files
+    click.echo("\nCopying example files...")
+    try:
+        example_created, example_skipped = copy_example_files(target_dir, force)
 
-            # Write quickstart.py
-            quickstart_path = target_dir / "quickstart.py"
-            if write_file_safely(quickstart_path, quickstart_template, force):
-                click.echo(f"  ✓ Created {quickstart_path.name}")
-                created_files.append("quickstart.py")
-            else:
-                skipped_files.append("quickstart.py")
+        for filename in example_created:
+            click.echo(f"  ✓ Created {filename}")
+            created_files.append(filename)
 
-        except Exception as e:
-            click.echo(f"  ✗ Failed to create quickstart.py: {e}", err=True)
-            # Don't exit - .env is more important
+        skipped_files.extend(example_skipped)
+
+    except Exception as e:
+        click.echo(f"  ✗ Failed to copy example files: {e}", err=True)
+        # Don't exit - .env is more important
 
     # Success summary
     click.echo("\n" + "=" * 60)
@@ -211,13 +270,10 @@ def init(token, environment, log_level, force, no_quickstart):
     # Next steps
     click.echo("\nNext steps:")
     click.echo("  1. Review your .env configuration")
-
-    if "quickstart.py" in created_files:
-        click.echo("  2. Run the quickstart: python quickstart.py")
-        click.echo("  3. Explore the examples and documentation")
-    else:
-        click.echo("  2. Start coding with: from pyetm.models import Scenario")
-        click.echo("  3. Check out: https://docs.energytransitionmodel.com/main/pyetm/")
+    click.echo("  2. Explore the example notebooks:")
+    click.echo("     • basic_features.ipynb - Introduction to core functionality")
+    click.echo("     • advanced_features.ipynb - Advanced usage patterns")
+    click.echo("  3. Check out: https://docs.energytransitionmodel.com/main/pyetm/")
 
     click.echo("\n⚠️  Remember: Never commit your .env file to version control!\n")
 

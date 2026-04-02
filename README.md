@@ -37,12 +37,7 @@ This interactive command will:
 - Prompt you for your ETM API token
 - Ask which environment you want to use (production, beta, or local)
 - Create a `.env` configuration file
-- Generate a `quickstart.py` template with examples to get you started
-
-You can then run the quickstart template:
-```bash
-python quickstart.py
-```
+- Copy example Jupyter notebooks and helper files to your current directory
 
 **Get your API token**: Visit the [ETM API authentication docs](https://docs.energytransitionmodel.com/api/authentication) to obtain your personal API token.
 
@@ -59,7 +54,6 @@ Options:
 - `--environment`: Target environment (`pro`, `beta`, or `local`)
 - `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
-- `--no-quickstart`: Skip creating the quickstart.py template
 
 ---
 
