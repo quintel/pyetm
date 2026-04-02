@@ -21,6 +21,9 @@ def clean_settings_env(monkeypatch, tmp_path):
         "DECIMAL_SEPARATOR",
         "PROXY_SERVERS_HTTP",
         "PROXY_SERVERS_HTTPS",
+        "SSL_VERIFY",
+        "TRUST_ENV",
+        "SSL_CERT_PATH",
     ]
     for var in etm_vars:
         monkeypatch.delenv(var, raising=False)
@@ -289,3 +292,115 @@ PROXY_SERVERS_HTTP="http://user:pass@proxy.example.com:8080"'''
     assert config.log_level == "DEBUG WITH SPACES"
     assert config.csv_separator == ";"
     assert config.proxy_servers_http == "http://user:pass@proxy.example.com:8080"
+
+
+# Test SSL default values
+def test_ssl_default_values(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token"})
+
+    config = AppConfig()
+
+    assert config.ssl_verify is True  # Should verify by default
+    assert config.trust_env is False  # Should not trust env by default
+    assert config.ssl_cert_path is None  # No custom cert by default
+
+
+# Test SSL verification can be disabled
+def test_ssl_verify_disabled(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "SSL_VERIFY": "false",
+        },
+    )
+
+    config = AppConfig()
+
+    assert config.ssl_verify is False
+
+
+# Test trust_env can be enabled
+def test_trust_env_enabled(clean_settings_env):
+    env_file = clean_settings_env
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "TRUST_ENV": "true",
+        },
+    )
+
+    config = AppConfig()
+
+    assert config.trust_env is True
+
+
+# Test custom SSL certificate path
+def test_ssl_cert_path_valid(clean_settings_env, tmp_path):
+    env_file = clean_settings_env
+
+    # Create a dummy cert file
+    cert_file = tmp_path / "ca-bundle.crt"
+    cert_file.write_text("-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----")
+
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "SSL_CERT_PATH": str(cert_file),
+        },
+    )
+
+    config = AppConfig()
+
+    assert config.ssl_cert_path == cert_file
+    assert config.ssl_cert_path.exists()
+
+
+# Test invalid SSL certificate path raises error
+def test_ssl_cert_path_invalid_raises_error(clean_settings_env, tmp_path):
+    env_file = clean_settings_env
+
+    # Use a path that doesn't exist
+    fake_cert_path = tmp_path / "nonexistent.crt"
+
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "SSL_CERT_PATH": str(fake_cert_path),
+        },
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        AppConfig()
+
+    errs = excinfo.value.errors()
+    assert any("SSL certificate file not found" in str(err) for err in errs)
+
+
+# Test all SSL options together
+def test_all_ssl_options_together(clean_settings_env, tmp_path):
+    env_file = clean_settings_env
+
+    cert_file = tmp_path / "custom-ca.crt"
+    cert_file.write_text("-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----")
+
+    write_env_file(
+        env_file,
+        {
+            "ETM_API_TOKEN": "etm_valid.looking.token",
+            "SSL_VERIFY": "true",
+            "TRUST_ENV": "true",
+            "SSL_CERT_PATH": str(cert_file),
+        },
+    )
+
+    config = AppConfig()
+
+    assert config.ssl_verify is True
+    assert config.trust_env is True
+    assert config.ssl_cert_path == cert_file
