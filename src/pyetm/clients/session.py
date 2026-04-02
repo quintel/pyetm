@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 import threading
+from pathlib import Path
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
@@ -99,7 +101,14 @@ class ETMResponse(BaseModel):
 class ETMSession:
     """Modern async session for ETM API interactions."""
 
-    def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None):
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        token: Optional[str] = None,
+        ssl_verify: Optional[bool] = None,
+        trust_env: Optional[bool] = None,
+        ssl_cert_path: Optional[Path] = None,
+    ):
         self.base_url = str(base_url or get_settings().base_url).rstrip("/")
         self.token = token or get_settings().etm_api_token
         self.headers = {
@@ -107,6 +116,12 @@ class ETMSession:
             "Accept": "application/json",
         }
         self.proxies = get_settings().proxy_servers or {}
+
+        # SSL configuration
+        settings = get_settings()
+        self.ssl_verify = ssl_verify if ssl_verify is not None else settings.ssl_verify
+        self.trust_env = trust_env if trust_env is not None else settings.trust_env
+        self.ssl_cert_path = ssl_cert_path or settings.ssl_cert_path
 
         self._session: Optional[aiohttp.ClientSession] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -137,18 +152,32 @@ class ETMSession:
             future.result()
 
     async def _create_session(self):
-        """Create aiohttp session."""
+        """Create aiohttp session with SSL configuration."""
         connector_kwargs = {
             "limit": 10,
             "limit_per_host": 2,
             "keepalive_timeout": 120,
         }
 
+        # Configure SSL verification
+        ssl_context: Optional[ssl.SSLContext | bool] = None
+        if not self.ssl_verify:
+            # Disable SSL verification (for testing with self-signed certs)
+            ssl_context = False
+        elif self.ssl_cert_path:
+            # Use custom CA certificate bundle
+            ssl_context = ssl.create_default_context(cafile=str(self.ssl_cert_path))
+        # else: ssl_context remains None, which uses Python's default SSL verification
+
+        connector_kwargs["ssl"] = ssl_context
         connector = aiohttp.TCPConnector(**connector_kwargs)
         timeout = aiohttp.ClientTimeout(total=120, connect=120)
 
         self._session = aiohttp.ClientSession(
-            headers=self.headers, connector=connector, timeout=timeout
+            headers=self.headers,
+            connector=connector,
+            timeout=timeout,
+            trust_env=self.trust_env,
         )
 
     def request(self, method: str, url: str, **kwargs) -> ETMResponse:

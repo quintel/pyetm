@@ -26,9 +26,13 @@ class BaseClient(metaclass=SingletonMeta):
             base_url (Optional[str]): Base URL for API requests. If None, uses the
                 base URL from application settings.
         """
+        settings = get_settings()
         self.session = ETMSession(
-            base_url=base_url or get_settings().base_url,
-            token=token or get_settings().etm_api_token,
+            base_url=base_url or settings.base_url,
+            token=token or settings.etm_api_token,
+            ssl_verify=settings.ssl_verify,
+            trust_env=settings.trust_env,
+            ssl_cert_path=settings.ssl_cert_path,
         )
 
     def close(self):

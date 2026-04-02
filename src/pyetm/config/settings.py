@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 import tempfile
 from typing import Optional, ClassVar, List, Annotated
-from pydantic import Field, ValidationError, HttpUrl, field_validator
+from pydantic import Field, ValidationError, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +42,18 @@ class AppConfig(BaseSettings):
         None,
         description="HTTPS proxy server URL",
     )
+    ssl_verify: bool = Field(
+        True,
+        description="Verify SSL certificates (set to False only for testing with self-signed certificates)",
+    )
+    trust_env: bool = Field(
+        False,
+        description="Trust system environment proxy settings (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)",
+    )
+    ssl_cert_path: Optional[Path] = Field(
+        None,
+        description="Path to custom CA certificate bundle for SSL verification",
+    )
     csv_separator: str = Field(
         ",",
         description="CSV file separator character",
@@ -59,6 +71,16 @@ class AppConfig(BaseSettings):
     )
 
     temp_folder: Optional[Path] = Path(tempfile.gettempdir()) / "pyetm"
+
+    @model_validator(mode="after")
+    def validate_ssl_cert_path(self):
+        """Validate that SSL cert path exists if provided."""
+        if self.ssl_cert_path is not None and not self.ssl_cert_path.exists():
+            raise ValueError(
+                f"SSL certificate file not found: {self.ssl_cert_path}. "
+                f"Please provide a valid path to a CA certificate bundle."
+            )
+        return self
 
     @field_validator("etm_api_token")
     @classmethod
