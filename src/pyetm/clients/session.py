@@ -115,7 +115,6 @@ class ETMSession:
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/json",
         }
-        self.proxies = get_settings().proxy_servers or {}
 
         # SSL configuration
         settings = get_settings()
@@ -270,11 +269,6 @@ class ETMSession:
             request_kwargs["params"] = kwargs["params"]
         if "data" in kwargs:
             request_kwargs["data"] = kwargs["data"]
-
-        if self.proxies:
-            request_kwargs["proxy"] = self.proxies.get(
-                "http", self.proxies.get("https")
-            )
 
         if "headers" in kwargs:
             headers = dict(self.headers)

@@ -34,14 +34,6 @@ class AppConfig(BaseSettings):
         description="App logging level",
     )
 
-    proxy_servers_http: Optional[str] = Field(
-        None,
-        description="HTTP proxy server URL",
-    )
-    proxy_servers_https: Optional[str] = Field(
-        None,
-        description="HTTPS proxy server URL",
-    )
     ssl_verify: bool = Field(
         True,
         description="Verify SSL certificates (set to False only for testing with self-signed certificates)",
@@ -126,15 +118,6 @@ class AppConfig(BaseSettings):
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
-    @property
-    def proxy_servers(self) -> dict[str, str]:
-        """Return proxy servers as a dictionary"""
-        proxies = {}
-        if self.proxy_servers_http:
-            proxies["http"] = self.proxy_servers_http
-        if self.proxy_servers_https:
-            proxies["https"] = self.proxy_servers_https
-        return proxies
 
 
 def get_settings() -> AppConfig:
