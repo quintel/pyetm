@@ -247,9 +247,13 @@ def write_index(
     if isinstance(index, pd.MultiIndex):
         for row, values in enumerate(index.values):
             for col, value in enumerate(values):
+                if isinstance(value, np.datetime64):
+                    value = pd.Timestamp(value)
                 worksheet.write(row + row_offset, col, value)
     else:
         for row, value in enumerate(index.values):
+            if isinstance(value, np.datetime64):
+                value = pd.Timestamp(value)
             worksheet.write(row + row_offset, 0, value)
 
 

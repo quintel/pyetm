@@ -21,8 +21,8 @@ dependencies = [
   "pydantic>=2.8.0,<3.0.0",
   "pydantic-settings>=2.7.0,<3.0.0",
 
-  # Data handling - pandas 2.x has breaking changes from 1.x
-  "pandas>=2.0.0,<3.0.0",
+  # Data handling - pandas 3.x tested and compatible
+  "pandas>=2.0.0,<4.0.0",
   "openpyxl>=3.0.0",
   "xlsxwriter>=3.0.0",
 

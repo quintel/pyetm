@@ -356,7 +356,7 @@ class Packable(BaseModel):
         self, workbook: Workbook, sheet_name: str, df: pd.DataFrame
     ):
         "Add a DataFrame to the workbook as a new sheet."
-        cleaned_df = df.fillna("").infer_objects(copy=False)
+        cleaned_df = df.fillna("").infer_objects()
         excel_utils.add_frame(
             name=sheet_name,
             frame=cleaned_df,
