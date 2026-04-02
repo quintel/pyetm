@@ -19,8 +19,6 @@ def clean_settings_env(monkeypatch, tmp_path):
         "ENVIRONMENT",
         "CSV_SEPARATOR",
         "DECIMAL_SEPARATOR",
-        "PROXY_SERVERS_HTTP",
-        "PROXY_SERVERS_HTTPS",
         "SSL_VERIFY",
         "TRUST_ENV",
         "SSL_CERT_PATH",
@@ -102,29 +100,6 @@ def test_base_url_inference_from_environment(clean_settings_env):
     )
 
 
-# Test proxy servers configuration
-def test_proxy_servers_configuration(clean_settings_env):
-    env_file = clean_settings_env
-    write_env_file(
-        env_file,
-        {
-            "ETM_API_TOKEN": "etm_valid.looking.token",
-            "PROXY_SERVERS_HTTP": "http://proxy.example.com:8080",
-            "PROXY_SERVERS_HTTPS": "https://secure.proxy.com:8080",
-        },
-    )
-
-    config = AppConfig()
-
-    assert config.proxy_servers_http == "http://proxy.example.com:8080"
-    assert config.proxy_servers_https == "https://secure.proxy.com:8080"
-
-    # Test backward compatibility property
-    proxy_dict = config.proxy_servers
-    assert proxy_dict["http"] == "http://proxy.example.com:8080"
-    assert proxy_dict["https"] == "https://secure.proxy.com:8080"
-
-
 # Test no .env file, only environment variables
 def test_no_env_file_uses_env_vars_and_defaults(clean_settings_env, monkeypatch):
     # Don't create the env_file, just set environment variable
@@ -167,8 +142,6 @@ def test_default_values(clean_settings_env):
     assert config.log_level == "INFO"
     assert config.csv_separator == ","
     assert config.decimal_separator == "."
-    assert config.proxy_servers_http is None
-    assert config.proxy_servers_https is None
     assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
 
 
@@ -282,8 +255,7 @@ def test_quoted_values_in_env_file(clean_settings_env):
     env_file = clean_settings_env
     content = '''ETM_API_TOKEN=etm_valid.looking.token
 LOG_LEVEL="DEBUG WITH SPACES"
-CSV_SEPARATOR=";"
-PROXY_SERVERS_HTTP="http://user:pass@proxy.example.com:8080"'''
+CSV_SEPARATOR=";"'''
     env_file.write_text(content)
 
     config = AppConfig()
@@ -291,7 +263,6 @@ PROXY_SERVERS_HTTP="http://user:pass@proxy.example.com:8080"'''
     assert config.etm_api_token == "etm_valid.looking.token"
     assert config.log_level == "DEBUG WITH SPACES"
     assert config.csv_separator == ";"
-    assert config.proxy_servers_http == "http://user:pass@proxy.example.com:8080"
 
 
 # Test SSL default values
