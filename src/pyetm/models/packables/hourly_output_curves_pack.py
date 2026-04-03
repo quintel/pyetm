@@ -36,6 +36,38 @@ class HourlyOutputCurvesPack(Packable):
         Transforms the model's multi-index format into column-based format for concatenation.
         """
         try:
+            # Fetch the requested curves from the API
+            # If curves is specified, fetch only those curves
+            # If curves is None, attempt to fetch all curves in the collection
+            if curves is not None:
+                curves_to_fetch = curves
+            else:
+                # Try to get all attached curves, but handle case where this isn't available
+                try:
+                    attached = scenario.hourly_output_curves.attached_keys()
+                    # Validate it's iterable
+                    curves_to_fetch = list(attached) if attached else []
+                except (AttributeError, TypeError):
+                    # If attached_keys() doesn't exist or fails, skip fetching
+                    curves_to_fetch = []
+
+            # Fetch each curve (will cache for later use by to_dataframe)
+            if hasattr(scenario, 'get_output_curve') and curves_to_fetch:
+                try:
+                    for curve_name in curves_to_fetch:
+                        try:
+                            scenario.get_output_curve(curve_name)
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to fetch curve %s for scenario %s: %s",
+                                curve_name,
+                                scenario.identifier(),
+                                e,
+                            )
+                except (TypeError, AttributeError):
+                    # Handle case where curves_to_fetch isn't iterable
+                    pass
+
             # Delegate to the model's to_dataframe() method
             df = scenario.hourly_output_curves.to_dataframe(curves=curves, **kwargs)
 
@@ -160,6 +192,38 @@ class HourlyOutputCurvesPack(Packable):
         for scenario in self.scenarios:
             try:
                 scenario_key = self._key_for(scenario)
+
+                # Fetch the requested curves from the API
+                # If curves is specified, fetch only those curves
+                # If curves is None, attempt to fetch all curves in the collection
+                if curves is not None:
+                    curves_to_fetch = curves
+                else:
+                    # Try to get all attached curves, but handle case where this isn't available
+                    try:
+                        attached = scenario.hourly_output_curves.attached_keys()
+                        # Validate it's iterable
+                        curves_to_fetch = list(attached) if attached else []
+                    except (AttributeError, TypeError):
+                        # If attached_keys() doesn't exist or fails, skip fetching
+                        curves_to_fetch = []
+
+                # Fetch each curve (will cache for later use by to_dataframe)
+                if hasattr(scenario, 'get_output_curve') and curves_to_fetch:
+                    try:
+                        for curve_name in curves_to_fetch:
+                            try:
+                                scenario.get_output_curve(curve_name)
+                            except Exception as e:
+                                logger.warning(
+                                    "Failed to fetch curve %s for scenario %s: %s",
+                                    curve_name,
+                                    scenario.identifier(),
+                                    e,
+                                )
+                    except (TypeError, AttributeError):
+                        # Handle case where curves_to_fetch isn't iterable
+                        pass
 
                 # Get multi-index dataframe from model
                 df = scenario.hourly_output_curves.to_dataframe(curves=curves)

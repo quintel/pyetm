@@ -34,6 +34,23 @@ class AnnualExportsPack(Packable):
             if exports is None:
                 return None
 
+            # Fetch the requested exports from the API
+            if hasattr(scenario, 'get_annual_export') and exports:
+                try:
+                    for export_name in exports:
+                        try:
+                            scenario.get_annual_export(export_name)
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to fetch export %s for scenario %s: %s",
+                                export_name,
+                                scenario.identifier(),
+                                e,
+                            )
+                except (TypeError, AttributeError):
+                    # Handle case where exports isn't iterable
+                    pass
+
             # Delegate to the model's to_dataframe() method
             df = scenario.annual_exports.to_dataframe(exports=exports, **kwargs)
 
@@ -61,13 +78,30 @@ class AnnualExportsPack(Packable):
 
         for scenario in self.scenarios:
             try:
+                scenario_key = self._key_for(scenario)
+
+                # Fetch the requested exports from the API
+                if hasattr(scenario, 'get_annual_export') and exports:
+                    try:
+                        for export_name in exports:
+                            try:
+                                scenario.get_annual_export(export_name)
+                            except Exception as e:
+                                logger.warning(
+                                    "Failed to fetch export %s for scenario %s: %s",
+                                    export_name,
+                                    scenario.identifier(),
+                                    e,
+                                )
+                    except (TypeError, AttributeError):
+                        # Handle case where exports isn't iterable
+                        pass
+
                 # Get multi-index dataframe from model
                 df = scenario.annual_exports.to_dataframe(exports=exports)
 
                 if df is None or df.empty:
                     continue
-
-                scenario_key = self._key_for(scenario)
 
                 for export_name in df.index.get_level_values("export_name").unique():
                     export_df = df.xs(export_name, level="export_name")
