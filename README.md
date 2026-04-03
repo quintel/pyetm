@@ -188,7 +188,24 @@ You can override the base URL directly if needed:
 BASE_URL=https://engine.energytransitionmodel.com/api/v3
 ```
 
-For proxy settings and other advanced options, see [the full documentation](https://docs.energytransitionmodel.com/main/pyetm/introduction).
+#### SSL/TLS Configuration
+
+For corporate environments or custom certificate setups:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `SSL_VERIFY` | `true` | Verify SSL certificates. Set to `false` only for testing with self-signed certificates. **Never disable in production!** |
+| `TRUST_ENV` | `false` | Enable system proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) |
+| `SSL_CERT_PATH` | (empty) | Path to custom CA certificate bundle for corporate environments |
+
+**Example for corporate CA:**
+```bash
+SSL_CERT_PATH=/path/to/corporate-ca-bundle.pem
+TRUST_ENV=true
+HTTP_PROXY=http://proxy.company.com:8080
+```
+
+For more advanced options, see [the full documentation](https://docs.energytransitionmodel.com/main/pyetm/introduction).
 
 ---
 
