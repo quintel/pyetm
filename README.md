@@ -12,6 +12,8 @@ More documentation is available [via the ETM documentation page](https://docs.en
 
 ## Installation
 
+**Note: If you are not familiar working with python packages, please refer to the quick start guide first.**
+
 Install **pyetm** from PyPI:
 ```bash
 pip install pyetm
@@ -59,6 +61,13 @@ source .venv/bin/activate
 With your virtual environment activated:
 ```bash
 pip install pyetm
+```
+
+**Note: New versions of pyetm are consistently released. [Check here for the latest release](https://pypi.org/project/pyetm/#history)**
+
+An example of how to install a specific release:
+```bash
+pip install pyetm==2.0.0
 ```
 
 ### 3. Initialize Your Project
@@ -127,6 +136,18 @@ If you prefer VS Code:
 2. Open a `.ipynb` file
 3. Click **Select Kernel** at the top right
 4. Choose **Python (pyetm)** from the list
+
+### Important notes
+
+The notebooks are set up to run against scenarios on pro. You will need to make some edits to the paths in these notebooks, for example in `basic_features.ipynb` the examples attempt to read from:
+```
+"../examples/inputs/example_input_excel.xlsx"
+```
+Whereas your example_input_excel.xlsx is more likely to be at:
+```
+"inputs/example_input_excel.xlsx"
+```
+You can change the paths or move the files!
 
 ---
 

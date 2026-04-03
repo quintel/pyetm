@@ -87,7 +87,9 @@ def get_examples_path() -> Path:
     return examples_path
 
 
-def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str], list[str]]:
+def copy_example_files(
+    target_dir: Path, force: bool = False
+) -> tuple[list[str], list[str]]:
     """
     Copy example files from the package to the target directory.
 
@@ -115,10 +117,16 @@ def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str]
 
     # Files to copy with their target paths
     files_to_copy = [
-        (examples_path / "advanced_features.ipynb", target_dir / "advanced_features.ipynb"),
+        (
+            examples_path / "advanced_features.ipynb",
+            target_dir / "advanced_features.ipynb",
+        ),
         (examples_path / "basic_features.ipynb", target_dir / "basic_features.ipynb"),
         (examples_path / "example_helpers.py", target_dir / "example_helpers.py"),
-        (examples_path / "inputs" / "example_input_excel.xlsx", target_dir / "inputs" / "example_input_excel.xlsx"),
+        (
+            examples_path / "inputs" / "example_input_excel.xlsx",
+            target_dir / "inputs" / "example_input_excel.xlsx",
+        ),
     ]
 
     for source_path, dest_path in files_to_copy:
@@ -254,7 +262,7 @@ def init(token, environment, log_level, force):
 
     # Success summary
     click.echo("\n" + "=" * 60)
-    click.echo("🎉 Initialization complete!")
+    click.echo("Initialization complete!")
     click.echo("=" * 60 + "\n")
 
     if created_files:
@@ -275,7 +283,7 @@ def init(token, environment, log_level, force):
     click.echo("     • advanced_features.ipynb - Advanced usage patterns")
     click.echo("  3. Check out: https://docs.energytransitionmodel.com/main/pyetm/")
 
-    click.echo("\n⚠️  Remember: Never commit your .env file to version control!\n")
+    click.echo("\n  Remember: Never commit your .env file to version control!\n")
 
 
 def main():
