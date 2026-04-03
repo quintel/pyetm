@@ -1,12 +1,73 @@
 # Setting up everything for you!
 
 
-def setup_notebook(debug=False):
+def setup_logging(level="WARNING"):
+    """
+    Configure logging for pyetm to show errors and warnings from batch operations.
+
+    Args:
+        level (str): Logging level. Options: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+                    - 'WARNING' (default): Shows warnings and errors from batch operations
+                    - 'INFO': Shows informational messages plus warnings/errors
+                    - 'ERROR': Only shows critical errors
+                    - 'DEBUG': Shows all logging output (verbose)
+
+    Example:
+        # Show all warnings from batch operations (recommended)
+        setup_logging('WARNING')
+
+        # Show detailed debug information
+        setup_logging('DEBUG')
+
+        # Only show critical errors
+        setup_logging('ERROR')
+    """
+    import logging
+
+    # Get the pyetm logger
+    logger = logging.getLogger("pyetm")
+    logger.setLevel(getattr(logging, level.upper()))
+
+    # Create console handler if not already present
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setLevel(getattr(logging, level.upper()))
+
+        # Create formatter
+        formatter = logging.Formatter(
+            "%(levelname)s [%(name)s.%(module)s]: %(message)s"
+        )
+        handler.setFormatter(formatter)
+
+        logger.addHandler(handler)
+
+    # Prevent propagation to root logger to avoid duplicate messages
+    logger.propagate = False
+
+    return logger
+
+
+def setup_notebook(debug=False, logging_level="WARNING"):
     """
     Set up the notebook environment for ETM API usage.
 
+    Configures pandas display options, IPython traceback handling, and pyetm logging.
+    By default, configures logging at WARNING level to show errors from batch operations.
+
     Args:
         debug (bool): If True, shows full tracebacks. If False, hides them for cleaner output.
+        logging_level (str): Logging level for pyetm. Options: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+                            Default is 'WARNING' to show batch operation errors.
+
+    Example:
+        # Standard setup (shows warnings and errors)
+        setup_notebook()
+
+        # Verbose setup (shows all debug output)
+        setup_notebook(debug=True, logging_level='DEBUG')
+
+        # Quiet setup (only critical errors)
+        setup_notebook(logging_level='ERROR')
     """
     import sys
     import builtins
@@ -16,6 +77,9 @@ def setup_notebook(debug=False):
     from IPython.display import display, HTML
 
     warnings.filterwarnings("ignore", category=FutureWarning)
+
+    # Configure logging for pyetm
+    setup_logging(logging_level)
 
     # Handle traceback display based on debug mode
     ipython = get_ipython()

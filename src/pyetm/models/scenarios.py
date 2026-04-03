@@ -194,6 +194,10 @@ class Scenarios(Base):
             client: Optional BaseClient instance (shared across all creates)
             raise_on_data_errors: If True, raise exception when data application fails.
                                   If False (default), store failures in data_warnings list.
+
+        Returns:
+            Scenarios: Collection of created scenarios with data_warnings attribute containing
+                      any errors from applying user_values, custom_curves, or sortables.
         """
         if client is None:
             client = BaseClient()
@@ -293,6 +297,8 @@ class Scenarios(Base):
                         f"Failed to apply data to scenarios:\n{error_summary}"
                     )
                 else:
+                    for warning in failure_warnings:
+                        logger.warning(f"Batch data application: {warning}")
                     scenarios.data_warnings.extend(failure_warnings)
 
         return scenarios
@@ -418,9 +424,9 @@ class Scenarios(Base):
                         ("user_values", scenario_idx, scenario.title)
                     )
                 except Exception as e:
-                    warnings.append(
-                        f"Failed to build user_values request for scenario '{scenario.title}': {e}"
-                    )
+                    warning_msg = f"Failed to build user_values request for scenario '{scenario.title}': {e}"
+                    logger.warning(warning_msg)
+                    warnings.append(warning_msg)
 
             # Use UpdateCustomCurvesRunner to build curve requests
             if data.get("custom_curves"):
@@ -434,9 +440,9 @@ class Scenarios(Base):
                             ("custom_curve", scenario_idx, scenario.title, curve_key)
                         )
                 except Exception as e:
-                    warnings.append(
-                        f"Failed to build curve requests for scenario '{scenario.title}': {e}"
-                    )
+                    warning_msg = f"Failed to build curve requests for scenario '{scenario.title}': {e}"
+                    logger.warning(warning_msg)
+                    warnings.append(warning_msg)
 
             # Use UpdateSortablesRunner to build sortables requests
             if data.get("sortables"):
@@ -450,9 +456,9 @@ class Scenarios(Base):
                             ("sortables", scenario_idx, scenario.title)
                         )
                     except Exception as e:
-                        warnings.append(
-                            f"Failed to build sortables request for scenario '{scenario.title}': {e}"
-                        )
+                        warning_msg = f"Failed to build sortables request for scenario '{scenario.title}': {e}"
+                        logger.warning(warning_msg)
+                        warnings.append(warning_msg)
 
         if requests:
             formatted_requests = []
@@ -474,6 +480,8 @@ class Scenarios(Base):
             # Collect errors from failed updates
             for metadata, result in zip(request_metadata, results):
                 if not result.success:
-                    warnings.append(Scenarios._format_data_error(metadata, result))
+                    warning_msg = Scenarios._format_data_error(metadata, result)
+                    logger.warning(warning_msg)
+                    warnings.append(warning_msg)
 
         return warnings

@@ -293,7 +293,10 @@ class HourlyOutputCurvesPack(Packable):
                                 scenario, carrier
                             )
                         )
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to fetch {carrier} curves for scenario '{scenario_name}': {e}"
+                        )
                         curves = None
                     if not isinstance(curves, dict) or not curves:
                         continue
