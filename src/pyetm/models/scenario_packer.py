@@ -574,6 +574,8 @@ class ScenarioPacker(BaseModel):
     ) -> Dict[str, Session]:
         """Create scenarios from main sheet rows."""
         scenarios_by_row = {}
+        failed_rows = []
+
         for idx, row in main_df.iterrows():
             try:
                 scenario = self._create_scenario_from_row(idx, row, update_set)
@@ -585,8 +587,34 @@ class ScenarioPacker(BaseModel):
                         scenario.set_short_name(short_name)
                     self.add(scenario)
                     scenarios_by_row[idx] = scenario
+                else:
+                    failed_rows.append(str(idx))
             except Exception as e:
                 logger.warning("Failed to set up scenario for row '%s': %s", idx, e)
+                failed_rows.append(str(idx))
+
+        # Log summary of import results
+        total_rows = len(main_df)
+        successful_count = len(scenarios_by_row)
+        failed_count = len(failed_rows)
+
+        if successful_count > 0:
+            logger.info(
+                "Successfully loaded/created %d out of %d scenarios from Excel",
+                successful_count,
+                total_rows,
+            )
+
+        if failed_count > 0:
+            logger.warning(
+                "Failed to load/create %d scenarios (rows: %s). "
+                "Common causes: scenario IDs don't exist in this environment, "
+                "missing area_code/end_year for new scenarios. "
+                "Check logs above for specific errors.",
+                failed_count,
+                ", ".join(failed_rows),
+            )
+
         return scenarios_by_row
 
     def _create_scenario_from_row(

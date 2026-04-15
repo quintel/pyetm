@@ -68,13 +68,26 @@ class SessionLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Load an ETEngine Session by ID."""
-        scenario = self._helper._load_or_create_scenario(
-            scenario_id, area_code, end_year, row_label, **metadata_updates
-        )
-        if scenario is None:
+        try:
+            scenario = Session.load(scenario_id)
+            self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
+            return scenario
+        except Exception as e:
+            error_msg = str(e)
+            if "does not exist" in error_msg or "not found" in error_msg.lower():
+                logger.warning(
+                    "Session %s does not exist on this ETM environment (row '%s')",
+                    scenario_id,
+                    row_label,
+                )
+            else:
+                logger.warning(
+                    "Could not load Session %s for row '%s': %s",
+                    scenario_id,
+                    row_label,
+                    e,
+                )
             return None
-        self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
-        return scenario
 
     def copy(
         self,
@@ -103,11 +116,27 @@ class SessionLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Create a new ETEngine Session."""
-        scenario = self._helper._load_or_create_scenario(
-            None, area_code, end_year, row_label, **metadata_updates
-        )
-        if scenario is None:
+        if not area_code or end_year is None:
+            logger.warning(
+                "Cannot create scenario for row '%s': missing required fields (area_code=%s, end_year=%s)",
+                row_label,
+                area_code,
+                end_year,
+            )
             return None
+
+        try:
+            scenario = Session.new(str(area_code), int(end_year), **metadata_updates)
+        except Exception as e:
+            logger.warning(
+                "Failed to create new scenario for row '%s' (area_code=%s, end_year=%s): %s",
+                row_label,
+                area_code,
+                end_year,
+                e,
+            )
+            return None
+
         self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
         return scenario
 
@@ -211,13 +240,29 @@ class SavedScenarioLoader:
         metadata_updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Create a new scenario and save it to MyETM."""
-        from pyetm.models.scenario import Scenario
+        from pyetm.models.session import Session
 
-        scenario = self._helper._load_or_create_scenario(
-            None, area_code, end_year, row_label, **metadata_updates
-        )
-        if scenario is None:
+        if not area_code or end_year is None:
+            logger.warning(
+                "Cannot create scenario for row '%s': missing required fields (area_code=%s, end_year=%s)",
+                row_label,
+                area_code,
+                end_year,
+            )
             return None
+
+        try:
+            scenario = Session.new(str(area_code), int(end_year), **metadata_updates)
+        except Exception as e:
+            logger.warning(
+                "Failed to create new scenario for row '%s' (area_code=%s, end_year=%s): %s",
+                row_label,
+                area_code,
+                end_year,
+                e,
+            )
+            return None
+
         self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
 
         title = metadata_updates.get("title") or f"Scenario {area_code} {end_year}"
