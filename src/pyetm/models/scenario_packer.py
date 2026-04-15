@@ -4,7 +4,6 @@ from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, Sequence, List, Union, TYPE_CHECKING
-from xlsxwriter import Workbook
 
 from pyetm.models.packables.inputs_pack import InputsPack
 from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
@@ -77,12 +76,20 @@ class ScenarioPacker(BaseModel):
         self._annual_exports.add(*scenarios)
 
     def main_info(self) -> pd.DataFrame:
-        """Create main info DataFrame by concatenating scenario dataframes."""
+        """
+        Create main info DataFrame with scenarios as rows.
+
+        Returns DataFrame with scenario_id column (numeric ID), identifier column
+        (human-readable name), and scenario attributes as columns.
+        """
         scenarios = self._scenarios()
         if not scenarios:
             return pd.DataFrame()
         df = pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
-        return df.T
+        result = df.T.reset_index(names=["scenario_id"])
+        result.insert(1, "identifier", [scenario.identifier() for scenario in scenarios])
+
+        return result
 
     def inputs(self, fields="user") -> pd.DataFrame:
         return self._inputs.to_dataframe(fields=fields)
@@ -348,29 +355,10 @@ class ScenarioPacker(BaseModel):
         include_input_details: Optional[bool] = None,
         include_users: Optional[bool] = None,
         include_annual_exports: Optional[Sequence[str]] = None,
-    ):
-        """
-        Export scenarios to Excel file.
+    ) -> Path:
+        """Export scenarios to Excel file."""
+        from pyetm.exporters.excel_exporter import ExcelExporter
 
-        This method now uses the generic collect_export_data() internally,
-        demonstrating the separation of data collection from format-specific writing.
-
-        Args:
-            path: Output file path for the main Excel file
-            carriers: Carrier types for hourly output curves (creates separate files)
-            include_inputs: Include input parameters in main file
-            include_sortables: Include sortable technologies in main file
-            include_custom_curves: Include custom curves in main file
-            include_gqueries: Include query results in main file
-            include_hourly_output_curves: Export hourly output curves (separate files)
-            include_input_details: Add detailed input sheet with defaults/min/max (Excel-specific)
-            include_users: Include user permissions in main file
-            include_annual_exports: List of annual exports to include (separate files)
-
-        Returns:
-            Path: The path to the created file
-        """
-        # Collect all export data using the generic API
         export_data = self.collect_export_data(
             carriers=carriers,
             include_inputs=include_inputs,
@@ -382,103 +370,13 @@ class ScenarioPacker(BaseModel):
             include_annual_exports=include_annual_exports,
         )
 
-        # Write to Excel format
-        return self._write_excel_from_collection(
+        return ExcelExporter.write(
             export_data=export_data,
             path=path,
-            carriers=carriers,
+            packer=self,
             include_input_details=include_input_details,
         )
 
-    def _write_excel_from_collection(
-        self,
-        export_data: ExportDataCollection,
-        path: str,
-        carriers: Optional[Sequence[str]] = None,
-        include_input_details: Optional[bool] = None,
-    ) -> Path:
-        """
-        Args:
-            export_data: The collected export data in generic format
-            path: Output file path for the main Excel file
-            carriers: Carrier types for hourly output curves (for separate files)
-            include_input_details: Add detailed input sheet (Excel-specific feature)
-
-        Returns:
-            Path: The path to the created main Excel file
-        """
-        # Ensure destination directory exists
-        try:
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-
-        # Create and populate main workbook
-        workbook = Workbook(path)
-        try:
-            # Write main info sheet
-            self._write_main_info_to_excel(workbook, export_data.main_info)
-
-            # Write data sheets based on what's in the collection
-            if export_data.inputs is not None:
-                self._inputs.add_to_workbook(workbook)
-
-            if export_data.sortables is not None:
-                self._sortables.add_to_workbook(workbook)
-
-            if export_data.custom_curves is not None:
-                self._custom_curves.add_to_workbook(workbook)
-
-            if export_data.gquery_results is not None:
-                self._query_pack.add_to_workbook(workbook)
-
-            if export_data.users is not None:
-                self._users.add_to_workbook(workbook)
-
-            # Excel-specific: Add detailed input sheet if requested
-            if include_input_details:
-                self._inputs.add_to_workbook(
-                    workbook,
-                    include_defaults=True,
-                    include_min_max=True,
-                    sheet_name="INPUT_DETAILS",
-                )
-        finally:
-            workbook.close()
-
-        # Handle hourly output curves (separate Excel files)
-        # Use data from collection instead of calling pack methods directly
-        if export_data.hourly_output_curves is not None:
-            self._export_hourly_output_curves_if_needed(
-                export_data,
-                Path(path),
-                carriers,
-            )
-
-        # Handle annual exports (separate Excel files)
-        # Use data from collection instead of calling pack methods directly
-        if export_data.annual_exports is not None:
-            self._export_annual_exports_if_needed(
-                export_data,
-                Path(path),
-            )
-
-        return Path(path)
-
-    def _write_main_info_to_excel(self, workbook: Workbook, main_info: pd.DataFrame):
-        """Write main scenario information to Excel workbook."""
-        if not main_info.empty:
-            excel_main_df = excel_utils.build_excel_main_dataframe(
-                main_info, list(self._scenarios())
-            )
-            sanitized_df = excel_utils.sanitize_dataframe_for_excel(excel_main_df)
-            excel_utils.add_frame(
-                name="MAIN",
-                frame=sanitized_df,
-                workbook=workbook,
-                column_width=18,
-                scenario_styling=True,
-            )
 
     def _get_global_export_config(self) -> Optional[ExportConfig]:
         """Get global export configuration from first scenario that has one."""
@@ -559,217 +457,6 @@ class ScenarioPacker(BaseModel):
 
         return result
 
-    def _export_hourly_output_curves_if_needed(
-        self,
-        export_data: ExportDataCollection,
-        main_path: Path,
-        carriers: Optional[Sequence[str]],
-    ):
-        """
-        Export hourly curves to separate Excel file using collection data.
-
-        Args:
-            export_data: The export data collection containing hourly curves
-            main_path: Path to the main Excel file
-            carriers: Carrier types to organize the export by
-        """
-        if not export_data.hourly_output_curves:
-            return
-
-        # Create separate file for hourly curves
-        output_path = main_path.with_name(
-            f"{main_path.stem}_hourly_output_curves{main_path.suffix}"
-        )
-
-        try:
-            self._write_hourly_curves_to_excel(
-                export_data.hourly_output_curves,
-                output_path,
-                carriers or export_data.config.output_carriers,
-            )
-        except Exception as e:
-            logger.warning("Failed exporting output curves workbook: %s", e)
-
-    def _export_annual_exports_if_needed(
-        self,
-        export_data: ExportDataCollection,
-        main_path: Path,
-    ):
-        """
-        Export annual exports to separate Excel file using collection data.
-
-        Args:
-            export_data: The export data collection containing annual exports
-            main_path: Path to the main Excel file
-        """
-        if not export_data.annual_exports:
-            return
-
-        # Create separate file for annual exports
-        output_path = main_path.with_name(
-            f"{main_path.stem}_annual_exports{main_path.suffix}"
-        )
-
-        try:
-            self._write_annual_exports_to_excel(
-                export_data.annual_exports,
-                output_path,
-            )
-        except Exception as e:
-            logger.warning("Failed exporting annual exports workbook: %s", e)
-
-    def _write_annual_exports_to_excel(
-        self,
-        exports_data: Dict[str, Dict[str, pd.DataFrame]],
-        output_path: Path,
-    ) -> None:
-        """
-        Write annual exports data to Excel file.
-
-        Args:
-            exports_data: Dict mapping export names to scenario data
-                         Structure: {export_name: {scenario_id: DataFrame}}
-            output_path: Path to the output Excel file
-        """
-        if not exports_data:
-            logger.info("No export data available")
-            return
-
-        workbook = None
-        try:
-            workbook = Workbook(str(output_path))
-
-            # Create a worksheet for each export type
-            for export_name, scenarios_data in sorted(exports_data.items()):
-                if not scenarios_data:
-                    continue
-
-                # Combine all scenarios for this export into one DataFrame
-                frames = []
-                for scenario_key, df in scenarios_data.items():
-                    # Add scenario identifier column
-                    df_copy = df.copy()
-                    df_copy.insert(0, "scenario", scenario_key)
-                    frames.append(df_copy)
-
-                if frames:
-                    combined = pd.concat(frames, ignore_index=True)
-
-                    # Create worksheet with export name (truncate if too long)
-                    sheet_name = export_name.upper()[:31]  # Excel limit
-
-                    excel_utils.add_frame(
-                        name=sheet_name,
-                        frame=combined,
-                        workbook=workbook,
-                        column_width=18,
-                        scenario_styling=False,
-                    )
-
-        finally:
-            if workbook is not None:
-                workbook.close()
-
-    def _write_hourly_curves_to_excel(
-        self,
-        curves_data: Dict[str, Dict[str, pd.DataFrame]],
-        output_path: Path,
-        carriers: Optional[Sequence[str]],
-    ) -> None:
-        """
-        Write hourly curves data to Excel file, organized by carrier.
-
-        Args:
-            curves_data: Dict mapping curve names to scenario data
-                        Structure: {curve_name: {scenario_id: DataFrame}}
-            output_path: Path to the output Excel file
-            carriers: Carrier types to organize sheets by
-        """
-        from pyetm.models.hourly_output_curves import HourlyOutputCurves
-
-        if not curves_data:
-            logger.info("No hourly curves data available")
-            return
-
-        # Load carrier mappings to organize curves by carrier
-        carrier_map = HourlyOutputCurves._load_carrier_mappings()
-        valid_carriers = list(carrier_map.keys())
-        selected = list(valid_carriers if carriers is None else carriers)
-        selected = [c for c in selected if c in valid_carriers]
-        if not selected:
-            selected = valid_carriers
-
-        # Invert the carrier map to get curve -> carrier mapping
-        curve_to_carrier = {}
-        for carrier, curves_list in carrier_map.items():
-            for curve_name in curves_list:
-                curve_to_carrier[curve_name] = carrier
-
-        workbook = None
-        wrote_any = False
-        try:
-            # Organize curves by carrier
-            for carrier in selected:
-                # Find all curves in the data that belong to this carrier
-                carrier_curves = {
-                    curve_name: scenarios_data
-                    for curve_name, scenarios_data in curves_data.items()
-                    if curve_to_carrier.get(curve_name) == carrier
-                }
-
-                if not carrier_curves:
-                    continue
-
-                # Build a combined DataFrame for this carrier
-                series_entries = []
-                for curve_name, scenarios_data in sorted(carrier_curves.items()):
-                    for scenario_id, df in sorted(scenarios_data.items()):
-                        if df is None or df.empty:
-                            continue
-
-                        # Handle both Series and DataFrame
-                        if isinstance(df, pd.Series):
-                            series_entries.append(((scenario_id, curve_name), df))
-                        elif isinstance(df, pd.DataFrame):
-                            if df.shape[1] == 1:
-                                series_entries.append(
-                                    ((scenario_id, curve_name), df.iloc[:, 0])
-                                )
-                            else:
-                                # Multi-column DataFrame - add each column separately
-                                for col in df.columns:
-                                    sub_curve = f"{curve_name}:{col}"
-                                    series_entries.append(
-                                        ((scenario_id, sub_curve), df[col])
-                                    )
-
-                if not series_entries:
-                    continue
-
-                # Combine into multi-column DataFrame
-                cols = [key for key, _ in series_entries]
-                frames = [s for _, s in series_entries]
-                combined = pd.concat(frames, axis=1)
-                combined.columns = pd.MultiIndex.from_tuples(
-                    cols, names=["Scenario", "Curve"]
-                )
-
-                # Lazily create workbook on first real data
-                if workbook is None:
-                    workbook = Workbook(str(output_path))
-
-                excel_utils.add_frame(
-                    name=carrier.upper(),
-                    frame=combined,
-                    workbook=workbook,
-                    column_width=18,
-                    scenario_styling=True,
-                )
-                wrote_any = True
-
-        finally:
-            if workbook is not None and wrote_any:
-                workbook.close()
 
     @staticmethod
     def _normalize_update(update: bool | List[str]) -> set[str]:

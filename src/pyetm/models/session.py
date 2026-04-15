@@ -246,12 +246,11 @@ class Session(Base):
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Session":
-        """
-        Convenience method to load a single scenario from Excel.
-        """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        """Load a single scenario from Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
 
-        scenarios = ScenarioExcelService.import_from_excel(xlsx_path)
+        packer = ScenarioPacker.from_excel(xlsx_path)
+        scenarios = list(packer._scenarios())
         if len(scenarios) != 1:
             raise ScenarioError(
                 f"Expected one scenario, found {len(scenarios)}. "
@@ -260,32 +259,20 @@ class Session(Base):
         return scenarios[0]
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
-        """
-        Convenience method to export this scenario to Excel.
-        """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        """Export this scenario to Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
 
-        ScenarioExcelService.export_to_excel([self], path, **export_options)
+        packer = ScenarioPacker()
+        packer.add(self)
+        packer.to_excel(path, **export_options)
 
     def collect_export_data(self, **export_options):
-        """
-        Args:
-            **export_options: Export configuration options (same as to_excel)
-                - carriers: Carrier types for hourly output curves
-                - include_inputs: Include input parameters
-                - include_sortables: Include sortable technologies
-                - include_custom_curves: Include custom curves
-                - include_gqueries: Include query results
-                - include_hourly_output_curves: Include hourly output curves
-                - include_users: Include user permissions
-                - include_annual_exports: List of annual export names
+        """Collect export data in format-agnostic structure."""
+        from pyetm.models.scenario_packer import ScenarioPacker
 
-        Returns:
-            ExportDataCollection: Format-agnostic collection of all export data
-        """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
-
-        return ScenarioExcelService.collect_export_data([self], **export_options)
+        packer = ScenarioPacker()
+        packer.add(self)
+        return packer.collect_export_data(**export_options)
 
     def save(
         self, client: Optional[BaseClient] = None, title: Optional[str] = None, **kwargs

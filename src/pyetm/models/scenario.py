@@ -656,7 +656,7 @@ class Scenario(Base):
                 if k not in info:
                     info[k] = v
 
-        col_name = str(self.identifier()) if self.identifier() is not None else str(self.id)
+        col_name = str(self.id)
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
     def list_users(self, client: Optional[BaseClient] = None) -> List[Dict[str, Any]]:

@@ -130,7 +130,7 @@ class ExportDataCollection(BaseModel):
         """Human-readable summary of the export data collection."""
         lines = [
             "ExportDataCollection(",
-            f"  main_info: {self._format_dataframe_shape(self.main_info)} scenarios)",
+            f"  main_info: {self._format_dataframe_shape(self.main_info)} fields)",
         ]
 
         # Add optional DataFrames
@@ -147,7 +147,7 @@ class ExportDataCollection(BaseModel):
     def _format_dataframe_shape(self, df: pd.DataFrame) -> str:
         """Format DataFrame shape for repr."""
         rows, cols = df.shape
-        return f"({rows} fields × {cols}"
+        return f"({rows} scenarios × {cols}"
 
     def _format_optional_field(self, field_name: str) -> list[str]:
         """Format optional DataFrame field for repr."""
