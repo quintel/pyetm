@@ -15,6 +15,7 @@ from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.users_pack import UsersPack
 from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
+from pyetm.models.export_data_collection import ExportDataCollection
 from pyetm.types import AnnualExportType, HourlyCurveType, CarrierType
 from pyetm.validators import (
     validate_hourly_curve_names,
@@ -80,7 +81,8 @@ class ScenarioPacker(BaseModel):
         scenarios = self._scenarios()
         if not scenarios:
             return pd.DataFrame()
-        return pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
+        df = pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
+        return df.T
 
     def inputs(self, fields="user") -> pd.DataFrame:
         return self._inputs.to_dataframe(fields=fields)
@@ -133,6 +135,29 @@ class ScenarioPacker(BaseModel):
         else:
             return validate_hourly_curve_names(curves)
 
+    @staticmethod
+    def _get_curves_for_carriers(carriers: Sequence[str]) -> List[str]:
+        """
+        Map carrier names to curve names using HourlyOutputCurves mappings.
+
+        Args:
+            carriers: List of carrier types (e.g., ["electricity", "heat"])
+
+        Returns:
+            List of curve names for all specified carriers
+
+        Example:
+            ["electricity"] → ["electricity_production", "electricity_import", ...]
+        """
+        from pyetm.models.hourly_output_curves import HourlyOutputCurves
+
+        carrier_mappings = HourlyOutputCurves._load_carrier_mappings()
+        all_curves = []
+        for carrier in carriers:
+            validate_carrier_type(carrier)
+            all_curves.extend(carrier_mappings.get(carrier, []))
+        return all_curves
+
     def hourly_output_curves(
         self,
         curves: Optional[Sequence[str]] = None,
@@ -167,6 +192,134 @@ class ScenarioPacker(BaseModel):
             exports = validate_export_names(exports)
         return self._annual_exports.to_dict_per_export(exports=exports)
 
+    def collect_export_data(
+        self,
+        *,
+        carriers: Optional[Sequence[str]] = None,
+        include_inputs: Optional[bool] = None,
+        include_sortables: Optional[bool] = None,
+        include_custom_curves: Optional[bool] = None,
+        include_gqueries: Optional[bool] = None,
+        include_hourly_output_curves: Optional[bool] = None,
+        include_users: Optional[bool] = None,
+        include_annual_exports: Optional[Sequence[str]] = None,
+    ) -> ExportDataCollection:
+        """
+        Collect export data in format-agnostic structure.
+                Args:
+            carriers: Carrier types for hourly output curves (e.g., ["electricity", "heat"]).
+                     Only used if include_hourly_output_curves is True.
+            include_inputs: Include input parameters. Defaults based on scenario export config.
+            include_sortables: Include sortable technologies. Defaults to False.
+            include_custom_curves: Include custom curves. Defaults to False.
+            include_gqueries: Include query results. Defaults to False.
+            include_hourly_output_curves: Include hourly output curves. Defaults to False.
+            include_users: Include user permissions. Defaults to False.
+            include_annual_exports: List of annual export names to include.
+                                   Examples: ["energy_flow", "sankey", "production_parameters"]
+                                   Defaults to None (no annual exports).
+
+        Returns:
+            ExportDataCollection containing all requested data in format-agnostic structures
+        """
+        if not self._scenarios():
+            raise ValueError("Packer was empty, nothing to export")
+
+        # Get global export configuration from scenarios
+        global_config = self._get_global_export_config()
+
+        # Resolve all export flags
+        resolved_flags = self._resolve_export_flags(
+            global_config,
+            include_inputs,
+            include_sortables,
+            include_custom_curves,
+            include_gqueries,
+            include_hourly_output_curves,
+            include_users,
+            include_annual_exports,
+        )
+
+        # Determine output_carriers: use explicit carriers or fall back to global config
+        output_carriers = None
+        if resolved_flags["include_hourly_output_curves"]:
+            if carriers is not None:
+                output_carriers = list(carriers)
+            elif global_config and global_config.output_carriers is not None:
+                output_carriers = list(global_config.output_carriers)
+
+        # Create ExportConfig from resolved flags for documentation
+        config = ExportConfig(
+            include_inputs=resolved_flags["include_inputs"],
+            include_sortables=resolved_flags["include_sortables"],
+            include_custom_curves=resolved_flags["include_custom_curves"],
+            include_gqueries=resolved_flags["include_gqueries"],
+            include_users=resolved_flags.get("include_users", False),
+            output_carriers=output_carriers,
+            include_annual_exports=resolved_flags.get("include_annual_exports"),
+            inputs_defaults=resolved_flags.get("inputs_defaults", False),
+            inputs_min_max=resolved_flags.get("inputs_min_max", False),
+        )
+
+        # Always collect main info
+        main_info = self.main_info()
+
+        # Conditionally collect other data based on flags
+        inputs_data = None
+        if resolved_flags["include_inputs"]:
+            inputs_data = self.inputs()
+
+        sortables_data = None
+        if resolved_flags["include_sortables"]:
+            sortables_data = self.sortables()
+
+        custom_curves_data = None
+        if resolved_flags["include_custom_curves"]:
+            custom_curves_data = self.custom_curves(as_dict=True)
+
+        # Collect hourly output curves if requested
+        hourly_output_curves_data = None
+        if resolved_flags["include_hourly_output_curves"]:
+            if output_carriers:
+                # User specified carriers - get curves for those carriers
+                curve_names = self._get_curves_for_carriers(output_carriers)
+                hourly_output_curves_data = (
+                    self._hourly_output_curves.to_dict_per_curve(curves=curve_names)
+                )
+            else:
+                # No carriers specified - collect ALL curves in the pack
+                hourly_output_curves_data = (
+                    self._hourly_output_curves.to_dict_per_curve(curves=None)
+                )
+
+        # Collect annual exports if requested
+        annual_exports_data = None
+        if resolved_flags.get("include_annual_exports"):
+            annual_exports_data = self._annual_exports.to_dict_per_export(
+                exports=resolved_flags["include_annual_exports"]
+            )
+
+        gquery_results_data = None
+        if resolved_flags["include_gqueries"]:
+            gquery_results_data = self.gquery_results()
+
+        users_data = None
+        if resolved_flags["include_users"]:
+            users_data = self._users.to_dataframe()
+
+        # Create and return ExportDataCollection
+        return ExportDataCollection(
+            main_info=main_info,
+            inputs=inputs_data,
+            sortables=sortables_data,
+            custom_curves=custom_curves_data,
+            hourly_output_curves=hourly_output_curves_data,
+            annual_exports=annual_exports_data,
+            gquery_results=gquery_results_data,
+            users=users_data,
+            config=config,
+        )
+
     def couplings(self) -> pd.DataFrame:
         if len(self._scenarios()) == 0:
             return pd.DataFrame()
@@ -196,37 +349,93 @@ class ScenarioPacker(BaseModel):
         include_users: Optional[bool] = None,
         include_annual_exports: Optional[Sequence[str]] = None,
     ):
-        """Export scenarios to Excel file."""
-        if not self._scenarios():
-            raise ValueError("Packer was empty, nothing to export")
+        """
+        Export scenarios to Excel file.
 
-        global_config = self._get_global_export_config()
-        resolved_flags = self._resolve_export_flags(
-            global_config,
-            include_inputs,
-            include_sortables,
-            include_custom_curves,
-            include_gqueries,
-            include_hourly_output_curves,
-            include_users,
-            include_annual_exports,
+        This method now uses the generic collect_export_data() internally,
+        demonstrating the separation of data collection from format-specific writing.
+
+        Args:
+            path: Output file path for the main Excel file
+            carriers: Carrier types for hourly output curves (creates separate files)
+            include_inputs: Include input parameters in main file
+            include_sortables: Include sortable technologies in main file
+            include_custom_curves: Include custom curves in main file
+            include_gqueries: Include query results in main file
+            include_hourly_output_curves: Export hourly output curves (separate files)
+            include_input_details: Add detailed input sheet with defaults/min/max (Excel-specific)
+            include_users: Include user permissions in main file
+            include_annual_exports: List of annual exports to include (separate files)
+
+        Returns:
+            Path: The path to the created file
+        """
+        # Collect all export data using the generic API
+        export_data = self.collect_export_data(
+            carriers=carriers,
+            include_inputs=include_inputs,
+            include_sortables=include_sortables,
+            include_custom_curves=include_custom_curves,
+            include_gqueries=include_gqueries,
+            include_hourly_output_curves=include_hourly_output_curves,
+            include_users=include_users,
+            include_annual_exports=include_annual_exports,
         )
 
+        # Write to Excel format
+        return self._write_excel_from_collection(
+            export_data=export_data,
+            path=path,
+            carriers=carriers,
+            include_input_details=include_input_details,
+        )
+
+    def _write_excel_from_collection(
+        self,
+        export_data: ExportDataCollection,
+        path: str,
+        carriers: Optional[Sequence[str]] = None,
+        include_input_details: Optional[bool] = None,
+    ) -> Path:
+        """
+        Args:
+            export_data: The collected export data in generic format
+            path: Output file path for the main Excel file
+            carriers: Carrier types for hourly output curves (for separate files)
+            include_input_details: Add detailed input sheet (Excel-specific feature)
+
+        Returns:
+            Path: The path to the created main Excel file
+        """
         # Ensure destination directory exists
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         except Exception:
             pass
 
-        # Create and populate workbook
+        # Create and populate main workbook
         workbook = Workbook(path)
         try:
-            self._add_main_sheet(workbook)
-            self._add_data_sheets(workbook, resolved_flags)
+            # Write main info sheet
+            self._write_main_info_to_excel(workbook, export_data.main_info)
 
-            if resolved_flags["include_gqueries"]:
+            # Write data sheets based on what's in the collection
+            if export_data.inputs is not None:
+                self._inputs.add_to_workbook(workbook)
+
+            if export_data.sortables is not None:
+                self._sortables.add_to_workbook(workbook)
+
+            if export_data.custom_curves is not None:
+                self._custom_curves.add_to_workbook(workbook)
+
+            if export_data.gquery_results is not None:
                 self._query_pack.add_to_workbook(workbook)
 
+            if export_data.users is not None:
+                self._users.add_to_workbook(workbook)
+
+            # Excel-specific: Add detailed input sheet if requested
             if include_input_details:
                 self._inputs.add_to_workbook(
                     workbook,
@@ -237,20 +446,39 @@ class ScenarioPacker(BaseModel):
         finally:
             workbook.close()
 
-        # Handle output curves separately
-        self._export_hourly_output_curves_if_needed(
-            path,
-            carriers,
-            resolved_flags["include_hourly_output_curves"],
-            global_config,
-        )
+        # Handle hourly output curves (separate Excel files)
+        # Use data from collection instead of calling pack methods directly
+        if export_data.hourly_output_curves is not None:
+            self._export_hourly_output_curves_if_needed(
+                export_data,
+                Path(path),
+                carriers,
+            )
 
-        # Handle annual exports separately
-        self._export_annual_exports_if_needed(
-            path,
-            resolved_flags.get("include_annual_exports"),
-            global_config,
-        )
+        # Handle annual exports (separate Excel files)
+        # Use data from collection instead of calling pack methods directly
+        if export_data.annual_exports is not None:
+            self._export_annual_exports_if_needed(
+                export_data,
+                Path(path),
+            )
+
+        return Path(path)
+
+    def _write_main_info_to_excel(self, workbook: Workbook, main_info: pd.DataFrame):
+        """Write main scenario information to Excel workbook."""
+        if not main_info.empty:
+            excel_main_df = excel_utils.build_excel_main_dataframe(
+                main_info, list(self._scenarios())
+            )
+            sanitized_df = excel_utils.sanitize_dataframe_for_excel(excel_main_df)
+            excel_utils.add_frame(
+                name="MAIN",
+                frame=sanitized_df,
+                workbook=workbook,
+                column_width=18,
+                scenario_styling=True,
+            )
 
     def _get_global_export_config(self) -> Optional[ExportConfig]:
         """Get global export configuration from first scenario that has one."""
@@ -274,178 +502,274 @@ class ScenarioPacker(BaseModel):
         """Resolve all export flags from parameters and configuration."""
         resolver = excel_utils.ExportConfigResolver()
 
-        return {
-            "include_inputs": resolver.resolve_boolean(
-                include_inputs,
-                (
-                    getattr(global_config, "include_inputs", None)
-                    if global_config
-                    else None
-                ),
-                True,
-            ),
-            "include_sortables": resolver.resolve_boolean(
-                include_sortables,
-                (
-                    getattr(global_config, "include_sortables", None)
-                    if global_config
-                    else None
-                ),
-                False,
-            ),
-            "include_custom_curves": resolver.resolve_boolean(
+        # Resolve flags
+        boolean_flags = {
+            "include_inputs": (include_inputs, "include_inputs", True),
+            "include_sortables": (include_sortables, "include_sortables", False),
+            "include_custom_curves": (
                 include_custom_curves,
-                (
-                    getattr(global_config, "include_custom_curves", None)
-                    if global_config
-                    else None
-                ),
+                "include_custom_curves",
                 False,
             ),
-            "include_gqueries": resolver.resolve_boolean(
-                include_gqueries,
-                (
-                    getattr(global_config, "include_gqueries", None)
-                    if global_config
-                    else None
-                ),
-                False,
-            ),
-            "include_hourly_output_curves": resolver.resolve_boolean(
-                include_hourly_output_curves,
-                (
-                    (getattr(global_config, "output_carriers", None) is not None)
-                    if global_config
-                    else None
-                ),
-                False,
-            ),
-            "inputs_defaults": (
-                bool(getattr(global_config, "inputs_defaults", False))
-                if global_config
-                else False
-            ),
-            "inputs_min_max": (
-                bool(getattr(global_config, "inputs_min_max", False))
-                if global_config
-                else False
-            ),
-            "include_users": resolver.resolve_boolean(
-                include_users,
-                (
-                    getattr(global_config, "include_users", None)
-                    if global_config
-                    else None
-                ),
-                False,
-            ),
-            "include_annual_exports": (
-                list(include_annual_exports)
-                if include_annual_exports
-                else (
-                    list(getattr(global_config, "include_annual_exports", []))
-                    if global_config
-                    and getattr(global_config, "include_annual_exports", None)
-                    else None
-                )
-            ),
+            "include_gqueries": (include_gqueries, "include_gqueries", False),
+            "include_users": (include_users, "include_users", False),
         }
 
-    def _add_main_sheet(self, workbook: Workbook):
-        """Add main scenario information sheet to workbook."""
-        main_df = self.main_info()
-        if not main_df.empty:
-            excel_main_df = excel_utils.build_excel_main_dataframe(
-                main_df, list(self._scenarios())
+        result = {
+            key: resolver.resolve_boolean(
+                param_value,
+                getattr(global_config, config_attr, None) if global_config else None,
+                default,
             )
-            sanitized_df = excel_utils.sanitize_dataframe_for_excel(excel_main_df)
-            excel_utils.add_frame(
-                name="MAIN",
-                frame=sanitized_df,
-                workbook=workbook,
-                column_width=18,
-                scenario_styling=True,
-            )
+            for key, (param_value, config_attr, default) in boolean_flags.items()
+        }
 
-    def _add_data_sheets(self, workbook: Workbook, flags: Dict[str, Any]):
-        """Add data sheets to workbook based on flags."""
-        if flags["include_inputs"]:
-            self._inputs.add_to_workbook(
-                workbook,
-                include_defaults=flags["inputs_defaults"],
-                include_min_max=flags["inputs_min_max"],
-            )
+        # Special case: hourly_output_curves (config value is output_carriers presence)
+        result["include_hourly_output_curves"] = resolver.resolve_boolean(
+            include_hourly_output_curves,
+            (
+                (getattr(global_config, "output_carriers", None) is not None)
+                if global_config
+                else None
+            ),
+            False,
+        )
 
-        if flags["include_sortables"]:
-            self._sortables.add_to_workbook(workbook)
-
-        if flags["include_custom_curves"]:
-            self._custom_curves.add_to_workbook(workbook)
-
-        if flags.get("include_users"):
-            self._users.add_to_workbook(workbook)
-
-    def _export_hourly_output_curves_if_needed(
-        self,
-        main_path: str,
-        carriers: Optional[Sequence[str]],
-        include_hourly_output_curves: bool,
-        global_config: Optional[ExportConfig],
-    ):
-        """Export output curves to separate file if needed."""
-        if not include_hourly_output_curves:
-            return
-
-        # Determine output file path
-        base_path = Path(main_path)
-        output_path = str(
-            base_path.with_name(
-                f"{base_path.stem}_hourly_output_curves{base_path.suffix}"
+        # Add non-boolean flags
+        result["inputs_defaults"] = (
+            bool(getattr(global_config, "inputs_defaults", False))
+            if global_config
+            else False
+        )
+        result["inputs_min_max"] = (
+            bool(getattr(global_config, "inputs_min_max", False))
+            if global_config
+            else False
+        )
+        result["include_annual_exports"] = (
+            list(include_annual_exports)
+            if include_annual_exports
+            else (
+                list(getattr(global_config, "include_annual_exports", []))
+                if global_config
+                and getattr(global_config, "include_annual_exports", None)
+                else None
             )
         )
 
-        # Determine carriers to export
-        chosen_carriers = list(carriers) if carriers else None
-        if chosen_carriers is None and global_config is not None:
-            config_carriers = getattr(global_config, "output_carriers", None)
-            chosen_carriers = list(config_carriers) if config_carriers else None
+        return result
+
+    def _export_hourly_output_curves_if_needed(
+        self,
+        export_data: ExportDataCollection,
+        main_path: Path,
+        carriers: Optional[Sequence[str]],
+    ):
+        """
+        Export hourly curves to separate Excel file using collection data.
+
+        Args:
+            export_data: The export data collection containing hourly curves
+            main_path: Path to the main Excel file
+            carriers: Carrier types to organize the export by
+        """
+        if not export_data.hourly_output_curves:
+            return
+
+        # Create separate file for hourly curves
+        output_path = main_path.with_name(
+            f"{main_path.stem}_hourly_output_curves{main_path.suffix}"
+        )
 
         try:
-            self._hourly_output_curves.to_excel_per_carrier(
-                output_path, chosen_carriers
+            self._write_hourly_curves_to_excel(
+                export_data.hourly_output_curves,
+                output_path,
+                carriers or export_data.config.output_carriers,
             )
         except Exception as e:
             logger.warning("Failed exporting output curves workbook: %s", e)
 
     def _export_annual_exports_if_needed(
         self,
-        main_path: str,
-        include_annual_exports: Optional[Sequence[str]],
-        global_config: Optional[ExportConfig],
+        export_data: ExportDataCollection,
+        main_path: Path,
     ):
-        """Export annual exports to separate file if needed."""
-        # Determine which exports to include
-        exports_to_include = None
-        if include_annual_exports:
-            exports_to_include = list(include_annual_exports)
-        elif global_config is not None:
-            config_exports = getattr(global_config, "include_annual_exports", None)
-            if config_exports:
-                exports_to_include = list(config_exports)
+        """
+        Export annual exports to separate Excel file using collection data.
 
-        if not exports_to_include:
+        Args:
+            export_data: The export data collection containing annual exports
+            main_path: Path to the main Excel file
+        """
+        if not export_data.annual_exports:
             return
 
-        # Determine output file path
-        base_path = Path(main_path)
-        output_path = str(
-            base_path.with_name(f"{base_path.stem}_annual_exports{base_path.suffix}")
+        # Create separate file for annual exports
+        output_path = main_path.with_name(
+            f"{main_path.stem}_annual_exports{main_path.suffix}"
         )
 
         try:
-            self._annual_exports.to_excel(output_path, exports=exports_to_include)
+            self._write_annual_exports_to_excel(
+                export_data.annual_exports,
+                output_path,
+            )
         except Exception as e:
             logger.warning("Failed exporting annual exports workbook: %s", e)
+
+    def _write_annual_exports_to_excel(
+        self,
+        exports_data: Dict[str, Dict[str, pd.DataFrame]],
+        output_path: Path,
+    ) -> None:
+        """
+        Write annual exports data to Excel file.
+
+        Args:
+            exports_data: Dict mapping export names to scenario data
+                         Structure: {export_name: {scenario_id: DataFrame}}
+            output_path: Path to the output Excel file
+        """
+        if not exports_data:
+            logger.info("No export data available")
+            return
+
+        workbook = None
+        try:
+            workbook = Workbook(str(output_path))
+
+            # Create a worksheet for each export type
+            for export_name, scenarios_data in sorted(exports_data.items()):
+                if not scenarios_data:
+                    continue
+
+                # Combine all scenarios for this export into one DataFrame
+                frames = []
+                for scenario_key, df in scenarios_data.items():
+                    # Add scenario identifier column
+                    df_copy = df.copy()
+                    df_copy.insert(0, "scenario", scenario_key)
+                    frames.append(df_copy)
+
+                if frames:
+                    combined = pd.concat(frames, ignore_index=True)
+
+                    # Create worksheet with export name (truncate if too long)
+                    sheet_name = export_name.upper()[:31]  # Excel limit
+
+                    excel_utils.add_frame(
+                        name=sheet_name,
+                        frame=combined,
+                        workbook=workbook,
+                        column_width=18,
+                        scenario_styling=False,
+                    )
+
+        finally:
+            if workbook is not None:
+                workbook.close()
+
+    def _write_hourly_curves_to_excel(
+        self,
+        curves_data: Dict[str, Dict[str, pd.DataFrame]],
+        output_path: Path,
+        carriers: Optional[Sequence[str]],
+    ) -> None:
+        """
+        Write hourly curves data to Excel file, organized by carrier.
+
+        Args:
+            curves_data: Dict mapping curve names to scenario data
+                        Structure: {curve_name: {scenario_id: DataFrame}}
+            output_path: Path to the output Excel file
+            carriers: Carrier types to organize sheets by
+        """
+        from pyetm.models.hourly_output_curves import HourlyOutputCurves
+
+        if not curves_data:
+            logger.info("No hourly curves data available")
+            return
+
+        # Load carrier mappings to organize curves by carrier
+        carrier_map = HourlyOutputCurves._load_carrier_mappings()
+        valid_carriers = list(carrier_map.keys())
+        selected = list(valid_carriers if carriers is None else carriers)
+        selected = [c for c in selected if c in valid_carriers]
+        if not selected:
+            selected = valid_carriers
+
+        # Invert the carrier map to get curve -> carrier mapping
+        curve_to_carrier = {}
+        for carrier, curves_list in carrier_map.items():
+            for curve_name in curves_list:
+                curve_to_carrier[curve_name] = carrier
+
+        workbook = None
+        wrote_any = False
+        try:
+            # Organize curves by carrier
+            for carrier in selected:
+                # Find all curves in the data that belong to this carrier
+                carrier_curves = {
+                    curve_name: scenarios_data
+                    for curve_name, scenarios_data in curves_data.items()
+                    if curve_to_carrier.get(curve_name) == carrier
+                }
+
+                if not carrier_curves:
+                    continue
+
+                # Build a combined DataFrame for this carrier
+                series_entries = []
+                for curve_name, scenarios_data in sorted(carrier_curves.items()):
+                    for scenario_id, df in sorted(scenarios_data.items()):
+                        if df is None or df.empty:
+                            continue
+
+                        # Handle both Series and DataFrame
+                        if isinstance(df, pd.Series):
+                            series_entries.append(((scenario_id, curve_name), df))
+                        elif isinstance(df, pd.DataFrame):
+                            if df.shape[1] == 1:
+                                series_entries.append(
+                                    ((scenario_id, curve_name), df.iloc[:, 0])
+                                )
+                            else:
+                                # Multi-column DataFrame - add each column separately
+                                for col in df.columns:
+                                    sub_curve = f"{curve_name}:{col}"
+                                    series_entries.append(
+                                        ((scenario_id, sub_curve), df[col])
+                                    )
+
+                if not series_entries:
+                    continue
+
+                # Combine into multi-column DataFrame
+                cols = [key for key, _ in series_entries]
+                frames = [s for _, s in series_entries]
+                combined = pd.concat(frames, axis=1)
+                combined.columns = pd.MultiIndex.from_tuples(
+                    cols, names=["Scenario", "Curve"]
+                )
+
+                # Lazily create workbook on first real data
+                if workbook is None:
+                    workbook = Workbook(str(output_path))
+
+                excel_utils.add_frame(
+                    name=carrier.upper(),
+                    frame=combined,
+                    workbook=workbook,
+                    column_width=18,
+                    scenario_styling=True,
+                )
+                wrote_any = True
+
+        finally:
+            if workbook is not None and wrote_any:
+                workbook.close()
 
     @staticmethod
     def _normalize_update(update: bool | List[str]) -> set[str]:

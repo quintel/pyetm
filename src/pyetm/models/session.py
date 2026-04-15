@@ -267,6 +267,26 @@ class Session(Base):
 
         ScenarioExcelService.export_to_excel([self], path, **export_options)
 
+    def collect_export_data(self, **export_options):
+        """
+        Args:
+            **export_options: Export configuration options (same as to_excel)
+                - carriers: Carrier types for hourly output curves
+                - include_inputs: Include input parameters
+                - include_sortables: Include sortable technologies
+                - include_custom_curves: Include custom curves
+                - include_gqueries: Include query results
+                - include_hourly_output_curves: Include hourly output curves
+                - include_users: Include user permissions
+                - include_annual_exports: List of annual export names
+
+        Returns:
+            ExportDataCollection: Format-agnostic collection of all export data
+        """
+        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+
+        return ScenarioExcelService.collect_export_data([self], **export_options)
+
     def save(
         self, client: Optional[BaseClient] = None, title: Optional[str] = None, **kwargs
     ):
@@ -360,7 +380,9 @@ class Session(Base):
                 if k not in info:
                     info[k] = v
 
-        col_name = str(self.identifier())
+        col_name = (
+            str(self.identifier()) if self.identifier() is not None else str(self.id)
+        )
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
     def set_short_name(self, short_name: str):

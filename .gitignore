@@ -9,6 +9,7 @@ dist/
 *.egg-info
 *.log
 *.env
+*.parquet
 *.ruff_cache
 config.yml
 # For mac users
@@ -17,6 +18,7 @@ config.yml
 .coverage
 import_graph.svg
 tmp/
+examples/outputs/*
 
 *.xlsx
 # Keep the examples

@@ -134,7 +134,7 @@ class TestMainInfo:
         assert result.empty
 
     def test_main_info_single_scenario(self, sample_scenario):
-        """Test main_info with single scenario"""
+        """Test main_info with single scenario (transposed format: rows=scenarios)"""
         # Mock the _to_dataframe method to return a proper DataFrame
         mock_df = pd.DataFrame(
             {sample_scenario.id: ["nl2015", 2050, "test_value"]},
@@ -149,11 +149,13 @@ class TestMainInfo:
         result = packer.main_info()
 
         assert not result.empty
-        assert sample_scenario.id in result.columns
-        assert result[sample_scenario.id]["area_code"] == "nl2015"
+        # After transpose: scenarios are rows, fields are columns
+        assert sample_scenario.id in result.index
+        assert "area_code" in result.columns
+        assert result.loc[sample_scenario.id, "area_code"] == "nl2015"
 
     def test_main_info_multiple_scenarios(self, multiple_scenarios):
-        """Test main_info with multiple scenarios"""
+        """Test main_info with multiple scenarios (transposed format: rows=scenarios)"""
         for i, scenario in enumerate(multiple_scenarios):
             mock_df = pd.DataFrame(
                 {scenario.id: ["nl2015", 2050, f"value_{i}"]},
@@ -166,9 +168,12 @@ class TestMainInfo:
 
         result = packer.main_info()
 
-        assert len(result.columns) == 3
+        # After transpose: 3 scenarios = 3 rows, fields = columns
+        assert len(result.index) == 3
+        assert "area_code" in result.columns
+        assert "end_year" in result.columns
         for scenario in multiple_scenarios:
-            assert scenario.id in result.columns
+            assert scenario.id in result.index
 
 
 class TestCouplings:
@@ -878,21 +883,30 @@ class TestScenarioPackerExtras:
         packer.add(s)
 
         # Case 1: carriers explicitly provided
+        # Mock to_dict_per_curve to return some data so the write method gets called
+        mock_curves_data = {"electricity_production": {"S": pd.DataFrame({"value": [1, 2, 3]})}}
         with (
-            patch.object(HourlyOutputCurvesPack, "to_excel_per_carrier") as toe,
+            patch.object(HourlyOutputCurvesPack, "to_dict_per_curve", return_value=mock_curves_data),
+            patch.object(ScenarioPacker, "_write_hourly_curves_to_excel") as write_method,
             patch("pyetm.models.scenario_packer.Workbook") as mock_wb,
         ):
             mock_wb.return_value = Mock()
             tmp = os.path.join(tempfile.gettempdir(), "export1.xlsx")
             packer.to_excel(
-                tmp, include_hourly_output_curves=True, carriers=["el", "gas"]
+                tmp, include_hourly_output_curves=True, carriers=["electricity", "heat"]
             )
-            args, _ = toe.call_args
-            assert args[0].endswith("_hourly_output_curves.xlsx")
-            assert args[1] == ["el", "gas"]
+            # Verify the write method was called with correct arguments
+            assert write_method.called
+            args, kwargs = write_method.call_args
+            # args[0] is the curves_data dict
+            assert args[0] == mock_curves_data
+            # args[1] is the output path
+            assert str(args[1]).endswith("_hourly_output_curves.xlsx")
+            # args[2] is the carriers list
+            assert args[2] == ["electricity", "heat"]
 
         # Case 2: carriers from global config
-        cfg = ExportConfig(output_carriers=["h2"])  # minimal
+        cfg = ExportConfig(output_carriers=["hydrogen"])  # minimal
         s2 = Mock(spec=Session)
         s2.id = "S2"
         s2.identifier = Mock(return_value="S2")
@@ -901,14 +915,17 @@ class TestScenarioPackerExtras:
         packer2 = ScenarioPacker()
         packer2.add(s2)
         with (
-            patch.object(HourlyOutputCurvesPack, "to_excel_per_carrier") as toe2,
+            patch.object(HourlyOutputCurvesPack, "to_dict_per_curve", return_value=mock_curves_data),
+            patch.object(ScenarioPacker, "_write_hourly_curves_to_excel") as write_method2,
             patch("pyetm.models.scenario_packer.Workbook") as mock_wb2,
         ):
             mock_wb2.return_value = Mock()
             tmp2 = os.path.join(tempfile.gettempdir(), "export2.xlsx")
             packer2.to_excel(tmp2, include_hourly_output_curves=True)
-            args2, _ = toe2.call_args
-            assert args2[1] == ["h2"]
+            assert write_method2.called
+            args2, kwargs2 = write_method2.call_args
+            # Check that carriers from config are used
+            assert args2[2] == ["hydrogen"]
 
 
 def test_hourly_output_curves_if_needed_false():
@@ -920,12 +937,12 @@ def test_hourly_output_curves_if_needed_false():
     packer.add(s)
 
     with (
-        patch.object(HourlyOutputCurvesPack, "to_excel_per_carrier") as toe,
+        patch.object(ScenarioPacker, "_write_hourly_curves_to_excel") as write_method,
         patch("pyetm.models.scenario_packer.Workbook") as wb,
     ):
         wb.return_value = Mock()
         packer.to_excel("/tmp/x.xlsx", include_hourly_output_curves=False)
-        toe.assert_not_called()
+        write_method.assert_not_called()
 
 
 def test_add_gqueries_sheet_disabled():
@@ -934,7 +951,6 @@ def test_add_gqueries_sheet_disabled():
         patch("pyetm.utils.excel_utils.add_frame") as add_frame,
         patch("pyetm.models.scenario_packer.Workbook") as wb,
         patch.object(ScenarioPacker, "_scenarios", return_value={Mock(spec=Session)}),
-        patch.object(ScenarioPacker, "_add_data_sheets"),
     ):
         wb.return_value = Mock()
         # Make main_info non-empty to create MAIN
@@ -1296,3 +1312,224 @@ class TestPackerValidation:
         # Should not raise - just verify it doesn't error
         result = packer.annual_exports(exports=["energy_flow", "sankey"])
         assert isinstance(result, dict)
+
+
+class TestScenarioPackerCollectExportData:
+    """Tests for the collect_export_data() method"""
+
+    def test_collect_export_data_empty_packer(self):
+        """Test that collecting from empty packer raises ValueError"""
+        packer = ScenarioPacker()
+
+        with pytest.raises(ValueError, match="Packer was empty"):
+            packer.collect_export_data()
+
+    def test_collect_export_data_minimal(self, sample_scenario):
+        """Test collecting export data with minimal configuration"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        # Collect with explicit False for all optional fields
+        export_data = packer.collect_export_data(
+            include_inputs=False,
+            include_sortables=False,
+            include_custom_curves=False,
+            include_gqueries=False,
+            include_users=False,
+        )
+
+        # Should return ExportDataCollection
+        assert isinstance(export_data, ExportDataCollection)
+
+        # Main info should always be present
+        assert export_data.main_info is not None
+        assert isinstance(export_data.main_info, pd.DataFrame)
+
+        # Optional fields should be None when explicitly disabled
+        assert export_data.inputs is None
+        assert export_data.sortables is None
+        assert export_data.custom_curves is None
+        assert export_data.hourly_output_curves is None
+        assert export_data.annual_exports is None
+        assert export_data.gquery_results is None
+        assert export_data.users is None
+
+        # Config should be present
+        assert export_data.config is not None
+        assert isinstance(export_data.config, ExportConfig)
+
+    def test_collect_export_data_with_inputs(self, scenario_with_inputs):
+        """Test collecting export data with inputs"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(scenario_with_inputs)
+
+        export_data = packer.collect_export_data(include_inputs=True)
+
+        assert isinstance(export_data, ExportDataCollection)
+        assert export_data.inputs is not None
+        assert isinstance(export_data.inputs, pd.DataFrame)
+        assert export_data.config.include_inputs is True
+
+    def test_collect_export_data_with_queries(self, scenario_with_queries):
+        """Test collecting export data with query results"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(scenario_with_queries)
+
+        export_data = packer.collect_export_data(include_gqueries=True)
+
+        assert isinstance(export_data, ExportDataCollection)
+        assert export_data.gquery_results is not None
+        assert isinstance(export_data.gquery_results, pd.DataFrame)
+        assert export_data.config.include_gqueries is True
+
+    def test_collect_export_data_with_multiple_scenarios(self, multiple_scenarios):
+        """Test collecting export data from multiple scenarios"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(*multiple_scenarios)
+
+        export_data = packer.collect_export_data(include_inputs=True)
+
+        assert isinstance(export_data, ExportDataCollection)
+        assert export_data.main_info is not None
+        # Should have data for all 3 scenarios
+        assert export_data.main_info.shape[1] == 3
+
+    def test_collect_export_data_with_custom_curves(self, sample_scenario):
+        """Test collecting export data with custom curves"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        export_data = packer.collect_export_data(include_custom_curves=True)
+
+        assert isinstance(export_data, ExportDataCollection)
+        # Custom curves might be None or empty dict depending on mock data
+        assert export_data.config.include_custom_curves is True
+
+    def test_collect_export_data_with_sortables(self, sample_scenario):
+        """Test collecting export data with sortables"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        export_data = packer.collect_export_data(include_sortables=True)
+
+        assert isinstance(export_data, ExportDataCollection)
+        assert export_data.config.include_sortables is True
+
+    def test_collect_export_data_with_users(self, sample_scenario):
+        """Test collecting export data with users"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        export_data = packer.collect_export_data(include_users=True)
+
+        assert isinstance(export_data, ExportDataCollection)
+        assert export_data.config.include_users is True
+
+    def test_collect_export_data_respects_global_config(self, sample_scenario):
+        """Test that collect_export_data respects scenario export config"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        # Create scenario with export config
+        sample_scenario._export_config = ExportConfig(
+            include_inputs=True,
+            include_sortables=True
+        )
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        # Without explicit params, should use global config
+        export_data = packer.collect_export_data()
+
+        assert isinstance(export_data, ExportDataCollection)
+        # Config should reflect the global config defaults
+        assert export_data.config.include_inputs is True
+        assert export_data.config.include_sortables is True
+
+    def test_collect_export_data_explicit_overrides_global(self, sample_scenario):
+        """Test that explicit parameters override global config"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        # Create scenario with export config that includes inputs
+        sample_scenario._export_config = ExportConfig(include_inputs=True)
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        # Explicitly disable inputs
+        export_data = packer.collect_export_data(include_inputs=False)
+
+        assert isinstance(export_data, ExportDataCollection)
+        # Explicit parameter should override global config
+        assert export_data.config.include_inputs is False
+        assert export_data.inputs is None
+
+    def test_collect_export_data_all_options(self, sample_scenario, scenario_with_inputs, scenario_with_queries):
+        """Test collecting export data with all options enabled"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario, scenario_with_inputs, scenario_with_queries)
+
+        export_data = packer.collect_export_data(
+            include_inputs=True,
+            include_sortables=True,
+            include_custom_curves=True,
+            include_gqueries=True,
+            include_users=True,
+        )
+
+        assert isinstance(export_data, ExportDataCollection)
+        assert export_data.main_info is not None
+        assert export_data.config.include_inputs is True
+        assert export_data.config.include_sortables is True
+        assert export_data.config.include_custom_curves is True
+        assert export_data.config.include_gqueries is True
+
+    def test_collect_export_data_config_reflects_choices(self, sample_scenario):
+        """Test that returned config accurately reflects what was collected"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        export_data = packer.collect_export_data(
+            include_inputs=True,
+            include_sortables=False,
+            include_gqueries=True,
+        )
+
+        assert isinstance(export_data, ExportDataCollection)
+        # Config should match what was requested
+        assert export_data.config.include_inputs is True
+        assert export_data.config.include_sortables is False
+        assert export_data.config.include_gqueries is True
+
+    def test_collect_export_data_immutability(self, sample_scenario):
+        """Test that collected data can be reused without interference"""
+        from pyetm.models.export_data_collection import ExportDataCollection
+
+        packer = ScenarioPacker()
+        packer.add(sample_scenario)
+
+        # Collect twice with different options
+        export_data1 = packer.collect_export_data(include_inputs=True)
+        export_data2 = packer.collect_export_data(include_inputs=False)
+
+        # Both collections should be independent
+        assert export_data1.config.include_inputs is True
+        assert export_data2.config.include_inputs is False

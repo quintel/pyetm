@@ -15,6 +15,7 @@ class ExportConfig(BaseModel):
     include_sortables: Optional[bool] = None
     include_custom_curves: Optional[bool] = None
     include_gqueries: Optional[bool] = None
+    include_users: Optional[bool] = None
     inputs_defaults: Optional[bool] = None
     inputs_min_max: Optional[bool] = None
 
