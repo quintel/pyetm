@@ -82,8 +82,16 @@ def write_file_safely(path: Path, content: str, force: bool = False) -> bool:
 
 def get_examples_path() -> Path:
     """Get the path to the examples directory in the package."""
+    # In development: src/pyetm/__main__.py -> go up to project root
+    # In installed package: site-packages/pyetm/__main__.py -> examples in parent
     package_dir = Path(__file__).parent.parent
     examples_path = package_dir / "examples"
+
+    # If not found (development mode), check project root
+    if not examples_path.exists():
+        project_root = package_dir.parent
+        examples_path = project_root / "examples"
+
     return examples_path
 
 
@@ -168,14 +176,13 @@ def cli():
 @cli.command()
 @click.option(
     "--token",
+    default=None,
     help="ETM API token (format: etm_<JWT> or etm_beta_<JWT>)",
-    prompt="ETM API Token",
 )
 @click.option(
     "--environment",
     type=click.Choice(["pro", "beta", "local"], case_sensitive=False),
-    default="pro",
-    prompt="Environment",
+    default=None,
     help="ETM environment to target",
 )
 @click.option(
@@ -198,6 +205,24 @@ def init(token, environment, log_level, force):
     click.echo("\n" + "=" * 60)
     click.echo("PyETM Project Initialization")
     click.echo("=" * 60 + "\n")
+
+    # Prompt for token if not provided via CLI
+    if not token:
+        click.echo("Please paste your ETM API token below and press Enter:")
+        click.echo("(The token will be visible as you paste it)\n")
+        try:
+            token = input("ETM API Token: ").strip()
+        except EOFError:
+            click.echo("\n✗ No token provided", err=True)
+            sys.exit(1)
+
+    # Prompt for environment if not provided
+    if not environment:
+        environment = click.prompt(
+            "Environment",
+            type=click.Choice(["pro", "beta", "local"], case_sensitive=False),
+            default="pro",
+        )
 
     # Validate token
     is_valid, error_msg = validate_token(token)

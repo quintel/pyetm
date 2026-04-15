@@ -67,6 +67,21 @@ class TestTokenValidation:
         assert not is_valid
         assert "must not contain spaces" in error_msg
 
+    def test_very_long_token(self):
+        """Test that very long tokens (>1000 chars) are accepted"""
+        # Create a 1050-character token
+        # Format: etm_ (4 chars) + seg1 + . (1) + seg2 + . (1) + seg3 = 1050
+        prefix = "etm_"
+        seg1 = "a" * 348
+        seg2 = "b" * 348
+        seg3 = "c" * 348
+        token = f"{prefix}{seg1}.{seg2}.{seg3}"
+
+        assert len(token) == 1050
+        is_valid, error_msg = validate_token(token)
+        assert is_valid
+        assert error_msg == ""
+
 
 class TestCliInit:
     """Test the pyetm init command"""
