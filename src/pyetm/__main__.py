@@ -82,7 +82,7 @@ def write_file_safely(path: Path, content: str, force: bool = False) -> bool:
 
 def get_examples_path() -> Path:
     """Get the path to the examples directory in the package."""
-    package_dir = Path(__file__).parent.parent.parent
+    package_dir = Path(__file__).parent.parent
     examples_path = package_dir / "examples"
     return examples_path
 
@@ -170,7 +170,6 @@ def cli():
     "--token",
     help="ETM API token (format: etm_<JWT> or etm_beta_<JWT>)",
     prompt="ETM API Token",
-    hide_input=True,
 )
 @click.option(
     "--environment",

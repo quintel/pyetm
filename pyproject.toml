@@ -47,15 +47,15 @@ pyetm = "pyetm.__main__:main"
 "Issue tracker" = "https://github.com/quintel/pyetm/issues"
 
 [tool.poetry]
-packages = [{ include = "pyetm", from = "src" }]
+packages = [
+  { include = "pyetm", from = "src" },
+  { include = "examples" }
+]
 include = [
   "LICENSE",
   "src/pyetm/config/*.yml",
   "src/pyetm/config/*.yaml",
   "src/pyetm/templates/*",
-  "examples/*.ipynb",
-  "examples/*.py",
-  "examples/inputs/*.xlsx"
 ]
 
 
