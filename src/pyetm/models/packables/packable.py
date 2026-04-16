@@ -210,8 +210,8 @@ class Packable(BaseModel):
         row_keys = row_keys.loc[valid_mask]
         data_df.index = row_keys
 
-        # Process scenario columns
-        scenario_columns = [col for col in data_df.columns if col != first_column]
+        # Process scenario columns (skip first column and filter out NaN values)
+        scenario_columns = [col for col in data_df.columns[1:] if not pd.isna(col)]
         data_df[scenario_columns] = data_df[scenario_columns].replace(
             {"": np.nan, "nan": np.nan}
         )

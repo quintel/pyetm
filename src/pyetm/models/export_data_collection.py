@@ -60,6 +60,11 @@ class ExportDataCollection(BaseModel):
         None, description="User permission data across scenarios"
     )
 
+    # Excel-specific optional fields
+    inputs_detailed: Optional[pd.DataFrame] = Field(
+        None, description="Detailed input sheet with defaults and min/max"
+    )
+
     # Configuration used to collect this data
     config: ExportConfig = Field(
         ..., description="The ExportConfig used to collect this data"
@@ -102,7 +107,7 @@ class ExportDataCollection(BaseModel):
         result = {"main_info": self._safe_to_dict(self.main_info)}
 
         # Convert simple DataFrames
-        for field in ["inputs", "sortables", "gquery_results", "users"]:
+        for field in ["inputs", "sortables", "gquery_results", "users", "inputs_detailed"]:
             value = getattr(self, field, None)
             if value is not None:
                 result[field] = self._safe_to_dict(value)
@@ -134,7 +139,7 @@ class ExportDataCollection(BaseModel):
         ]
 
         # Add optional DataFrames
-        for field in ["inputs", "sortables", "gquery_results", "users"]:
+        for field in ["inputs", "sortables", "gquery_results", "users", "inputs_detailed"]:
             lines.extend(self._format_optional_field(field))
 
         # Add nested dicts
