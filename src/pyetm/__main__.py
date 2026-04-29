@@ -15,29 +15,41 @@ def validate_token(token: str) -> tuple[bool, str]:
     """
     Validate ETM API token format.
 
+    Accepts empty tokens (returns True) to allow unauthenticated mode.
+    For non-empty tokens, validates etm_ prefix and basic format.
+
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Check prefix
+    # Empty token is valid (unauthenticated mode)
+    if not token:
+        return True, ""
+
+    # Token must start with etm_ prefix
+    if not token.startswith("etm_"):
+        return False, "Token must start with 'etm_' prefix"
+
+    # Extract body (handle both etm_ and etm_beta_ prefixes)
     if token.startswith("etm_beta_"):
         body = token[len("etm_beta_") :]
-    elif token.startswith("etm_"):
-        body = token[len("etm_") :]
     else:
-        return False, "Token must start with 'etm_' or 'etm_beta_'"
+        body = token[len("etm_") :]
 
-    # Body must start with alphanumeric
+    # Body must not be empty and must start with alphanumeric
     if not body or not body[0].isalnum():
         return False, "Token body must start with an alphanumeric character"
 
-    # Must have exactly three dot-separated segments
+    # Relaxed validation: allow non-JWT tokens
+    # Only validate JWT structure if it looks like a JWT (has 3 dot-separated segments)
     segs = body.split(".")
-    if len(segs) != 3:
-        return False, "Token must have exactly three segments separated by '.'"
-
-    # No spaces in any segment
-    if any(" " in seg for seg in segs):
-        return False, "Token segments must not contain spaces"
+    if len(segs) == 3:
+        # Validate JWT format
+        if any(" " in seg for seg in segs):
+            return False, "JWT segments must not contain spaces"
+    elif "." in body:
+        # Has dots but not exactly 3 segments - might be malformed JWT
+        return False, "JWT must have exactly three segments separated by '.'"
+    # else: non-JWT token, accept it
 
     return True, ""
 
@@ -177,13 +189,12 @@ def cli():
 @click.option(
     "--token",
     default=None,
-    help="ETM API token (format: etm_<JWT> or etm_beta_<JWT>)",
+    help="ETM API token (optional, format: etm_<JWT> or etm_beta_<JWT>). Leave empty for unauthenticated access to public scenarios only.",
 )
 @click.option(
     "--environment",
-    type=click.Choice(["pro", "beta", "local"], case_sensitive=False),
     default=None,
-    help="ETM environment to target",
+    help="ETM environment to target (e.g., 'pro', 'beta', 'local', 'tyndp2024', '2025-01'). Defaults to 'pro'.",
 )
 @click.option(
     "--log-level",
@@ -207,21 +218,21 @@ def init(token, environment, log_level, force):
     click.echo("=" * 60 + "\n")
 
     # Prompt for token if not provided via CLI
-    if not token:
+    if token is None:
         click.echo("Please paste your ETM API token below and press Enter:")
-        click.echo("(The token will be visible as you paste it)\n")
+        click.echo("(Leave empty and press Enter to skip for unauthenticated access)\n")
         try:
-            token = input("ETM API Token: ").strip()
+            token = input("ETM API Token (optional): ").strip()
         except EOFError:
-            click.echo("\n✗ No token provided", err=True)
-            sys.exit(1)
+            token = ""
 
     # Prompt for environment if not provided
     if not environment:
+        click.echo("\nCommon environments: pro, beta, local, tyndp2024, 2025-01")
         environment = click.prompt(
             "Environment",
-            type=click.Choice(["pro", "beta", "local"], case_sensitive=False),
             default="pro",
+            type=str,
         )
 
     # Validate token
@@ -234,7 +245,12 @@ def init(token, environment, log_level, force):
         )
         sys.exit(1)
 
-    click.echo("✓ Token validated\n")
+    if token:
+        click.echo("Token validated\n")
+    else:
+        click.echo(
+            "No token provided - you will only be able to access public scenarios\n"
+        )
 
     # Determine target directory (current working directory)
     target_dir = Path.cwd()
@@ -250,7 +266,14 @@ def init(token, environment, log_level, force):
         env_template = read_template(".env.template")
 
         # Replace placeholders
-        env_content = env_template.replace("{{ETM_API_TOKEN}}", token)
+        # If token is empty, comment out the ETM_API_TOKEN line
+        if token:
+            env_content = env_template.replace("{{ETM_API_TOKEN}}", token)
+        else:
+            env_content = env_template.replace(
+                "ETM_API_TOKEN={{ETM_API_TOKEN}}", "# ETM_API_TOKEN="
+            )
+
         env_content = env_content.replace("{{ENVIRONMENT}}", environment)
         env_content = env_content.replace("{{LOG_LEVEL}}", log_level)
 

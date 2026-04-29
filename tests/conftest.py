@@ -53,6 +53,37 @@ def scenario():
     return Session(id=999)
 
 
+# --- Config Fixtures for Testing Optional Token and Custom Environments --- #
+
+
+@pytest.fixture
+def unauthenticated_config(monkeypatch):
+    """Fixture for testing unauthenticated (no token) configuration"""
+    from pyetm.config.settings import AppConfig, get_settings
+
+    # Clear cache to ensure fresh config with test settings
+    get_settings.cache_clear()
+
+    monkeypatch.delenv("ETM_API_TOKEN", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "pro")
+
+    return AppConfig()
+
+
+@pytest.fixture
+def custom_env_config(monkeypatch):
+    """Fixture for testing custom environment configuration (e.g., tyndp2024)"""
+    from pyetm.config.settings import AppConfig, get_settings
+
+    # Clear cache to ensure fresh config with test settings
+    get_settings.cache_clear()
+
+    monkeypatch.setenv("ETM_API_TOKEN", "etm_custom_token_for_tyndp")
+    monkeypatch.setenv("ENVIRONMENT", "tyndp2024")
+
+    return AppConfig()
+
+
 # --- Service Result Fixtures --- #
 
 

@@ -1,9 +1,13 @@
 from pathlib import Path
+import functools
+import logging
 import re
 import tempfile
 from typing import Optional, ClassVar, List, Annotated
 from pydantic import Field, ValidationError, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("pyetm")
 
 
 class AppConfig(BaseSettings):
@@ -12,10 +16,13 @@ class AppConfig(BaseSettings):
     """
 
     etm_api_token: Annotated[
-        str,
+        Optional[str],
         Field(
-            ...,
-            description="Your ETM API token: must be either `etm_<JWT>` or `etm_beta_<JWT>`",
+            None,
+            description=(
+                "Your ETM API token (optional): must start with 'etm_' prefix. "
+                "If not provided, you will only be able to access public scenarios without authentication."
+            ),
         ),
     ]
     base_url: Optional[HttpUrl] = Field(
@@ -76,42 +83,57 @@ class AppConfig(BaseSettings):
 
     @field_validator("etm_api_token")
     @classmethod
-    def check_jwt(cls, v: str) -> str:
-        # prefix and optional 'beta'
+    def check_jwt(cls, v: Optional[str]) -> Optional[str]:
+        # Token is optional - skip validation if None or empty
+        if not v:
+            return v
+
+        # Token must start with etm_ prefix
+        if not v.startswith("etm_"):
+            raise ValueError(
+                "Invalid ETM API token: must start with 'etm_' prefix"
+            )
+
+        # Extract body (handle both etm_ and etm_beta_ prefixes)
         if v.startswith("etm_beta_"):
             body = v[len("etm_beta_") :]
-        elif v.startswith("etm_"):
-            body = v[len("etm_") :]
         else:
-            raise ValueError(
-                "Invalid ETM API token: must start with 'etm_' or 'etm_beta_'"
-            )
+            body = v[len("etm_") :]
 
-        # body must start with an alphanumeric character (no double underscore)
+        # Body must not be empty and must start with an alphanumeric character
         if not body or not body[0].isalnum():
             raise ValueError(
-                "Invalid ETM API token: JWT body must start with an alphanumeric character"
+                "Invalid ETM API token: token body must start with an alphanumeric character"
             )
 
-        # must have exactly three dot-separated segments
+        # Relaxed validation: allow non-JWT tokens (any format after etm_ prefix)
+        # Only validate JWT structure if it looks like a JWT (has 3 dot-separated segments)
         segs = body.split(".")
-        if len(segs) != 3:
+        if len(segs) == 3:
+            # Validate JWT format
+            if any(" " in seg for seg in segs):
+                raise ValueError(
+                    "Invalid ETM API token: JWT segments must not contain spaces"
+                )
+        elif "." in body:
+            # Has dots but not exactly 3 segments - might be malformed JWT
             raise ValueError(
                 "Invalid ETM API token: JWT must have exactly three segments separated by '.'"
             )
-
-        # no spaces in any segment
-        if any(" " in seg for seg in segs):
-            raise ValueError(
-                "Invalid ETM API token: JWT segments must not contain spaces"
-            )
+        # else: non-JWT token, accept it as-is
 
         return v
 
     def model_post_init(self, __context) -> None:
-        """Post-initialization to handle base_url inference."""
+        """Post-initialization to handle base_url inference and token warnings."""
         if not self.base_url:
             self.base_url = HttpUrl(_infer_base_url_from_env(self.environment))
+
+        # Warn if no token is provided
+        if not self.etm_api_token:
+            logger.warning(
+                "No ETM_API_TOKEN provided. You will only be able to access public scenarios without authentication."
+            )
 
     def path_to_tmp(self, subfolder: str):
         folder = self.temp_folder / subfolder
@@ -120,9 +142,12 @@ class AppConfig(BaseSettings):
 
 
 
+@functools.lru_cache(maxsize=1)
 def get_settings() -> AppConfig:
     """
     Load AppConfig from .env file and environment variables.
+
+    Cached to ensure only one AppConfig instance is created per session.
     """
     try:
         return AppConfig()
@@ -150,8 +175,10 @@ def _infer_base_url_from_env(environment: str) -> str:
       - 'beta'/'staging':       https://beta.engine.energytransitionmodel.com/api/v3
       - 'local'/'dev'/'development': http://localhost:3000/api/v3
       - stable tags 'YYYY-MM':  https://{YYYY-MM}.engine.energytransitionmodel.com/api/v3
+      - custom environments:    https://{environment}.engine.energytransitionmodel.com/api/v3
+        (e.g., 'tyndp2024' -> https://tyndp2024.engine.energytransitionmodel.com/api/v3)
 
-    Falls back to the 'pro' URL if the input is empty or unrecognized.
+    Falls back to the 'pro' URL if the input is empty.
     """
     env = (environment or "").strip().lower()
 
@@ -166,5 +193,6 @@ def _infer_base_url_from_env(environment: str) -> str:
     if re.fullmatch(r"\d{4}-\d{2}", env):
         return f"https://{env}.engine.energytransitionmodel.com/api/v3"
 
-    # Unrecognized: be conservative and return production
-    return "https://engine.energytransitionmodel.com/api/v3"
+    # Custom environments (e.g., tyndp2024, tyndp2026, etc.)
+    # Use the environment string as a subdomain
+    return f"https://{env}.engine.energytransitionmodel.com/api/v3"
