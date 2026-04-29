@@ -11,6 +11,9 @@ get_settings = settings_module.get_settings
 @pytest.fixture
 def clean_settings_env(monkeypatch, tmp_path):
     """Create a completely clean environment for settings tests"""
+    # Clear the get_settings cache to ensure each test gets a fresh config
+    get_settings.cache_clear()
+
     # Clear all ETM environment variables
     etm_vars = [
         "ETM_API_TOKEN",
@@ -113,21 +116,37 @@ def test_no_env_file_uses_env_vars_and_defaults(clean_settings_env, monkeypatch)
     assert config.environment == "pro"
 
 
-# Test missing required token raises helpful error
-def test_get_settings_missing_token_raises_runtime_error(clean_settings_env):
+# Test optional token - no token is now valid
+def test_optional_token_no_error(clean_settings_env, caplog):
+    """Test that missing token is allowed and generates a warning"""
+    import logging
+
     env_file = clean_settings_env
     write_env_file(env_file, {})
 
-    with pytest.raises(RuntimeError) as excinfo:
-        get_settings()
+    with caplog.at_level(logging.WARNING):
+        config = AppConfig()
 
-    msg = str(excinfo.value)
-    assert (
-        "Configuration error: one or more required settings are missing or invalid"
-        in msg
+    # Token should be None
+    assert config.etm_api_token is None
+
+    # Should have logged a warning
+    assert any(
+        "No ETM_API_TOKEN provided" in record.message
+        and "public scenarios" in record.message
+        for record in caplog.records
     )
-    assert "• etm_api_token: Field required" in msg
-    assert "environment variables" in msg
+
+
+# Test get_settings with missing token
+def test_get_settings_missing_token_succeeds(clean_settings_env):
+    """Test that get_settings() succeeds when token is missing"""
+    env_file = clean_settings_env
+    write_env_file(env_file, {})
+
+    # Should not raise
+    config = get_settings()
+    assert config.etm_api_token is None
 
 
 # Test defaults when no configuration provided
@@ -154,12 +173,18 @@ def test_default_values(clean_settings_env):
         ("local", "http://localhost:3000/api/v3"),
         ("2025-01", "https://2025-01.engine.energytransitionmodel.com/api/v3"),
         ("", "https://engine.energytransitionmodel.com/api/v3"),  # default
-        ("unknown", "https://engine.energytransitionmodel.com/api/v3"),  # fallback
+        # Custom environments now resolve to subdomain
+        ("tyndp2024", "https://tyndp2024.engine.energytransitionmodel.com/api/v3"),
+        ("tyndp2026", "https://tyndp2026.engine.energytransitionmodel.com/api/v3"),
+        (
+            "custom-env",
+            "https://custom-env.engine.energytransitionmodel.com/api/v3",
+        ),
     ],
 )
 def test_environment_inference(clean_settings_env, env, expected_url):
     env_file = clean_settings_env
-    env_data = {"ETM_API_TOKEN": "etm_valid.looking.token"}
+    env_data = {}
     if env:  # Don't add environment key if it's empty string
         env_data["ENVIRONMENT"] = env
 
@@ -191,12 +216,16 @@ def test_explicit_base_url_overrides_environment(clean_settings_env):
 @pytest.mark.parametrize(
     "token",
     [
-        # minimal JWT chars + no beta
+        # JWT tokens
         "etm_eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6"
         "IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
         # with _beta
         "etm_beta_eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6"
         "IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+        # Non-JWT tokens (custom tokens for non-standard environments)
+        "etm_custom_token_123",
+        "etm_simpletoken",
+        "etm_beta_custom_token",
     ],
 )
 def test_valid_etm_api_token_regex(clean_settings_env, token):
@@ -214,12 +243,15 @@ def test_valid_etm_api_token_regex(clean_settings_env, token):
     [
         # missing prefix entirely
         "eyJhbGciOiJIUzI1NiJ9.header.payload.signature",
-        # double underscore because you made beta optional incorrectly
+        # double underscore (body starts with non-alphanumeric)
         "etm__eyJhbGci.abc.def",
-        # only two parts
+        # invalid JWT with 2 parts (has dots but not 3 segments)
         "etm_eyJhbGci.eyJzdWIiOiIxMjM0NTY",
-        # invalid characters (space)
+        # invalid JWT with spaces (has 3 parts but contains spaces)
         "etm_beta_eyJhbGci.eyJ zdWIi.abc",
+        # empty body after prefix
+        "etm_",
+        "etm_beta_",
     ],
 )
 def test_invalid_etm_api_token_raises(clean_settings_env, token):

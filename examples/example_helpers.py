@@ -185,7 +185,7 @@ def setup_notebook(debug=False, logging_level="WARNING"):
 
         if not get_settings().etm_api_token:
             print(
-                " Warning: No ETM_API_TOKEN found. Please set your token in the environment."
+                " Warning: No ETM_API_TOKEN found. You will only be able to access public scenarios without authentication."
             )
         else:
             print("API connection ready")
