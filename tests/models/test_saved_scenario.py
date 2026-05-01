@@ -491,9 +491,10 @@ def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
 
     saved_scenario._scenario_session = mock_session
 
-    # User code should work identically whether they have a Scenario or SavedScenario
+    # SavedScenario has its own identifier logic that prioritizes saved title
+    # This saved_scenario fixture has title="My Saved Scenario", so that takes priority
     identifier = saved_scenario.identifier()
-    assert identifier == "test_scenario"
+    assert identifier == "My Saved Scenario"
 
     # Both should support the same operations
     saved_scenario.update_user_values({"test": 123})
@@ -679,3 +680,107 @@ def test_saved_scenario_interpolate_rejects_different_area_codes():
 
     with pytest.raises(ValueError, match="All sessions must have the same area_code"):
         Scenario.interpolate([saved_nl, saved_de], 2040)
+
+
+# --- Identifier Resolution Tests --- #
+
+
+def test_identifier_prioritizes_saved_title():
+    """Test identifier returns saved scenario title when available."""
+    saved = Scenario(id=1001, scenario_id=12345, title="Saved Title")
+    # Mock session with short_name, title, and id
+    saved._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050, title="Session Title", short_name="short"
+    )
+
+    assert saved.identifier() == "Saved Title"
+
+
+def test_identifier_falls_back_to_short_name():
+    """Test identifier returns short_name when saved title is not available."""
+    saved = Scenario(id=1001, scenario_id=12345, title="")
+    # Mock session with short_name
+    saved._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050, title="Session Title", short_name="short"
+    )
+
+    assert saved.identifier() == "short"
+
+
+def test_identifier_falls_back_to_session_title():
+    """Test identifier returns session title when saved title and short_name not available."""
+    saved = Scenario(id=1001, scenario_id=12345, title="")
+    # Mock session with only title
+    saved._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050, title="Session Title"
+    )
+
+    assert saved.identifier() == "Session Title"
+
+
+def test_identifier_falls_back_to_saved_id():
+    """Test identifier returns saved scenario id when saved title, short_name, and session title not available."""
+    saved = Scenario(id=1001, scenario_id=12345, title="")
+    # Mock session with no title or short_name
+    saved._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050
+    )
+
+    assert saved.identifier() == 1001
+
+
+def test_identifier_falls_back_to_session_id():
+    """Test identifier returns session id as final fallback."""
+    saved = Scenario(id=None, scenario_id=12345, title="")
+    # Mock session with no title or short_name
+    saved._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050
+    )
+
+    assert saved.identifier() == 12345
+
+
+def test_identifier_resolution_order_complete():
+    """Test complete identifier resolution order with all properties present."""
+    # Test 1: When all properties are present, saved title should win
+    saved1 = Scenario(id=1001, scenario_id=12345, title="Saved Title")
+    saved1._scenario_session = Session(
+        id=12345,
+        area_code="nl",
+        end_year=2050,
+        title="Session Title",
+        short_name="short"
+    )
+    assert saved1.identifier() == "Saved Title"
+
+    # Test 2: Without saved title, should return short_name
+    saved2 = Scenario(id=1001, scenario_id=12345, title="")
+    saved2._scenario_session = Session(
+        id=12345,
+        area_code="nl",
+        end_year=2050,
+        title="Session Title",
+        short_name="short"
+    )
+    assert saved2.identifier() == "short"
+
+    # Test 3: Without saved title and short_name, should return session title
+    saved3 = Scenario(id=1001, scenario_id=12345, title="")
+    saved3._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050, title="Session Title"
+    )
+    assert saved3.identifier() == "Session Title"
+
+    # Test 4: Without saved title, short_name, and session title, should return saved id
+    saved4 = Scenario(id=1001, scenario_id=12345, title="")
+    saved4._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050
+    )
+    assert saved4.identifier() == 1001
+
+    # Test 5: Without any identifier except session id, should return session id
+    saved5 = Scenario(id=None, scenario_id=12345, title="")
+    saved5._scenario_session = Session(
+        id=12345, area_code="nl", end_year=2050
+    )
+    assert saved5.identifier() == 12345

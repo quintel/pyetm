@@ -360,7 +360,7 @@ class Session(Base):
                 if k not in info:
                     info[k] = v
 
-        col_name = self.identifier() if self.identifier() is not None else self.id
+        col_name = str(self.identifier())
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
     def set_short_name(self, short_name: str):
