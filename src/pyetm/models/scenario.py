@@ -480,8 +480,16 @@ class Scenario(Base):
         self.session.show_all_warnings()
 
     def identifier(self) -> Union[str, int]:
-        """Get identifier (short_name, title, or id) from the underlying session."""
-        return self.session.identifier()
+        """Get identifier in priority order: saved title, short_name, session title, saved id, session id."""
+        if self.title:
+            return self.title
+        if self.session.short_name:
+            return self.session.short_name
+        if self.session.title:
+            return self.session.title
+        if self.id:
+            return self.id
+        return self.session.id
 
     def set_short_name(self, short_name: str) -> None:
         """Set short name on the underlying session."""

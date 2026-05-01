@@ -658,7 +658,7 @@ def test_to_dataframe(scenario):
     scenario = Session(id=scenario.id, area_code="nl2019", end_year=2050)
     dataframe = scenario.to_dataframe()
 
-    assert dataframe[scenario.id]["end_year"] == 2050
+    assert dataframe[str(scenario.identifier())]["end_year"] == 2050
 
 
 # ------ Warnings tests ------ #
@@ -1198,8 +1198,6 @@ def test_copy_scenario_deep_false_doesnt_break_link(
     assert scenario.id == 67896
 
 
-
-
 # ------ interpolate ------ #
 
 
@@ -1424,7 +1422,9 @@ def test_get_annual_exports_mixed_valid_and_invalid(scenario):
     assert "bad_export" in error_message
 
 
-def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, ok_service_result):
+def test_get_annual_exports_auto_converts_single_string(
+    monkeypatch, scenario, ok_service_result
+):
     """Test that get_annual_exports auto-converts single string to list"""
     # Mock the retrieve_multiple method to capture the arguments
     calls = []
@@ -1438,6 +1438,7 @@ def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, o
 
     def mock_session_get_annual_exports(self, export_names):
         from pyetm.validators import validate_export_names
+
         validated_names = validate_export_names(export_names)
         calls.append(validated_names)
         return {}
