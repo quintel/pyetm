@@ -246,12 +246,11 @@ class Session(Base):
 
     @classmethod
     def from_excel(cls, xlsx_path: PathLike | str) -> "Session":
-        """
-        Convenience method to load a single scenario from Excel.
-        """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        """Load a single scenario from Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
 
-        scenarios = ScenarioExcelService.import_from_excel(xlsx_path)
+        packer = ScenarioPacker.from_excel(xlsx_path)
+        scenarios = list(packer._scenarios())
         if len(scenarios) != 1:
             raise ScenarioError(
                 f"Expected one scenario, found {len(scenarios)}. "
@@ -260,12 +259,20 @@ class Session(Base):
         return scenarios[0]
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
-        """
-        Convenience method to export this scenario to Excel.
-        """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        """Export this scenario to Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
 
-        ScenarioExcelService.export_to_excel([self], path, **export_options)
+        packer = ScenarioPacker()
+        packer.add(self)
+        packer.to_excel(path, **export_options)
+
+    def collect_export_data(self, **export_options):
+        """Collect export data in format-agnostic structure."""
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker()
+        packer.add(self)
+        return packer.collect_export_data(**export_options)
 
     def save(
         self, client: Optional[BaseClient] = None, title: Optional[str] = None, **kwargs
@@ -360,7 +367,9 @@ class Session(Base):
                 if k not in info:
                     info[k] = v
 
-        col_name = str(self.identifier())
+        col_name = (
+            str(self.identifier()) if self.identifier() is not None else str(self.id)
+        )
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
     def set_short_name(self, short_name: str):

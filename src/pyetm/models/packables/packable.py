@@ -53,12 +53,12 @@ class Packable(BaseModel):
     def summary(self) -> dict:
         return {self.key: {"scenario_count": len(self.scenarios)}}
 
-    def _key_for(self, scenario: Session) -> Any:
+    def _key_for(self, scenario: Session) -> str:
         """Return the identifier used as the top-level column key when packing.
         Uses short name, identifier, or ID in that priority order."""
         return self._get_scenario_display_key(scenario)
 
-    def _get_scenario_display_key(self, scenario: Session) -> Any:
+    def _get_scenario_display_key(self, scenario: Session) -> str:
         """Get the display key for a scenario (short name, identifier, or ID)."""
         short_name = self._scenario_short_names.get(str(scenario.id))
         if short_name:
@@ -67,11 +67,11 @@ class Packable(BaseModel):
         try:
             identifier = scenario.identifier()
             if isinstance(identifier, (str, int)):
-                return identifier
+                return str(identifier)
         except Exception:
             pass
 
-        return scenario.id
+        return str(scenario.id)
 
     def _build_dataframe_for_scenario(
         self, scenario: Session, columns: str = "", **kwargs
@@ -210,8 +210,8 @@ class Packable(BaseModel):
         row_keys = row_keys.loc[valid_mask]
         data_df.index = row_keys
 
-        # Process scenario columns
-        scenario_columns = [col for col in data_df.columns if col != first_column]
+        # Process scenario columns (skip first column and filter out NaN values)
+        scenario_columns = [col for col in data_df.columns[1:] if not pd.isna(col)]
         data_df[scenario_columns] = data_df[scenario_columns].replace(
             {"": np.nan, "nan": np.nan}
         )

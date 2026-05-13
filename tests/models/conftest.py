@@ -143,6 +143,13 @@ def sample_scenario():
     scenario.sortables = Mock()
     scenario.sortables.to_dataframe = Mock(return_value=pd.DataFrame())
 
+    # Mock _to_dataframe for ScenarioPacker.main_info()
+    scenario._to_dataframe = Mock(return_value=pd.Series({
+        "id": scenario.id,
+        "area_code": scenario.area_code,
+        "end_year": scenario.end_year,
+    }, name=scenario.id))
+
     return scenario
 
 
@@ -166,6 +173,13 @@ def scenario_with_inputs():
     # Mock sortables
     scenario.sortables = Mock()
     scenario.sortables.to_dataframe = Mock(return_value=pd.DataFrame())
+
+    # Mock _to_dataframe for ScenarioPacker.main_info()
+    scenario._to_dataframe = Mock(return_value=pd.Series({
+        "id": scenario.id,
+        "area_code": scenario.area_code,
+        "end_year": scenario.end_year,
+    }, name=scenario.id))
 
     return scenario
 
@@ -200,6 +214,13 @@ def scenario_with_queries():
     scenario.sortables = Mock()
     scenario.sortables.to_dataframe = Mock(return_value=pd.DataFrame())
 
+    # Mock _to_dataframe for ScenarioPacker.main_info()
+    scenario._to_dataframe = Mock(return_value=pd.Series({
+        "id": scenario.id,
+        "area_code": scenario.area_code,
+        "end_year": scenario.end_year,
+    }, name=scenario.id))
+
     return scenario
 
 
@@ -225,6 +246,13 @@ def multiple_scenarios():
         # Mock sortables
         scenario.sortables = Mock()
         scenario.sortables.to_dataframe = Mock(return_value=pd.DataFrame())
+
+        # Mock _to_dataframe for ScenarioPacker.main_info()
+        scenario._to_dataframe = Mock(return_value=pd.Series({
+            "id": scenario.id,
+            "area_code": scenario.area_code,
+            "end_year": scenario.end_year,
+        }, name=scenario.id))
 
         scenarios.append(scenario)
     return scenarios

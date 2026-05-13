@@ -64,7 +64,7 @@ class TestUsersPack:
 
         result = pack._get_scenario_display_key(scenario)
 
-        assert result == 1
+        assert result == "1"
 
     def test_resolve_scenario_by_short_name(self):
         s1 = make_scenario(id_val=1, identifier="S1")

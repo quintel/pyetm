@@ -304,21 +304,15 @@ class Scenarios(Base):
         return scenarios
 
     def to_excel(self, path: PathLike | str, **export_options) -> None:
-        """
-        Export all scenarios to Excel.
-
-        Note: This exports the underlying session data from each SavedScenario.
-        The scenario_id column will contain Scenario IDs (MyETM).
-        """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
+        """Export all scenarios to Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
 
         if not self.items:
             raise ValueError("No scenarios to export")
 
-        resolved_path = Path(path).expanduser().resolve()
-        ScenarioExcelService.export_to_excel(
-            self.items, str(resolved_path), **export_options
-        )
+        packer = ScenarioPacker()
+        packer.add(*self.items)
+        packer.to_excel(str(Path(path).expanduser().resolve()), **export_options)
 
     @classmethod
     def from_excel(

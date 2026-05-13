@@ -606,6 +606,13 @@ class Scenario(Base):
         """Export this saved scenario to Excel."""
         self.session.to_excel(path, **export_options)
 
+    def collect_export_data(self, **export_options):
+        """
+        Returns ExportDataCollection containing pandas DataFrames and dictionaries
+        that can be exported to any file format (Parquet, CSV, JSON, etc.).
+        """
+        return self.session.collect_export_data(**export_options)
+
     def _to_dataframe(self, **kwargs) -> "pd.DataFrame":
         """
         Return a single-column DataFrame describing this saved scenario.
@@ -649,7 +656,7 @@ class Scenario(Base):
                 if k not in info:
                     info[k] = v
 
-        col_name = self.identifier() if self.identifier() is not None else self.id
+        col_name = str(self.id)
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
     def list_users(self, client: Optional[BaseClient] = None) -> List[Dict[str, Any]]:
