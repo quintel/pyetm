@@ -15,7 +15,7 @@ def fake_response():
         def __init__(self, ok, status_code, json_data=None, text=""):
             self.ok = ok
             self.status_code = status_code
-            self._json_data = json_data or {}
+            self._json_data = {} if json_data is None else json_data
             self.text = text
 
         def json(self):

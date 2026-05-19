@@ -145,6 +145,39 @@ class Scenarios(Base):
         return self.combine.annual_exports(exports)
 
     @classmethod
+    def load_all(
+        cls,
+        client: BaseClient | None = None,
+    ) -> "Scenarios":
+        """
+        Fetch all saved scenarios for the authenticated user.
+
+        Args:
+            client: Optional BaseClient instance
+
+        Returns:
+            Scenarios collection
+        """
+        from pyetm.services.scenario_runners.fetch_user_saved_scenarios import (
+            FetchUserSavedScenariosRunner,
+        )
+
+        client = client or BaseClient()
+        result = FetchUserSavedScenariosRunner.run(client)
+
+        if not result.success:
+            raise SavedScenarioError(f"Could not fetch saved scenarios: {result.errors}")
+
+        saved_scenarios = []
+        for item in result.data:
+            try:
+                saved_scenarios.append(Scenario.model_validate(item))
+            except Exception as e:
+                print(f"Could not load saved scenario {item.get('id')}: {e}")
+
+        return cls(items=saved_scenarios)
+
+    @classmethod
     def load_many(cls, saved_scenario_ids: Iterable[int]) -> "Scenarios":
         """
         Load multiple SavedScenario objects by their MyETM saved scenario IDs.

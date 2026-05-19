@@ -1,11 +1,11 @@
 from __future__ import annotations
 from os import PathLike
 from pathlib import Path
-from typing import Iterable, Iterator, List
+from typing import Iterable, Iterator, List, Optional
 from pydantic import Field
 from pyetm.models.base import Base
+from pyetm.clients import BaseClient
 from .session import Session, ScenarioError
-from pathlib import Path
 
 
 class Sessions(Base):
@@ -29,6 +29,41 @@ class Sessions(Base):
 
     def extend(self, scenarios: Iterable[Session]) -> None:
         self.items.extend(list(scenarios))
+
+    @classmethod
+    def load_all(
+        cls,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        client: Optional[BaseClient] = None,
+    ) -> "Sessions":
+        """
+        Fetch all sessions (ETEngine scenarios) for the authenticated user.
+
+        Args:
+            page: Page number for pagination
+            limit: Number of results per page (default 25, max 100)
+            client: Optional BaseClient instance
+
+        Returns:
+            Sessions collection
+        """
+        from pyetm.services.scenario_runners.fetch_user_scenarios import FetchUserScenariosRunner
+
+        client = client or BaseClient()
+        result = FetchUserScenariosRunner.run(client, page=page, limit=limit)
+
+        if not result.success:
+            raise ScenarioError(f"Could not fetch scenarios: {result.errors}")
+
+        sessions = []
+        for item in result.data:
+            try:
+                sessions.append(Session.model_validate(item))
+            except Exception as e:
+                print(f"Could not load session {item.get('id')}: {e}")
+
+        return cls(items=sessions)
 
     @classmethod
     def load_many(cls, scenario_ids: Iterable[int]) -> "Sessions":

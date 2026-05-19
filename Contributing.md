@@ -31,9 +31,13 @@ poetry run pytest
 poetry run pyetm
 ```
 
-Or enter the shell:
+Or enter the Poetry shell so you can run the commands without the `poetry run` prefix:
 
 ```bash
+# For Poetry 2.0+
+eval $(poetry env activate)
+
+# Or with earlier Poetry versions
 poetry shell
 ```
 
