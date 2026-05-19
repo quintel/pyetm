@@ -1,7 +1,7 @@
 """Coupling configuration for interconnected scenarios."""
 
 from __future__ import annotations
-from typing import List, Set
+from typing import Any, Dict, List, Set
 from pyetm.models.base import Base
 
 import pandas as pd
@@ -15,7 +15,7 @@ class Couplings(Base):
     active_couplings: List[str] = []
     inactive_couplings: List[str] = []
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
 
     def empty(self) -> bool:
@@ -33,15 +33,15 @@ class Couplings(Base):
         """Get all coupling groups (active and inactive)"""
         return set(self.active_couplings + self.inactive_couplings)
 
-    def to_series(self, name="") -> pd.Series:
+    def to_series(self, name: str = "") -> pd.Series[Any]:
         return pd.Series(
             [self.active_couplings, self.inactive_couplings],
             index=["active_couplings", "inactive_couplings"],
-            name=name
+            name=name,
         )
 
     @classmethod
-    def from_json(cls, data: dict) -> Couplings:
+    def from_json(cls, data: Dict[str, Any]) -> "Couplings":
         """
         Create Couplings from JSON data.
 

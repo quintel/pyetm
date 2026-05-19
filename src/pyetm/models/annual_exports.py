@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import pandas as pd
-from typing import Optional
+from typing import Any, Optional
 from pydantic import ConfigDict
 
 from pyetm.clients import BaseClient
@@ -43,7 +43,7 @@ class AnnualExport(Base):
         return self.data is not None
 
     def retrieve(
-        self, client: BaseClient, scenario, force_refresh: bool = False
+        self, client: BaseClient, scenario: Any, force_refresh: bool = False
     ) -> Optional[pd.DataFrame]:
         """Fetch export data from API"""
         # Return cached data unless explicitly refreshing
@@ -61,26 +61,20 @@ class AnnualExport(Base):
                     self.data = df_clean
                     return df_clean
                 except Exception as e:
-                    self.add_warning(
-                        "data", f"Failed to process export data for {self.name}: {e}"
-                    )
+                    self.add_warning("data", f"Failed to process export data for {self.name}: {e}")
                     return None
             else:
                 for error in result.errors or []:
                     self.add_warning("api", f"API error: {error}")
                 return None
         except Exception as e:
-            self.add_warning(
-                "base", f"Unexpected error retrieving export {self.name}: {e}"
-            )
+            self.add_warning("base", f"Unexpected error retrieving export {self.name}: {e}")
             return None
 
     def contents(self) -> Optional[pd.DataFrame]:
         """Get export contents (returns cached data if available)"""
         if not self.available():
-            self.add_warning(
-                "data", f"Export {self.name} not available - data not yet retrieved"
-            )
+            self.add_warning("data", f"Export {self.name} not available - data not yet retrieved")
             return None
         return self.data
 
@@ -108,7 +102,7 @@ class AnnualExports(Base):
     def __len__(self) -> int:
         return len(self.exports)
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         """Iterate over export objects"""
         yield from self.exports.values()
 
@@ -136,7 +130,7 @@ class AnnualExports(Base):
         return contents
 
     def retrieve(
-        self, client: BaseClient, scenario, name: str, force_refresh: bool = False
+        self, client: BaseClient, scenario: Any, name: str, force_refresh: bool = False
     ) -> Optional[pd.DataFrame]:
         """
         Retrieve a specific export by name.
@@ -152,7 +146,7 @@ class AnnualExports(Base):
     def retrieve_multiple(
         self,
         client: BaseClient,
-        scenario,
+        scenario: Any,
         names: list[str],
         force_refresh: bool = False,
     ) -> dict[str, pd.DataFrame]:
@@ -166,9 +160,7 @@ class AnnualExports(Base):
                 results[name] = data
         return results
 
-    def _to_dataframe(
-        self, exports: Optional[list[str]] = None, **kwargs
-    ) -> pd.DataFrame:
+    def _to_dataframe(self, exports: Optional[list[str]] = None, **kwargs: Any) -> pd.DataFrame:
         """
         Serialize AnnualExports collection to DataFrame with multi-index format.
         Returns a DataFrame with export_name as an additional index level.
@@ -200,20 +192,16 @@ class AnnualExports(Base):
                     if export_df_copy.index.name is None:
                         export_df_copy.index.name = "row"
 
-                    export_df_copy = export_df_copy.set_index(
-                        "export_name", append=True
-                    )
+                    export_df_copy = export_df_copy.set_index("export_name", append=True)
                     # Reorder index levels so export_name is first
+                    remaining_names: list[str] = [str(n) for n in export_df_copy.index.names if n != "export_name"]
                     export_df_copy = export_df_copy.reorder_levels(
-                        ["export_name"]
-                        + [n for n in export_df_copy.index.names if n != "export_name"]
+                        ["export_name"] + remaining_names
                     )
                     dataframes_to_concat.append(export_df_copy)
 
             except Exception as e:
-                self.add_warning(
-                    "exports", f"Failed to serialize export {export_name}: {e}"
-                )
+                self.add_warning("exports", f"Failed to serialize export {export_name}: {e}")
 
         if dataframes_to_concat:
             # Concatenate with outer join to handle different schemas

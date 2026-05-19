@@ -33,8 +33,7 @@ class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
+        client: BaseClient, scenario: Any, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         result = FetchMetadataRunner._make_request(
             client=client, method="get", path=f"/scenarios/{scenario.id}"
@@ -43,8 +42,13 @@ class FetchMetadataRunner(BaseRunner[Dict[str, Any]]):
         if not result.success:
             return result
 
+        if result.data is None:
+            return ServiceResult.fail(["No data returned from API"])
+
         validated_data, warnings = FetchMetadataRunner._validate_response_keys(
-            result.data, FetchMetadataRunner.META_KEYS, fill_missing=True
+            result.data,
+            FetchMetadataRunner.META_KEYS,
+            fill_missing=True,
         )
 
         return ServiceResult.ok(data=validated_data, errors=warnings)

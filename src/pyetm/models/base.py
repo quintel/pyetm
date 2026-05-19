@@ -1,7 +1,7 @@
 """Base models and shared functionality."""
 
 from __future__ import annotations
-from typing import Any, Type, TypeVar, Union, List, Dict
+from typing import Any, Type, TypeVar, Union, List, Dict, Optional
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
 from pydantic_core import InitErrorDetails, PydanticCustomError
 import pandas as pd
@@ -31,13 +31,14 @@ class Base(BaseModel):
         super(BaseModel, self).__setattr__("__pydantic_private__", {})
 
         # Initialize all private attributes with their defaults
+        private_dict: Dict[str, Any] = self.__pydantic_private__  # type: ignore[assignment]
         for attr_name, attr_info in self.__class__.__private_attributes__.items():
-            if hasattr(attr_info, 'default_factory') and attr_info.default_factory is not None:
-                self.__pydantic_private__[attr_name] = attr_info.default_factory()
-            elif hasattr(attr_info, 'default'):
-                self.__pydantic_private__[attr_name] = attr_info.default
+            if hasattr(attr_info, "default_factory") and attr_info.default_factory is not None:
+                private_dict[attr_name] = attr_info.default_factory()
+            elif hasattr(attr_info, "default"):
+                private_dict[attr_name] = attr_info.default
             else:
-                self.__pydantic_private__[attr_name] = None
+                private_dict[attr_name] = None
 
         try:
             super().__init__(**data)
@@ -114,9 +115,7 @@ class Base(BaseModel):
         """Print all warnings to the console."""
         self._warning_collector.show_warnings()
 
-    def log_warnings(
-        self, logger, level: str = "warning", prefix: str | None = None
-    ) -> None:
+    def log_warnings(self, logger: Any, level: str = "warning", prefix: str | None = None) -> None:
         """
         Log all collected warnings using the provided logger.
         """
@@ -141,14 +140,14 @@ class Base(BaseModel):
         """Remove warnings for a specific field."""
         self._warning_collector.clear(field)
 
-    def _merge_submodel_warnings(self, *submodels: Base, key_attr: str = None) -> None:
+    def _merge_submodel_warnings(self, *submodels: Base, key_attr: Optional[str] = None) -> None:
         """
         Merge warnings from nested Base models.
         """
         self._warning_collector.merge_submodel_warnings(*submodels, key_attr=key_attr)
 
     @classmethod
-    def from_dataframe(cls: Type[T], df: pd.DataFrame, **kwargs) -> T:
+    def from_dataframe(cls: Type[T], df: pd.DataFrame, **kwargs: Any) -> T:
         """
         Create an instance from a pandas DataFrame.
         """
@@ -157,19 +156,15 @@ class Base(BaseModel):
         except Exception as e:
             # Create a fallback instance with warnings
             instance = cls.model_construct()
-            instance.add_warning(
-                "from_dataframe", f"Failed to create from DataFrame: {e}"
-            )
+            instance.add_warning("from_dataframe", f"Failed to create from DataFrame: {e}")
             return instance
 
     @classmethod
-    def _from_dataframe(cls, df: pd.DataFrame, **kwargs):
+    def _from_dataframe(cls: Type[T], df: pd.DataFrame, **kwargs: Any) -> T:
         """
         Private method to be implemented by each subclass for specific deserialization logic.
         """
-        raise NotImplementedError(
-            f"{cls.__name__} must implement _from_dataframe() class method"
-        )
+        raise NotImplementedError(f"{cls.__name__} must implement _from_dataframe() class method")
 
     def _get_serializable_fields(self) -> List[str]:
         """
@@ -182,7 +177,7 @@ class Base(BaseModel):
             if not field_name.startswith("_")
         ]
 
-    def _raise_exception_on_loc(self, err: str, type: str, loc: str, msg: str):
+    def _raise_exception_on_loc(self, err: str, type: str, loc: str, msg: str) -> None:
         """
         Raise validation errors on custom locations.
         Used in model validators.
@@ -198,7 +193,7 @@ class Base(BaseModel):
             ],
         )
 
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
         """
         Private method to be implemented by each subclass for specific serialization logic.
         This method should contain the actual DataFrame creation logic.
@@ -210,7 +205,7 @@ class Base(BaseModel):
             f"{self.__class__.__name__} must implement _to_dataframe() method"
         )
 
-    def to_dataframe(self, **kwargs) -> pd.DataFrame:
+    def to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
         """
         Public method that handles common serialization logic and delegates to _to_dataframe().
 
@@ -224,9 +219,7 @@ class Base(BaseModel):
         try:
             df = self._to_dataframe(**kwargs)
         except Exception as e:
-            self.add_warning(
-                f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}"
-            )
+            self.add_warning(f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}")
             df = pd.DataFrame()
 
         return df

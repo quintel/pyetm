@@ -26,7 +26,7 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
         client: BaseClient,
         saved_scenario_id: int,
         update_data: Dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update an existing SavedScenario in MyETM.
@@ -67,6 +67,7 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
         if result.success and warnings:
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

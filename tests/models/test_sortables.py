@@ -55,9 +55,7 @@ def test_to_dataframe(valid_sortable_collection_json):
 
 def test_is_valid_update():
     """Test the is_valid_update method"""
-    coll = Sortables.from_json(
-        {"forecast_storage": ["a", "b"], "heat_network": {"lt": ["c", "d"]}}
-    )
+    coll = Sortables.from_json({"forecast_storage": ["a", "b"], "heat_network": {"lt": ["c", "d"]}})
 
     # Valid updates
     valid_updates = {"forecast_storage": ["x", "y"], "heat_network_lt": ["z"]}
@@ -77,9 +75,7 @@ def test_is_valid_update():
 
 
 def test_update_method():
-    coll = Sortables.from_json(
-        {"forecast_storage": ["a", "b"], "heat_network": {"lt": ["c", "d"]}}
-    )
+    coll = Sortables.from_json({"forecast_storage": ["a", "b"], "heat_network": {"lt": ["c", "d"]}})
 
     updates = {"forecast_storage": ["x", "y", "z"], "heat_network_lt": ["w"]}
     coll.update(updates)

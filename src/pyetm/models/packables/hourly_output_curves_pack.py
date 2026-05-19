@@ -1,8 +1,8 @@
 """Hourly output curves packing utilities."""
 
 import logging
-from typing import ClassVar, Any, Optional, Sequence, Tuple
-from xlsxwriter import Workbook
+from typing import ClassVar, Any, Optional, Sequence, Tuple, cast
+from xlsxwriter import Workbook  # type: ignore[import-untyped]
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 import pandas as pd
 from pyetm.models.packables.packable import Packable
@@ -30,8 +30,8 @@ class HourlyOutputCurvesPack(Packable):
         scenario: Any,
         columns: str = "",
         curves: Optional[Sequence[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> pd.DataFrame | None:
         """
         Build a DataFrame for one scenario by delegating to the model's to_dataframe() method.
 
@@ -54,7 +54,7 @@ class HourlyOutputCurvesPack(Packable):
                     curves_to_fetch = []
 
             # Fetch each curve (will cache for later use by to_dataframe)
-            if hasattr(scenario, 'get_output_curve') and curves_to_fetch:
+            if hasattr(scenario, "get_output_curve") and curves_to_fetch:
                 try:
                     for curve_name in curves_to_fetch:
                         try:
@@ -73,9 +73,7 @@ class HourlyOutputCurvesPack(Packable):
             # Delegate to the model's to_dataframe() method
             df = scenario.hourly_output_curves.to_dataframe(curves=curves, **kwargs)
 
-            self.log_scenario_warnings(
-                scenario, "hourly_output_curves", "Hourly output curves"
-            )
+            self.log_scenario_warnings(scenario, "hourly_output_curves", "Hourly output curves")
 
             if df.empty:
                 return None
@@ -108,7 +106,7 @@ class HourlyOutputCurvesPack(Packable):
                 # Unexpected format, return as-is
                 df_unstacked = df
 
-            return df_unstacked
+            return cast(pd.DataFrame, df_unstacked)
 
         except Exception as e:
             logger.warning(
@@ -119,7 +117,7 @@ class HourlyOutputCurvesPack(Packable):
             return None
 
     def to_dataframe(
-        self, columns="", curves: Optional[Sequence[str]] = None, **kwargs
+        self, columns: str = "", curves: Optional[Sequence[str]] = None, **kwargs: Any
     ) -> pd.DataFrame:
         """
         Build a DataFrame with optional curve filtering.
@@ -149,12 +147,12 @@ class HourlyOutputCurvesPack(Packable):
         return df
 
     def _to_dataframe(
-        self, columns="", curves: Optional[Sequence[str]] = None, **kwargs
+        self, columns: str = "", curves: Optional[Sequence[str]] = None, **kwargs: Any
     ) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, curves=curves, **kwargs)
 
     def build_pack_dataframe(
-        self, columns: str = "", curves: Optional[Sequence[str]] = None, **kwargs
+        self, columns: str = "", curves: Optional[Sequence[str]] = None, **kwargs: Any
     ) -> pd.DataFrame:
         """
         Override base build_pack_dataframe to pass curves filter to _build_dataframe_for_scenario.
@@ -189,7 +187,7 @@ class HourlyOutputCurvesPack(Packable):
 
         Returns dict[curve_name][scenario_id] = DataFrame for that curve and scenario.
         """
-        result = {}
+        result: dict[str, dict[str, pd.DataFrame]] = {}
 
         for scenario in self.scenarios:
             try:
@@ -211,7 +209,7 @@ class HourlyOutputCurvesPack(Packable):
                         curves_to_fetch = []
 
                 # Fetch each curve (will cache for later use by to_dataframe)
-                if hasattr(scenario, 'get_output_curve') and curves_to_fetch:
+                if hasattr(scenario, "get_output_curve") and curves_to_fetch:
                     try:
                         for curve_name in curves_to_fetch:
                             try:
@@ -236,7 +234,9 @@ class HourlyOutputCurvesPack(Packable):
                 # Unstack the multi-index to separate by curve_name
                 for curve_name in df.index.get_level_values("curve_name").unique():
                     # Extract data for this specific curve
-                    curve_df = df.xs(curve_name, level="curve_name")
+                    curve_df_raw = df.xs(curve_name, level="curve_name")
+                    # Ensure it's a DataFrame, not a Series
+                    curve_df = curve_df_raw if isinstance(curve_df_raw, pd.DataFrame) else curve_df_raw.to_frame()
 
                     if curve_name not in result:
                         result[curve_name] = {}
@@ -254,9 +254,7 @@ class HourlyOutputCurvesPack(Packable):
 
         return result
 
-    def to_excel_per_carrier(
-        self, path: str, carriers: Optional[Sequence[str]] = None
-    ) -> None:
+    def to_excel_per_carrier(self, path: str, carriers: Optional[Sequence[str]] = None) -> None:
         """Export hourly output curves to Excel file organized by carrier."""
 
         # Determine carrier selection
@@ -290,10 +288,8 @@ class HourlyOutputCurvesPack(Packable):
                     # Fetch curves by carrier type using the model's method
                     curves = None
                     try:
-                        curves = (
-                            scenario.hourly_output_curves.get_curves_by_carrier_type(
-                                scenario, carrier
-                            )
+                        curves = scenario.hourly_output_curves.get_curves_by_carrier_type(
+                            scenario, carrier
                         )
                     except Exception as e:
                         logger.warning(
@@ -315,16 +311,12 @@ class HourlyOutputCurvesPack(Packable):
                                     continue
                                 if df.shape[1] == 1:
                                     s = df.iloc[:, 0].copy()
-                                    series_entries.append(
-                                        ((scenario_name, curve_name), s)
-                                    )
+                                    series_entries.append(((scenario_name, curve_name), s))
                                 else:
                                     for col in df.columns:
                                         s = df[col].copy()
                                         sub_curve = f"{curve_name}:{col}"
-                                        series_entries.append(
-                                            ((scenario_name, sub_curve), s)
-                                        )
+                                        series_entries.append(((scenario_name, sub_curve), s))
                         except Exception:
                             continue
 
@@ -334,9 +326,7 @@ class HourlyOutputCurvesPack(Packable):
                 cols: list[Tuple[str, str]] = [key for key, _ in series_entries]
                 frames = [s for _, s in series_entries]
                 combined = pd.concat(frames, axis=1)
-                combined.columns = pd.MultiIndex.from_tuples(
-                    cols, names=["Scenario", "Curve"]
-                )
+                combined.columns = pd.MultiIndex.from_tuples(cols, names=["Scenario", "Curve"])
 
                 # Lazily create the workbook on first real data
                 if workbook is None:

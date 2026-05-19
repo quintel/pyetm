@@ -23,9 +23,7 @@ class BreakPresetLinkRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Union[Any, int],
-        **kwargs
+        client: BaseClient, scenario: Union[Any, int], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Break the preset link for a scenario.

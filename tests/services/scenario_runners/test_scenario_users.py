@@ -192,9 +192,7 @@ class TestScenarioUsersUpdateRunner:
         mock_response.ok = False  # 422 is not ok
         mock_response.status_code = 422
         mock_response.json.return_value = {
-            "success": [
-                {"user_id": 1, "user_email": None, "role": "scenario_owner"}
-            ],
+            "success": [{"user_id": 1, "user_email": None, "role": "scenario_owner"}],
             "errors": {
                 "notfound@test.com": ["User not found"],
             },
@@ -250,9 +248,7 @@ class TestScenarioUsersDestroyRunner:
         mock_client.session = Mock()
         mock_response = Mock()
         mock_response.ok = True
-        mock_response.json.return_value = [
-            {"user_id": None, "user_email": "test@test.com"}
-        ]
+        mock_response.json.return_value = [{"user_id": None, "user_email": "test@test.com"}]
         mock_client.session.delete.return_value = mock_response
 
         users = [{"user_email": "test@test.com"}]
@@ -268,9 +264,7 @@ class TestScenarioUsersDestroyRunner:
         mock_response.ok = False  # 422 is not ok
         mock_response.status_code = 422
         mock_response.json.return_value = {
-            "success": [
-                {"user_id": 2, "user_email": None, "role": "scenario_viewer"}
-            ],
+            "success": [{"user_id": 2, "user_email": None, "role": "scenario_viewer"}],
             "errors": {
                 "lastowner@test.com": ["Cannot remove last owner"],
             },

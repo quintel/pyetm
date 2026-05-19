@@ -14,9 +14,7 @@ def test_fetch_inputs_success_no_defaults(dummy_client, fake_response, dummy_sce
     assert client.calls == [("/scenarios/1/inputs", None)]
 
 
-def test_fetch_inputs_success_with_defaults(
-    dummy_client, fake_response, dummy_scenario
-):
+def test_fetch_inputs_success_with_defaults(dummy_client, fake_response, dummy_scenario):
     body = {"i2": {"default": 42}}
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response)
@@ -26,9 +24,7 @@ def test_fetch_inputs_success_with_defaults(
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios/2/inputs", {"params": {"defaults": "original"}})
-    ]
+    assert client.calls == [("/scenarios/2/inputs", {"params": {"defaults": "original"}})]
 
 
 def test_fetch_inputs_http_failure(dummy_client, fake_response, dummy_scenario):

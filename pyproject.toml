@@ -98,6 +98,7 @@ testpaths = ["tests"]
 target-version = "py312"
 line-length = 100
 
+[tool.ruff.lint]
 # Enable comprehensive linting
 select = [
   "E",      # pycodestyle errors
@@ -116,8 +117,6 @@ select = [
 ignore = [
   "D203",   # one-blank-line-before-class (conflicts with D211)
   "D213",   # multi-line-summary-second-line (conflicts with D212)
-  "ANN101", # missing-type-self
-  "ANN102", # missing-type-cls
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -143,10 +142,11 @@ disallow_any_unimported = false
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
-warn_unused_configs = true
+# Disabled to allow flexible mypy invocations (src only, or src+tests)
+warn_unused_configs = false
 show_error_codes = true
 
-# Allow gradual adoption
+# Allow gradual adoption for tests
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false

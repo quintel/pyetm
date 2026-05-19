@@ -30,9 +30,7 @@ class FetchInputsRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
-        defaults: Optional[str] = None,
+        client: BaseClient, scenario: Any, defaults: Optional[str] = None, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         params = {"defaults": defaults} if defaults else None
 

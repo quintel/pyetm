@@ -39,7 +39,7 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario_data: Dict[str, Any], **kwargs
+        client: BaseClient, scenario_data: Dict[str, Any], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Create a new scenario.
@@ -95,6 +95,7 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
         if result.success and warnings:
             # Merge our warnings with any from the API call
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

@@ -24,8 +24,7 @@ class FetchSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        saved_scenario: ScenarioIdentifier,
+        client: BaseClient, saved_scenario: ScenarioIdentifier, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Fetch a single SavedScenario by ID.
@@ -51,8 +50,13 @@ class FetchSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
                     )
             return result
 
+        if result.data is None:
+            return ServiceResult.fail(["No data returned from API"])
+
         _, warnings = FetchSavedScenarioRunner._validate_response_keys(
-            result.data, FetchSavedScenarioRunner.REQUIRED_KEYS, fill_missing=False
+            result.data,
+            FetchSavedScenarioRunner.REQUIRED_KEYS,
+            fill_missing=False,
         )
 
         return ServiceResult.ok(data=result.data, errors=warnings)

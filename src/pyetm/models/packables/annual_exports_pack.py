@@ -23,8 +23,8 @@ class AnnualExportsPack(Packable):
         scenario: Any,
         columns: str = "",
         exports: Optional[Sequence[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> Optional[pd.DataFrame]:
         """
         Build a DataFrame for one scenario by delegating to the model's to_dataframe() method.
 
@@ -37,7 +37,7 @@ class AnnualExportsPack(Packable):
                 return None
 
             # Fetch the requested exports from the API
-            if hasattr(scenario, 'get_annual_export') and exports:
+            if hasattr(scenario, "get_annual_export") and exports:
                 try:
                     for export_name in exports:
                         try:
@@ -76,14 +76,14 @@ class AnnualExportsPack(Packable):
 
         Returns dict[export_name][scenario_id] = DataFrame for that export and scenario.
         """
-        result = {}
+        result: dict[str, dict[str, pd.DataFrame]] = {}
 
         for scenario in self.scenarios:
             try:
                 scenario_key = self._key_for(scenario)
 
                 # Fetch the requested exports from the API
-                if hasattr(scenario, 'get_annual_export') and exports:
+                if hasattr(scenario, "get_annual_export") and exports:
                     try:
                         for export_name in exports:
                             try:
@@ -106,7 +106,9 @@ class AnnualExportsPack(Packable):
                     continue
 
                 for export_name in df.index.get_level_values("export_name").unique():
-                    export_df = df.xs(export_name, level="export_name")
+                    export_df_raw = df.xs(export_name, level="export_name")
+                    # Ensure it's a DataFrame
+                    export_df = export_df_raw if isinstance(export_df_raw, pd.DataFrame) else export_df_raw.to_frame()
 
                     if export_name not in result:
                         result[export_name] = {}
@@ -129,7 +131,7 @@ class AnnualExportsPack(Packable):
         Each export type becomes a separate worksheet.
         Within each worksheet, scenarios are concatenated with a scenario identifier column.
         """
-        from xlsxwriter import Workbook
+        from xlsxwriter import Workbook  # type: ignore[import-untyped]
         from pyetm.utils import excel_utils
 
         if not self.scenarios:

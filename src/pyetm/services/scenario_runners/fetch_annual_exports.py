@@ -14,9 +14,7 @@ class DownloadAnnualExportRunner(BaseRunner[Any]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
-        export_name: str,
+        client: BaseClient, scenario: Any, export_name: str, **kwargs: Any
     ) -> ServiceResult[Any]:
         """
         Download a single annual export.
@@ -42,11 +40,9 @@ class DownloadAnnualExportRunner(BaseRunner[Any]):
 
         try:
             resp = result.data
-            return ServiceResult.ok(data=io.StringIO(resp.content.decode("utf-8")))
+            return ServiceResult.ok(data=io.StringIO(resp.content.decode("utf-8")))  # type: ignore[union-attr]
         except Exception as e:
-            return ServiceResult.fail(
-                [f"Failed to parse export data for {export_name}: {e}"]
-            )
+            return ServiceResult.fail([f"Failed to parse export data for {export_name}: {e}"])
 
 
 def download_annual_export(

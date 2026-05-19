@@ -79,9 +79,7 @@ def test_build_pack_dataframe_skips_none_empty(monkeypatch, packable):
     df = packable.build_pack_dataframe()
     assert df.empty
 
-    monkeypatch.setattr(
-        packable, "_build_dataframe_for_scenario", lambda s, **kw: pd.DataFrame()
-    )
+    monkeypatch.setattr(packable, "_build_dataframe_for_scenario", lambda s, **kw: pd.DataFrame())
     df = packable.build_pack_dataframe()
     assert df.empty
 
@@ -103,9 +101,7 @@ def test_build_pack_dataframe_handles_exceptions(monkeypatch, packable):
 def test_to_dataframe_returns_empty_if_no_scenarios(monkeypatch, packable):
     assert packable.to_dataframe().empty
 
-    monkeypatch.setattr(
-        packable, "_to_dataframe", lambda **kwargs: pd.DataFrame({"a": [1]})
-    )
+    monkeypatch.setattr(packable, "_to_dataframe", lambda **kwargs: pd.DataFrame({"a": [1]}))
     packable.add(MockScenario("sc"))
     df = packable.to_dataframe()
     assert "a" in df.columns
@@ -229,12 +225,12 @@ def test_should_include_upload_inputs_pack():
     pack = InputsPack()
 
     # Should include when 'user_values' is in update_set
-    assert pack._should_include_upload({'user_values'}) is True
-    assert pack._should_include_upload({'user_values', 'custom_curves'}) is True
+    assert pack._should_include_upload({"user_values"}) is True
+    assert pack._should_include_upload({"user_values", "custom_curves"}) is True
 
     # Should not include for other types
-    assert pack._should_include_upload({'custom_curves'}) is False
-    assert pack._should_include_upload({'sortables'}) is False
+    assert pack._should_include_upload({"custom_curves"}) is False
+    assert pack._should_include_upload({"sortables"}) is False
     assert pack._should_include_upload(set()) is False
     assert pack._should_include_upload(None) is False
 
@@ -244,12 +240,12 @@ def test_should_include_upload_custom_curves_pack():
     pack = CustomCurvesPack()
 
     # Should include when 'custom_curves' is in update_set
-    assert pack._should_include_upload({'custom_curves'}) is True
-    assert pack._should_include_upload({'user_values', 'custom_curves'}) is True
+    assert pack._should_include_upload({"custom_curves"}) is True
+    assert pack._should_include_upload({"user_values", "custom_curves"}) is True
 
     # Should not include for other types
-    assert pack._should_include_upload({'user_values'}) is False
-    assert pack._should_include_upload({'sortables'}) is False
+    assert pack._should_include_upload({"user_values"}) is False
+    assert pack._should_include_upload({"sortables"}) is False
     assert pack._should_include_upload(set()) is False
     assert pack._should_include_upload(None) is False
 
@@ -259,11 +255,11 @@ def test_should_include_upload_sortables_pack():
     pack = SortablePack()
 
     # Should include when 'sortables' is in update_set
-    assert pack._should_include_upload({'sortables'}) is True
-    assert pack._should_include_upload({'user_values', 'sortables'}) is True
+    assert pack._should_include_upload({"sortables"}) is True
+    assert pack._should_include_upload({"user_values", "sortables"}) is True
 
     # Should not include for other types
-    assert pack._should_include_upload({'user_values'}) is False
-    assert pack._should_include_upload({'custom_curves'}) is False
+    assert pack._should_include_upload({"user_values"}) is False
+    assert pack._should_include_upload({"custom_curves"}) is False
     assert pack._should_include_upload(set()) is False
     assert pack._should_include_upload(None) is False

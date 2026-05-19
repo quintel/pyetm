@@ -5,6 +5,7 @@ import logging
 from os import PathLike
 from pathlib import Path
 from typing import (
+    Dict,
     Iterable,
     Iterator,
     List,
@@ -14,6 +15,7 @@ from typing import (
     Any,
     Sequence,
     TYPE_CHECKING,
+    cast,
 )
 from pydantic import Field, PrivateAttr
 from pyetm.models.session import Session
@@ -60,7 +62,7 @@ class Scenarios(Base):
     data_warnings: List[str] = Field(default_factory=list)
     _packer: Optional["ScenarioPacker"] = PrivateAttr(default=None)
 
-    def __iter__(self) -> Iterator[Union[Scenario, Session]]:
+    def __iter__(self) -> Iterator[Union[Scenario, Session]]:  # type: ignore[override]
         return iter(self.items)
 
     def __len__(self) -> int:
@@ -116,7 +118,7 @@ class Scenarios(Base):
         # Now delegate to packer for organization
         return self.combine.hourly_output_curves(carrier_type)
 
-    def _ensure_hourly_curves_fetched(self, carrier_type: CarrierType):
+    def _ensure_hourly_curves_fetched(self, carrier_type: CarrierType) -> None:
         """
         Ensure all scenarios have fetched their hourly output curves.
         Args:
@@ -163,7 +165,7 @@ class Scenarios(Base):
                 saved_scenarios.append(Scenario.load(ssid))
             except SavedScenarioError as e:
                 print(f"Could not load saved scenario {ssid}: {e}")
-        return cls(items=saved_scenarios)
+        return cls(items=cast(List[Union[Scenario, Session]], saved_scenarios))
 
     @classmethod
     def create_many(
@@ -206,12 +208,14 @@ class Scenarios(Base):
 
         # Separate data parameters from creation parameters
         DATA_PARAMS = ["user_values", "custom_curves", "sortables"]
-        creation_params_list = []
-        data_to_apply = []  # List of (scenario_index, data_dict)
+        creation_params_list: List[Dict[str, Any]] = []
+        data_to_apply: List[tuple[int, Dict[str, Any]]] = (
+            []
+        )  # List of (scenario_index, data_dict)
 
         for idx, params in enumerate(scenario_params):
             # Make a copy to avoid modifying original
-            params_copy = dict(params)
+            params_copy: Dict[str, Any] = dict(params)
 
             # Extract all data params declaratively
             data = {key: params_copy.pop(key, None) for key in DATA_PARAMS}
@@ -224,20 +228,21 @@ class Scenarios(Base):
 
         # Create scenarios sequentially
         saved_scenarios = []
-        for params in creation_params_list:
+        for params_item in creation_params_list:
+            params = params_item  # type: ignore[assignment]
             title = params.get("title")
 
             if title is None:
                 print(
-                    f"Could not create saved scenario with {params}: "
-                    "Missing required 'title'"
+                    f"Could not create saved scenario with {params}: Missing required 'title'"
                 )
                 continue
 
             try:
                 # If scenario_id is provided, use existing session
                 if "scenario_id" in params:
-                    saved_scenarios.append(Scenario.create(params, client=client))
+                    params_dict = dict(params)  # Convert TypedDict to regular dict
+                    saved_scenarios.append(Scenario.create(params_dict, client=client))
                 else:
                     # Create new session first
                     area = params.get("area_code") or area_code
@@ -285,7 +290,8 @@ class Scenarios(Base):
                 print(f"Could not create saved scenario with {params}: {e}")
 
         # Apply data parameters concurrently after all scenarios are created
-        scenarios = cls(items=saved_scenarios)
+        scenarios_list: List[Union[Scenario, Session]] = saved_scenarios  # type: ignore[assignment]
+        scenarios = cls(items=scenarios_list)
         if data_to_apply and saved_scenarios:
             failure_warnings = cls._apply_data_concurrently(
                 saved_scenarios, data_to_apply, client
@@ -305,9 +311,14 @@ class Scenarios(Base):
 
         return scenarios
 
-    def to_excel(self, path: PathLike | str, **export_options) -> None:
-        """Export all scenarios to Excel."""
-        from pyetm.models.scenario_packer import ScenarioPacker
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
+        """
+        Export all scenarios to Excel.
+
+        Note: This exports the underlying session data from each SavedScenario.
+        The scenario_id column will contain Scenario IDs (MyETM).
+        """
+        from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
         if not self.items:
             raise ValueError("No scenarios to export")
@@ -318,7 +329,7 @@ class Scenarios(Base):
 
     @classmethod
     def from_excel(
-        cls, xlsx_path: PathLike | str, update: bool | List[str] = False
+        cls, xlsx_path: PathLike[str] | str, update: bool | List[str] = False
     ) -> "Scenarios":
         """
         Import all scenarios from Excel file.
@@ -342,7 +353,8 @@ class Scenarios(Base):
 
         all_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
 
-        scenarios = cls(items=all_scenarios)
+        scenarios_list: List[Union[Scenario, Session]] = all_scenarios  # type: ignore[assignment]
+        scenarios = cls(items=scenarios_list)
         scenarios._packer = packer
         return scenarios
 
@@ -354,7 +366,7 @@ class Scenarios(Base):
         return item.session if isinstance(item, Scenario) else item
 
     @staticmethod
-    def _format_data_error(metadata: tuple, result) -> str:
+    def _format_data_error(metadata: tuple[Any, ...], result: Any) -> str:
         """
         Format error message based on request metadata and result.
 
@@ -377,7 +389,9 @@ class Scenarios(Base):
 
     @staticmethod
     def _apply_data_concurrently(
-        scenarios: List[Scenario], data_to_apply: List[tuple], client: BaseClient
+        scenarios: List[Scenario],
+        data_to_apply: List[tuple[Any, ...]],
+        client: BaseClient,
     ) -> List[str]:
         """
         Apply user_values/curves/sortables to scenarios concurrently using runners.
@@ -399,7 +413,9 @@ class Scenarios(Base):
         )
 
         requests = []
-        request_metadata = []  # Track what each request is for
+        request_metadata: list[Any] = (
+            []
+        )  # Track what each request is for - can be 3 or 4 element tuples
         warnings = []  # Collect warning messages
 
         for scenario_idx, data in data_to_apply:
@@ -433,7 +449,12 @@ class Scenarios(Base):
                     requests.extend(curve_requests)
                     for curve_key in data["custom_curves"].keys():
                         request_metadata.append(
-                            ("custom_curve", scenario_idx, scenario.title, curve_key)
+                            (
+                                "custom_curve",
+                                scenario_idx,
+                                str(scenario.title),
+                                str(curve_key),
+                            )
                         )
                 except Exception as e:
                     warning_msg = f"Failed to build curve requests for scenario '{scenario.title}': {e}"

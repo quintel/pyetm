@@ -22,20 +22,19 @@ class GetQueryResultsRunner(BaseRunner[Dict[str, Any]]):
             }
         ServiceResult.fail(errors) on any breaking error.
     """
+
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
-        gquery_keys: list[str]
+        client: BaseClient, scenario: Any, gquery_keys: list[str], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         response = GetQueryResultsRunner._make_request(
             client=client,
             method="put",
             path=f"/scenarios/{scenario.id}",
-            json={'gqueries': gquery_keys}
+            json={"gqueries": gquery_keys},
         )
 
         if not response.success:
             return response
 
-        return ServiceResult.ok(data=response.data["gqueries"])
+        return ServiceResult.ok(data=response.data["gqueries"])  # type: ignore[index]  # type: ignore[index]  # type: ignore[index]

@@ -55,9 +55,11 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
                 # Handle value field by preferring user over default
                 if field == "value":
                     data[field] = [
-                        inputs_data[key].get("user")
-                        if inputs_data[key].get("user") is not None
-                        else inputs_data[key].get("default")
+                        (
+                            inputs_data[key].get("user")
+                            if inputs_data[key].get("user") is not None
+                            else inputs_data[key].get("default")
+                        )
                         for key in inputs_data.keys()
                     ]
                 else:

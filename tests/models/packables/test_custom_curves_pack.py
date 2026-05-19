@@ -2,6 +2,7 @@ import pandas as pd
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.custom_curves import CustomCurve, CustomCurves
 
+
 class MockScenario:
     def __init__(self, id="id1"):
         self.id = id

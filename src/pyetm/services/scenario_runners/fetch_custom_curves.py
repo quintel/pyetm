@@ -22,13 +22,9 @@ class DownloadCustomCurveRunner(BaseRunner[io.StringIO]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
-        curve_name: str,
+        client: BaseClient, scenario: Any, curve_name: str, **kwargs: Any
     ) -> ServiceResult[Any]:
-        return GenericCurveDownloadRunner.run(
-            client, scenario, curve_name, curve_type="custom"
-        )
+        return GenericCurveDownloadRunner.run(client, scenario, curve_name, curve_type="custom")
 
 
 class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
@@ -42,10 +38,7 @@ class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
     """
 
     @staticmethod
-    def run(
-        client: BaseClient,
-        scenario: Any,
-    ) -> ServiceResult[Dict[str, Any]]:
+    def run(client: BaseClient, scenario: Any, **kwargs: Any) -> ServiceResult[Dict[str, Any]]:
         return FetchAllCustomCurveDataRunner._make_request(
             client=client,
             method="get",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING, cast
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient
@@ -30,6 +30,7 @@ from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
 )
 import pandas as pd
 from os import PathLike
+from typing import Generator
 
 if TYPE_CHECKING:
     from pyetm.models.session import Session
@@ -68,10 +69,12 @@ class Scenario(Base):
     _scenario_session: Optional[Session] = PrivateAttr(None)
     _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
 
-    def __eq__(self, other: "Scenario"):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Scenario):
+            return NotImplemented
         return self.id == other.id
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.id, self.area_code, self.end_year))
 
     @classmethod
@@ -115,7 +118,9 @@ class Scenario(Base):
             saved_scenario.add_warning("base", warning)
 
         for field, value in params.items():
-            if hasattr(saved_scenario, field) and field not in result.data:
+            if hasattr(saved_scenario, field) and (
+                result.data is None or field not in result.data
+            ):
                 setattr(saved_scenario, field, value)
 
         # Apply data parameters if provided
@@ -130,7 +135,7 @@ class Scenario(Base):
     def _apply_submodel(
         scenario: "Scenario",
         data: Any,
-        runner_class: type,
+        runner_class: type[Any],
         warning_key: str,
         client: BaseClient,
     ) -> None:
@@ -184,7 +189,7 @@ class Scenario(Base):
         scenario: "Session",
         title: str,
         client: Optional[BaseClient] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> "Scenario":
         """
         Convenience method to create SavedScenario from a Scenario instance.
@@ -221,7 +226,8 @@ class Scenario(Base):
         if client is None:
             client = BaseClient()
 
-        template = type("T", (), {"id": saved_scenario_id})
+        # Create a simple object with id attribute for the runner
+        template = type("T", (), {"id": saved_scenario_id})()
         result = FetchSavedScenarioRunner.run(client, template)
 
         if not result.success:
@@ -247,7 +253,7 @@ class Scenario(Base):
         scenario_id: int,
         title: str,
         client: Optional[BaseClient] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> "Scenario":
         """
         Create a new SavedScenario from an ETEngine scenario ID.
@@ -290,7 +296,7 @@ class Scenario(Base):
         self._scenario_session = Session.load(self.scenario_id)
         return self._scenario_session
 
-    def update(self, client: Optional[BaseClient] = None, **kwargs) -> None:
+    def update(self, client: Optional[BaseClient] = None, **kwargs: Any) -> None:
         """
         Update this SavedScenario
 
@@ -411,23 +417,25 @@ class Scenario(Base):
         """Set sortables from dataframe on the underlying session."""
         self.session.set_sortables_from_dataframe(dataframe, skip_upload=skip_upload)
 
-    def update_custom_curves(self, custom_curves, skip_upload: bool = False) -> None:
+    def update_custom_curves(
+        self, custom_curves: Any, skip_upload: bool = False
+    ) -> None:
         """Update custom curves on the underlying session."""
         self.session.update_custom_curves(custom_curves, skip_upload=skip_upload)
 
-    def custom_curve_series(self, curve_name: str) -> pd.Series:
+    def custom_curve_series(self, curve_name: str) -> Optional[pd.Series[Any]]:
         """Get a custom curve series from the underlying session."""
         return self.session.custom_curve_series(curve_name)
 
-    def custom_curves_series(self):
+    def custom_curves_series(self) -> Any:  # Returns generator
         """Yield all custom curve series from the underlying session."""
         return self.session.custom_curves_series()
 
-    def get_output_curve(self, curve_name: str) -> pd.DataFrame:
+    def get_output_curve(self, curve_name: str) -> Optional[pd.DataFrame]:
         """Get a single hourly output curve by name from the underlying session."""
         return self.session.get_output_curve(curve_name)
 
-    def all_hourly_output_curves(self):
+    def all_hourly_output_curves(self) -> Any:  # Returns generator
         """Yield all output curves from the underlying session."""
         return self.session.all_hourly_output_curves()
 
@@ -437,7 +445,7 @@ class Scenario(Base):
         """Get output curves by carrier type from the underlying session."""
         return self.session.get_hourly_output_curves(carrier_type)
 
-    def get_annual_export(self, export_name: str) -> pd.DataFrame:
+    def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
         """Get a single annual export by name from the underlying session."""
         return self.session.get_annual_export(export_name)
 
@@ -461,7 +469,7 @@ class Scenario(Base):
         """Execute queries on the underlying session."""
         self.session.execute_queries()
 
-    def results(self, columns=None) -> pd.DataFrame:
+    def results(self, columns: Any = None) -> pd.DataFrame:
         """Get query results from the underlying session."""
         return self.session.results(columns)
 
@@ -497,11 +505,11 @@ class Scenario(Base):
         """Set short name on the underlying session."""
         self.session.set_short_name(short_name)
 
-    def update_metadata(self, **kwargs) -> Dict[str, Any]:
+    def update_metadata(self, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Update metadata on the underlying session."""
         return self.session.update_metadata(**kwargs)
 
-    def copy_with_preset(self, **overrides) -> "Scenario":
+    def copy_with_preset(self, **overrides: Any) -> "Scenario":
         """
         Create a copy of the underlying session with a linked preset and save it to MyETM.
         """
@@ -517,14 +525,14 @@ class Scenario(Base):
         if private is not None:
             save_params["private"] = private
 
-        return copied_session.save(**save_params)
+        return cast("Scenario", copied_session.save(**save_params))
 
     def copy(
         self,
         user_values: Optional[Dict[str, Any]] = None,
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
-        **overrides,
+        **overrides: Any,
     ) -> "Scenario":
         """
         Create a copy with no template link to the original scenario and save it to MyETM.
@@ -561,7 +569,7 @@ class Scenario(Base):
                 copied_scenario, user_values, custom_curves, sortables, client
             )
 
-        return copied_scenario
+        return cast("Scenario", copied_scenario)
 
     @classmethod
     def interpolate(
@@ -570,7 +578,7 @@ class Scenario(Base):
         *end_years: int,
         titles: Optional[List[str]] = None,
         client: Optional[BaseClient] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> List["Scenario"]:
         """
         Interpolate one or more saved scenarios to target years and save to MyETM.
@@ -604,7 +612,7 @@ class Scenario(Base):
 
         return saved_scenarios_list
 
-    def to_excel(self, path: PathLike | str, **export_options) -> None:
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
         """Export this saved scenario to Excel."""
         self.session.to_excel(path, **export_options)
 
@@ -615,7 +623,7 @@ class Scenario(Base):
         """
         return self.session.collect_export_data(**export_options)
 
-    def _to_dataframe(self, **kwargs) -> "pd.DataFrame":
+    def _to_dataframe(self, **kwargs: Any) -> "pd.DataFrame":
         """
         Return a single-column DataFrame describing this saved scenario.
 
@@ -672,6 +680,9 @@ class Scenario(Base):
 
         if not result.success:
             raise SavedScenarioError(f"Could not fetch users: {result.errors}")
+
+        if result.data is None:
+            return []
 
         for user in result.data:
             user["role"] = user["role"].replace("scenario_", "", 1)

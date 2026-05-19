@@ -16,14 +16,10 @@ def test_copy_scenario_success_no_overrides(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios", {"json": {"scenario": {"scenario_id": 12345}}})
-    ]
+    assert client.calls == [("/scenarios", {"json": {"scenario": {"scenario_id": 12345}}})]
 
 
-def test_copy_scenario_with_metadata_override_including_title(
-    dummy_client, fake_response
-):
+def test_copy_scenario_with_metadata_override_including_title(dummy_client, fake_response):
     """Test that title can be set via metadata"""
     body = {
         "id": 67891,
@@ -41,9 +37,7 @@ def test_copy_scenario_with_metadata_override_including_title(
     assert result.data == body
     assert result.errors == []
 
-    expected_payload = {
-        "scenario": {"scenario_id": 12345, "metadata": {"title": "My Custom Copy"}}
-    }
+    expected_payload = {"scenario": {"scenario_id": 12345, "metadata": {"title": "My Custom Copy"}}}
     assert client.calls == [("/scenarios", {"json": expected_payload})]
 
 
@@ -277,9 +271,7 @@ def test_copy_scenario_none_overrides(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios", {"json": {"scenario": {"scenario_id": 12345}}})
-    ]
+    assert client.calls == [("/scenarios", {"json": {"scenario": {"scenario_id": 12345}}})]
 
 
 def test_copy_scenario_empty_overrides(dummy_client, fake_response):
@@ -293,9 +285,7 @@ def test_copy_scenario_empty_overrides(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios", {"json": {"scenario": {"scenario_id": 12345}}})
-    ]
+    assert client.calls == [("/scenarios", {"json": {"scenario": {"scenario_id": 12345}}})]
 
 
 def test_copy_scenario_payload_structure(dummy_client, fake_response):

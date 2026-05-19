@@ -31,10 +31,7 @@ class FetchSortablesRunner(BaseRunner[Dict[str, Any]]):
     """
 
     @staticmethod
-    def run(
-        client: BaseClient,
-        scenario: Any,
-    ) -> ServiceResult[Dict[str, Any]]:
+    def run(client: BaseClient, scenario: Any, **kwargs: Any) -> ServiceResult[Dict[str, Any]]:
         return FetchSortablesRunner._make_request(
             client=client, method="get", path=f"/scenarios/{scenario.id}/user_sortables"
         )

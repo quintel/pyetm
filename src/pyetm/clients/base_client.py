@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 
 from pyetm.utils.singleton import SingletonMeta
 from pyetm.services.service_result import ServiceResult
@@ -11,6 +11,7 @@ from .session import ETMSession
 from pyetm.config.settings import get_settings
 
 MAX_CONCURRENT = 2
+
 
 # TODO: like this it feels unnecessary
 class BaseClient(metaclass=SingletonMeta):
@@ -29,15 +30,19 @@ class BaseClient(metaclass=SingletonMeta):
                 base URL from application settings.
         """
         settings = get_settings()
+        # Convert HttpUrl to string if needed
+        base_url_str = base_url or (
+            str(settings.base_url) if settings.base_url else None
+        )
         self.session = ETMSession(
-            base_url=base_url or settings.base_url,
+            base_url=base_url_str,
             token=token or settings.etm_api_token,
             ssl_verify=settings.ssl_verify,
             trust_env=settings.trust_env,
             ssl_cert_path=settings.ssl_cert_path,
         )
 
-    def close(self):
+    def close(self) -> None:
         """
         Clean up resources and close the session.
 
@@ -59,8 +64,8 @@ class AsyncBatchRunner:
     # Can't we yield what is done somehow?
     @staticmethod
     async def batch_requests(
-        session: ETMSession, requests: List[dict], max_concurrent: int = 10
-    ) -> List[ServiceResult]:
+        session: ETMSession, requests: List[Dict[str, Any]], max_concurrent: int = 10
+    ) -> List[ServiceResult[Optional[Dict[str, Any]]]]:
         """
         Execute multiple requests concurrently using asyncio.
 
@@ -71,7 +76,9 @@ class AsyncBatchRunner:
         # Controls how many requests are in flight at the same time at the application level.
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def make_single_request(req: dict) -> ServiceResult:
+        async def make_single_request(
+            req: Dict[str, Any],
+        ) -> ServiceResult[Optional[Dict[str, Any]]]:
             """
             Execute a single request and wrap the result in ServiceResult.
 
@@ -92,7 +99,7 @@ class AsyncBatchRunner:
                         try:
                             data = response.json()
                         except Exception:
-                            data = response
+                            data = {}  # Return empty dict if JSON parsing fails
 
                         return ServiceResult.ok(data=data)
                     else:
@@ -117,8 +124,8 @@ class AsyncBatchRunner:
 
     @staticmethod
     def batch_requests_sync(
-        session: ETMSession, requests: List[dict], max_concurrent: int = 10
-    ) -> List[ServiceResult]:
+        session: ETMSession, requests: List[Dict[str, Any]], max_concurrent: int = 10
+    ) -> List[ServiceResult[Optional[Dict[str, Any]]]]:
         """
         Synchronous wrapper for batch_requests method.
 
@@ -140,6 +147,8 @@ class AsyncBatchRunner:
             be used when async/await syntax is not available in the calling context.
         """
         coro = AsyncBatchRunner.batch_requests(session, requests, max_concurrent)
+        if session._loop is None:
+            raise RuntimeError("Event loop not initialized in session")
         future = asyncio.run_coroutine_threadsafe(coro, session._loop)
         return future.result()
 
@@ -147,12 +156,14 @@ class AsyncBatchRunner:
 # TODO: why is he just here?
 # Helper function for runners that need batch operations
 def make_batch_requests(
-    client: BaseClient, requests: List[dict]
-) -> List[ServiceResult]:
+    client: BaseClient, requests: List[Dict[str, Any]]
+) -> List[ServiceResult[Optional[Dict[str, Any]]]]:
     """
     Convenience function for making batch requests using a BaseClient instance.
 
     This helper function extracts the session from a BaseClient and delegates
     to AsyncBatchRunner.batch_requests_sync for execution.
     """
-    return AsyncBatchRunner.batch_requests_sync(client.session, requests, MAX_CONCURRENT)
+    return AsyncBatchRunner.batch_requests_sync(
+        client.session, requests, MAX_CONCURRENT
+    )

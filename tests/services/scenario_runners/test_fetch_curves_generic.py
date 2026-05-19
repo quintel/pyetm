@@ -30,9 +30,7 @@ def test_generic_curve_download_runner_success():
         "_make_batch_requests",
         return_value=[ServiceResult.ok(data=_ok_csv_response("time,value\n1,2\n3,4"))],
     ):
-        result = GenericCurveDownloadRunner.run(
-            mock_client, mock_scenario, "test_curve"
-        )
+        result = GenericCurveDownloadRunner.run(mock_client, mock_scenario, "test_curve")
     assert result.success and result.data.getvalue() == "time,value\n1,2\n3,4"
 
 
@@ -66,9 +64,7 @@ def test_generic_curve_download_runner_http_error():
         "_make_batch_requests",
         return_value=[ServiceResult.fail(["404: Not Found"])],
     ):
-        result = GenericCurveDownloadRunner.run(
-            mock_client, mock_scenario, "missing_curve"
-        )
+        result = GenericCurveDownloadRunner.run(mock_client, mock_scenario, "missing_curve")
     assert not result.success and "404: Not Found" in result.errors
 
 
@@ -82,9 +78,7 @@ def test_generic_curve_download_runner_exception():
         "_make_batch_requests",
         side_effect=RuntimeError("boom"),
     ):
-        result = GenericCurveDownloadRunner.run(
-            mock_client, mock_scenario, "test_curve"
-        )
+        result = GenericCurveDownloadRunner.run(mock_client, mock_scenario, "test_curve")
     assert not result.success and "boom" in result.errors[0]
 
 
@@ -98,9 +92,7 @@ def test_generic_curve_download_runner_unexpected_exception():
         "_make_batch_requests",
         side_effect=Exception("Unexpected error"),
     ):
-        result = GenericCurveDownloadRunner.run(
-            mock_client, mock_scenario, "test_curve"
-        )
+        result = GenericCurveDownloadRunner.run(mock_client, mock_scenario, "test_curve")
     assert not result.success and "Unexpected error" in result.errors[0]
 
 
@@ -140,11 +132,7 @@ def test_generic_curve_bulk_runner_partial_failure():
         result = GenericCurveBulkRunner.run(
             mock_client, mock_scenario, ["curve1", "curve2"], batch_size=10
         )
-    assert (
-        result.success
-        and "curve1" in result.data
-        and any("curve2" in e for e in result.errors)
-    )
+    assert result.success and "curve1" in result.data and any("curve2" in e for e in result.errors)
 
 
 def test_generic_curve_bulk_runner_all_fail():
@@ -177,7 +165,5 @@ def test_generic_curve_bulk_runner_unexpected_exception():
         "_make_batch_requests",
         side_effect=RuntimeError("Unexpected error"),
     ):
-        result = GenericCurveBulkRunner.run(
-            mock_client, mock_scenario, ["curve1"], batch_size=10
-        )
+        result = GenericCurveBulkRunner.run(mock_client, mock_scenario, ["curve1"], batch_size=10)
     assert not result.success and "Unexpected error" in result.errors[0]

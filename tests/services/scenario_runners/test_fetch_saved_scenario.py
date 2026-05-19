@@ -25,9 +25,7 @@ def test_fetch_saved_scenario_success(dummy_client, fake_response, dummy_scenari
     assert client.calls == [("/saved_scenarios/1", None)]
 
 
-def test_fetch_saved_scenario_missing_fields_warning(
-    dummy_client, fake_response, dummy_scenario
-):
+def test_fetch_saved_scenario_missing_fields_warning(dummy_client, fake_response, dummy_scenario):
     # Response missing some fields
     body = {
         "id": 2,

@@ -5,9 +5,7 @@ from pyetm.clients.base_client import BaseClient
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 
 
-def test_update_metadata_runner_direct_fields_only(
-    dummy_client, fake_response, dummy_scenario
-):
+def test_update_metadata_runner_direct_fields_only(dummy_client, fake_response, dummy_scenario):
     """Test updating only fields in META_KEYS."""
     body = {"scenario": {"id": 123, "updated": True}}
     response = fake_response(ok=True, status_code=200, json_data=body)
@@ -37,9 +35,7 @@ def test_update_metadata_runner_direct_fields_only(
         assert result == mock_result
 
 
-def test_update_metadata_runner_nested_metadata_only(
-    dummy_client, fake_response, dummy_scenario
-):
+def test_update_metadata_runner_nested_metadata_only(dummy_client, fake_response, dummy_scenario):
     """Test updating only custom fields (nested in metadata)."""
     body = {"scenario": {"id": 123, "updated": True}}
     response = fake_response(ok=True, status_code=200, json_data=body)
@@ -69,9 +65,7 @@ def test_update_metadata_runner_nested_metadata_only(
         )
 
 
-def test_update_metadata_runner_mixed_fields(
-    dummy_client, fake_response, dummy_scenario
-):
+def test_update_metadata_runner_mixed_fields(dummy_client, fake_response, dummy_scenario):
     """Test updating both direct and nested fields."""
     body = {"scenario": {"id": 123, "updated": True}}
     response = fake_response(ok=True, status_code=200, json_data=body)
@@ -177,9 +171,7 @@ def test_update_metadata_runner_scenario_without_existing_metadata():
 
         result = UpdateMetadataRunner.run(client, scenario, metadata)
 
-        expected_payload = {
-            "scenario": {"end_year": 2050, "metadata": {"custom_field": "value"}}
-        }
+        expected_payload = {"scenario": {"end_year": 2050, "metadata": {"custom_field": "value"}}}
         mock_request.assert_called_once_with(
             client=client, method="put", path="/scenarios/123", payload=expected_payload
         )

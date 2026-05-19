@@ -40,7 +40,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario: Any, metadata: Dict[str, Any], **kwargs
+        client: BaseClient, scenario: Any, metadata: Dict[str, Any], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update metadata for a scenario.

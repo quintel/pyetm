@@ -15,7 +15,7 @@ class ScenarioUsersDestroyRunner(BaseRunner[List[Dict[str, Any]]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario_id: int, users: List[Dict[str, Any]], **kwargs
+        client: BaseClient, scenario_id: int, users: List[Dict[str, Any]], **kwargs: Any
     ) -> ServiceResult[List[Dict[str, Any]]]:
         if not users:
             return ServiceResult.fail(["No users provided"])
@@ -23,9 +23,7 @@ class ScenarioUsersDestroyRunner(BaseRunner[List[Dict[str, Any]]]):
         errors = []
         for i, user in enumerate(users):
             if "user_id" not in user and "user_email" not in user:
-                errors.append(
-                    f"User {i}: Must provide either 'user_id' or 'user_email'"
-                )
+                errors.append(f"User {i}: Must provide either 'user_id' or 'user_email'")
 
         if errors:
             return ServiceResult.fail(errors)

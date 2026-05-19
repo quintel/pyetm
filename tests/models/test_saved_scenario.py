@@ -91,9 +91,7 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
     assert len(saved_scenario.warnings) == 0
 
 
-def test_create_saved_scenario_with_warnings(
-    monkeypatch, ok_service_result, mock_client
-):
+def test_create_saved_scenario_with_warnings(monkeypatch, ok_service_result, mock_client):
     """Test SavedScenario creation with warnings."""
     created_data = {
         "id": 790,
@@ -218,9 +216,7 @@ def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
 
     monkeypatch.setattr(CreateSavedScenarioRunner, "run", capture_run)
 
-    Scenario.from_scenario(
-        scenario, title="Private Scenario", client=mock_client, private=True
-    )
+    Scenario.from_scenario(scenario, title="Private Scenario", client=mock_client, private=True)
 
     assert captured_params["scenario_id"] == 1000
     assert captured_params["title"] == "Private Scenario"
@@ -230,9 +226,7 @@ def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
 # --- Update Tests --- #
 
 
-def test_update_saved_scenario_success(
-    monkeypatch, ok_service_result, saved_scenario, mock_client
-):
+def test_update_saved_scenario_success(monkeypatch, ok_service_result, saved_scenario, mock_client):
     """Test successful SavedScenario update."""
     updated_data = {
         "id": 456,
@@ -331,9 +325,7 @@ def test_update_saved_scenario_applies_kwargs_if_not_in_response(
     assert saved_scenario.title == "Local Title"
 
 
-def test_update_saved_scenario_discard(
-    monkeypatch, ok_service_result, saved_scenario, mock_client
-):
+def test_update_saved_scenario_discard(monkeypatch, ok_service_result, saved_scenario, mock_client):
     """Test discarding a SavedScenario."""
     updated_data = {"id": 456, "discarded": True}
 
@@ -469,9 +461,7 @@ def test_saved_scenario_delegates_method_calls(saved_scenario):
     mock_session.user_values.assert_called_once()
 
     saved_scenario.update_user_values({"input1": 50})
-    mock_session.update_user_values.assert_called_once_with(
-        {"input1": 50}, skip_upload=False
-    )
+    mock_session.update_user_values.assert_called_once_with({"input1": 50}, skip_upload=False)
 
     saved_scenario.update_sortables({"demand": ["a", "b"]})
     mock_session.update_sortables.assert_called_once_with({"demand": ["a", "b"]})
@@ -498,9 +488,7 @@ def test_saved_scenario_delegation_transparent_to_user(saved_scenario):
 
     # Both should support the same operations
     saved_scenario.update_user_values({"test": 123})
-    mock_session.update_user_values.assert_called_once_with(
-        {"test": 123}, skip_upload=False
-    )
+    mock_session.update_user_values.assert_called_once_with({"test": 123}, skip_upload=False)
 
 
 # ------ interpolate ------ #
@@ -538,9 +526,7 @@ def test_saved_scenario_interpolate_success(monkeypatch, ok_service_result):
 
     # Mock session property
     for ss in [saved_2030, saved_2050, saved_2070]:
-        ss._scenario_session = Session(
-            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
-        )
+        ss._scenario_session = Session(id=ss.scenario_id, area_code="nl", end_year=ss.end_year)
 
     result = Scenario.interpolate([saved_2030, saved_2050, saved_2070], [2040, 2060])
 
@@ -579,13 +565,9 @@ def test_saved_scenario_interpolate_with_custom_titles(monkeypatch):
     saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
 
     for ss in [saved_2030, saved_2050]:
-        ss._scenario_session = Session(
-            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
-        )
+        ss._scenario_session = Session(id=ss.scenario_id, area_code="nl", end_year=ss.end_year)
 
-    result = Scenario.interpolate(
-        [saved_2030, saved_2050], [2040], titles=["Custom Title 2040"]
-    )
+    result = Scenario.interpolate([saved_2030, saved_2050], [2040], titles=["Custom Title 2040"])
 
     assert len(result) == 1
     assert saved_titles[0] == "Custom Title 2040"
@@ -621,9 +603,7 @@ def test_saved_scenario_interpolate_with_save_kwargs(monkeypatch):
     saved_2050 = Scenario(id=1002, scenario_id=67890, title="Saved 2050", end_year=2050)
 
     for ss in [saved_2030, saved_2050]:
-        ss._scenario_session = Session(
-            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
-        )
+        ss._scenario_session = Session(id=ss.scenario_id, area_code="nl", end_year=ss.end_year)
 
     result = Scenario.interpolate(
         [saved_2030, saved_2050],
@@ -644,7 +624,8 @@ def test_saved_scenario_interpolate_titles_length_mismatch():
     with pytest.raises(ValueError, match="Length of titles .* must match"):
         Scenario.interpolate(
             [saved_2030, saved_2050],
-            2040, 2060,  # 2 target years
+            2040,
+            2060,  # 2 target years
             titles=["Only One Title"],  # But only 1 title
         )
 
@@ -657,9 +638,7 @@ def test_saved_scenario_interpolate_rejects_duplicate_end_years():
 
     # Mock session property with matching end_years
     for ss in [saved_2040_a, saved_2040_b, saved_2050]:
-        ss._scenario_session = Session(
-            id=ss.scenario_id, area_code="nl", end_year=ss.end_year
-        )
+        ss._scenario_session = Session(id=ss.scenario_id, area_code="nl", end_year=ss.end_year)
 
     with pytest.raises(ValueError, match="Sessions must have unique end_year values"):
         Scenario.interpolate([saved_2040_a, saved_2040_b, saved_2050], 2045)
@@ -722,9 +701,7 @@ def test_identifier_falls_back_to_saved_id():
     """Test identifier returns saved scenario id when saved title, short_name, and session title not available."""
     saved = Scenario(id=1001, scenario_id=12345, title="")
     # Mock session with no title or short_name
-    saved._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
 
     assert saved.identifier() == 1001
 
@@ -733,9 +710,7 @@ def test_identifier_falls_back_to_session_id():
     """Test identifier returns session id as final fallback."""
     saved = Scenario(id=None, scenario_id=12345, title="")
     # Mock session with no title or short_name
-    saved._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
 
     assert saved.identifier() == 12345
 
@@ -745,22 +720,14 @@ def test_identifier_resolution_order_complete():
     # Test 1: When all properties are present, saved title should win
     saved1 = Scenario(id=1001, scenario_id=12345, title="Saved Title")
     saved1._scenario_session = Session(
-        id=12345,
-        area_code="nl",
-        end_year=2050,
-        title="Session Title",
-        short_name="short"
+        id=12345, area_code="nl", end_year=2050, title="Session Title", short_name="short"
     )
     assert saved1.identifier() == "Saved Title"
 
     # Test 2: Without saved title, should return short_name
     saved2 = Scenario(id=1001, scenario_id=12345, title="")
     saved2._scenario_session = Session(
-        id=12345,
-        area_code="nl",
-        end_year=2050,
-        title="Session Title",
-        short_name="short"
+        id=12345, area_code="nl", end_year=2050, title="Session Title", short_name="short"
     )
     assert saved2.identifier() == "short"
 
@@ -773,14 +740,10 @@ def test_identifier_resolution_order_complete():
 
     # Test 4: Without saved title, short_name, and session title, should return saved id
     saved4 = Scenario(id=1001, scenario_id=12345, title="")
-    saved4._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved4._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
     assert saved4.identifier() == 1001
 
     # Test 5: Without any identifier except session id, should return session id
     saved5 = Scenario(id=None, scenario_id=12345, title="")
-    saved5._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved5._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
     assert saved5.identifier() == 12345

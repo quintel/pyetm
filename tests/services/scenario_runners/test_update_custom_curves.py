@@ -46,9 +46,7 @@ def test_update_custom_curves_success_single_curve(temp_curve_files):
     mock_scenario = Mock()
     mock_scenario.id = 12345
 
-    curve = CustomCurve(
-        key="test_curve", type="profile", file_path=temp_curve_files["valid"]
-    )
+    curve = CustomCurve(key="test_curve", type="profile", file_path=temp_curve_files["valid"])
     custom_curves = CustomCurves(curves=[curve])
 
     with patch.object(
@@ -85,9 +83,7 @@ def test_update_custom_curves_success_multiple_curves(temp_curve_files):
 
     curves = [
         CustomCurve(key="curve_1", type="profile", file_path=temp_curve_files["valid"]),
-        CustomCurve(
-            key="curve_2", type="availability", file_path=temp_curve_files["another"]
-        ),
+        CustomCurve(key="curve_2", type="availability", file_path=temp_curve_files["another"]),
     ]
     custom_curves = CustomCurves(curves=curves)
 
@@ -124,9 +120,7 @@ def test_update_custom_curves_curve_without_file():
     curve = CustomCurve(key="no_file_curve", type="profile")
     mock_series = pd.Series(np.random.uniform(0, 100, 8760))
 
-    with patch(
-        "pyetm.models.custom_curves.CustomCurve.contents", return_value=mock_series
-    ):
+    with patch("pyetm.models.custom_curves.CustomCurve.contents", return_value=mock_series):
         custom_curves = CustomCurves(curves=[curve])
 
         with patch.object(
@@ -134,9 +128,7 @@ def test_update_custom_curves_curve_without_file():
             "_make_batch_requests",
             return_value=[ServiceResult.ok(data={"status": "uploaded"})],
         ) as mock_batch:
-            result = UpdateCustomCurvesRunner.run(
-                mock_client, mock_scenario, custom_curves
-            )
+            result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
             assert result.success is True
             assert result.data["successful_uploads"] == 1
@@ -158,9 +150,7 @@ def test_update_custom_curves_http_error():
     curve = CustomCurve(key="error_curve", type="profile")
     mock_series = pd.Series(np.random.uniform(0, 100, 8760))
 
-    with patch(
-        "pyetm.models.custom_curves.CustomCurve.contents", return_value=mock_series
-    ):
+    with patch("pyetm.models.custom_curves.CustomCurve.contents", return_value=mock_series):
         custom_curves = CustomCurves(curves=[curve])
 
         with patch.object(
@@ -168,9 +158,7 @@ def test_update_custom_curves_http_error():
             "_make_batch_requests",
             return_value=[ServiceResult.fail(["422: Validation failed"])],
         ):
-            result = UpdateCustomCurvesRunner.run(
-                mock_client, mock_scenario, custom_curves
-            )
+            result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
             assert result.success is False
             assert result.data["successful_uploads"] == 0
@@ -189,9 +177,7 @@ def test_update_custom_curves_network_exception():
     curve = CustomCurve(key="network_error_curve", type="profile")
     mock_series = pd.Series(np.random.uniform(0, 100, 8760))
 
-    with patch(
-        "pyetm.models.custom_curves.CustomCurve.contents", return_value=mock_series
-    ):
+    with patch("pyetm.models.custom_curves.CustomCurve.contents", return_value=mock_series):
         custom_curves = CustomCurves(curves=[curve])
 
         with patch.object(
@@ -199,9 +185,7 @@ def test_update_custom_curves_network_exception():
             "_make_batch_requests",
             return_value=[ServiceResult.fail(["Network unreachable"])],
         ):
-            result = UpdateCustomCurvesRunner.run(
-                mock_client, mock_scenario, custom_curves
-            )
+            result = UpdateCustomCurvesRunner.run(mock_client, mock_scenario, custom_curves)
 
             assert result.success is False
             assert result.data["successful_uploads"] == 0
@@ -218,12 +202,8 @@ def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     mock_scenario.id = 12345
 
     curves = [
-        CustomCurve(
-            key="success_curve", type="profile", file_path=temp_curve_files["valid"]
-        ),
-        CustomCurve(
-            key="fail_curve", type="availability", file_path=temp_curve_files["another"]
-        ),
+        CustomCurve(key="success_curve", type="profile", file_path=temp_curve_files["valid"]),
+        CustomCurve(key="fail_curve", type="availability", file_path=temp_curve_files["another"]),
     ]
     custom_curves = CustomCurves(curves=curves)
 

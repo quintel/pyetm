@@ -18,7 +18,6 @@ from pyetm.utils.excel_utils import ExportConfigResolver
 
 
 class TestScenarioPackerInit:
-
     def test_init_creates_empty_collections(self):
         """Test that initialization creates empty collections"""
         packer = ScenarioPacker()
@@ -28,7 +27,6 @@ class TestScenarioPackerInit:
 
 
 class TestScenarioPackerAdd:
-
     def test_add_single_scenario(self, sample_scenario):
         """Test adding a single scenario"""
         packer = ScenarioPacker()
@@ -85,7 +83,6 @@ class TestScenarioPackerAdd:
 
 
 class TestScenarioPackerDataExtraction:
-
     def test_scenarios_empty(self):
         """Test _scenarios with empty packer"""
         packer = ScenarioPacker()
@@ -124,7 +121,6 @@ class TestScenarioPackerDataExtraction:
 
 
 class TestMainInfo:
-
     def test_main_info_empty(self):
         """Test main_info with no scenarios"""
         packer = ScenarioPacker()
@@ -155,7 +151,10 @@ class TestMainInfo:
         assert "identifier" in result.columns
         assert sample_scenario.identifier() in result["identifier"].values
         assert "area_code" in result.columns
-        assert result[result["scenario_id"] == sample_scenario.id]["area_code"].iloc[0] == "nl2015"
+        assert (
+            result[result["scenario_id"] == sample_scenario.id]["area_code"].iloc[0]
+            == "nl2015"
+        )
 
     def test_main_info_multiple_scenarios(self, multiple_scenarios):
         """Test main_info with multiple scenarios (scenarios as rows with scenario_id column)"""
@@ -212,7 +211,6 @@ class TestCouplings:
 
 
 class TestInputs:
-
     def test_inputs_empty(self):
         """Test inputs with no scenarios"""
         packer = ScenarioPacker()
@@ -289,7 +287,6 @@ class TestInputs:
 
 
 class TestGqueryResults:
-
     def test_gquery_results_empty(self):
         """Test gquery_results with no scenarios"""
         packer = ScenarioPacker()
@@ -335,7 +332,7 @@ class TestGqueryResults:
 
             mock_results = pd.DataFrame(
                 {"future": [100 + i * 10, 200 + i * 20], "unit": ["MW", "GWh"]},
-                index=[f"query_1", f"query_{i+2}"],
+                index=[f"query_1", f"query_{i + 2}"],
             )
             mock_results.index.name = "gquery"
 
@@ -356,7 +353,6 @@ class TestGqueryResults:
 
 
 class TestDataExtractionMethods:
-
     def test_sortables_empty(self):
         """Test sortables with no scenarios"""
         packer = ScenarioPacker()
@@ -433,7 +429,6 @@ class TestDataExtractionMethods:
 
 
 class TestExcelExport:
-
     def setup_method(self):
         """Setup temp directory for Excel files"""
         self.temp_dir = tempfile.mkdtemp()
@@ -480,7 +475,6 @@ class TestExcelExport:
                 HourlyOutputCurvesPack, "to_dataframe", return_value=dummy_empty_df
             ),
         ):
-
             file_path = os.path.join(self.temp_dir, "test_export.xlsx")
             packer.to_excel(file_path)
 
@@ -540,7 +534,6 @@ class TestExcelExport:
 
 
 class TestUtilityMethods:
-
     def test_clear(self, multiple_scenarios):
         """Test clear method"""
         packer = ScenarioPacker()
@@ -623,7 +616,6 @@ class TestExportConfigResolver:
 
 
 class TestScenarioPackerHelpers:
-
     def test_load_or_create_scenario_load_new_and_failures(self, monkeypatch):
         """Test _load_or_create_scenario method"""
         packer = ScenarioPacker()
@@ -696,7 +688,6 @@ class TestScenarioPackerHelpers:
 
 
 class TestCreateScenarioFromColumn:
-
     def test_create_scenario_from_row_loads_and_updates(self, monkeypatch):
         """Test _create_scenario_from_row method with loading existing scenario"""
         packer = ScenarioPacker()
@@ -767,7 +758,6 @@ class TestInputsPackIntegration:
 
 
 class TestExportConfigResolverExtras:
-
     def test_extract_from_main_sheet_skips_helper_and_parses(self):
         # First column is a helper and must be skipped
         main = pd.DataFrame(
@@ -800,7 +790,6 @@ class TestExportConfigResolverExtras:
 
 
 class TestScenarioPackerExtras:
-
     def test_get_global_export_config_first_available(self):
         packer = ScenarioPacker()
 
@@ -864,10 +853,20 @@ class TestScenarioPackerExtras:
 
         # Make packs return non-empty DataFrames
         with (
-            patch.object(SortablePack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})),
-            patch.object(CustomCurvesPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})),
-            patch.object(QueryPack, "to_dataframe", return_value=pd.DataFrame({"future": [1]}, index=["q"])),
-            patch.object(InputsPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})),
+            patch.object(
+                SortablePack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
+            patch.object(
+                CustomCurvesPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
+            patch.object(
+                QueryPack,
+                "to_dataframe",
+                return_value=pd.DataFrame({"future": [1]}, index=["q"]),
+            ),
+            patch.object(
+                InputsPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
             patch("pyetm.exporters.excel_exporter.ExcelExporter.write") as mock_write,
         ):
             tmp = os.path.join(tempfile.gettempdir(), "with_packs.xlsx")
@@ -881,7 +880,7 @@ class TestScenarioPackerExtras:
             # Verify ExcelExporter.write was called
             assert mock_write.called
             call_args = mock_write.call_args
-            export_data = call_args.kwargs['export_data']
+            export_data = call_args.kwargs["export_data"]
 
             # Verify all requested data is in the ExportDataCollection
             assert export_data.main_info is not None
@@ -889,6 +888,7 @@ class TestScenarioPackerExtras:
             assert export_data.sortables is not None
             assert export_data.custom_curves is not None
             assert export_data.gquery_results is not None
+
 
 def test_clear_and_remove_scenario_swallow_errors():
     packer = ScenarioPacker()
@@ -907,7 +907,6 @@ def test_clear_and_remove_scenario_swallow_errors():
 
 
 class TestNormalizeUpdate:
-
     def test_normalize_update_false(self):
         """Test normalizing update=False returns empty set"""
         result = ScenarioPacker._normalize_update(False)
@@ -1229,7 +1228,6 @@ class TestPackerValidation:
         assert "Invalid export names" in error_message
         assert "bad_export" in error_message
 
-
     def test_annual_exports_valid_list(self):
         """Test that valid export lists work without errors"""
         packer = ScenarioPacker()
@@ -1370,8 +1368,7 @@ class TestScenarioPackerCollectExportData:
 
         # Create scenario with export config
         sample_scenario._export_config = ExportConfig(
-            include_inputs=True,
-            include_sortables=True
+            include_inputs=True, include_sortables=True
         )
 
         packer = ScenarioPacker()
@@ -1403,7 +1400,9 @@ class TestScenarioPackerCollectExportData:
         assert export_data.config.include_inputs is False
         assert export_data.inputs is None
 
-    def test_collect_export_data_all_options(self, sample_scenario, scenario_with_inputs, scenario_with_queries):
+    def test_collect_export_data_all_options(
+        self, sample_scenario, scenario_with_inputs, scenario_with_queries
+    ):
         """Test collecting export data with all options enabled"""
         from pyetm.models.export_data_collection import ExportDataCollection
 

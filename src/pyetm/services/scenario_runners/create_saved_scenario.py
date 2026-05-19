@@ -23,7 +23,7 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, saved_scenario_data: Dict[str, Any], **kwargs
+        client: BaseClient, saved_scenario_data: Dict[str, Any], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Create a new SavedScenario in MyETM.
@@ -67,6 +67,7 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
         if result.success and warnings:
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

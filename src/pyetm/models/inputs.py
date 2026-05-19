@@ -1,7 +1,7 @@
 """Input parameter models and validation."""
 
 from __future__ import annotations
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 from pydantic import field_validator, model_validator
 import pandas as pd
 from pyetm.models.warnings import WarningCollector
@@ -25,18 +25,23 @@ class Input(Base):
     disabled: Optional[bool] = False
     disabled_by: Optional[str] = None
 
-    def is_valid_update(self, value) -> WarningCollector:
+    def is_valid_update(self, value: Any) -> WarningCollector:
         """
         Returns a WarningCollector with validation warnings without updating the current object.
         """
         new_obj_dict = self.model_dump()
         new_obj_dict["user"] = value
 
-        warnings_obj = self.__class__(**new_obj_dict)
-        return warnings_obj.warnings
+        try:
+            warnings_obj = self.__class__(**new_obj_dict)
+            if isinstance(warnings_obj.warnings, WarningCollector):
+                return warnings_obj.warnings
+            return WarningCollector()
+        except Exception:
+            return WarningCollector()
 
     @classmethod
-    def from_json(cls, data: tuple[str, dict]) -> "Input":
+    def from_json(cls, data: tuple[str, Dict[str, Any]]) -> "Input":
         """
         Initialize an Input from a JSON-like tuple coming from .items()
         """
@@ -65,7 +70,7 @@ class Input(Base):
 
     @field_validator("user", mode="before")
     @classmethod
-    def check_reset(cls, value):
+    def check_reset(cls, value: Any) -> Any:
         """If a reset value is sent, treat it as setting the user value to None"""
         if isinstance(value, str) and value == "reset":
             return None
@@ -86,7 +91,7 @@ class Input(Base):
         # Both are None/NaN - add warning
         self.add_warning(
             self.key,
-            f"Both user and default values are None/NaN for input '{self.key}'"
+            f"Both user and default values are None/NaN for input '{self.key}'",
         )
         return None
 
@@ -111,11 +116,11 @@ class BoolInput(Input):
 
     @field_validator("user", mode="before")
     @classmethod
-    def coerce_bool(cls, value):
+    def coerce_bool(cls, value: Any) -> Any:
         if value is None:
             return None
 
-        truth_map = {
+        truth_map: Dict[str, float] = {
             "true": 1.0,
             "t": 1.0,
             "1": 1.0,
@@ -157,7 +162,7 @@ class EnumInput(Input):
         return base_fields
 
     @model_validator(mode="after")
-    def check_permitted(self) -> EnumInput:
+    def check_permitted(self) -> "EnumInput":
         if pd.isna(self.user) or self.user in self.permitted_values:
             return self
         self._raise_exception_on_loc(
@@ -166,10 +171,11 @@ class EnumInput(Input):
             loc="user",
             msg=f"Value error, {self.user} should be in {self.permitted_values}",
         )
+        return self
 
     @field_validator("user", mode="before")
     @classmethod
-    def coerce_enum(cls, value):
+    def coerce_enum(cls, value: Any) -> Any:
         if pd.isna(value):
             return None
         return pd.Series([value]).astype(str).str.strip().iloc[0]
@@ -194,7 +200,7 @@ class FloatInput(Input):
         return base_fields
 
     @model_validator(mode="after")
-    def check_min_max(self) -> FloatInput:
+    def check_min_max(self) -> "FloatInput":
         if not isinstance(self.user, float):
             return self
         if self.user is None or (self.user <= self.max and self.user >= self.min):
@@ -205,10 +211,11 @@ class FloatInput(Input):
             loc="user",
             msg=f"Value error, {self.user} should be between {self.min} and {self.max}",
         )
+        return self
 
     @field_validator("user", mode="before")
     @classmethod
-    def coerce_float(cls, value):
+    def coerce_float(cls, value: Any) -> Any:
         if pd.isna(value):
             return None
         try:
@@ -231,13 +238,13 @@ class Inputs(Base):
 
     inputs: list[Input]
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.inputs)
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         yield from iter(self.inputs)
 
     def __getitem__(self, key: str) -> Input:
@@ -246,7 +253,7 @@ class Inputs(Base):
             raise KeyError(f"Input '{key}' not found")
         return result
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return [input.key for input in self.inputs]
 
     def get_input_by_key(self, key: str) -> Optional[Input]:
@@ -256,11 +263,11 @@ class Inputs(Base):
                 return input_obj
         return None
 
-    def is_valid_update(self, key_vals: dict) -> dict[str, WarningCollector]:
+    def is_valid_update(self, key_vals: Dict[str, Any]) -> Dict[str, WarningCollector]:
         """
         Returns a dict mapping input keys to their WarningCollectors when errors were found.
         """
-        warnings: dict[str, WarningCollector] = {}
+        warnings: Dict[str, WarningCollector] = {}
         input_map = {inp.key: inp for inp in self.inputs}
 
         for key, value in key_vals.items():
@@ -275,7 +282,7 @@ class Inputs(Base):
 
         return warnings
 
-    def update(self, key_vals: dict):
+    def update(self, key_vals: Dict[str, Any]) -> None:
         """
         Update the values of certain inputs.
         """
@@ -283,7 +290,9 @@ class Inputs(Base):
             if input_obj.key in key_vals:
                 input_obj.user = key_vals[input_obj.key]
 
-    def _to_dataframe(self, fields="value", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(
+        self, fields: Union[str, list[str]] = "value", **kwargs: Any
+    ) -> pd.DataFrame:
         """
         Serialize the Inputs collection to DataFrame.
 
@@ -302,7 +311,11 @@ class Inputs(Base):
             df = pd.DataFrame.from_dict(
                 {
                     input.key: [
-                        input.merged_value if key == "value" else getattr(input, key, None)
+                        (
+                            input.merged_value
+                            if key == "value"
+                            else getattr(input, key, None)
+                        )
                         for key in columns
                     ]
                     for input in self.inputs
@@ -317,7 +330,7 @@ class Inputs(Base):
             return pd.DataFrame()
 
     @classmethod
-    def from_json(cls, data) -> Inputs:
+    def from_json(cls, data: Dict[str, Any]) -> "Inputs":
         inputs = [Input.from_json(item) for item in data.items()]
 
         collection = cls.model_validate({"inputs": inputs})

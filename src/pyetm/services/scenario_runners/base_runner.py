@@ -8,6 +8,30 @@ from pyetm.clients.base_client import BaseClient, make_batch_requests
 T = TypeVar("T")
 
 
+class ScenarioRunnerProtocol(Protocol[T]):
+    """
+    Protocol for scenario runner implementations.
+
+    Allows flexible method signatures while maintaining type safety.
+    Each runner can define its own specific parameters beyond the client.
+    """
+
+    @staticmethod
+    def run(client: BaseClient, /, *args: Any, **kwargs: Any) -> ServiceResult[T]:
+        """
+        Execute the scenario operation.
+
+        Args:
+            client: The HTTP client for API requests
+            *args: Operation-specific positional arguments
+            **kwargs: Operation-specific keyword arguments
+
+        Returns:
+            ServiceResult with operation-specific data type
+        """
+        ...
+
+
 class ScenarioIdentifier(Protocol):
     """Protocol for objects with a scenario or saved_scenario ID."""
 
@@ -28,7 +52,7 @@ class BaseRunner(ABC, Generic[T]):
         method: str,
         path: str,
         payload: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[Any]:
         """
         Make an HTTP request and handle common error patterns.
@@ -70,7 +94,7 @@ class BaseRunner(ABC, Generic[T]):
             # Check for partial success pattern (422 with both success and errors)
             if resp.status_code == 422:
 
-                def _flatten_errors(error_data, errors):
+                def _flatten_errors(error_data: Any, errors: List[str]) -> None:
                     if isinstance(error_data, dict):
                         for k, v in error_data.items():
                             if isinstance(v, list):
@@ -93,7 +117,7 @@ class BaseRunner(ABC, Generic[T]):
                         and "success" in response_data
                         and "errors" in response_data
                     ):
-                        errors = []
+                        errors: List[str] = []
                         successes = response_data.get("success", [])
                         if successes:
                             errors.append(
@@ -149,9 +173,7 @@ class BaseRunner(ABC, Generic[T]):
         return make_batch_requests(client, formatted_requests)
 
     @classmethod
-    def _validate_required_fields(
-        cls, data: Dict[str, Any], required_keys: List[str]
-    ) -> List[str]:
+    def _validate_required_fields(cls, data: Dict[str, Any], required_keys: List[str]) -> List[str]:
         """
         Check for missing required fields.
         """
@@ -179,9 +201,7 @@ class BaseRunner(ABC, Generic[T]):
         """
         filtered = {k: v for k, v in data.items() if k in allowed_keys}
         ignored_keys = set(data.keys()) - set(filtered.keys())
-        warnings = [
-            f"Ignoring invalid field for {context}: {key!r}" for key in ignored_keys
-        ]
+        warnings = [f"Ignoring invalid field for {context}: {key!r}" for key in ignored_keys]
         return filtered, warnings
 
     @classmethod
@@ -210,8 +230,5 @@ class BaseRunner(ABC, Generic[T]):
 
         return result, warnings
 
-    @staticmethod
-    @abstractmethod
-    def run(client: BaseClient, scenario: Any, **kwargs) -> ServiceResult[T]:
-        """Subclasses must implement this method."""
-        pass
+    # Note: Concrete implementations should follow ScenarioRunnerProtocol
+    # Each runner defines its own run() signature based on operation requirements

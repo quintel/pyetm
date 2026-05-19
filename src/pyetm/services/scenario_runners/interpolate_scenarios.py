@@ -20,7 +20,7 @@ class InterpolateScenariosRunner(BaseRunner[List[Dict[str, Any]]]):
         client: BaseClient,
         scenario_ids: List[int],
         end_years: List[int],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[List[Dict[str, Any]]]:
         payload = {
             "scenario_ids": scenario_ids,

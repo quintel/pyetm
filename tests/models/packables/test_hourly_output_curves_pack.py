@@ -26,38 +26,37 @@ def _attach_hourly_output_curves(scenario, curve_dict: dict):
     all_rows = []
 
     for curve_name, curve_data in curve_dict.items():
-        if curve_data is None or (hasattr(curve_data, 'empty') and curve_data.empty):
+        if curve_data is None or (hasattr(curve_data, "empty") and curve_data.empty):
             continue
 
         if isinstance(curve_data, pd.DataFrame):
             # Stack the DataFrame to create (hour, curve_name, column) multi-index
             stacked = curve_data.stack()
-            stacked.index.names = ['hour', 'column']
+            stacked.index.names = ["hour", "column"]
             for (hour, column), value in stacked.items():
-                all_rows.append({
-                    'hour': hour,
-                    'curve_name': curve_name,
-                    'column': column,
-                    'value': value
-                })
+                all_rows.append(
+                    {"hour": hour, "curve_name": curve_name, "column": column, "value": value}
+                )
         else:
             # Series - simpler case
             for hour, value in enumerate(curve_data):
-                all_rows.append({
-                    'hour': hour,
-                    'curve_name': curve_name,
-                    'column': curve_name,  # Use curve_name as column name
-                    'value': value
-                })
+                all_rows.append(
+                    {
+                        "hour": hour,
+                        "curve_name": curve_name,
+                        "column": curve_name,  # Use curve_name as column name
+                        "value": value,
+                    }
+                )
 
     if all_rows:
         df = pd.DataFrame(all_rows)
         # Create multi-index (hour, curve_name, column) with 'value' as data
-        result_df = df.set_index(['hour', 'curve_name', 'column'])['value'].to_frame()
+        result_df = df.set_index(["hour", "curve_name", "column"])["value"].to_frame()
     else:
         result_df = pd.DataFrame(
-            index=pd.MultiIndex.from_tuples([], names=['hour', 'curve_name', 'column']),
-            columns=['value']
+            index=pd.MultiIndex.from_tuples([], names=["hour", "curve_name", "column"]),
+            columns=["value"],
         )
 
     scenario.hourly_output_curves = Mock()
@@ -223,9 +222,7 @@ def test_to_excel_per_carrier_no_scenarios(carrier_mappings):
         os.unlink(tmp.name)
 
 
-def test_to_excel_per_carrier_full_flow(
-    carrier_mappings, mock_workbook, patch_add_frame
-):
+def test_to_excel_per_carrier_full_flow(carrier_mappings, mock_workbook, patch_add_frame):
     """Test full flow of to_excel_per_carrier."""
     # Setup mocks
     mock_wb = mock_workbook["instance"]
@@ -276,9 +273,7 @@ def test_to_excel_invalid_carriers(carrier_mappings):
         os.unlink(tmp.name)
 
 
-def test_to_excel_scenario_without_get_hourly_output_curves(
-    mock_workbook, carrier_mappings
-):
+def test_to_excel_scenario_without_get_hourly_output_curves(mock_workbook, carrier_mappings):
     """Test scenario without get_hourly_output_curves method."""
     mock_wb = mock_workbook["instance"]
 
@@ -299,9 +294,7 @@ def test_to_excel_get_hourly_output_curves_exception(mock_workbook, carrier_mapp
 
     s = make_scenario()
     s.hourly_output_curves = Mock()
-    s.hourly_output_curves.get_curves_by_carrier_type = Mock(
-        side_effect=Exception("curves failed")
-    )
+    s.hourly_output_curves.get_curves_by_carrier_type = Mock(side_effect=Exception("curves failed"))
 
     pack = HourlyOutputCurvesPack()
     pack.add(s)
@@ -367,16 +360,12 @@ def test_to_excel_empty_dataframe(mock_workbook, carrier_mappings):
     mock_workbook["cls"].assert_not_called()
 
 
-def test_to_excel_multi_column_dataframe(
-    mock_workbook, carrier_mappings, patch_add_frame
-):
+def test_to_excel_multi_column_dataframe(mock_workbook, carrier_mappings, patch_add_frame):
     """Test scenario with multi-column DataFrame."""
     mock_wb = mock_workbook["instance"]
 
     s = make_scenario()
-    multi_df = pd.DataFrame(
-        {"wind": [10, 20, 30], "solar": [5, 15, 25], "hydro": [2, 4, 6]}
-    )
+    multi_df = pd.DataFrame({"wind": [10, 20, 30], "solar": [5, 15, 25], "hydro": [2, 4, 6]})
     _attach_hourly_output_curves_by_carrier(s, {"electricity": {"supply": multi_df}})
 
     pack = HourlyOutputCurvesPack()
@@ -388,9 +377,7 @@ def test_to_excel_multi_column_dataframe(
     mock_wb.close.assert_called_once()
 
 
-def test_to_excel_single_column_dataframe(
-    mock_workbook, carrier_mappings, patch_add_frame
-):
+def test_to_excel_single_column_dataframe(mock_workbook, carrier_mappings, patch_add_frame):
     """Test scenario with single-column DataFrame."""
     mock_wb = mock_workbook["instance"]
 

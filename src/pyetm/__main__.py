@@ -81,9 +81,7 @@ def write_file_safely(path: Path, content: str, force: bool = False) -> bool:
         True if file was written, False if skipped
     """
     if path.exists() and not force:
-        overwrite = click.confirm(
-            f"  {path.name} already exists. Overwrite?", default=False
-        )
+        overwrite = click.confirm(f"  {path.name} already exists. Overwrite?", default=False)
         if not overwrite:
             click.echo(f"  ⊗ Skipped {path.name}")
             return False
@@ -107,9 +105,7 @@ def get_examples_path() -> Path:
     return examples_path
 
 
-def copy_example_files(
-    target_dir: Path, force: bool = False
-) -> tuple[list[str], list[str]]:
+def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str], list[str]]:
     """
     Copy example files from the package to the target directory.
 
@@ -176,7 +172,7 @@ def copy_example_files(
 
 @click.group()
 @click.version_option(version=version("pyetm"), prog_name="pyetm")
-def cli():
+def cli() -> None:
     """
     PyETM - Python client for the Energy Transition Model API
 
@@ -207,7 +203,7 @@ def cli():
     is_flag=True,
     help="Overwrite existing files without prompting",
 )
-def init(token, environment, log_level, force):
+def init(token: str | None, environment: str | None, log_level: str, force: bool) -> None:
     """
     Initialize a new pyetm project.
 
@@ -248,9 +244,7 @@ def init(token, environment, log_level, force):
     if token:
         click.echo("Token validated\n")
     else:
-        click.echo(
-            "No token provided - you will only be able to access public scenarios\n"
-        )
+        click.echo("No token provided - you will only be able to access public scenarios\n")
 
     # Determine target directory (current working directory)
     target_dir = Path.cwd()
@@ -333,7 +327,7 @@ def init(token, environment, log_level, force):
     click.echo("\n  Remember: Never commit your .env file to version control!\n")
 
 
-def main():
+def main() -> None:
     """Entry point for the CLI."""
     cli()
 

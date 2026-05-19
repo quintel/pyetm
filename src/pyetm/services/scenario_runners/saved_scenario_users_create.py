@@ -37,7 +37,7 @@ class SavedScenarioUsersCreateRunner(BaseRunner[List[Dict[str, Any]]]):
         client: BaseClient,
         saved_scenario_id: int,
         users: List[Dict[str, Any]],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[List[Dict[str, Any]]]:
         """
         Add users to a saved scenario with specified roles.

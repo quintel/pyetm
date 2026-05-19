@@ -33,7 +33,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         client: BaseClient,
         scenario_id: int,
         overrides: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Copy an existing scenario with optional attribute overrides.
@@ -84,6 +84,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         if result.success and warnings:
             # Merge our warnings with any from the API call
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

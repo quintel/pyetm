@@ -2,7 +2,7 @@
 
 import logging
 from typing import ClassVar, Dict, Any, List, Optional
-from openpyxl import Workbook
+from openpyxl import Workbook  # type: ignore[import-untyped]
 import pandas as pd
 import numpy as np
 from pydantic import Field
@@ -23,7 +23,7 @@ class UsersPack(Packable):
     key: ClassVar[str] = "users"
     sheet_name: ClassVar[str] = "USERS"
 
-    def to_dataframe(self) -> pd.DataFrame:
+    def to_dataframe(self, columns: Any = None) -> pd.DataFrame:
         """
         Export user roles to a DataFrame in grid format.
 
@@ -41,7 +41,7 @@ class UsersPack(Packable):
 
             try:
                 result = ScenarioUsersIndexRunner.run(
-                    client=scenario.client, scenario_id=scenario.id
+                    client=scenario.client, scenario_id=scenario.id  # type: ignore[attr-defined]
                 )
 
                 if not result.success:
@@ -85,8 +85,7 @@ class UsersPack(Packable):
             scenario_key = self._get_scenario_display_key(scenario)
             # Create a series with all emails and their roles for this scenario
             scenario_roles = {
-                email: roles.get(scenario_key, np.nan)
-                for email, roles in user_roles.items()
+                email: roles.get(scenario_key, np.nan) for email, roles in user_roles.items()
             }
             df = pd.DataFrame({"role": scenario_roles})
             frames.append(df)
@@ -107,7 +106,7 @@ class UsersPack(Packable):
         }
         return role_map.get(api_role, api_role)
 
-    def from_dataframe(self, df, update_set: set[str] = None):
+    def from_dataframe(self, df: Any, update_set: Optional[set[str]] = None) -> None:
         """
         Import user roles from DataFrame and apply to scenarios.
 
@@ -132,9 +131,7 @@ class UsersPack(Packable):
 
             for column_name in scenario_columns:
                 # Resolve scenario with automatic warning
-                scenario = self._resolve_scenario_with_warning(
-                    column_name, "USERS sheet"
-                )
+                scenario = self._resolve_scenario_with_warning(column_name, "USERS sheet")
                 if scenario is None:
                     continue
 
@@ -146,9 +143,7 @@ class UsersPack(Packable):
                         continue
 
                     try:
-                        scenario.update_users(
-                            email, role_value, skip_upload=skip_upload
-                        )
+                        scenario.update_users(email, role_value, skip_upload=skip_upload)
                         if not skip_upload:
                             logger.info(
                                 "Updated user '%s' with role '%s' for scenario '%s'",

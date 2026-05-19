@@ -6,7 +6,7 @@ import asyncio
 import ssl
 import threading
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 from pydantic import BaseModel
 
 import aiohttp
@@ -23,19 +23,20 @@ class ETMResponse(BaseModel):
     text: str = ""
     status_code: int
     _content: bytes = b""
-    _json_data: Optional[dict] = None
+    _json_data: Optional[Dict[str, Any]] = None
 
     @property
     def ok(self) -> bool:
         return 200 <= self.status_code < 300
 
-    def json(self) -> dict:
+    def json(self) -> Dict[str, Any]:  # type: ignore[override]
+        """Parse response body as JSON."""
         if self._json_data is not None:
             return self._json_data
 
         import json
 
-        return json.loads(self.text)
+        return cast(Dict[str, Any], json.loads(self.text))
 
     # TODO: why encode again? I understand that curves are creating IO streams
     # but why so generic? Also, curves seem to be the only ones accessing this prop
@@ -131,10 +132,10 @@ class ETMSession:
 
         self._start_loop_thread()
 
-    def _start_loop_thread(self):
+    def _start_loop_thread(self) -> None:
         """Start background thread with event loop."""
 
-        def run_loop():
+        def run_loop() -> None:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
             self._loop_started.set()
@@ -144,24 +145,24 @@ class ETMSession:
         self._loop_thread.start()
         self._loop_started.wait()
 
-    def _ensure_session(self):
+    def _ensure_session(self) -> None:
         """Ensure aiohttp session exists."""
         if self._session is None:
-            future = asyncio.run_coroutine_threadsafe(
-                self._create_session(), self._loop
-            )
+            if self._loop is None:
+                raise RuntimeError("Event loop not initialized")
+            future = asyncio.run_coroutine_threadsafe(self._create_session(), self._loop)
             future.result()
 
-    async def _create_session(self):
+    async def _create_session(self) -> None:
         """Create aiohttp session with SSL configuration."""
-        connector_kwargs = {
+        connector_kwargs: dict[str, Any] = {
             "limit": 10,
             "limit_per_host": 2,
             "keepalive_timeout": 120,
         }
 
         # Configure SSL verification
-        ssl_context: Optional[ssl.SSLContext | bool] = None
+        ssl_context: Optional[ssl.SSLContext] | bool = None
         if not self.ssl_verify:
             # Disable SSL verification (for testing with self-signed certs)
             ssl_context = False
@@ -181,15 +182,17 @@ class ETMSession:
             trust_env=self.trust_env,
         )
 
-    def request(self, method: str, url: str, **kwargs) -> ETMResponse:
+    def request(self, method: str, url: str, **kwargs: Any) -> ETMResponse:
         """Make HTTP request (sync)."""
         self._ensure_session()
+        if self._loop is None:
+            raise RuntimeError("Event loop not initialized")
         future = asyncio.run_coroutine_threadsafe(
             self.async_request(method, url, **kwargs), self._loop
         )
         return future.result()
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         """Method generation for HTTP verbs."""
         if name in ["get", "post", "put", "patch", "delete"]:
             return lambda url, **kwargs: self.request(name.upper(), url, **kwargs)
@@ -204,20 +207,17 @@ class ETMSession:
             method = name[6:].upper()
             return lambda url, **kwargs: self.async_request(method, url, **kwargs)
 
-        raise AttributeError(
-            f"'{self.__class__.__name__}' object has no attribute '{name}'"
-        )
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    async def async_request(self, method: str, url: str, **kwargs) -> ETMResponse:
+    async def async_request(self, method: str, url: str, **kwargs: Any) -> ETMResponse:
         """Make async HTTP request."""
         request_kwargs = self._build_request_kwargs(**kwargs)
-        full_url = (
-            url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
-        )
+        full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
 
-        async with self._session.request(
-            method, full_url, **request_kwargs
-        ) as response:
+        if self._session is None:
+            raise RuntimeError("Session not initialized")
+
+        async with self._session.request(method, full_url, **request_kwargs) as response:
             etm_response = ETMResponse(
                 status_code=response.status,
                 headers=dict(response.headers),
@@ -241,25 +241,21 @@ class ETMSession:
 
             return etm_response
 
-    def _build_request_kwargs(self, **kwargs) -> dict:
+    def _build_request_kwargs(self, **kwargs: Any) -> Dict[str, Any]:
         """Build request kwargs for aiohttp."""
-        request_kwargs = {}
+        request_kwargs: Dict[str, Any] = {}
 
         if "files" in kwargs:
-            data = aiohttp.FormData()
+            form_data = aiohttp.FormData()
 
             for field_name, file_tuple in kwargs["files"].items():
                 filename, file_content, content_type = file_tuple
-                content = (
-                    file_content.read()
-                    if hasattr(file_content, "read")
-                    else file_content
-                )
-                data.add_field(
+                content = file_content.read() if hasattr(file_content, "read") else file_content
+                form_data.add_field(
                     field_name, content, filename=filename, content_type=content_type
                 )
 
-            request_kwargs["data"] = data
+            request_kwargs["data"] = form_data
             request_kwargs["headers"] = {
                 k: v for k, v in self.headers.items() if k != "Content-Type"
             }
@@ -273,15 +269,15 @@ class ETMSession:
             request_kwargs["data"] = kwargs["data"]
 
         if "headers" in kwargs:
-            headers = dict(self.headers)
+            headers: Dict[str, str] = dict(self.headers)
             headers.update(kwargs["headers"])
             request_kwargs["headers"] = headers
 
         return request_kwargs
 
-    def close(self):
+    def close(self) -> None:
         """Close session and clean up resources."""
-        if self._session:
+        if self._session and self._loop:
             future = asyncio.run_coroutine_threadsafe(self._session.close(), self._loop)
             future.result()
 

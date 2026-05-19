@@ -40,7 +40,7 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario: Any, inputs: Dict[str, Any], **kwargs
+        client: BaseClient, scenario: Any, inputs: Dict[str, Any], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update inputs for a scenario.

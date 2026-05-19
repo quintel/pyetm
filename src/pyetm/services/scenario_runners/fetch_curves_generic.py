@@ -23,6 +23,7 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
         scenario: Any,
         curve_name: str,
         curve_type: Literal["custom", "output"] = "output",
+        **kwargs: Any,
     ) -> ServiceResult[Any]:
         path = (
             f"/scenarios/{scenario.id}/custom_curves/{curve_name}.csv"
@@ -48,7 +49,7 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
             resp = result.data
             # TODO: is this ok to return a io object??
             # Is this what causes IO pressure?
-            return ServiceResult.ok(data=io.StringIO(resp.content.decode("utf-8")))
+            return ServiceResult.ok(data=io.StringIO(resp.content.decode("utf-8")))  # type: ignore[union-attr]
         except Exception as e:
             return ServiceResult.fail([f"Failed to parse curve data: {e}"])
 
@@ -67,8 +68,8 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
     @staticmethod
     def _build_requests(
         scenario: Any, curve_names: List[str], curve_type: Literal["custom", "output"]
-    ) -> List[dict]:
-        requests: List[dict] = []
+    ) -> List[Dict[str, Any]]:
+        requests: List[Dict[str, Any]] = []
         for name in curve_names:
             path = (
                 f"/scenarios/{scenario.id}/custom_curves/{name}.csv"
@@ -94,6 +95,7 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
         curve_names: List[str],
         curve_type: Literal["custom", "output"] = "output",
         batch_size: Optional[int] = None,
+        **kwargs: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         batch_size = batch_size or (
             GenericCurveBulkRunner.DEFAULT_BATCH_SIZE_OUTPUT
@@ -104,9 +106,7 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
         curves_data: Dict[str, io.StringIO] = {}
         errors: List[str] = []
 
-        all_requests = GenericCurveBulkRunner._build_requests(
-            scenario, curve_names, curve_type
-        )
+        all_requests = GenericCurveBulkRunner._build_requests(scenario, curve_names, curve_type)
         for start in range(0, len(all_requests), batch_size):
             chunk = all_requests[start : start + batch_size]
             try:
@@ -122,7 +122,7 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
                 if result.success:
                     try:
                         resp = result.data
-                        curves_data[name] = io.StringIO(resp.content.decode("utf-8"))
+                        curves_data[name] = io.StringIO(resp.content.decode("utf-8"))  # type: ignore[union-attr]
                     except Exception as e:
                         errors.append(f"{name}: parse error {e}")
                 else:

@@ -56,9 +56,7 @@ def test_break_preset_link_http_failure_401(dummy_client, fake_response, dummy_s
 
 
 def test_break_preset_link_http_failure_422(dummy_client, fake_response, dummy_scenario):
-    response = fake_response(
-        ok=False, status_code=422, text="Cannot modify this scenario"
-    )
+    response = fake_response(ok=False, status_code=422, text="Cannot modify this scenario")
     client = dummy_client(response, method="put")
     scenario = dummy_scenario(123)
 

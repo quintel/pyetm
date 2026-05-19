@@ -35,11 +35,10 @@ class CustomCurve(Base):
 
     # TODO: validation of length and read csv are same for this method and content method
     # extract them!
-    def retrieve(self, client, scenario) -> Optional[pd.Series]:
+    def retrieve(self, client: Any, scenario: Any) -> Optional[pd.Series[Any]]:
         """Process curve from client, save to file, set file_path"""
         file_path = (
-            get_settings().path_to_tmp(str(scenario.id))
-            / f"{self.key.replace('/','-')}.csv"
+            get_settings().path_to_tmp(str(scenario.id)) / f"{self.key.replace('/', '-')}.csv"
         )
 
         # TODO: Examine the caching situation in the future if time permits: could be particularly
@@ -50,15 +49,17 @@ class CustomCurve(Base):
         try:
             result = DownloadCustomCurveRunner.run(client, scenario, self.key)
 
-            if result.success:
+            if result.success and result.data is not None:
                 try:
-                    curve = (
-                        pd.read_csv(
-                            result.data, header=None, index_col=False, dtype=float
-                        )
-                        .squeeze("columns")
-                        .dropna(how="all")
-                    )
+                    raw_df = pd.read_csv(result.data, header=None, index_col=False, dtype=float)
+                    df_or_series = raw_df.squeeze("columns")
+                    if isinstance(df_or_series, pd.DataFrame):
+                        curve = df_or_series.dropna(how="all").iloc[:, 0]
+                    elif isinstance(df_or_series, pd.Series):
+                        curve = df_or_series.dropna(how="all")
+                    else:
+                        # If it's somehow something else, convert to Series
+                        curve = pd.Series(df_or_series, dtype=float).dropna(how="all")
                     if len(curve) != 8760:
                         self.add_warning(
                             self.key,
@@ -67,7 +68,7 @@ class CustomCurve(Base):
 
                     self.file_path = file_path
                     curve.to_csv(self.file_path, index=False, header=False)
-                    return curve.rename(self.key)
+                    return pd.Series(curve.values, name=self.key)
                 except Exception as e:
                     # File processing error - add warning and return None
                     self.add_warning(self.key, f"Failed to process curve data: {e}")
@@ -83,31 +84,38 @@ class CustomCurve(Base):
             self.add_warning(self.key, f"Unexpected error retrieving curve: {e}")
             return None
 
-    def contents(self) -> Optional[pd.Series]:
+    def contents(self) -> Optional[pd.Series[Any]]:
         """Open file from path and return contents"""
         if not self.available():
             self.add_warning(self.key, f"Curve not available - no file path set")
             return None
 
         try:
-            series = (
-                pd.read_csv(self.file_path, header=None, index_col=False, dtype=float)
-                .squeeze("columns")
-                .dropna(how="all")
-            )
+            if self.file_path is None:
+                self.add_warning(self.key, f"Curve has no file path set")
+                return None
+            raw_df = pd.read_csv(self.file_path, header=None, index_col=False, dtype=float)
+            df_or_series = raw_df.squeeze("columns")
+            if isinstance(df_or_series, pd.DataFrame):
+                series = df_or_series.dropna(how="all").iloc[:, 0]
+            elif isinstance(df_or_series, pd.Series):
+                series = df_or_series.dropna(how="all")
+            else:
+                # If it's somehow something else, convert to Series
+                series = pd.Series(df_or_series, dtype=float).dropna(how="all")
             if len(series) != 8760:
                 self.add_warning(
                     self.key,
                     f"Curve length should be 8760, got {len(series)}; using available data",
                 )
-            return series.rename(self.key)
+            return pd.Series(series.values, name=self.key)
         except Exception as e:
             self.add_warning(self.key, f"Failed to read curve file: {e}")
             return None
 
     def remove(self) -> bool:
         """Remove file and clear path"""
-        if not self.available():
+        if not self.available() or self.file_path is None:
             return True
 
         try:
@@ -119,7 +127,7 @@ class CustomCurve(Base):
             return False
 
     @classmethod
-    def from_json(cls, data: dict) -> CustomCurve:
+    def from_json(cls, data: dict[str, Any]) -> "CustomCurve":
         """
         Initialize a CustomCurve from JSON data
         """
@@ -142,7 +150,7 @@ class CustomCurve(Base):
             curve.add_warning("base", f"Failed to create curve from data: {e}")
             return curve
 
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
         """
         Serialize CustomCurve to DataFrame with time series data.
         """
@@ -157,15 +165,13 @@ class CustomCurve(Base):
 
     @classmethod
     def _from_dataframe(
-        cls, df: pd.DataFrame, scenario_id: str | int | None = None, **kwargs
+        cls, df: pd.DataFrame, scenario_id: str | int | None = None, **kwargs: Any
     ) -> "CustomCurve":
         """
         Create CustomCurve from DataFrame containing time series data.
         """
         if len(df.columns) != 1:
-            raise ValueError(
-                f"DataFrame must contain exactly 1 column, got {len(df.columns)}"
-            )
+            raise ValueError(f"DataFrame must contain exactly 1 column, got {len(df.columns)}")
 
         curve_key = df.columns[0]
         curve_data_dict = {
@@ -178,17 +184,13 @@ class CustomCurve(Base):
             curve_data = df.iloc[:, 0].dropna()
             if not curve_data.empty:
                 safe_key = str(curve_key).replace("/", "-")
-                file_path = (
-                    get_settings().path_to_tmp(str(scenario_id)) / f"{safe_key}.csv"
-                )
+                file_path = get_settings().path_to_tmp(str(scenario_id)) / f"{safe_key}.csv"
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     curve_data.to_csv(file_path, index=False, header=False)
                     curve.file_path = file_path
                 except Exception as e:
-                    curve.add_warning(
-                        curve_key, f"Failed to save curve data to file: {e}"
-                    )
+                    curve.add_warning(curve_key, f"Failed to save curve data to file: {e}")
         return curve
 
 
@@ -203,20 +205,18 @@ class CustomCurves(Base):
     def __len__(self) -> int:
         return len(self.curves)
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         yield from iter(self.curves)
 
     def is_attached(self, curve_name: str) -> bool:
         """Returns true if that curve is attached"""
         return any((curve_name == key for key in self.attached_keys()))
 
-    def attached_keys(self):
+    def attached_keys(self) -> Any:
         """Returns the keys of attached curves"""
         yield from (curve.key for curve in self.curves)
 
-    def get_contents(
-        self, scenario, curve_name: str
-    ) -> Optional[pd.DataFrame | pd.Series]:
+    def get_contents(self, scenario: Any, curve_name: str) -> Optional[pd.DataFrame | pd.Series[Any]]:
         curve = self._find(curve_name)
 
         if not curve:
@@ -237,7 +237,7 @@ class CustomCurves(Base):
         return next((c for c in self.curves if c.key == curve_name), None)
 
     @classmethod
-    def from_json(cls, data: list[dict]) -> CustomCurves:
+    def from_json(cls, data: list[dict[str, Any]]) -> "CustomCurves":
         """
         Initialize CustomCurves collection from JSON data
         """
@@ -258,7 +258,7 @@ class CustomCurves(Base):
         collection._merge_submodel_warnings(*curves, key_attr="key")
         return collection
 
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
         """
         Serialize CustomCurves collection to DataFrame with time series data.
         """
@@ -269,10 +269,7 @@ class CustomCurves(Base):
 
         for curve in self.curves:
             try:
-                if (
-                    not curve.available()
-                    and getattr(self, "_scenario", None) is not None
-                ):
+                if not curve.available() and getattr(self, "_scenario", None) is not None:
                     try:
                         curve.retrieve(BaseClient(), self._scenario)
                     except Exception:
@@ -288,9 +285,7 @@ class CustomCurves(Base):
 
             except Exception as e:
                 curve_columns[curve.key] = pd.Series(dtype=float, name=curve.key)
-                self.add_warning(
-                    "curves", f"Failed to serialize curve {curve.key}: {e}"
-                )
+                self.add_warning("curves", f"Failed to serialize curve {curve.key}: {e}")
 
         if curve_columns:
             # Combine all curves into a single DataFrame
@@ -302,25 +297,21 @@ class CustomCurves(Base):
 
     @classmethod
     def _from_dataframe(
-        cls, df: pd.DataFrame, scenario_id: str | int | None = None, **kwargs
+        cls, df: pd.DataFrame, scenario_id: str | int | None = None, **kwargs: Any
     ) -> "CustomCurves":
         """
         Create CustomCurves collection from DataFrame with time series data.
         """
-        curves = []
+        curves: list[CustomCurve] = []
         if len(df.columns) == 0:
             return cls.model_validate({"curves": curves})
         for column_name in df.columns:
             try:
                 curve_df = df[[column_name]]
-                curve = CustomCurve._from_dataframe(
-                    curve_df, scenario_id=scenario_id, **kwargs
-                )
+                curve = CustomCurve._from_dataframe(curve_df, scenario_id=scenario_id, **kwargs)
                 curves.append(curve)
             except Exception as e:
-                basic_curve = CustomCurve.model_construct(
-                    key=column_name, type="custom"
-                )
+                basic_curve = CustomCurve.model_construct(key=column_name, type="custom")
                 basic_curve.add_warning(
                     "base", f"Failed to create curve from column {column_name}: {e}"
                 )
@@ -334,7 +325,7 @@ class CustomCurves(Base):
         """
         Validate all curves for upload
         """
-        validation_errors = {}
+        validation_errors: dict[str, WarningCollector] = {}
 
         for curve in self.curves:
             curve_warnings = WarningCollector()
@@ -347,9 +338,11 @@ class CustomCurves(Base):
             try:
                 try:
                     # Read without dtype conversion to preserve non-numeric values
-                    raw_data = pd.read_csv(
-                        curve.file_path, header=None, index_col=False
-                    )
+                    if curve.file_path is None:
+                        curve_warnings.add(curve.key, "Curve has no file path")
+                        validation_errors[curve.key] = curve_warnings
+                        continue
+                    raw_data = pd.read_csv(curve.file_path, header=None, index_col=False)
                     if raw_data.empty:
                         curve_warnings.add(curve.key, "Curve contains no data")
                         validation_errors[curve.key] = curve_warnings
@@ -366,9 +359,7 @@ class CustomCurves(Base):
                             # Try to convert to numeric, this will raise if there are non-numeric values
                             pd.to_numeric(raw_data.iloc[:, 0], errors="raise")
                         except (ValueError, TypeError):
-                            curve_warnings.add(
-                                curve.key, "Curve contains non-numeric values"
-                            )
+                            curve_warnings.add(curve.key, "Curve contains non-numeric values")
 
                 except pd.errors.EmptyDataError:
                     curve_warnings.add(curve.key, "Curve contains no data")

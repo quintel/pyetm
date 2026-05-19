@@ -17,9 +17,7 @@ class TestCreateManyWithUserValues:
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
     @patch("pyetm.models.scenario.Scenario.from_scenario")
     @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_inputs(
-        self, mock_session_new, mock_from_scenario, mock_apply_data
-    ):
+    def test_create_many_with_inputs(self, mock_session_new, mock_from_scenario, mock_apply_data):
         """Test that user_values are passed to concurrent data application."""
         # Mock Session.new to return mock sessions
         mock_session_1 = Mock()
@@ -484,9 +482,7 @@ class TestCreateManyWithTemplateId:
 
     @patch("pyetm.models.scenario.Scenario.from_scenario")
     @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_template_id_only(
-        self, mock_session_new, mock_from_scenario
-    ):
+    def test_create_many_with_template_id_only(self, mock_session_new, mock_from_scenario):
         """Test that template_id allows creating scenarios without area_code and end_year."""
         # Mock Session.new to return mock session
         mock_session = Mock()
@@ -575,9 +571,7 @@ class TestCreateManyWithTemplateId:
             },
         ]
 
-        result = scenarios.create_many(
-            params, area_code="nl", end_year=2050
-        )
+        result = scenarios.create_many(params, area_code="nl", end_year=2050)
 
         assert len(result.items) == 1
 

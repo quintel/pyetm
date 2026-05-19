@@ -1,7 +1,7 @@
 """Sortable items packing utilities."""
 
 import logging
-from typing import ClassVar, Any
+from typing import ClassVar, Any, Optional
 import pandas as pd
 from pyetm.models.packables.packable import Packable
 from pyetm.utils import excel_utils
@@ -20,29 +20,33 @@ class SortablePack(Packable):
     key: ClassVar[str] = "sortables"
     sheet_name: ClassVar[str] = "SORTABLES"
 
-    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs):
+    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "", **kwargs: Any) -> pd.DataFrame | None:
         try:
             df = scenario.sortables.to_dataframe()
             self.log_scenario_warnings(scenario, "_sortables", "Sortables")
         except Exception as e:
-            logger.warning(
-                "Failed extracting sortables for %s: %s", scenario.identifier(), e
-            )
+            logger.warning("Failed extracting sortables for %s: %s", scenario.identifier(), e)
             return None
         return df if not df.empty else None
 
-    def _to_dataframe(self, columns="", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, columns: str = "", **kwargs: Any) -> pd.DataFrame:
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
     def import_scenario_specific_sheet(
-        self, excel_file: pd.ExcelFile, sheet_name: str, scenario: "Any", update_set: set[str] = None
-    ):
+        self,
+        excel_file: pd.ExcelFile,
+        sheet_name: str,
+        scenario: Any,
+        update_set: Optional[set[str]] = None,
+    ) -> None:
         """Import sortables from a scenario-specific sheet."""
         df = excel_utils.parse_excel_sheet(excel_file, sheet_name, header=None)
         if df is not None and not df.empty:
             self.process_single_scenario_sortables(scenario, df, update_set)
 
-    def process_single_scenario_sortables(self, scenario: "Any", df: pd.DataFrame, update_set: set[str] = None):
+    def process_single_scenario_sortables(
+        self, scenario: Any, df: pd.DataFrame, update_set: Optional[set[str]] = None
+    ) -> None:
         """Process sortables data for a single scenario."""
         normalized_data = excel_utils.normalize_sheet(
             df,
@@ -56,7 +60,9 @@ class SortablePack(Packable):
 
         self.apply_sortables_to_scenario(scenario, normalized_data, update_set)
 
-    def apply_sortables_to_scenario(self, scenario: "Any", data: pd.DataFrame, update_set: set[str] = None):
+    def apply_sortables_to_scenario(
+        self, scenario: Any, data: pd.DataFrame, update_set: Optional[set[str]] = None
+    ) -> None:
         """Apply sortables data to scenario with error handling."""
         skip_upload = not self._should_include_upload(update_set)
 
@@ -64,11 +70,9 @@ class SortablePack(Packable):
             scenario.set_sortables_from_dataframe(data, skip_upload=skip_upload)
             self.log_scenario_warnings(scenario, "_sortables", "Sortables")
         except Exception as e:
-            logger.warning(
-                "Failed processing sortables for '%s': %s", scenario.identifier(), e
-            )
+            logger.warning("Failed processing sortables for '%s': %s", scenario.identifier(), e)
 
-    def from_dataframe(self, df: pd.DataFrame):
+    def from_dataframe(self, df: pd.DataFrame) -> None:
         """Unpack and update sortables for each scenario from the sheet."""
         if df is None or getattr(df, "empty", False):
             return
@@ -85,7 +89,7 @@ class SortablePack(Packable):
         if df is None or df.empty:
             return
 
-        def _apply(scenario, block: pd.DataFrame):
+        def _apply(scenario: Any, block: pd.DataFrame) -> None:
             scenario.set_sortables_from_dataframe(block)
             self.log_scenario_warnings(scenario, "_sortables", "Sortables")
 

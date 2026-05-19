@@ -17,9 +17,7 @@ def test_interpolate_success_two_scenarios(dummy_client, fake_response):
     response = fake_response(ok=True, status_code=200, json_data=body)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 67890], end_years=[2040]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 67890], end_years=[2040])
 
     assert result.success is True
     assert result.data == body
@@ -98,9 +96,7 @@ def test_interpolate_failure_too_few_scenarios(dummy_client, fake_response):
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345], end_years=[2040]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345], end_years=[2040])
 
     assert result.success is False
     assert result.data is None
@@ -114,9 +110,7 @@ def test_interpolate_failure_empty_end_years(dummy_client, fake_response):
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 67890], end_years=[]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 67890], end_years=[])
 
     assert result.success is False
     assert result.data is None
@@ -129,9 +123,7 @@ def test_interpolate_failure_missing_scenario(dummy_client, fake_response):
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 999999], end_years=[2040]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 999999], end_years=[2040])
 
     assert result.success is False
     assert result.data is None
@@ -140,15 +132,11 @@ def test_interpolate_failure_missing_scenario(dummy_client, fake_response):
 
 def test_interpolate_failure_mismatched_area_codes(dummy_client, fake_response):
     """Test handling of validation error: scenarios with different area codes"""
-    error_response = {
-        "errors": {"scenario_ids": ["all scenarios must have the same area code"]}
-    }
+    error_response = {"errors": {"scenario_ids": ["all scenarios must have the same area code"]}}
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 67890], end_years=[2040]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 67890], end_years=[2040])
 
     assert result.success is False
     assert result.data is None
@@ -163,9 +151,7 @@ def test_interpolate_failure_invalid_target_year(dummy_client, fake_response):
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 67890], end_years=[2055]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 67890], end_years=[2055])
 
     assert result.success is False
     assert result.data is None
@@ -174,15 +160,11 @@ def test_interpolate_failure_invalid_target_year(dummy_client, fake_response):
 
 def test_interpolate_failure_scaled_scenario(dummy_client, fake_response):
     """Test handling of validation error: cannot interpolate scaled scenarios"""
-    error_response = {
-        "errors": {"scenario_ids": ["cannot interpolate scaled scenario 12345"]}
-    }
+    error_response = {"errors": {"scenario_ids": ["cannot interpolate scaled scenario 12345"]}}
     response = fake_response(ok=False, status_code=422, json_data=error_response)
     client = dummy_client(response, method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 67890], end_years=[2040]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 67890], end_years=[2040])
 
     assert result.success is False
     assert result.data is None
@@ -193,9 +175,7 @@ def test_interpolate_connection_error(dummy_client):
     """Test handling of connection errors"""
     client = dummy_client(ConnectionError("Connection failed"), method="post")
 
-    result = InterpolateScenariosRunner.run(
-        client, scenario_ids=[12345, 67890], end_years=[2040]
-    )
+    result = InterpolateScenariosRunner.run(client, scenario_ids=[12345, 67890], end_years=[2040])
 
     assert result.success is False
     assert result.data is None

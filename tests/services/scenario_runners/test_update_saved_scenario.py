@@ -16,15 +16,11 @@ def test_update_saved_scenario_success_single_field(dummy_client, fake_response)
 
     update_data = {"title": "Updated Title"}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})
-    ]
+    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
 
 
 def test_update_saved_scenario_success_multiple_fields(dummy_client, fake_response):
@@ -43,15 +39,11 @@ def test_update_saved_scenario_success_multiple_fields(dummy_client, fake_respon
         "private": True,
     }
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})
-    ]
+    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
 
 
 def test_update_saved_scenario_success_all_allowed_fields(dummy_client, fake_response):
@@ -72,15 +64,11 @@ def test_update_saved_scenario_success_all_allowed_fields(dummy_client, fake_res
         "discarded": False,
     }
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})
-    ]
+    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
 
 
 def test_update_saved_scenario_empty_update_data(dummy_client, fake_response):
@@ -89,9 +77,7 @@ def test_update_saved_scenario_empty_update_data(dummy_client, fake_response):
 
     update_data = {}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert "No fields provided for update" in result.errors
@@ -115,9 +101,7 @@ def test_update_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         "invalid_field": "value",  # Invalid - should be filtered
     }
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is True
     assert result.data == body
 
@@ -131,9 +115,7 @@ def test_update_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         assert warning in result.errors
 
     # Should only send valid fields
-    expected_payload = {
-        "saved_scenario": {"title": "Updated Title", "scenario_id": 123}
-    }
+    expected_payload = {"saved_scenario": {"title": "Updated Title", "scenario_id": 123}}
     assert client.calls == [("/saved_scenarios/456", {"json": expected_payload})]
 
 
@@ -146,9 +128,7 @@ def test_update_saved_scenario_only_invalid_fields(dummy_client, fake_response):
         "invalid_field": "value",  # Invalid
     }
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert "No valid fields provided for update" in result.errors
@@ -162,9 +142,7 @@ def test_update_saved_scenario_http_failure_422(dummy_client, fake_response):
 
     update_data = {"title": ""}  # Invalid empty title
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert result.errors == ["422: Validation Error"]
@@ -177,9 +155,7 @@ def test_update_saved_scenario_http_failure_401(dummy_client, fake_response):
 
     update_data = {"title": "New Title"}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert result.errors == ["401: Unauthorized"]
@@ -192,9 +168,7 @@ def test_update_saved_scenario_http_failure_404(dummy_client, fake_response):
 
     update_data = {"title": "New Title"}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=99999, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=99999, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert result.errors == ["404: SavedScenario not found"]
@@ -209,9 +183,7 @@ def test_update_saved_scenario_http_failure_403(dummy_client, fake_response):
 
     update_data = {"title": "New Title"}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert result.errors == ["403: Not authorized to update this scenario"]
@@ -223,9 +195,7 @@ def test_update_saved_scenario_connection_error(dummy_client):
 
     update_data = {"title": "New Title"}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is False
     assert result.data is None
     assert any("Connection failed" in err for err in result.errors)
@@ -261,9 +231,7 @@ def test_update_saved_scenario_payload_structure(dummy_client, fake_response):
         "title": "Test Title",
     }
 
-    UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
 
     # Verify the exact payload structure
     expected_call = (
@@ -284,15 +252,11 @@ def test_update_saved_scenario_discard(dummy_client, fake_response):
 
     update_data = {"discarded": True}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})
-    ]
+    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
 
 
 def test_update_saved_scenario_change_privacy(dummy_client, fake_response):
@@ -306,12 +270,8 @@ def test_update_saved_scenario_change_privacy(dummy_client, fake_response):
 
     update_data = {"private": True}
 
-    result = UpdateSavedScenarioRunner.run(
-        client, saved_scenario_id=456, update_data=update_data
-    )
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})
-    ]
+    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]

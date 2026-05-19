@@ -70,9 +70,7 @@ def test_make_request_post_with_json_payload():
     mock_client.session.post.return_value = mock_response
 
     payload = {"data": "create_value"}
-    result = RealRunner._make_request(
-        mock_client, "POST", "/test-path", payload=payload
-    )
+    result = RealRunner._make_request(mock_client, "POST", "/test-path", payload=payload)
 
     assert result.success
     assert result.data == {"created": "success"}
@@ -89,9 +87,7 @@ def test_make_request_patch_with_json_payload():
     mock_client.session.patch.return_value = mock_response
 
     payload = {"data": "patch_value"}
-    result = RealRunner._make_request(
-        mock_client, "PATCH", "/test-path", payload=payload
-    )
+    result = RealRunner._make_request(mock_client, "PATCH", "/test-path", payload=payload)
 
     assert result.success
     assert result.data == {"patched": "success"}
@@ -128,15 +124,11 @@ def test_make_request_with_payload_and_kwargs():
     mock_client.session.put.return_value = mock_response
 
     payload = {"data": "value"}
-    result = RealRunner._make_request(
-        mock_client, "PUT", "/test-path", payload=payload, timeout=30
-    )
+    result = RealRunner._make_request(mock_client, "PUT", "/test-path", payload=payload, timeout=30)
 
     assert result.success
     assert result.data == {"result": "success"}
-    mock_client.session.put.assert_called_once_with(
-        "/test-path", json=payload, timeout=30
-    )
+    mock_client.session.put.assert_called_once_with("/test-path", json=payload, timeout=30)
 
 
 def test_make_request_non_json_response():

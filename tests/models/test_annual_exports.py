@@ -17,11 +17,11 @@ def test_annual_exports_to_dataframe_with_exports():
     # Create mock exports with data
     export1 = AnnualExport(
         name="energy_flow",
-        data=pd.DataFrame({"carrier": ["electricity", "gas"], "value": [100, 200]})
+        data=pd.DataFrame({"carrier": ["electricity", "gas"], "value": [100, 200]}),
     )
     export2 = AnnualExport(
         name="production_parameters",
-        data=pd.DataFrame({"parameter": ["cost", "capacity"], "amount": [50, 75]})
+        data=pd.DataFrame({"parameter": ["cost", "capacity"], "amount": [50, 75]}),
     )
 
     exports = AnnualExports(exports={"energy_flow": export1, "production_parameters": export2})
@@ -41,12 +41,10 @@ def test_annual_exports_to_dataframe_with_exports():
 def test_annual_exports_to_dataframe_filtered():
     """Test to_dataframe with export filtering"""
     export1 = AnnualExport(
-        name="energy_flow",
-        data=pd.DataFrame({"carrier": ["electricity"], "value": [100]})
+        name="energy_flow", data=pd.DataFrame({"carrier": ["electricity"], "value": [100]})
     )
     export2 = AnnualExport(
-        name="production_parameters",
-        data=pd.DataFrame({"parameter": ["cost"], "amount": [50]})
+        name="production_parameters", data=pd.DataFrame({"parameter": ["cost"], "amount": [50]})
     )
 
     exports = AnnualExports(exports={"energy_flow": export1, "production_parameters": export2})
@@ -62,8 +60,7 @@ def test_annual_exports_to_dataframe_unavailable_skipped():
     """Test to_dataframe skips unavailable exports"""
     export1 = AnnualExport(name="energy_flow", data=None)  # No data
     export2 = AnnualExport(
-        name="production_parameters",
-        data=pd.DataFrame({"parameter": ["cost"], "amount": [50]})
+        name="production_parameters", data=pd.DataFrame({"parameter": ["cost"], "amount": [50]})
     )
 
     exports = AnnualExports(exports={"energy_flow": export1, "production_parameters": export2})
@@ -78,13 +75,9 @@ def test_annual_exports_to_dataframe_unavailable_skipped():
 def test_annual_exports_to_dataframe_heterogeneous_schemas():
     """Test to_dataframe with exports that have different columns (outer join)"""
     export1 = AnnualExport(
-        name="energy_flow",
-        data=pd.DataFrame({"carrier": ["electricity"], "value": [100]})
+        name="energy_flow", data=pd.DataFrame({"carrier": ["electricity"], "value": [100]})
     )
-    export2 = AnnualExport(
-        name="costs",
-        data=pd.DataFrame({"category": ["capex"], "cost": [500]})
-    )
+    export2 = AnnualExport(name="costs", data=pd.DataFrame({"category": ["capex"], "cost": [500]}))
 
     exports = AnnualExports(exports={"energy_flow": export1, "costs": export2})
     df = exports.to_dataframe()
