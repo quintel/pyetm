@@ -1,3 +1,5 @@
+"""Warning collection and management for scenarios."""
+
 from __future__ import annotations
 from typing import Any, Optional, Dict, List, Union, Literal
 from dataclasses import dataclass, field

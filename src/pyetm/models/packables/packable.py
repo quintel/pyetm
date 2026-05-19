@@ -1,3 +1,5 @@
+"""Base class for packable scenario components."""
+
 from typing import ClassVar, Set, Callable, Optional, Dict, Any, Union, TYPE_CHECKING
 import logging
 import pandas as pd

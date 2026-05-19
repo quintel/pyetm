@@ -1,3 +1,5 @@
+"""Input packing utilities for batch scenario operations."""
+
 import logging
 from typing import ClassVar, Dict, Any, List, Optional
 from openpyxl import Workbook

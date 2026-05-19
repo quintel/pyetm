@@ -1,3 +1,5 @@
+"""Custom curves packing utilities."""
+
 import logging
 from typing import ClassVar, Any
 import pandas as pd

@@ -1,3 +1,5 @@
+"""Excel file utilities for reading and writing scenario data."""
+
 from __future__ import annotations
 
 import math

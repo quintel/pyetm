@@ -1,3 +1,5 @@
+"""Service for updating metadata on a scenario."""
+
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult

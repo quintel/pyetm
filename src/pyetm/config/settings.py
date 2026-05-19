@@ -1,3 +1,5 @@
+"""Application configuration and settings management."""
+
 from pathlib import Path
 import functools
 import logging

@@ -1,3 +1,5 @@
+"""Base models and shared functionality."""
+
 from __future__ import annotations
 from typing import Any, Type, TypeVar, Union, List, Dict
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict

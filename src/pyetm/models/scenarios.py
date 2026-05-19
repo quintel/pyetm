@@ -1,3 +1,5 @@
+"""Collection and bulk operations for scenarios."""
+
 from __future__ import annotations
 import logging
 from os import PathLike

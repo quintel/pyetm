@@ -1,3 +1,5 @@
+"""Hourly output curve data models."""
+
 from __future__ import annotations
 from functools import lru_cache
 import pandas as pd

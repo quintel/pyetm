@@ -1,3 +1,5 @@
+"""Service for fetch custom curves operations."""
+
 import io
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner

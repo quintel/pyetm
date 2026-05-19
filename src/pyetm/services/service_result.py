@@ -1,3 +1,5 @@
+"""Service result wrapper for operation outcomes."""
+
 from __future__ import annotations
 from typing import Generic, TypeVar, Optional
 from pydantic import BaseModel

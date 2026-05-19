@@ -1,3 +1,5 @@
+"""Sortable items management for scenarios."""
+
 from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 

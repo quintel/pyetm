@@ -1,3 +1,5 @@
+"""Service for updating a 'sortable'"""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -44,7 +46,7 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
             "method": "put",
             "path": path,
             "payload": {"order": order},
-            "kwargs": {}
+            "kwargs": {},
         }
 
     @staticmethod

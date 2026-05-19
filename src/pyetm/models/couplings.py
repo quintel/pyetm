@@ -1,3 +1,5 @@
+"""Coupling configuration for interconnected scenarios."""
+
 from __future__ import annotations
 from typing import List, Set
 from pyetm.models.base import Base

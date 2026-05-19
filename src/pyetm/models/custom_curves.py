@@ -1,3 +1,5 @@
+"""Custom curve data models for scenario inputs."""
+
 from __future__ import annotations
 import pandas as pd
 from pathlib import Path

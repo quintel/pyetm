@@ -1,3 +1,5 @@
+"""Async HTTP session management for ETM API."""
+
 from __future__ import annotations
 import pandas as pd
 from datetime import datetime

@@ -1,3 +1,5 @@
+"""Annual exports packing utilities."""
+
 import logging
 from typing import ClassVar, Any, Optional, Sequence
 import pandas as pd

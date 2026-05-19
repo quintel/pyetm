@@ -1,3 +1,5 @@
+"""Utilities for loading scenarios from various sources."""
+
 import logging
 from typing import Protocol, Optional, Dict, Any
 from pyetm.models.session import Session

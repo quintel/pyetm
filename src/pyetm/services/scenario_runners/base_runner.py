@@ -1,3 +1,5 @@
+"""Base runner class for scenario operations."""
+
 from typing import Any, Dict, List, Optional, TypeVar, Generic, Protocol
 from abc import ABC, abstractmethod
 from ..service_result import ServiceResult

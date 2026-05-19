@@ -1,3 +1,5 @@
+"""Service for update custom curves operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult

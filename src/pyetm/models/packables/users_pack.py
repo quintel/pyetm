@@ -1,3 +1,5 @@
+"""User data packing utilities."""
+
 import logging
 from typing import ClassVar, Dict, Any, List, Optional
 from openpyxl import Workbook

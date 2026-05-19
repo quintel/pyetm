@@ -1,3 +1,5 @@
+"""Service for fetch curves generic operations."""
+
 import io
 from typing import Any, Dict, Literal, List, Optional
 from pyetm.services.scenario_runners.base_runner import BaseRunner

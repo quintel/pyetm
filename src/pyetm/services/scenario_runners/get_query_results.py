@@ -1,3 +1,5 @@
+"""Service for get query results operations."""
+
 from typing import Any, Dict
 
 from pyetm.services.scenario_runners.base_runner import BaseRunner

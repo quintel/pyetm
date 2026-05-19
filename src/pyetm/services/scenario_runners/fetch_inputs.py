@@ -1,3 +1,5 @@
+"""Service for fetch inputs operations."""
+
 from typing import Any, Dict, Optional
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult

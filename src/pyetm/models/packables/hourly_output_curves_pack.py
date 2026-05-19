@@ -1,3 +1,5 @@
+"""Hourly output curves packing utilities."""
+
 import logging
 from typing import ClassVar, Any, Optional, Sequence, Tuple
 from xlsxwriter import Workbook

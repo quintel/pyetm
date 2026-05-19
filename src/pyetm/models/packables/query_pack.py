@@ -1,3 +1,5 @@
+"""Query packing utilities for batch GQL queries."""
+
 import logging
 from typing import ClassVar, Any, Dict, Optional, List, Iterable
 from xlsxwriter import Workbook

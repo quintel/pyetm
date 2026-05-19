@@ -1,3 +1,5 @@
+"""Base HTTP client for ETM API communication."""
+
 from __future__ import annotations
 
 import asyncio

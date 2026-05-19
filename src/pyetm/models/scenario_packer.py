@@ -1,3 +1,5 @@
+"""Scenario packing utilities for creating multiple scenario variations."""
+
 import pandas as pd
 import logging
 from pathlib import Path

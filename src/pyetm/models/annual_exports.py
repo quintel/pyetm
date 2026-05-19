@@ -1,3 +1,5 @@
+"""Annual export data models and configurations."""
+
 from __future__ import annotations
 import pandas as pd
 from typing import Optional

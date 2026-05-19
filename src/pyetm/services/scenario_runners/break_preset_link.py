@@ -1,3 +1,5 @@
+"""Service for breaking preset scenario links."""
+
 from typing import Any, Dict, Union
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult

@@ -1,4 +1,4 @@
-# Setting up everything for you!
+"""Helper functions for example notebooks."""
 
 
 def setup_logging(level="WARNING"):

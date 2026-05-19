@@ -1,3 +1,5 @@
+"""Singleton metaclass implementation."""
+
 import threading
 
 

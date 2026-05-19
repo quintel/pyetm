@@ -1,3 +1,5 @@
+"""Scenario model for ETM scenario management."""
+
 from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING

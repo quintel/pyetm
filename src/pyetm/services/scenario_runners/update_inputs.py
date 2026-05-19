@@ -1,3 +1,5 @@
+"""Service for updating inputs on a session."""
+
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -33,7 +35,7 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
             "method": "put",
             "path": f"/scenarios/{scenario.id}",
             "payload": {"scenario": {"user_values": inputs}},
-            "kwargs": {}
+            "kwargs": {},
         }
 
     @staticmethod
