@@ -31,7 +31,7 @@ class GetQueryResultsRunner(BaseRunner[Dict[str, Any]]):
             client=client,
             method="put",
             path=f"/scenarios/{scenario.id}",
-            json={"gqueries": gquery_keys},
+            payload={"gqueries": gquery_keys},
         )
 
         if not response.success:

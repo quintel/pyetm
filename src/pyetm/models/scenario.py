@@ -188,6 +188,13 @@ class Scenario(Base):
                 f"Could not create saved scenario: {result.errors}"
             )
 
+        # Validate that we received data before attempting to create the model
+        if result.data is None:
+            error_msg = "Could not create saved scenario: API returned no data"
+            if result.errors:
+                error_msg += f". Errors: {result.errors}"
+            raise SavedScenarioError(error_msg)
+
         saved_scenario = cls.model_validate(result.data)
 
         for warning in result.errors:

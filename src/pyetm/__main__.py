@@ -8,50 +8,6 @@ from pathlib import Path
 from importlib.metadata import version
 import shutil
 import click
-import re
-
-
-def validate_token(token: str) -> tuple[bool, str]:
-    """
-    Validate ETM API token format.
-
-    Accepts empty tokens (returns True) to allow unauthenticated mode.
-    For non-empty tokens, validates etm_ prefix and basic format.
-
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    # Empty token is valid (unauthenticated mode)
-    if not token:
-        return True, ""
-
-    # Token must start with etm_ prefix
-    if not token.startswith("etm_"):
-        return False, "Token must start with 'etm_' prefix"
-
-    # Extract body (handle both etm_ and etm_beta_ prefixes)
-    if token.startswith("etm_beta_"):
-        body = token[len("etm_beta_") :]
-    else:
-        body = token[len("etm_") :]
-
-    # Body must not be empty and must start with alphanumeric
-    if not body or not body[0].isalnum():
-        return False, "Token body must start with an alphanumeric character"
-
-    # Relaxed validation: allow non-JWT tokens
-    # Only validate JWT structure if it looks like a JWT (has 3 dot-separated segments)
-    segs = body.split(".")
-    if len(segs) == 3:
-        # Validate JWT format
-        if any(" " in seg for seg in segs):
-            return False, "JWT segments must not contain spaces"
-    elif "." in body:
-        # Has dots but not exactly 3 segments - might be malformed JWT
-        return False, "JWT must have exactly three segments separated by '.'"
-    # else: non-JWT token, accept it
-
-    return True, ""
 
 
 def get_template_path(filename: str) -> Path:
@@ -183,11 +139,6 @@ def cli() -> None:
 
 @cli.command()
 @click.option(
-    "--token",
-    default=None,
-    help="ETM API token (optional, format: etm_<JWT> or etm_beta_<JWT>). Leave empty for unauthenticated access to public scenarios only.",
-)
-@click.option(
     "--environment",
     default=None,
     help="ETM environment to target (e.g., 'pro', 'beta', 'local', 'tyndp2024', '2025-01'). Defaults to 'pro'.",
@@ -203,7 +154,7 @@ def cli() -> None:
     is_flag=True,
     help="Overwrite existing files without prompting",
 )
-def init(token: str | None, environment: str | None, log_level: str, force: bool) -> None:
+def init(environment: str | None, log_level: str, force: bool) -> None:
     """
     Initialize a new pyetm project.
 
@@ -213,38 +164,14 @@ def init(token: str | None, environment: str | None, log_level: str, force: bool
     click.echo("PyETM Project Initialization")
     click.echo("=" * 60 + "\n")
 
-    # Prompt for token if not provided via CLI
-    if token is None:
-        click.echo("Please paste your ETM API token below and press Enter:")
-        click.echo("(Leave empty and press Enter to skip for unauthenticated access)\n")
-        try:
-            token = input("ETM API Token (optional): ").strip()
-        except EOFError:
-            token = ""
-
     # Prompt for environment if not provided
     if not environment:
-        click.echo("\nCommon environments: pro, beta, local, tyndp2024, 2025-01")
+        click.echo("Common environments: pro, beta, local, tyndp2024, 2025-01")
         environment = click.prompt(
             "Environment",
             default="pro",
             type=str,
         )
-
-    # Validate token
-    is_valid, error_msg = validate_token(token)
-    if not is_valid:
-        click.echo(f"✗ Invalid API token: {error_msg}", err=True)
-        click.echo(
-            "\nGet your token from: https://docs.energytransitionmodel.com/api/authentication",
-            err=True,
-        )
-        sys.exit(1)
-
-    if token:
-        click.echo("Token validated\n")
-    else:
-        click.echo("No token provided - you will only be able to access public scenarios\n")
 
     # Determine target directory (current working directory)
     target_dir = Path.cwd()
@@ -255,20 +182,12 @@ def init(token: str | None, environment: str | None, log_level: str, force: bool
     skipped_files = []
 
     # 1. Create .env file
-    click.echo("Creating .env configuration...")
+    click.echo("\nCreating .env configuration...")
     try:
         env_template = read_template(".env.template")
 
         # Replace placeholders
-        # If token is empty, comment out the ETM_API_TOKEN line
-        if token:
-            env_content = env_template.replace("{{ETM_API_TOKEN}}", token)
-        else:
-            env_content = env_template.replace(
-                "ETM_API_TOKEN={{ETM_API_TOKEN}}", "# ETM_API_TOKEN="
-            )
-
-        env_content = env_content.replace("{{ENVIRONMENT}}", environment)
+        env_content = env_template.replace("{{ENVIRONMENT}}", environment)
         env_content = env_content.replace("{{LOG_LEVEL}}", log_level)
 
         # Handle optional BASE_URL line
@@ -318,7 +237,10 @@ def init(token: str | None, environment: str | None, log_level: str, force: bool
 
     # Next steps
     click.echo("\nNext steps:")
-    click.echo("  1. Review your .env configuration")
+    click.echo("  1. Add your ETM API token to .env (if needed):")
+    click.echo("     • Get token from: https://docs.energytransitionmodel.com/api/authentication")
+    click.echo("     • Uncomment the ETM_API_TOKEN line in .env")
+    click.echo("     • Paste your token (format: etm_<JWT> or etm_beta_<JWT>)")
     click.echo("  2. Explore the example notebooks:")
     click.echo("     • basic_features.ipynb - Introduction to core functionality")
     click.echo("     • advanced_features.ipynb - Advanced usage patterns")

@@ -30,6 +30,27 @@ class CustomCurve(Base):
     type: str
     file_path: Optional[Path] = None
 
+    @staticmethod
+    def _normalize_to_session(scenario: Any) -> Any:
+        """
+        Normalize scenario parameter to Session object to extract ETEngine session ID.
+
+        Args:
+            scenario: Either a Session object or a Scenario (SavedScenario) object
+
+        Returns:
+            Session object with the ETEngine session ID
+        """
+        # Import at function level to avoid circular imports
+        from pyetm.models.scenario import Scenario
+
+        # If it's a SavedScenario, extract the underlying Session
+        if isinstance(scenario, Scenario):
+            return scenario.session
+
+        # Otherwise assume it's already a Session
+        return scenario
+
     def available(self) -> bool:
         return bool(self.file_path)
 
@@ -37,8 +58,11 @@ class CustomCurve(Base):
     # extract them!
     def retrieve(self, client: Any, scenario: Any) -> Optional[pd.Series[Any]]:
         """Process curve from client, save to file, set file_path"""
+        # Normalize to Session to get ETEngine session ID
+        session = self._normalize_to_session(scenario)
+
         file_path = (
-            get_settings().path_to_tmp(str(scenario.id)) / f"{self.key.replace('/', '-')}.csv"
+            get_settings().path_to_tmp(str(session.id)) / f"{self.key.replace('/', '-')}.csv"
         )
 
         # TODO: Examine the caching situation in the future if time permits: could be particularly
@@ -47,7 +71,7 @@ class CustomCurve(Base):
         #     self.file_path = file_path
         #     return self.contents()
         try:
-            result = DownloadCustomCurveRunner.run(client, scenario, self.key)
+            result = DownloadCustomCurveRunner.run(client, session, self.key)
 
             if result.success and result.data is not None:
                 try:

@@ -49,7 +49,7 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
             client=client,
             method="post",
             path=f"/scenarios/{scenario.id}/{action}",
-            json=data,
+            payload=data,
         )
 
         if not result.success:

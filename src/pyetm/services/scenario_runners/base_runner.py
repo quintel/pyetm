@@ -112,25 +112,29 @@ class BaseRunner(ABC, Generic[T]):
 
                 try:
                     response_data = resp.json()
-                    if (
-                        isinstance(response_data, dict)
-                        and "success" in response_data
-                        and "errors" in response_data
-                    ):
-                        errors: List[str] = []
-                        successes = response_data.get("success", [])
-                        if successes:
-                            errors.append(
-                                f"Partial success: {len(successes)} operation(s) succeeded"
-                            )
-                            errors.append(f"Successful operations: {successes}")
-                        error_data = response_data.get("errors", {})
-                        _flatten_errors(error_data, errors)
-                        if not errors:
-                            errors.append(
-                                "Operation failed with unknown error (server returned empty error messages)"
-                            )
-                        return ServiceResult.fail(errors)
+                    if isinstance(response_data, dict):
+                        # Check if response has errors key (common for validation failures)
+                        if "errors" in response_data:
+                            errors: List[str] = []
+
+                            # Handle partial success pattern (has both success and errors)
+                            if "success" in response_data:
+                                successes = response_data.get("success", [])
+                                if successes:
+                                    errors.append(
+                                        f"Partial success: {len(successes)} operation(s) succeeded"
+                                    )
+                                    errors.append(f"Successful operations: {successes}")
+
+                            # Extract error messages
+                            error_data = response_data.get("errors", {})
+                            _flatten_errors(error_data, errors)
+
+                            if not errors:
+                                errors.append(
+                                    "Operation failed with unknown error (server returned empty error messages)"
+                                )
+                            return ServiceResult.fail(errors)
                 except Exception:
                     pass
 
@@ -142,6 +146,12 @@ class BaseRunner(ABC, Generic[T]):
             error_msg = str(e)
             if "404" in error_msg:
                 return ServiceResult.fail([f"Resource not found: {error_msg}"])
+            # Make authentication errors more explicit and actionable
+            if "ETM_API_TOKEN" in error_msg or "401" in error_msg or isinstance(e, PermissionError):
+                return ServiceResult.fail([
+                    "Authentication failed: Invalid or missing ETM_API_TOKEN. "
+                    f"Please check your .env file and ensure the token is correct. Details: {error_msg}"
+                ])
             return ServiceResult.fail([error_msg])
         except Exception as e:
             # Any other unexpected exception is treated as breaking

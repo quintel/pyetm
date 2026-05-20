@@ -43,6 +43,14 @@ class Base(BaseModel):
         try:
             super().__init__(**data)
         except ValidationError as e:
+            # Check if data is None or empty - this indicates API error
+            if not data or data is None:
+                # Re-raise with clearer message
+                raise ValueError(
+                    f"Cannot create {self.__class__.__name__} with empty data. "
+                    "This usually indicates an authentication or API error."
+                ) from e
+
             # If validation fails, create model without validation and collect warnings
             # Use model_construct to bypass validation
             temp_instance = self.__class__.model_construct(**data)
@@ -51,6 +59,18 @@ class Base(BaseModel):
             for field_name, field_value in temp_instance.__dict__.items():
                 if not field_name.startswith("_"):
                     object.__setattr__(self, field_name, field_value)
+
+            # Ensure required Pydantic slot attributes exist to prevent AttributeError
+            for slot in ('__pydantic_fields_set__', '__pydantic_extra__'):
+                try:
+                    value = object.__getattribute__(temp_instance, slot)
+                    object.__setattr__(self, slot, value)
+                except AttributeError:
+                    # Initialize missing slot attributes with defaults
+                    if slot == '__pydantic_extra__':
+                        object.__setattr__(self, slot, {})
+                    elif slot == '__pydantic_fields_set__':
+                        object.__setattr__(self, slot, set())
 
             # Convert validation errors to warnings
             for error in e.errors():
@@ -105,7 +125,7 @@ class Base(BaseModel):
         self._warning_collector.add(field, message, severity)
 
     @property
-    def warnings(self) -> Union[WarningCollector, Dict[str, List[str]]]:
+    def warnings(self) -> WarningCollector:
         """
         Return warnings.
         """

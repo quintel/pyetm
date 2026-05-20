@@ -26,25 +26,43 @@ pyetm init
 
 This command will:
 
-- Prompt you for your ETM API token
 - Ask which environment to use (production, beta, or local)
 - Create a `.env` configuration file
 - Copy example Jupyter notebooks and helper files
 
-### Non-Interactive Mode
-
-You can also provide all options directly:
-
-```bash
-pyetm init --token etm_your.token.here --environment pro --log-level INFO
-```
+After initialization, you'll need to manually add your API token to the `.env` file if you want to create or modify scenarios (see [Adding Your API Token](#adding-your-api-token) below).
 
 **Available options:**
 
-- `--token`: Your ETM API token
 - `--environment`: Target environment (`pro`, `beta`, or `local`)
 - `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
+
+Example:
+
+```bash
+pyetm init --environment pro --log-level INFO
+```
+
+### Adding Your API Token
+
+After running `pyetm init`, open the generated `.env` file and add your token:
+
+1. Open `.env` in your text editor
+2. Find the commented `# ETM_API_TOKEN=` line
+3. Uncomment it by removing the `#`
+4. Paste your full token after the `=` sign
+5. Save the file
+
+Your `.env` should look like this:
+
+```env
+ETM_API_TOKEN=etm_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+ENVIRONMENT=pro
+LOG_LEVEL=INFO
+```
+
+**Note:** API tokens are very long (1000+ characters). Make sure you paste the entire token.
 
 ## Your First Scenario
 
@@ -69,34 +87,41 @@ print(f"URL: {scenario.session.url}")
 Now let's change some inputs to model a future with more solar energy:
 
 ```python
-# Set the number of solar PV panels via the underlying session
-scenario.session.inputs.user_values = {
+# Update input values on the scenario
+scenario.update_user_values({
     "number_of_energy_power_solar_pv_solar_radiation": 50000000,
     "number_of_households_solar_pv_solar_radiation": 5000000,
-}
+})
 
-# Query results from the session
-gqueries = scenario.session.gqueries.future(
-    ["dashboard_renewability", "dashboard_co2_emissions"]
-)
-print(f"Renewable percentage: {gqueries['dashboard_renewability']:.1f}%")
-print(f"CO2 emissions: {gqueries['dashboard_co2_emissions']:.1f} Mton")
+# Add queries and execute them
+scenario.add_queries(["dashboard_renewability", "dashboard_co2_emissions"])
+scenario.execute_queries()
+
+# Get results
+results = scenario.results(columns=["future"])
+print(f"Renewable percentage: {results.loc['dashboard_renewability', 'future']:.1f}%")
+print(f"CO2 emissions: {results.loc['dashboard_co2_emissions', 'future']:.1f} Mton")
 ```
 
 ## Querying Results
 
-You can query any output value from your scenario's session:
+You can query any output value from your scenario:
 
 ```python
-# Query specific outputs from the session
-results = scenario.session.gqueries.future([
+# Add queries and execute them
+scenario.add_queries([
     "dashboard_total_costs",
     "dashboard_renewability",
     "dashboard_co2_emissions",
 ])
+scenario.execute_queries()
 
-for key, value in results.items():
-    print(f"{key}: {value}")
+# Get results as a DataFrame
+results = scenario.results(columns=["future"])
+
+# Iterate through results
+for key in results.index:
+    print(f"{key}: {results.loc[key, 'future']}")
 ```
 
 ## Exporting Data
@@ -152,25 +177,29 @@ scenario = Scenario.create(
     client=client,
 )
 
-# Modify inputs via the session
-scenario.session.inputs.user_values = {
+# Modify inputs
+scenario.update_user_values({
     "number_of_energy_power_solar_pv_solar_radiation": 50000000,
     "households_solar_pv_solar_radiation_market_penetration": 75.0,
     "transport_car_using_electricity_share": 50.0,
-}
+})
 
-# Query results from the session
-results = scenario.session.gqueries.future([
+# Add queries and execute them
+scenario.add_queries([
     "dashboard_total_costs",
     "dashboard_renewability",
     "dashboard_co2_emissions",
     "dashboard_total_demand",
 ])
+scenario.execute_queries()
+
+# Get results
+results = scenario.results(columns=["future"])
 
 # Print results
 print("\n=== Scenario Results ===")
-for key, value in results.items():
-    print(f"{key}: {value:.2f}")
+for key in results.index:
+    print(f"{key}: {results.loc[key, 'future']:.2f}")
 
 # The scenario is already saved in MyETM
 print(f"\nSaved scenario ID: {scenario.id}")

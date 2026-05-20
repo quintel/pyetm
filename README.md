@@ -78,21 +78,29 @@ pyetm init
 ```
 
 This will:
-- Prompt you for your ETM API token ([get your token here](https://docs.energytransitionmodel.com/api/authentication))
 - Ask which environment you want to use (production, beta, or local)
 - Create a `.env` configuration file
 - Copy example Jupyter notebooks and helper files to your current directory
 
-**Non-interactive mode**: You can also provide options directly:
-```bash
-pyetm init --token etm_your.token.here --environment pro --log-level INFO
-```
+After initialization, you'll need to manually add your API token to the `.env` file:
 
-Options:
-- `--token`: Your ETM API token
+1. Open `.env` in your text editor
+2. Find the commented `# ETM_API_TOKEN=` line
+3. Uncomment it by removing the `#`
+4. Paste your full token after the `=` sign (get your token [here](https://docs.energytransitionmodel.com/api/authentication))
+5. Save the file
+
+**Note:** API tokens are very long (1000+ characters). Make sure you paste the entire token.
+
+**Command options**:
 - `--environment`: Target environment (`pro`, `beta`, or `local`)
 - `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
+
+Example:
+```bash
+pyetm init --environment pro --log-level INFO
+```
 
 ---
 

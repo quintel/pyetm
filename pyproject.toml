@@ -46,6 +46,9 @@ pyetm = "pyetm.__main__:main"
 "Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
 "Issue tracker" = "https://github.com/quintel/pyetm/issues"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.poetry]
 packages = [
   { include = "pyetm", from = "src" },

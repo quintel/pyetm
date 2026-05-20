@@ -25,10 +25,14 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
         curve_type: Literal["custom", "output"] = "output",
         **kwargs: Any,
     ) -> ServiceResult[Any]:
+        # Normalize to Session to get ETEngine session ID
+        from pyetm.models.scenario import Scenario
+        session = scenario.session if isinstance(scenario, Scenario) else scenario
+
         path = (
-            f"/scenarios/{scenario.id}/custom_curves/{curve_name}.csv"
+            f"/scenarios/{session.id}/custom_curves/{curve_name}.csv"
             if curve_type == "custom"
-            else f"/scenarios/{scenario.id}/curves/{curve_name}.csv"
+            else f"/scenarios/{session.id}/curves/{curve_name}.csv"
         )
         req = [
             {
@@ -69,12 +73,16 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
     def _build_requests(
         scenario: Any, curve_names: List[str], curve_type: Literal["custom", "output"]
     ) -> List[Dict[str, Any]]:
+        # Normalize to Session to get ETEngine session ID
+        from pyetm.models.scenario import Scenario
+        session = scenario.session if isinstance(scenario, Scenario) else scenario
+
         requests: List[Dict[str, Any]] = []
         for name in curve_names:
             path = (
-                f"/scenarios/{scenario.id}/custom_curves/{name}.csv"
+                f"/scenarios/{session.id}/custom_curves/{name}.csv"
                 if curve_type == "custom"
-                else f"/scenarios/{scenario.id}/curves/{name}.csv"
+                else f"/scenarios/{session.id}/curves/{name}.csv"
             )
             requests.append(
                 {

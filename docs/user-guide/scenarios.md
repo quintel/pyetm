@@ -255,7 +255,7 @@ scenario = Scenario.create(
     client=client,
     private=False,
 )
-scenario.session.inputs.user_values = {"input_key": 100.0}
+scenario.update_user_values({"input_key": 100.0})
 
 print(f"Saved scenario ID: {scenario.id}")
 ```

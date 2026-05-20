@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 from functools import lru_cache
+import logging
 import pandas as pd
 from pathlib import Path
 from typing import Any, Optional, cast
 import os
 
 import yaml
+
+logger = logging.getLogger(__name__)
 from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.warnings import WarningCollector
@@ -46,13 +49,37 @@ class HourlyOutputCurve(Base):
     type: str
     file_path: Optional[Path] = None
 
+    @staticmethod
+    def _normalize_to_session(scenario: Any) -> Any:
+        """
+        Normalize scenario parameter to Session object to extract ETEngine session ID.
+
+        Args:
+            scenario: Either a Session object or a Scenario (SavedScenario) object
+
+        Returns:
+            Session object with the ETEngine session ID
+        """
+        # Import at function level to avoid circular imports
+        from pyetm.models.scenario import Scenario
+
+        # If it's a SavedScenario, extract the underlying Session
+        if isinstance(scenario, Scenario):
+            return scenario.session
+
+        # Otherwise assume it's already a Session
+        return scenario
+
     def available(self) -> bool:
         return bool(self.file_path)
 
     def retrieve(self, client: Any, scenario: Any, force_refresh: bool = False) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
+        # Normalize to Session to get ETEngine session ID
+        session = self._normalize_to_session(scenario)
+
         file_path = (
-            get_settings().path_to_tmp(str(scenario.id)) / f"{self.key.replace('/', '-')}.csv"
+            get_settings().path_to_tmp(str(session.id)) / f"{self.key.replace('/', '-')}.csv"
         )
 
         # Reuse a cached file if present unless explicitly refreshing.
@@ -68,26 +95,38 @@ class HourlyOutputCurve(Base):
                         f"Failed to read cached curve file for {self.key}: {e}; refetching",
                     )
         try:
-            result = DownloadHourlyOutputCurveRunner.run(client, scenario, self.key)
+            result = DownloadHourlyOutputCurveRunner.run(client, session, self.key)
             if result.success and result.data is not None:
                 try:
                     result.data.seek(0)
                     df = pd.read_csv(result.data, index_col=0)
                     df_clean = df.dropna(how="all")
                     df_clean.index = pd.RangeIndex(len(df_clean))
+                    # Create parent directory before saving
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    df_clean.to_csv(file_path, index=True)
+                    # Only set file_path after successful save
                     self.file_path = file_path
-                    df_clean.to_csv(self.file_path, index=True)
                     return df_clean
 
                 except Exception as e:
-                    self.add_warning("data", f"Failed to process curve data for {self.key}: {e}")
+                    error_msg = f"Failed to process curve data for {self.key}: {e}"
+                    self.add_warning("data", error_msg)
+                    logger.exception(error_msg)
                     return None
+            else:
+                # API call failed or returned no data
+                errors = result.errors if hasattr(result, 'errors') else ['Unknown error']
+                error_msg = f"Failed to download curve {self.key}: {errors}"
+                self.add_warning("download", error_msg)
+                logger.error(error_msg)
+                return None
 
         except Exception as e:
-            # Unexpected error - add warning
-            self.add_warning("base", f"Unexpected error retrieving curve {self.key}: {e}")
-
-        return None
+            error_msg = f"Unexpected error retrieving curve {self.key}: {e}"
+            self.add_warning("base", error_msg)
+            logger.exception(error_msg)
+            return None
 
     def contents(self) -> Optional[pd.DataFrame]:
         """Open file from path and return contents"""
@@ -143,6 +182,27 @@ class HourlyOutputCurves(Base):
 
     curves: list[HourlyOutputCurve]
 
+    @staticmethod
+    def _normalize_to_session(scenario: Any) -> Any:
+        """
+        Normalize scenario parameter to Session object to extract ETEngine session ID.
+
+        Args:
+            scenario: Either a Session object or a Scenario (SavedScenario) object
+
+        Returns:
+            Session object with the ETEngine session ID
+        """
+        # Import at function level to avoid circular imports
+        from pyetm.models.scenario import Scenario
+
+        # If it's a SavedScenario, extract the underlying Session
+        if isinstance(scenario, Scenario):
+            return scenario.session
+
+        # Otherwise assume it's already a Session
+        return scenario
+
     def __len__(self) -> int:
         return len(self.curves)
 
@@ -158,6 +218,9 @@ class HourlyOutputCurves(Base):
         return [curve.key for curve in self.curves]
 
     def get_contents(self, scenario: Any, curve_name: str) -> Optional[pd.DataFrame]:
+        # Normalize to Session to get ETEngine session ID
+        session = self._normalize_to_session(scenario)
+
         curve = self._find(curve_name)
 
         if not curve:
@@ -167,7 +230,7 @@ class HourlyOutputCurves(Base):
         if not curve.available():
             # Try to attach a cached file from disk first
             expected_path = (
-                get_settings().path_to_tmp(str(scenario.id)) / f"{curve.key.replace('/', '-')}.csv"
+                get_settings().path_to_tmp(str(session.id)) / f"{curve.key.replace('/', '-')}.csv"
             )
             if expected_path.is_file():
                 curve.file_path = expected_path
@@ -175,7 +238,7 @@ class HourlyOutputCurves(Base):
                 self._merge_submodel_warnings(curve, key_attr="key")
                 return contents
 
-            result = curve.retrieve(BaseClient(), scenario)
+            result = curve.retrieve(BaseClient(), session)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -271,6 +334,10 @@ class HourlyOutputCurves(Base):
         cls, service_result: Any, scenario: Any, cache_curves: bool = True
     ) -> "HourlyOutputCurves":
         """Create HourlyOutputCurves instance from service result"""
+        # Normalize to Session to get ETEngine session ID
+        from pyetm.models.scenario import Scenario
+        session = scenario.session if isinstance(scenario, Scenario) else scenario
+
         if not service_result.success or not service_result.data:
             empty_curves = cls(curves=[])
             for error in service_result.errors:
@@ -280,7 +347,7 @@ class HourlyOutputCurves(Base):
         curves_list = []
 
         if cache_curves:
-            cache_dir = get_settings().path_to_tmp(str(scenario.id))
+            cache_dir = get_settings().path_to_tmp(str(session.id))
             cache_dir.mkdir(parents=True, exist_ok=True)
 
         for curve_name, curve_data in service_result.data.items():
@@ -335,8 +402,12 @@ class HourlyOutputCurves(Base):
         """
         Convenience method to fetch all carrier curves for a scenario.
         """
-        service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), scenario)
-        return cls.from_service_result(service_result, scenario, cache_curves)
+        # Normalize to Session to get ETEngine session ID
+        from pyetm.models.scenario import Scenario
+        session = scenario.session if isinstance(scenario, Scenario) else scenario
+
+        service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), session)
+        return cls.from_service_result(service_result, session, cache_curves)
 
     def _to_dataframe(self, curves: Optional[list[str]] = None, **kwargs: Any) -> pd.DataFrame:
         """

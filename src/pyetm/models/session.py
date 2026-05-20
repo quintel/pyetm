@@ -740,8 +740,21 @@ class Session(Base):
         if not self.queries_requested():
             return pd.DataFrame()
 
-        if self._queries is not None and not self._queries.is_ready():
-            self.execute_queries()
+        # Check if queries need to be executed (none have been executed yet)
+        if self._queries is not None:
+            # Only execute if NO queries have data yet (all are None)
+            has_any_results = any(v is not None for v in self._queries.query_dict.values())
+            if not has_any_results:
+                self.execute_queries()
+
+            # Show warning for any failed queries
+            failed = [k for k, v in self._queries.query_dict.items() if v is None]
+            if failed:
+                print(f"WARNING: {len(failed)} query(ies) failed:")
+                # Get specific error messages from warnings
+                query_warnings = self._queries.warnings.get_by_field("results")
+                for w in query_warnings:
+                    print(f"  - {w.message}")
 
         if self._queries is not None:
             return self._queries.to_dataframe(columns=columns)

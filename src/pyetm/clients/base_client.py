@@ -65,20 +65,21 @@ class AsyncBatchRunner:
     @staticmethod
     async def batch_requests(
         session: ETMSession, requests: List[Dict[str, Any]], max_concurrent: int = 10
-    ) -> List[ServiceResult[Optional[Dict[str, Any]]]]:
+    ) -> List[ServiceResult[Any]]:
         """
         Execute multiple requests concurrently using asyncio.
 
         This method processes all requests in parallel and returns results in the
         same order as the input requests. Each result is wrapped in a ServiceResult
-        for consistent error handling.
+        for consistent error handling. Results can be either dict (for JSON responses)
+        or ETMResponse objects (for non-JSON responses like CSV).
         """
         # Controls how many requests are in flight at the same time at the application level.
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def make_single_request(
             req: Dict[str, Any],
-        ) -> ServiceResult[Optional[Dict[str, Any]]]:
+        ) -> ServiceResult[Any]:
             """
             Execute a single request and wrap the result in ServiceResult.
 
@@ -86,7 +87,8 @@ class AsyncBatchRunner:
                 req (dict): Request specification containing method, url, and kwargs.
 
             Returns:
-                ServiceResult: Wrapped result with either success data or error details.
+                ServiceResult: Wrapped result with either success data (dict for JSON,
+                ETMResponse for non-JSON like CSV) or error details.
             """
             async with semaphore:
                 try:
@@ -96,10 +98,12 @@ class AsyncBatchRunner:
 
                     # Success - wrap response data in ServiceResult
                     if response.ok:
+                        data: Any
                         try:
                             data = response.json()
                         except Exception:
-                            data = {}  # Return empty dict if JSON parsing fails
+                            # For non-JSON responses (like CSV), return the response object
+                            data = response
 
                         return ServiceResult.ok(data=data)
                     else:
