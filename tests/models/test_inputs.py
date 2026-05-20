@@ -17,16 +17,23 @@ def test_collection_from_json(inputs_json):
 def test_to_dataframe(inputs_json):
     input_collection = Inputs.from_json(inputs_json)
 
+    # Test default behavior - should return "value" column
     df_standard = input_collection.to_dataframe()
-    df_with_defaults = input_collection.to_dataframe(fields=["user", "default"])
-
-    assert "user" in df_standard.columns
-    assert "user" in df_with_defaults.columns
+    assert "value" in df_standard.columns
+    assert "user" not in df_standard.columns
     assert "default" not in df_standard.columns
+
+    # Test explicit fields
+    df_with_user = input_collection.to_dataframe(fields="user")
+    assert "user" in df_with_user.columns
+    assert "value" not in df_with_user.columns
+
+    df_with_defaults = input_collection.to_dataframe(fields=["user", "default"])
+    assert "user" in df_with_defaults.columns
     assert "default" in df_with_defaults.columns
+    assert "value" not in df_with_defaults.columns
 
     df_with_non_existing = input_collection.to_dataframe(fields="foo")
-
     assert df_with_non_existing["foo"].isnull().all()
 
 
@@ -379,3 +386,99 @@ def test_collection_iteration_and_access():
     assert "input1" in keys
     assert "input2" in keys
     assert "input3" in keys
+
+
+def test_merged_value_property():
+    """Test the merged_value property returns user value if set, else default."""
+    # Test with user value set
+    input_with_user = FloatInput(
+        key="test1", unit="float", min=0, max=100, user=50.0, default=25.0
+    )
+    assert input_with_user.merged_value == 50.0  # User value takes precedence
+
+    # Test with only default value
+    input_with_default = FloatInput(
+        key="test2", unit="float", min=0, max=100, default=25.0
+    )
+    assert input_with_default.merged_value == 25.0  # Falls back to default
+
+    # Test with both None - should add warning
+    input_without_values = FloatInput(key="test3", unit="float", min=0, max=100)
+    merged = input_without_values.merged_value
+    assert merged is None
+    assert input_without_values.warnings.has_warnings("test3")
+
+    # Test with enum input
+    enum_input = EnumInput(
+        key="test4",
+        unit="enum",
+        permitted_values=["a", "b"],
+        user="a",
+        default="b",
+    )
+    assert enum_input.merged_value == "a"
+
+    # Test with bool input
+    bool_input = BoolInput(key="test5", unit="bool", user=1.0, default=0.0)
+    assert bool_input.merged_value == 1.0
+
+
+def test_to_dataframe_with_merged_values():
+    """Test to_dataframe with fields='value' returns proper merged values."""
+    inputs_data = {
+        "input_with_user": {
+            "unit": "float",
+            "min": 0,
+            "max": 100,
+            "user": 75.0,
+            "default": 50.0,
+        },
+        "input_with_default_only": {
+            "unit": "float",
+            "min": 0,
+            "max": 100,
+            "default": 30.0,
+        },
+        "input_with_both_none": {"unit": "float", "min": 0, "max": 100},
+    }
+
+    collection = Inputs.from_json(inputs_data)
+
+    # Test value column (should be default now)
+    df_merged = collection.to_dataframe(fields="value")
+    assert "value" in df_merged.columns
+    assert df_merged.loc[("input_with_user", "float"), "value"] == 75.0
+    assert df_merged.loc[("input_with_default_only", "float"), "value"] == 30.0
+
+    # Test that we can still get separate user and default columns
+    df_separate = collection.to_dataframe(fields=["user", "default"])
+    assert "user" in df_separate.columns
+    assert "default" in df_separate.columns
+    assert "value" not in df_separate.columns
+
+
+def test_to_dataframe_merged_with_different_input_types():
+    """Test merged values work correctly across different input types."""
+    inputs_data = {
+        "float_input": {
+            "unit": "float",
+            "min": 0,
+            "max": 100,
+            "user": 75.0,
+            "default": 50.0,
+        },
+        "enum_input": {
+            "unit": "enum",
+            "permitted_values": ["a", "b", "c"],
+            "user": "a",
+            "default": "b",
+        },
+        "bool_input": {"unit": "bool", "user": 1.0, "default": 0.0},
+    }
+
+    collection = Inputs.from_json(inputs_data)
+    df = collection.to_dataframe(fields="value")
+
+    assert df.loc[("float_input", "float"), "value"] == 75.0
+    assert df.loc[("enum_input", "enum"), "value"] == "a"
+    assert df.loc[("bool_input", "bool"), "value"] == 1.0

@@ -82,7 +82,7 @@ class ScenarioPacker(BaseModel):
             return pd.DataFrame()
         return pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
 
-    def inputs(self, fields="user") -> pd.DataFrame:
+    def inputs(self, fields="value") -> pd.DataFrame:
         return self._inputs.to_dataframe(fields=fields)
 
     def gquery_results(self, columns="future") -> pd.DataFrame:
