@@ -15,6 +15,8 @@ def make_input_object(
     input_obj.default = default_value
     input_obj.min = min_value
     input_obj.max = max_value
+    # Add merged_value property
+    input_obj.merged_value = user_value if user_value is not None else default_value
     return input_obj
 
 
@@ -46,13 +48,22 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
             if isinstance(fields, list):
                 fields = fields
             else:
-                fields = [fields] if fields else ["user"]
+                fields = [fields] if fields else ["value"]
 
             data = {}
             for field in fields:
-                data[field] = [
-                    inputs_data[key].get(field) for key in inputs_data.keys()
-                ]
+                # Handle value field by preferring user over default
+                if field == "value":
+                    data[field] = [
+                        inputs_data[key].get("user")
+                        if inputs_data[key].get("user") is not None
+                        else inputs_data[key].get("default")
+                        for key in inputs_data.keys()
+                    ]
+                else:
+                    data[field] = [
+                        inputs_data[key].get(field) for key in inputs_data.keys()
+                    ]
 
             df = pd.DataFrame(data, index=list(inputs_data.keys()))
             return df

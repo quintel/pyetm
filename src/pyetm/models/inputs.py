@@ -70,6 +70,24 @@ class Input(Base):
         else:
             return value
 
+    @property
+    def merged_value(self) -> Optional[Union[float, str]]:
+        """
+        Returns the merged value: user value if set, otherwise default value.
+        Raises a warning if both user and default are None/NaN.
+        """
+        if not pd.isna(self.user):
+            return self.user
+        if not pd.isna(self.default):
+            return self.default
+
+        # Both are None/NaN - add warning
+        self.add_warning(
+            self.key,
+            f"Both user and default values are None/NaN for input '{self.key}'"
+        )
+        return None
+
 
 class BoolInput(Input):
     """
@@ -263,9 +281,17 @@ class Inputs(Base):
             if input_obj.key in key_vals:
                 input_obj.user = key_vals[input_obj.key]
 
-    def _to_dataframe(self, fields="user", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, fields="value", **kwargs) -> pd.DataFrame:
         """
         Serialize the Inputs collection to DataFrame.
+
+        Args:
+            fields: Field(s) to include. Default is "value" (user value if set, else default).
+                   Can be a string or list of strings. Options include:
+                   - "value": user value if set, otherwise default (RECOMMENDED)
+                   - "user": only user-set values
+                   - "default": only default values
+                   - "min", "max", "permitted_values", etc.: other input attributes
         """
         if not isinstance(fields, list):
             fields = [fields]
@@ -273,7 +299,10 @@ class Inputs(Base):
         try:
             df = pd.DataFrame.from_dict(
                 {
-                    input.key: [getattr(input, key, None) for key in columns]
+                    input.key: [
+                        input.merged_value if key == "value" else getattr(input, key, None)
+                        for key in columns
+                    ]
                     for input in self.inputs
                 },
                 orient="index",

@@ -27,7 +27,7 @@ class InputsPack(Packable):
 
     def to_dataframe(
         self,
-        fields: str | List[str] = "user",
+        fields: str | List[str] = "value",
         *,
         include_defaults: bool = False,
         include_min_max: bool = False,
@@ -62,7 +62,7 @@ class InputsPack(Packable):
             else pd.DataFrame()
         )
 
-    def _to_dataframe(self, fields="user", **kwargs):
+    def _to_dataframe(self, fields="value", **kwargs):
         return self.to_dataframe(fields=fields)
 
     def add_to_workbook(
