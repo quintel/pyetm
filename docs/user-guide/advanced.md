@@ -168,5 +168,5 @@ plt.savefig("cost_renewability.png")
 
 ## Next Steps
 
-- [API Reference](../api/) - Complete API documentation
+- [API Reference](../api/index.md) - Complete API documentation
 - [Contributing](../contributing/guide.md) - Help improve pyetm

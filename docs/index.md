@@ -6,7 +6,7 @@ Welcome to the official documentation for **pyetm**, the Python client library f
 
 ## What is pyetm?
 
-pyetm is a powerful, modular Python package designed for advanced users who want to programmatically interact with the [Energy Transition Model](https://energytransitionmodel.com/). It provides a comprehensive set of tools for:
+pyetm is a powerful, modular Python package designed for users who want to programmatically interact with the [Energy Transition Model](https://energytransitionmodel.com/). It provides a comprehensive set of tools for:
 
 - Creating and managing ETM scenarios
 - Modifying scenario inputs programmatically
@@ -14,29 +14,17 @@ pyetm is a powerful, modular Python package designed for advanced users who want
 - Batch processing multiple scenarios
 - Integrating ETM into automated workflows
 
-## Key Features
-
-- **Type-Safe**: Built with Pydantic for robust data validation and type checking
-- **Async Support**: Efficient async/await patterns for handling multiple scenarios
-- **Well-Tested**: Comprehensive test suite ensuring reliability
-- **Developer-Friendly**: Clear API design with extensive documentation
-- **Flexible Configuration**: Support for multiple environments and authentication methods
-
 ## Quick Links
 
 - [Installation Guide](getting-started/installation.md) - Get started with pyetm
 - [Quick Start Tutorial](getting-started/quickstart.md) - Your first scenario in 5 minutes
 - [User Guide](user-guide/index.md) - In-depth guides for common workflows
-- [API Reference](api/) - Complete API documentation
+- [API Reference](api/index.md) - Complete API documentation
 - [Contributing](contributing/guide.md) - Help improve pyetm
 
 ## About the Energy Transition Model
 
-The Energy Transition Model (ETM) is an open-source energy system model that allows you to explore future energy scenarios for countries, regions, neighborhoods, and more. It helps answer questions like:
-
-- What happens if we switch to 100% renewable energy?
-- How much energy storage do we need?
-- What are the costs and CO₂ implications of different policy choices?
+The Energy Transition Model (ETM) is an interactive online simulation tool for energy systems. It allows you to explore and quantify potential future energy systems in detail. The ETM is free to use, open source, and is available for (EU) countries, municipalities, and many other regions.
 
 Learn more at [energytransitionmodel.com](https://energytransitionmodel.com/).
 
@@ -48,7 +36,6 @@ Learn more at [energytransitionmodel.com](https://energytransitionmodel.com/).
 ## Getting Help
 
 - **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/quintel/pyetm/issues)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/quintel/pyetm/discussions)
 - **ETM Documentation**: General ETM documentation at [docs.energytransitionmodel.com](https://docs.energytransitionmodel.com/)
 
 ## License

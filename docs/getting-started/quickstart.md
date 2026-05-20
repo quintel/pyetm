@@ -54,10 +54,14 @@ Let's create and run a simple scenario programmatically:
 from pyetm import Scenario
 
 # Create a new scenario for the Netherlands
-scenario = Scenario.create(area_code="nl", end_year=2050)
+scenario = Scenario.create(
+    title="My First Scenario",
+    area_code="nl2023",
+    end_year=2050
+)
 
 print(f"Created scenario {scenario.id}")
-print(f"URL: {scenario.url}")
+print(f"URL: {scenario.session.url}")
 ```
 
 ## Modifying Inputs
@@ -65,29 +69,31 @@ print(f"URL: {scenario.url}")
 Now let's change some inputs to model a future with more solar energy:
 
 ```python
-# Set the number of solar PV panels
-scenario.user_values = {
+# Set the number of solar PV panels via the underlying session
+scenario.session.inputs.user_values = {
     "number_of_energy_power_solar_pv_solar_radiation": 50000000,
     "number_of_households_solar_pv_solar_radiation": 5000000,
 }
 
-# Fetch the results
-print(f"Total electricity production: {scenario.total_electricity_production} PJ")
-print(f"Renewable percentage: {scenario.renewable_percentage:.1f}%")
-print(f"CO2 emissions: {scenario.co2_emissions:.1f} Mton")
+# Query results from the session
+gqueries = scenario.session.gqueries.future(
+    ["dashboard_renewability", "dashboard_co2_emissions"]
+)
+print(f"Renewable percentage: {gqueries['dashboard_renewability']:.1f}%")
+print(f"CO2 emissions: {gqueries['dashboard_co2_emissions']:.1f} Mton")
 ```
 
 ## Querying Results
 
-You can query any output value from your scenario:
+You can query any output value from your scenario's session:
 
 ```python
-# Query specific outputs
-results = scenario.query_results({
+# Query specific outputs from the session
+results = scenario.session.gqueries.future([
     "dashboard_total_costs",
     "dashboard_renewability",
     "dashboard_co2_emissions",
-})
+])
 
 for key, value in results.items():
     print(f"{key}: {value}")
@@ -98,8 +104,8 @@ for key, value in results.items():
 Export your scenario's hourly electricity curves:
 
 ```python
-# Export hourly curves to CSV
-curves = scenario.fetch_hourly_electricity_curves()
+# Export hourly curves to CSV via the session
+curves = scenario.session.hourly_output_curves.electricity_df
 
 # Save to file
 curves.to_csv("hourly_electricity.csv")
@@ -111,21 +117,21 @@ print("Exported hourly electricity curves")
 To save your scenario permanently (requires authentication):
 
 ```python
-from pyetm import Client
+from pyetm import Scenario, BaseClient
 
 # Initialize authenticated client
-client = Client.from_env()
+client = BaseClient()
 
-# Create and save a scenario
+# Create and save a scenario (saved scenarios require a title)
 scenario = Scenario.create(
-    area_code="nl",
-    end_year=2050,
     title="My First Scenario",
+    area_code="nl2023",
+    end_year=2050,
     client=client,
 )
 
-saved_scenario = scenario.save()
-print(f"Saved scenario: {saved_scenario.url}")
+print(f"Saved scenario: {scenario.id}")
+print(f"Session URL: {scenario.session.url}")
 ```
 
 ## Complete Example
@@ -133,42 +139,42 @@ print(f"Saved scenario: {saved_scenario.url}")
 Here's a complete example putting it all together:
 
 ```python
-from pyetm import Scenario, Client
+from pyetm import Scenario, BaseClient
 
 # Initialize client (reads from .env)
-client = Client.from_env()
+client = BaseClient()
 
-# Create a scenario
+# Create a new scenario
 scenario = Scenario.create(
-    area_code="nl",
-    end_year=2050,
     title="High Solar Scenario",
+    area_code="nl2023",
+    end_year=2050,
     client=client,
 )
 
-# Modify inputs
-scenario.user_values = {
+# Modify inputs via the session
+scenario.session.inputs.user_values = {
     "number_of_energy_power_solar_pv_solar_radiation": 50000000,
     "households_solar_pv_solar_radiation_market_penetration": 75.0,
     "transport_car_using_electricity_share": 50.0,
 }
 
-# Query results
-results = scenario.query_results({
+# Query results from the session
+results = scenario.session.gqueries.future([
     "dashboard_total_costs",
     "dashboard_renewability",
     "dashboard_co2_emissions",
     "dashboard_total_demand",
-})
+])
 
 # Print results
 print("\n=== Scenario Results ===")
 for key, value in results.items():
     print(f"{key}: {value:.2f}")
 
-# Save the scenario
-saved = scenario.save()
-print(f"\nSaved scenario: {saved.url}")
+# The scenario is already saved in MyETM
+print(f"\nSaved scenario ID: {scenario.id}")
+print(f"Session URL: {scenario.session.url}")
 ```
 
 ## Using Jupyter Notebooks
@@ -210,7 +216,7 @@ Now that you've created your first scenario, explore more advanced features:
 - [Configuration Guide](configuration.md) - Learn about environment setup and SSL configuration
 - [Working with Scenarios](../user-guide/scenarios.md) - Deep dive into scenario management
 - [Managing Inputs](../user-guide/inputs.md) - Learn about input handling and validation
-- [API Reference](../api/) - Complete API documentation
+- [API Reference](../api/index.md) - Complete API documentation
 
 ## Common Issues
 

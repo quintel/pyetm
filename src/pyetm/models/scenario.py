@@ -80,6 +80,86 @@ class Scenario(Base):
     @classmethod
     def create(
         cls,
+        title: str,
+        session_id: Optional[int] = None,
+        area_code: Optional[str] = None,
+        end_year: Optional[int] = None,
+        client: Optional[BaseClient] = None,
+        user_values: Optional[Dict[str, Any]] = None,
+        custom_curves: Optional[Dict[str, Any]] = None,
+        sortables: Optional[Dict[str, Any]] = None,
+        private: bool = False,
+        **kwargs: Any,
+    ) -> "Scenario":
+        """
+        Create a SavedScenario in MyETM - either from an existing session or by creating a new one.
+
+        Provide EITHER session_id OR (area_code + end_year), not both.
+
+        Args:
+            title: Title for the saved scenario (required)
+            session_id: ID of existing Session to save (optional)
+            area_code: Region code for new session, e.g., "nl2023", "de" (optional)
+            end_year: End year for new session (optional)
+            client: Optional BaseClient instance
+            user_values: Optional dict of user input values to apply after creation
+            custom_curves: Optional dict of custom curves to upload after creation
+            sortables: Optional dict of sortables to apply after creation
+            private: Whether the scenario should be private (default: False)
+            **kwargs: Additional parameters (e.g., description)
+
+        Returns:
+            SavedScenario instance
+
+        Raises:
+            SavedScenarioError: If creation fails
+            ValueError: If parameter combination is invalid
+
+        Example:
+            >>> # Create new scenario (creates new session + saves it)
+            >>> scenario = Scenario.create(
+            ...     title="High Solar 2050",
+            ...     area_code="nl2023",
+            ...     end_year=2050
+            ... )
+
+            >>> # Save existing session
+            >>> scenario = Scenario.create(
+            ...     title="My Scenario",
+            ...     session_id=existing_session.id
+            ... )
+        """
+        # Validation
+        if session_id is not None and (area_code is not None or end_year is not None):
+            raise ValueError(
+                "Provide either session_id OR (area_code + end_year), not both"
+            )
+        if session_id is None and (area_code is None or end_year is None):
+            raise ValueError(
+                "Must provide either session_id OR both area_code and end_year"
+            )
+
+        # Create new session if area_code and end_year are provided
+        if area_code is not None and end_year is not None:
+            from pyetm.models.session import Session
+
+            session = Session.new(area_code=area_code, end_year=end_year, client=client)
+            session_id = session.id
+
+        # Create SavedScenario using the session_id
+        params = {
+            "scenario_id": session_id,
+            "title": title,
+            "private": private,
+            **kwargs,
+        }
+        return cls._create_from_params(
+            params, client, user_values, custom_curves, sortables
+        )
+
+    @classmethod
+    def _create_from_params(
+        cls,
         params: Dict[str, Any],
         client: Optional[BaseClient] = None,
         user_values: Optional[Dict[str, Any]] = None,
@@ -87,11 +167,10 @@ class Scenario(Base):
         sortables: Optional[Dict[str, Any]] = None,
     ) -> "Scenario":
         """
-        Create a new SavedScenario in MyETM from an existing session scenario.
+        Internal helper to create SavedScenario from params dict.
 
         Args:
             params: Dictionary with required keys (scenario_id, title) and optional keys
-                   (private)
             client: Optional BaseClient instance
             user_values: Optional dict of user input values to apply after creation
             custom_curves: Optional dict of custom curves to upload after creation
@@ -99,9 +178,6 @@ class Scenario(Base):
 
         Returns:
             SavedScenario instance
-
-        Raises:
-            SavedScenarioError if creation fails
         """
         if client is None:
             client = BaseClient()
@@ -184,29 +260,6 @@ class Scenario(Base):
                 )
 
     @classmethod
-    def from_scenario(
-        cls,
-        scenario: "Session",
-        title: str,
-        client: Optional[BaseClient] = None,
-        **kwargs: Any,
-    ) -> "Scenario":
-        """
-        Convenience method to create SavedScenario from a Scenario instance.
-
-        Args:
-            scenario: Scenario instance to save
-            title: Title for the saved scenario
-            client: Optional BaseClient instance
-            **kwargs: Optional params (private)
-
-        Returns:
-            SavedScenario instance
-        """
-        params = {"scenario_id": scenario.id, "title": title, **kwargs}
-        return cls.create(params, client=client)
-
-    @classmethod
     def load(
         cls, saved_scenario_id: int, client: Optional[BaseClient] = None
     ) -> "Scenario":
@@ -256,10 +309,12 @@ class Scenario(Base):
         **kwargs: Any,
     ) -> "Scenario":
         """
-        Create a new SavedScenario from an ETEngine scenario ID.
+        DEPRECATED: Use Scenario.create(title=..., session_id=...) instead.
+
+        Create a new SavedScenario from an ETEngine session ID.
 
         Args:
-            scenario_id: The ETEngine scenario ID to save
+            scenario_id: The ETEngine session ID to save
             title: Title for the saved scenario
             client: Optional BaseClient instance
             **kwargs: Optional params (private)
@@ -270,8 +325,67 @@ class Scenario(Base):
         Raises:
             SavedScenarioError if creation fails
         """
-        params = {"scenario_id": scenario_id, "title": title, **kwargs}
-        return cls.create(params, client=client)
+        import warnings
+
+        warnings.warn(
+            "Scenario.new() is deprecated. "
+            "Use Scenario.create(title=..., session_id=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.create(title=title, session_id=scenario_id, client=client, **kwargs)
+
+    @classmethod
+    def create_new(
+        cls,
+        title: str,
+        area_code: str = "nl2023",
+        end_year: int = 2050,
+        client: Optional[BaseClient] = None,
+        user_values: Optional[Dict[str, Any]] = None,
+        custom_curves: Optional[Dict[str, Any]] = None,
+        sortables: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> "Scenario":
+        """
+        DEPRECATED: Use Scenario.create(title=..., area_code=..., end_year=...) instead.
+
+        Create a new ETEngine session and save it to MyETM in one step.
+
+        Args:
+            title: Title for the saved scenario
+            area_code: Region code (e.g., "nl2023", "de", "uk2050"). Default: "nl2023"
+            end_year: Target end year for the scenario. Default: 2050
+            client: Optional BaseClient instance
+            user_values: Optional dict of user input values to apply
+            custom_curves: Optional dict of custom curves to upload
+            sortables: Optional dict of sortables to apply
+            **kwargs: Additional parameters for scenario creation (e.g., private=True)
+
+        Returns:
+            SavedScenario instance
+
+        Raises:
+            SavedScenarioError if creation fails
+        """
+        import warnings
+
+        warnings.warn(
+            "Scenario.create_new() is deprecated. "
+            "Use Scenario.create(title=..., area_code=..., end_year=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.create(
+            title=title,
+            area_code=area_code,
+            end_year=end_year,
+            client=client,
+            user_values=user_values,
+            custom_curves=custom_curves,
+            sortables=sortables,
+            **kwargs,
+        )
 
     @property
     def session(self) -> "Session":

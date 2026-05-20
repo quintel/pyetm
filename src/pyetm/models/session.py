@@ -304,16 +304,15 @@ class Session(Base):
                 "Title is required to save scenario. Provide title parameter or set scenario.title"
             )
 
-        params = {
-            "scenario_id": self.id,
-            "title": save_title,
+        private = kwargs.pop("private", self.private if self.private is not None else False)
+
+        return Scenario.create(
+            title=save_title,
+            session_id=self.id,
+            client=client,
+            private=private,
             **kwargs,
-        }
-
-        if self.private is not None:
-            params.setdefault("private", self.private)
-
-        return Scenario.create(params, client=client)
+        )
 
     def update_metadata(self, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """

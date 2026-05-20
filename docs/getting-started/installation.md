@@ -98,21 +98,32 @@ pip install git+https://github.com/quintel/pyetm.git
 
 ### Using venv
 
+Create a virtual environment:
+
 ```bash
-# Create a virtual environment
 python3 -m venv .venv
+```
 
-# Activate it
-# macOS/Linux:
-source .venv/bin/activate
+Activate it:
 
-# Windows (PowerShell):
-.venv\Scripts\Activate.ps1
+=== "macOS/Linux"
+    ```bash
+    source .venv/bin/activate
+    ```
 
-# Windows (Command Prompt):
-.venv\Scripts\activate.bat
+=== "Windows (PowerShell)"
+    ```powershell
+    .venv\Scripts\Activate.ps1
+    ```
 
-# Install pyetm
+=== "Windows (Command Prompt)"
+    ```batch
+    .venv\Scripts\activate.bat
+    ```
+
+Install pyetm:
+
+```bash
 pip install pyetm
 ```
 
@@ -137,7 +148,7 @@ print(pyetm.__version__)
 Or from the command line:
 
 ```bash
-python -c "import pyetm; print(pyetm.__version__)"
+python3 -c "import pyetm; print(pyetm.__version__)"
 ```
 
 You should see the version number printed (e.g., `2.0.0b9`).

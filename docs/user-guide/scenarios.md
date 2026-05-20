@@ -12,10 +12,14 @@ Create a new scenario for a specific region and end year:
 from pyetm import Scenario
 
 # Create a scenario for the Netherlands in 2050
-scenario = Scenario.create(area_code="nl", end_year=2050)
+scenario = Scenario.create(
+    title="Netherlands 2050",
+    area_code="nl2023",
+    end_year=2050
+)
 
 print(f"Created scenario {scenario.id}")
-print(f"URL: {scenario.url}")
+print(f"Session URL: {scenario.session.url}")
 ```
 
 ### With Custom Settings
@@ -30,20 +34,20 @@ client = Client.from_env()
 
 # Create scenario with custom settings
 scenario = Scenario.create(
-    area_code="nl",
-    end_year=2050,
     title="High Renewables Scenario",
-    description="Exploring 100% renewable energy by 2050",
+    area_code="nl2023",
+    end_year=2050,
     client=client,
+    private=False,
 )
 ```
 
 **Available parameters:**
 
-- `area_code` (required): Region code (e.g., "nl", "de", "uk2050")
-- `end_year` (required): Target year for the scenario (e.g., 2030, 2040, 2050)
-- `title`: Scenario title
-- `description`: Detailed description
+- `title` (required): Scenario title
+- `area_code` (required if not providing session_id): Region code (e.g., "nl2023", "de", "uk2050")
+- `end_year` (required if not providing session_id): Target year for the scenario (e.g., 2030, 2040, 2050)
+- `session_id` (alternative to area_code+end_year): ID of existing session to save
 - `client`: Authenticated client for saving
 - `private`: Whether the scenario is private (default: False)
 
@@ -244,17 +248,16 @@ from pyetm import Client
 
 client = Client.from_env()
 
-scenario = Scenario.create(area_code="nl", end_year=2050, client=client)
-scenario.user_values = {"input_key": 100.0}
-
-# Save with metadata
-saved = scenario.save(
+scenario = Scenario.create(
     title="My Scenario",
-    description="A test scenario",
+    area_code="nl2023",
+    end_year=2050,
+    client=client,
     private=False,
 )
+scenario.session.inputs.user_values = {"input_key": 100.0}
 
-print(f"Saved: {saved.url}")
+print(f"Saved scenario ID: {scenario.id}")
 ```
 
 ### Update Existing Scenario

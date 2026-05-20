@@ -303,4 +303,4 @@ When multiple configuration sources exist, pyetm uses this priority order:
 
 - [Quick Start Guide](quickstart.md) - Create your first scenario
 - [Working with Scenarios](../user-guide/scenarios.md) - Learn about scenario management
-- [API Reference](../api/) - Complete API documentation
+- [API Reference](../api/index.md) - Complete API documentation

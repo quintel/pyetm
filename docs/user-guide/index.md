@@ -125,7 +125,7 @@ for i, scenario in enumerate(scenarios):
 
 ## Getting Help
 
-- **API Reference**: See the [API Reference](../api/) for detailed documentation of all classes and methods
+- **API Reference**: See the [API Reference](../api/index.md) for detailed documentation of all classes and methods
 - **Examples**: Check the `examples/` directory in the repository for complete working examples
 - **Issues**: Report problems or ask questions on [GitHub Issues](https://github.com/quintel/pyetm/issues)
 

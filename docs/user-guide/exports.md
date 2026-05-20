@@ -141,4 +141,4 @@ with pd.ExcelWriter("scenario_data.xlsx") as writer:
 
 - [Sessions and Authentication](sessions.md) - Learn about managing saved scenarios
 - [Advanced Usage](advanced.md) - Batch processing and automation
-- [API Reference](../api/) - Complete API documentation
+- [API Reference](../api/index.md) - Complete API documentation

@@ -241,10 +241,18 @@ class Scenarios(Base):
             try:
                 # If scenario_id is provided, use existing session
                 if "scenario_id" in params:
-                    params_dict = dict(params)  # Convert TypedDict to regular dict
-                    saved_scenarios.append(Scenario.create(params_dict, client=client))
+                    session_id = params.get("scenario_id")
+                    private = bool(params.get("private", False))
+                    saved_scenarios.append(
+                        Scenario.create(
+                            title=title,
+                            session_id=session_id,
+                            client=client,
+                            private=private,
+                        )
+                    )
                 else:
-                    # Create new session first
+                    # Create new session and save it
                     area = params.get("area_code") or area_code
                     year = params.get("end_year") or end_year
 
@@ -258,33 +266,38 @@ class Scenarios(Base):
                         )
                         continue
 
-                    # Extract session creation params
-                    session_params = {
+                    # Extract private flag and ensure it's a bool
+                    private = bool(params.get("private", False))
+
+                    # Extract additional session params (like template_id)
+                    extra_params = {
                         k: v
                         for k, v in params.items()
-                        if k
-                        not in (
-                            "title",
-                            "private",
-                            "area_code",
-                            "end_year",
-                        )
+                        if k not in ("title", "private", "area_code", "end_year")
                     }
 
-                    # Create the session
-                    session = Session.new(area, year, **session_params)
-
-                    # Extract SavedScenario-specific params
-                    saved_scenario_params = {
-                        k: v for k, v in params.items() if k == "private"
-                    }
-
-                    # Create SavedScenario from the session
-                    saved_scenarios.append(
-                        Scenario.from_scenario(
-                            session, title, client=client, **saved_scenario_params
+                    # For template_id, we need to create session first, then wrap it
+                    if "template_id" in extra_params:
+                        session = Session.new(area, year, **extra_params)
+                        saved_scenarios.append(
+                            Scenario.create(
+                                title=title,
+                                session_id=session.id,
+                                client=client,
+                                private=private,
+                            )
                         )
-                    )
+                    else:
+                        # Use unified create for simple case
+                        saved_scenarios.append(
+                            Scenario.create(
+                                title=title,
+                                area_code=area,
+                                end_year=year,
+                                client=client,
+                                private=private,
+                            )
+                        )
 
             except (SavedScenarioError, Exception) as e:
                 print(f"Could not create saved scenario with {params}: {e}")

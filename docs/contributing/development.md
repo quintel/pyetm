@@ -268,4 +268,4 @@ poetry run pytest -vv
 
 - [Testing Guide](testing.md) - Learn about testing practices
 - [Contributing Guide](guide.md) - Contribution workflow
-- [API Reference](../api/) - Code documentation
+- [API Reference](../api/index.md) - Code documentation

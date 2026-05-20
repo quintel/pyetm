@@ -249,4 +249,4 @@ Always check the ETM interface for the correct unit for each input.
 
 - [Exports and Queries](exports.md) - Learn how to query results
 - [Advanced Usage](advanced.md) - Batch processing and scenario packing
-- [API Reference](../api/) - Complete API documentation
+- [API Reference](../api/index.md) - Complete API documentation
