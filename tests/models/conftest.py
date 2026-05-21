@@ -150,6 +150,8 @@ def sample_scenario():
         "end_year": scenario.end_year,
     }, name=scenario.id))
 
+    scenario.get_export_config = Mock(return_value=None)
+
     return scenario
 
 
@@ -180,6 +182,8 @@ def scenario_with_inputs():
         "area_code": scenario.area_code,
         "end_year": scenario.end_year,
     }, name=scenario.id))
+
+    scenario.get_export_config = Mock(return_value=None)
 
     return scenario
 
@@ -221,6 +225,8 @@ def scenario_with_queries():
         "end_year": scenario.end_year,
     }, name=scenario.id))
 
+    scenario.get_export_config = Mock(return_value=None)
+
     return scenario
 
 
@@ -253,6 +259,8 @@ def multiple_scenarios():
             "area_code": scenario.area_code,
             "end_year": scenario.end_year,
         }, name=scenario.id))
+
+        scenario.get_export_config = Mock(return_value=None)
 
         scenarios.append(scenario)
     return scenarios

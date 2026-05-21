@@ -528,6 +528,7 @@ class TestExcelExport:
                 pd.Series([3, 4], name="carrier1"),
             ]
         )
+        scenario.get_export_config = Mock(return_value=None)
 
         packer = ScenarioPacker()
         packer.add(scenario)
@@ -807,12 +808,12 @@ class TestScenarioPackerExtras:
         s1 = Mock(spec=Session)
         s1.id = "1"
         s1.identifier = Mock(return_value="1")
-        s1._export_config = ExportConfig(include_inputs=True)
+        s1.get_export_config = Mock(return_value=ExportConfig(include_inputs=True))
 
         s2 = Mock(spec=Session)
         s2.id = "2"
         s2.identifier = Mock(return_value="2")
-        s2._export_config = ExportConfig(include_inputs=False)
+        s2.get_export_config = Mock(return_value=ExportConfig(include_inputs=False))
 
         # Ensure deterministic order by patching _scenarios
         with patch.object(ScenarioPacker, "_scenarios", return_value={s1, s2}):
@@ -860,6 +861,7 @@ class TestScenarioPackerExtras:
         s.id = "S"
         s.identifier = Mock(return_value="S")
         s._to_dataframe = Mock(return_value=pd.DataFrame({"S": [1]}, index=["row"]))
+        s.get_export_config = Mock(return_value=None)
         packer.add(s)
 
         # Make packs return non-empty DataFrames
@@ -1369,10 +1371,10 @@ class TestScenarioPackerCollectExportData:
         from pyetm.models.export_data_collection import ExportDataCollection
 
         # Create scenario with export config
-        sample_scenario._export_config = ExportConfig(
+        sample_scenario.get_export_config = Mock(return_value=ExportConfig(
             include_inputs=True,
             include_sortables=True
-        )
+        ))
 
         packer = ScenarioPacker()
         packer.add(sample_scenario)
@@ -1390,7 +1392,7 @@ class TestScenarioPackerCollectExportData:
         from pyetm.models.export_data_collection import ExportDataCollection
 
         # Create scenario with export config that includes inputs
-        sample_scenario._export_config = ExportConfig(include_inputs=True)
+        sample_scenario.get_export_config = Mock(return_value=ExportConfig(include_inputs=True))
 
         packer = ScenarioPacker()
         packer.add(sample_scenario)

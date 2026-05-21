@@ -375,7 +375,10 @@ class ScenarioPacker(BaseModel):
     def _get_global_export_config(self) -> Optional[ExportConfig]:
         """Get global export configuration from first scenario that has one."""
         for scenario in self._scenarios():
-            config = getattr(scenario, "_export_config", None)
+            if hasattr(scenario, "get_export_config"):
+                config = scenario.get_export_config()
+            else:
+                config = getattr(scenario, "_export_config", None)
             if config is not None:
                 return config
         return None
@@ -794,8 +797,8 @@ class ScenarioPacker(BaseModel):
                 try:
                     if hasattr(scenario, "set_export_config"):
                         scenario.set_export_config(config)
-                    else:
-                        setattr(scenario, "_export_config", config)
+                    elif hasattr(scenario, "_export_config"):
+                        scenario._export_config = config
                 except Exception:
                     logger.warning(
                         f"Failed to set export config for scenario: {scenario}"

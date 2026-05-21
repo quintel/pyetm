@@ -28,11 +28,6 @@ class Packable(BaseModel):
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"
     _scenario_id_cache: Dict[str, Session] | None = PrivateAttr(default=None)
-    _scenario_short_names: Dict[str, str] = PrivateAttr(default_factory=dict)
-
-    def set_scenario_short_names(self, scenario_short_names: Dict[str, str]):
-        """Set mapping of scenario IDs to short names for display purposes."""
-        self._scenario_short_names = scenario_short_names or {}
 
     def add(self, *scenarios):
         """Add one or more scenarios to the packable."""
@@ -58,9 +53,17 @@ class Packable(BaseModel):
         Uses short name, identifier, or ID in that priority order."""
         return self._get_scenario_display_key(scenario)
 
+    def _scenario_short_name(self, scenario: Session) -> Optional[str]:
+        """Return the short name set on a scenario, handling both Session and Scenario objects."""
+        if hasattr(scenario, "session"):
+            return scenario.session.short_name
+        if hasattr(scenario, "short_name"):
+            return scenario.short_name
+        return None
+
     def _get_scenario_display_key(self, scenario: Session) -> str:
         """Get the display key for a scenario (short name, identifier, or ID)."""
-        short_name = self._scenario_short_names.get(str(scenario.id))
+        short_name = self._scenario_short_name(scenario)
         if short_name:
             return short_name
 
@@ -142,7 +145,7 @@ class Packable(BaseModel):
 
         # Try short name first
         for scenario in self.scenarios:
-            if self._scenario_short_names.get(str(scenario.id)) == label_str:
+            if self._scenario_short_name(scenario) == label_str:
                 return scenario
 
         # Identifier/title

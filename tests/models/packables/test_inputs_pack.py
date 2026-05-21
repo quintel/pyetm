@@ -25,6 +25,7 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
     s = Mock()
     s.id = id_val
     s.identifier = Mock(return_value=identifier)
+    s.session.short_name = None
 
     # Create mock inputs
     s.inputs = Mock()
@@ -80,28 +81,10 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
     return s
 
 
-def test_set_scenario_short_names():
-    pack = InputsPack()
-    short_names = {"1": "Base", "2": "Alternative"}
-
-    pack.set_scenario_short_names(short_names)
-
-    assert pack._scenario_short_names == short_names
-
-
-def test_set_scenario_short_names_with_none():
-    pack = InputsPack()
-
-    pack.set_scenario_short_names(None)
-
-    assert pack._scenario_short_names == {}
-
-
 def test_get_scenario_display_key_uses_short_name():
     pack = InputsPack()
-    pack.set_scenario_short_names({"1": "Base"})
-
     scenario = make_scenario(id_val=1)
+    scenario.session.short_name = "Base"
 
     result = pack._get_scenario_display_key(scenario)
 
@@ -132,10 +115,11 @@ def test_get_scenario_display_key_falls_back_to_id():
 def test_resolve_scenario_by_short_name():
     s1 = make_scenario(id_val=1, identifier="S1")
     s2 = make_scenario(id_val=2, identifier="S2")
+    s1.session.short_name = "Base"
+    s2.session.short_name = "Alt"
 
     pack = InputsPack()
     pack.add(s1, s2)
-    pack.set_scenario_short_names({"1": "Base", "2": "Alt"})
 
     result = pack.resolve_scenario("Base")
 

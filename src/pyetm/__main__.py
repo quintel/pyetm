@@ -147,6 +147,10 @@ def copy_example_files(
             examples_path / "inputs" / "example_input_excel.xlsx",
             target_dir / "inputs" / "example_input_excel.xlsx",
         ),
+        (
+            Path(__file__).parent / "templates" / "input_template.xlsx",
+            target_dir / "input.xlsx",
+        ),
     ]
 
     for source_path, dest_path in files_to_copy:
@@ -331,6 +335,81 @@ def init(token, environment, log_level, force):
     click.echo("  3. Check out: https://docs.energytransitionmodel.com/main/pyetm/")
 
     click.echo("\n  Remember: Never commit your .env file to version control!\n")
+
+
+@cli.command()
+@click.option(
+    "--input", "input_path",
+    default="input.xlsx",
+    show_default=True,
+    type=click.Path(exists=False),
+    help="Path to the input Excel file.",
+)
+@click.option(
+    "--output", "output_path",
+    default="outputs/output.xlsx",
+    show_default=True,
+    help="Path to the output Excel file.",
+)
+@click.option(
+    "--no-update",
+    is_flag=True,
+    default=False,
+    help="Load scenarios from Excel without pushing changes to ETM.",
+)
+def run(input_path, output_path, no_update):
+    """
+    Load scenarios from an Excel file and export results.
+
+    By default loads input.xlsx, pushes updates to ETM, and writes
+    results to outputs/output.xlsx.
+
+    Example:
+        pyetm run
+        pyetm run --input my_scenarios.xlsx --output outputs/results.xlsx
+        pyetm run --no-update
+    """
+    from pyetm.models.scenarios import Scenarios
+
+    input_file = Path(input_path)
+    output_file = Path(output_path)
+
+    if not input_file.exists():
+        click.echo(f"Input file not found: {input_file}", err=True)
+        click.echo("Create an input.xlsx file or specify a path with --input.", err=True)
+        sys.exit(1)
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    update = not no_update
+    mode = "update" if update else "read-only"
+    click.echo(f"\nLoading scenarios from {input_file} ({mode} mode)...")
+
+    try:
+        scenarios = Scenarios.from_excel(input_file, update=update)
+    except Exception as e:
+        click.echo(f"Failed to load scenarios: {e}", err=True)
+        sys.exit(1)
+
+    if not scenarios.items:
+        click.echo("No scenarios loaded. Check your input file.", err=True)
+        sys.exit(1)
+
+    click.echo(f"Loaded {len(scenarios)} scenario(s). Exporting results...")
+
+    try:
+        scenarios.to_excel(output_file)
+    except Exception as e:
+        click.echo(f"Failed to export results: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"  Output: {output_file}")
+
+    annual_exports_file = output_file.parent / f"{output_file.stem}_annual_exports{output_file.suffix}"
+    if annual_exports_file.exists():
+        click.echo(f"  Annual exports: {annual_exports_file}")
+
+    click.echo("\nDone.\n")
 
 
 def main():

@@ -13,6 +13,7 @@ def make_scenario(id_val="S"):
         ).set_index("unit", append=True).rename_axis(("gquery", "unit"))
     )
     s.add_queries = Mock()
+    s.session.short_name = None
     return s
 
 

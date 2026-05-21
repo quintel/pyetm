@@ -10,6 +10,7 @@ def make_scenario(id_val="S"):
     s = Mock()
     s.identifier = Mock(return_value=str(id_val))
     s.id = id_val
+    s.session.short_name = None
     return s
 
 

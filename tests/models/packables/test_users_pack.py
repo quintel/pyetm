@@ -13,6 +13,7 @@ def make_scenario(id_val=1, identifier="S1", client=None):
     s.id = id_val
     s.identifier = Mock(return_value=identifier)
     s.client = client or Mock()
+    s.session.short_name = None
     return s
 
 
@@ -22,26 +23,10 @@ def make_user(email, role):
 
 
 class TestUsersPack:
-    def test_set_scenario_short_names(self):
-        pack = UsersPack()
-        short_names = {"1": "Base", "2": "Alternative"}
-
-        pack.set_scenario_short_names(short_names)
-
-        assert pack._scenario_short_names == short_names
-
-    def test_set_scenario_short_names_with_none(self):
-        pack = UsersPack()
-
-        pack.set_scenario_short_names(None)
-
-        assert pack._scenario_short_names == {}
-
     def test_get_scenario_display_key_uses_short_name(self):
         pack = UsersPack()
-        pack.set_scenario_short_names({"1": "Base"})
-
         scenario = make_scenario(id_val=1)
+        scenario.session.short_name = "Base"
 
         result = pack._get_scenario_display_key(scenario)
 
@@ -69,10 +54,11 @@ class TestUsersPack:
     def test_resolve_scenario_by_short_name(self):
         s1 = make_scenario(id_val=1, identifier="S1")
         s2 = make_scenario(id_val=2, identifier="S2")
+        s1.session.short_name = "Base"
+        s2.session.short_name = "Alt"
 
         pack = UsersPack()
         pack.add(s1, s2)
-        pack.set_scenario_short_names({"1": "Base", "2": "Alt"})
 
         result = pack.resolve_scenario("Base")
 

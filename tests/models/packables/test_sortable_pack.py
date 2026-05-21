@@ -8,6 +8,7 @@ def make_scenario(id_val="S1"):
     s = Mock()
     s.identifier = Mock(return_value=str(id_val))
     s.sortables = Mock()
+    s.session.short_name = None
     return s
 
 
