@@ -3,6 +3,8 @@ PyETM Command Line Interface
 Provides CLI commands for managing pyetm projects.
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 from importlib.metadata import version

@@ -110,9 +110,6 @@ Enable or disable SSL certificate verification.
 SSL_VERIFY=false
 ```
 
-!!! danger "Production Warning"
-    Never disable SSL verification in production environments!
-
 #### SSL_CERT_PATH
 
 Path to a custom CA certificate bundle for SSL verification.
@@ -242,9 +239,6 @@ SSL_CERT_PATH=/path/to/corporate-ca-bundle.crt
 ```
 
 ### 3. Disable SSL Verification (Development Only)
-
-!!! danger "Not for Production"
-    Only use this in isolated development environments!
 
 ```env
 SSL_VERIFY=false

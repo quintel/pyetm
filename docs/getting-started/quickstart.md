@@ -66,7 +66,7 @@ LOG_LEVEL=INFO
 
 ## Your First Scenario
 
-Let's create and run a simple scenario programmatically:
+Let's create and run a simple scenario with pyetm:
 
 ```python
 from pyetm import Scenario
@@ -84,23 +84,16 @@ print(f"URL: {scenario.session.url}")
 
 ## Modifying Inputs
 
-Now let's change some inputs to model a future with more solar energy:
+Now let's change some inputs:
 
 ```python
 # Update input values on the scenario
 scenario.update_user_values({
-    "number_of_energy_power_solar_pv_solar_radiation": 50000000,
-    "number_of_households_solar_pv_solar_radiation": 5000000,
+    "capacity_costs_energy_flexibility_flow_batteries_electricity": 22,
+    "costs_buildings_ht_heat_delivery_system_costs_eur_per_connection": 50,
 })
 
-# Add queries and execute them
-scenario.add_queries(["dashboard_renewability", "dashboard_co2_emissions"])
-scenario.execute_queries()
-
-# Get results
-results = scenario.results(columns=["future"])
-print(f"Renewable percentage: {results.loc['dashboard_renewability', 'future']:.1f}%")
-print(f"CO2 emissions: {results.loc['dashboard_co2_emissions', 'future']:.1f} Mton")
+scenario.inputs.to_dataframe()
 ```
 
 ## Querying Results
@@ -109,106 +102,35 @@ You can query any output value from your scenario:
 
 ```python
 # Add queries and execute them
-scenario.add_queries([
-    "dashboard_total_costs",
-    "dashboard_renewability",
-    "dashboard_co2_emissions",
-])
+scenario.add_queries(["dashboard_bio_footprint", "dashboard_biomass_final_demand", "dashboard_biomass_import_share", "dashboard_total_costs"])
 scenario.execute_queries()
 
-# Get results as a DataFrame
-results = scenario.results(columns=["future"])
-
-# Iterate through results
-for key in results.index:
-    print(f"{key}: {results.loc[key, 'future']}")
+# Get results (returns DataFrame with MultiIndex)
+results = scenario.results()
+results
 ```
 
 ## Exporting Data
 
-Export your scenario's hourly electricity curves:
+Export your scenario's hourly electricity curves (a dictionary). Access the keys and grab just the `merit_order.csv`:
 
 ```python
 # Export hourly curves to CSV via the session
-curves = scenario.session.hourly_output_curves.electricity_df
-
+curves = scenario.get_hourly_output_curves('electricity')
+curves.keys()
+merit_order = curves['merit_order']
 # Save to file
-curves.to_csv("hourly_electricity.csv")
-print("Exported hourly electricity curves")
+merit_order.to_csv("hourly_electricity.csv")
 ```
 
-## Saving Scenarios
-
-To save your scenario permanently (requires authentication):
-
+You can also export your whole scenario to excel:
 ```python
-from pyetm import Scenario, BaseClient
-
-# Initialize authenticated client
-client = BaseClient()
-
-# Create and save a scenario (saved scenarios require a title)
-scenario = Scenario.create(
-    title="My First Scenario",
-    area_code="nl2023",
-    end_year=2050,
-    client=client,
-)
-
-print(f"Saved scenario: {scenario.id}")
-print(f"Session URL: {scenario.session.url}")
-```
-
-## Complete Example
-
-Here's a complete example putting it all together:
-
-```python
-from pyetm import Scenario, BaseClient
-
-# Initialize client (reads from .env)
-client = BaseClient()
-
-# Create a new scenario
-scenario = Scenario.create(
-    title="High Solar Scenario",
-    area_code="nl2023",
-    end_year=2050,
-    client=client,
-)
-
-# Modify inputs
-scenario.update_user_values({
-    "number_of_energy_power_solar_pv_solar_radiation": 50000000,
-    "households_solar_pv_solar_radiation_market_penetration": 75.0,
-    "transport_car_using_electricity_share": 50.0,
-})
-
-# Add queries and execute them
-scenario.add_queries([
-    "dashboard_total_costs",
-    "dashboard_renewability",
-    "dashboard_co2_emissions",
-    "dashboard_total_demand",
-])
-scenario.execute_queries()
-
-# Get results
-results = scenario.results(columns=["future"])
-
-# Print results
-print("\n=== Scenario Results ===")
-for key in results.index:
-    print(f"{key}: {results.loc[key, 'future']:.2f}")
-
-# The scenario is already saved in MyETM
-print(f"\nSaved scenario ID: {scenario.id}")
-print(f"Session URL: {scenario.session.url}")
+scenario.to_excel("scenario.xlsx")
 ```
 
 ## Using Jupyter Notebooks
 
-pyetm works great with Jupyter notebooks! After running `pyetm init`, you'll have example notebooks ready to go.
+pyetm works great with Jupyter notebooks! After running `pyetm init`, you'll have example notebooks in your directory to play around with. These notebooks are meant to **serve as inspiration for your own workflows**, rather than being 'ready to go' for scenario flows.
 
 ### Setting Up Jupyter
 
@@ -236,7 +158,7 @@ If you prefer VS Code:
 1. Install the [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python) and [Jupyter](https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter) extensions
 2. Open a `.ipynb` file
 3. Click **Select Kernel** (top right)
-4. Choose **Python (pyetm)**
+4. Choose **Python (pyetm)** or your .venv
 
 ## Next Steps
 

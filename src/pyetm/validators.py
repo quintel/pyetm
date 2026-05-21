@@ -4,6 +4,8 @@ This module provides validation functionsthat raise clear ValueError exceptions
 when invalid curve types, carrier types, or export names are provided.
 """
 
+from __future__ import annotations
+
 from typing import TypeVar, get_args, Any, cast
 from pydantic import TypeAdapter, ValidationError
 from pyetm.types import AnnualExportType, CarrierType, HourlyCurveType

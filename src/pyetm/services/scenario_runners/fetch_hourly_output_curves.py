@@ -1,5 +1,7 @@
 """Service for fetch hourly output curves operations."""
 
+from __future__ import annotations
+
 import io
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
