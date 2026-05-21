@@ -175,6 +175,9 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
             type=str,
         )
 
+    # Ensure environment is not None for type checking
+    assert environment is not None, "Environment must be specified"
+
     # Determine target directory (current working directory)
     target_dir = Path.cwd()
     click.echo(f"Creating files in: {target_dir}\n")

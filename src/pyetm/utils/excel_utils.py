@@ -6,6 +6,7 @@ import math
 from typing import Any, Dict, List, Optional, Set, Union, Tuple, cast
 import numpy as np
 import pandas as pd
+from pandas import Series, Index
 import datetime as dt
 from xlsxwriter.workbook import Workbook  # type: ignore[import-untyped]
 from xlsxwriter.worksheet import Worksheet  # type: ignore[import-untyped]
@@ -92,7 +93,7 @@ class ExportConfigResolver:
             return None
 
     @staticmethod
-    def _parse_config_from_series(series: pd.Series) -> "ExportConfig":
+    def _parse_config_from_series(series: Series[Any]) -> "ExportConfig":
         """Parse ExportConfig from a pandas Series (column from main sheet)."""
 
         def _iter_rows() -> Any:
@@ -222,7 +223,7 @@ def set_column_widths(
 
 
 def write_index(
-    worksheet: Worksheet, index: pd.Index, row_offset: int, bold_format: Any = None
+    worksheet: Worksheet, index: Index[Any], row_offset: int, bold_format: Any = None
 ) -> None:
     """Write pandas index to worksheet"""
     # Write index names if they exist
@@ -448,7 +449,7 @@ def add_frame(
 
 def add_series(
     name: str,
-    series: pd.Series,
+    series: Series[Any],
     workbook: Workbook,
     index: bool = True,
     column_width: Optional[int] = None,
@@ -514,7 +515,7 @@ def sanitize_dataframe_for_excel(df: pd.DataFrame) -> pd.DataFrame:
 
     # Sanitize index and columns
     sanitized_df.index = sanitized_df.index.map(sanitize_excel_value)
-    sanitized_df.columns = [sanitize_excel_value(col) for col in sanitized_df.columns]
+    sanitized_df.columns = pd.Index([sanitize_excel_value(col) for col in sanitized_df.columns])
 
     # Sanitize cell values
     sanitized_df = sanitized_df.map(sanitize_excel_value)
@@ -701,7 +702,7 @@ def normalize_sheet(
     # Extract header and data
     header = df.iloc[header_position].astype(str).map(str.strip)
     data = df.iloc[header_position + 1 :].copy()
-    data.columns = header.values
+    data.columns = pd.Index(header.values)
 
     # Keep only non-helper columns
     columns_to_keep = [col for col in data.columns if not is_helper_column(col, helper_names)]
@@ -737,7 +738,7 @@ def extract_scenario_sheet_info(main_df: pd.DataFrame) -> Dict[str, Dict[str, Op
         return extract_multiple_scenario_sheet_info(main_df)
 
 
-def extract_single_scenario_sheet_info(series: pd.Series) -> Dict[str, Dict[str, Optional[str]]]:
+def extract_single_scenario_sheet_info(series: Series[Any]) -> Dict[str, Dict[str, Optional[str]]]:
     """Extract sheet info for single scenario (Series case)."""
     identifier = str(series.name)
 
@@ -767,7 +768,7 @@ def extract_multiple_scenario_sheet_info(df: pd.DataFrame) -> Dict[str, Dict[str
     return scenario_sheets
 
 
-def get_safe_value(series: pd.Series, key: str, default: str) -> str:
+def get_safe_value(series: Series[Any], key: str, default: str) -> str:
     """Safely get value from series with default fallback."""
     value = series.get(key)
     if pd.notna(value):
@@ -775,7 +776,7 @@ def get_safe_value(series: pd.Series, key: str, default: str) -> str:
     return default
 
 
-def get_value_before_output(series: pd.Series, key: str) -> Optional[str]:
+def get_value_before_output(series: Series[Any], key: str) -> Optional[str]:
     """Get value from series, but only if it appears before 'output' section."""
     seen_output = False
 

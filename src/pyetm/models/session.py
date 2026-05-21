@@ -18,6 +18,7 @@ from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.models.export_config import ExportConfig
+from pyetm.models.export_data_collection import ExportDataCollection
 from pyetm.types import AnnualExportType, CarrierType
 from pyetm.validators import validate_carrier_type, validate_export_names
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
@@ -272,9 +273,9 @@ class Session(Base):
 
         packer = ScenarioPacker()
         packer.add(self)
-        packer.to_excel(path, **export_options)
+        packer.to_excel(str(path), **export_options)
 
-    def collect_export_data(self, **export_options):
+    def collect_export_data(self, **export_options: Any) -> ExportDataCollection:
         """Collect export data in format-agnostic structure."""
         from pyetm.models.scenario_packer import ScenarioPacker
 

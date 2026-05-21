@@ -66,6 +66,5 @@
 * utils
     * [excel_utils](utils/excel_utils.md)
     * [safe_cast](utils/safe_cast.md)
-    * [scenario_excel_service](utils/scenario_excel_service.md)
     * [singleton](utils/singleton.md)
 * [validators](validators.md)

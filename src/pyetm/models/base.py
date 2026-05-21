@@ -1,7 +1,7 @@
 """Base models and shared functionality."""
 
 from __future__ import annotations
-from typing import Any, Type, TypeVar, Union, List, Dict, Optional
+from typing import Any, Type, TypeVar, Union, List, Dict, Optional, Callable, cast
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
 from pydantic_core import InitErrorDetails, PydanticCustomError
 import pandas as pd
@@ -33,7 +33,11 @@ class Base(BaseModel):
         # Initialize all private attributes with their defaults
         private_dict: Dict[str, Any] = self.__pydantic_private__  # type: ignore[assignment]
         for attr_name, attr_info in self.__class__.__private_attributes__.items():
-            if hasattr(attr_info, "default_factory") and attr_info.default_factory is not None:
+            if (
+                hasattr(attr_info, "default_factory")
+                and attr_info.default_factory is not None
+            ):
+                # Call factory - signature varies between pydantic versions
                 private_dict[attr_name] = attr_info.default_factory()
             elif hasattr(attr_info, "default"):
                 private_dict[attr_name] = attr_info.default
@@ -61,15 +65,15 @@ class Base(BaseModel):
                     object.__setattr__(self, field_name, field_value)
 
             # Ensure required Pydantic slot attributes exist to prevent AttributeError
-            for slot in ('__pydantic_fields_set__', '__pydantic_extra__'):
+            for slot in ("__pydantic_fields_set__", "__pydantic_extra__"):
                 try:
                     value = object.__getattribute__(temp_instance, slot)
                     object.__setattr__(self, slot, value)
                 except AttributeError:
                     # Initialize missing slot attributes with defaults
-                    if slot == '__pydantic_extra__':
+                    if slot == "__pydantic_extra__":
                         object.__setattr__(self, slot, {})
-                    elif slot == '__pydantic_fields_set__':
+                    elif slot == "__pydantic_fields_set__":
                         object.__setattr__(self, slot, set())
 
             # Convert validation errors to warnings
@@ -135,7 +139,9 @@ class Base(BaseModel):
         """Print all warnings to the console."""
         self._warning_collector.show_warnings()
 
-    def log_warnings(self, logger: Any, level: str = "warning", prefix: str | None = None) -> None:
+    def log_warnings(
+        self, logger: Any, level: str = "warning", prefix: str | None = None
+    ) -> None:
         """
         Log all collected warnings using the provided logger.
         """
@@ -160,7 +166,9 @@ class Base(BaseModel):
         """Remove warnings for a specific field."""
         self._warning_collector.clear(field)
 
-    def _merge_submodel_warnings(self, *submodels: Base, key_attr: Optional[str] = None) -> None:
+    def _merge_submodel_warnings(
+        self, *submodels: Base, key_attr: Optional[str] = None
+    ) -> None:
         """
         Merge warnings from nested Base models.
         """
@@ -176,7 +184,9 @@ class Base(BaseModel):
         except Exception as e:
             # Create a fallback instance with warnings
             instance = cls.model_construct()
-            instance.add_warning("from_dataframe", f"Failed to create from DataFrame: {e}")
+            instance.add_warning(
+                "from_dataframe", f"Failed to create from DataFrame: {e}"
+            )
             return instance
 
     @classmethod
@@ -184,7 +194,9 @@ class Base(BaseModel):
         """
         Private method to be implemented by each subclass for specific deserialization logic.
         """
-        raise NotImplementedError(f"{cls.__name__} must implement _from_dataframe() class method")
+        raise NotImplementedError(
+            f"{cls.__name__} must implement _from_dataframe() class method"
+        )
 
     def _get_serializable_fields(self) -> List[str]:
         """
@@ -239,7 +251,9 @@ class Base(BaseModel):
         try:
             df = self._to_dataframe(**kwargs)
         except Exception as e:
-            self.add_warning(f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}")
+            self.add_warning(
+                f"{self.__class__.__name__}._to_dataframe()", f"failed: {e}"
+            )
             df = pd.DataFrame()
 
         return df

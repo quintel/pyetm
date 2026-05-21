@@ -192,7 +192,7 @@ class Packable(BaseModel):
 
         # Extract data rows
         data_df = df.iloc[header_row_index + 1 :].copy()
-        data_df.columns = header_row.values
+        data_df.columns = pd.Index(header_row.values)
 
         if data_df.empty or len(data_df.columns) < min_columns:
             return None
@@ -214,7 +214,7 @@ class Packable(BaseModel):
         valid_mask = row_keys != ""
         data_df = data_df.loc[valid_mask]
         row_keys = row_keys.loc[valid_mask]
-        data_df.index = row_keys
+        data_df.index = pd.Index(row_keys)
 
         # Process scenario columns
         scenario_columns = [col for col in data_df.columns if col != first_column]
@@ -328,7 +328,7 @@ class Packable(BaseModel):
         header_pos = positions[0]
         header_row = df.iloc[header_pos].astype(str).map(lambda s: s.strip())
         data = df.iloc[header_pos + 1 :].copy()
-        data.columns = header_row.values
+        data.columns = pd.Index(header_row.values)
 
         def _is_blank(v: Any) -> bool:
             return (

@@ -1,12 +1,13 @@
 """Scenario packing utilities for creating multiple scenario variations."""
 
 import pandas as pd
+from pandas import Series
 import logging
 from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, Sequence, List, Union, TYPE_CHECKING, cast
-from xlsxwriter import Workbook
+from xlsxwriter import Workbook  # type: ignore[import-untyped]
 
 from pyetm.models.packables.inputs_pack import InputsPack
 from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
@@ -95,7 +96,7 @@ class ScenarioPacker(BaseModel):
         result.insert(1, "identifier", [scenario.identifier() for scenario in scenarios])
         return result
 
-    def inputs(self, fields="user") -> pd.DataFrame:
+    def inputs(self, fields: str = "user") -> pd.DataFrame:
         return self._inputs.to_dataframe(fields=fields)
 
     def gquery_results(self, columns: str = "future") -> pd.DataFrame:
@@ -263,6 +264,7 @@ class ScenarioPacker(BaseModel):
         return ExportDataCollection(
             main_info=self.main_info(),
             inputs=collected_data.get("inputs"),
+            inputs_detailed=collected_data.get("inputs_detailed"),
             sortables=collected_data.get("sortables"),
             custom_curves=collected_data.get("custom_curves"),
             hourly_output_curves=collected_data.get("hourly_output_curves"),
@@ -307,10 +309,16 @@ class ScenarioPacker(BaseModel):
         self, resolved_flags: Dict[str, Any], output_carriers: Optional[List[str]]
     ) -> Dict[str, Any]:
         """Collect all data based on resolved flags."""
-        collected = {}
+        collected: Dict[str, Any] = {}
 
         if resolved_flags["include_inputs"]:
             collected["inputs"] = self.inputs()
+            # Collect inputs_detailed if defaults or min_max are requested
+            if resolved_flags.get("inputs_defaults") or resolved_flags.get("inputs_min_max"):
+                collected["inputs_detailed"] = self._inputs.to_dataframe(
+                    include_defaults=resolved_flags.get("inputs_defaults", False),
+                    include_min_max=resolved_flags.get("inputs_min_max", False),
+                )
         if resolved_flags["include_sortables"]:
             collected["sortables"] = self.sortables()
         if resolved_flags["include_custom_curves"]:
@@ -330,7 +338,7 @@ class ScenarioPacker(BaseModel):
 
         return collected
 
-    def _collect_hourly_curves(self, output_carriers: Optional[List[str]]) -> Dict:
+    def _collect_hourly_curves(self, output_carriers: Optional[List[str]]) -> Dict[str, Dict[str, pd.DataFrame]]:
         """Collect hourly output curves based on carriers."""
         if output_carriers:
             curve_names = self._get_curves_for_carriers(output_carriers)
@@ -365,7 +373,7 @@ class ScenarioPacker(BaseModel):
         include_input_details: Optional[bool] = None,
         include_users: Optional[bool] = None,
         include_annual_exports: Optional[Sequence[str]] = None,
-    ):
+    ) -> None:
         """Export scenarios to Excel file."""
         from pyetm.exporters.excel_exporter import ExcelExporter
 
@@ -386,7 +394,7 @@ class ScenarioPacker(BaseModel):
                 include_defaults=True, include_min_max=True
             )
 
-        return ExcelExporter.write(
+        ExcelExporter.write(
             export_data=export_data, path=path, scenarios=list(self._scenarios())
         )
 
@@ -489,7 +497,7 @@ class ScenarioPacker(BaseModel):
             ),
         }
 
-    def _add_main_sheet(self, workbook: Workbook):
+    def _add_main_sheet(self, workbook: Workbook) -> None:
         """Add main scenario information sheet to workbook."""
         main_df = self.main_info()
         if not main_df.empty:
@@ -505,7 +513,7 @@ class ScenarioPacker(BaseModel):
                 scenario_styling=True,
             )
 
-    def _add_data_sheets(self, workbook: Workbook, flags: Dict[str, Any]):
+    def _add_data_sheets(self, workbook: Workbook, flags: Dict[str, Any]) -> None:
         """Add data sheets to workbook based on flags."""
         if flags["include_inputs"]:
             self._inputs.add_to_workbook(
@@ -529,7 +537,7 @@ class ScenarioPacker(BaseModel):
         carriers: Optional[Sequence[str]],
         include_hourly_output_curves: bool,
         global_config: Optional[ExportConfig],
-    ):
+    ) -> None:
         """Export output curves to separate file if needed."""
         if not include_hourly_output_curves:
             return
@@ -560,7 +568,7 @@ class ScenarioPacker(BaseModel):
         main_path: str,
         include_annual_exports: Optional[Sequence[str]],
         global_config: Optional[ExportConfig],
-    ):
+    ) -> None:
         """Export annual exports to separate file if needed."""
         # Determine which exports to include
         exports_to_include = None
@@ -685,16 +693,19 @@ class ScenarioPacker(BaseModel):
             return None
 
     def _import_all_sheets(
-        self, excel_file: pd.ExcelFile, main_df: pd.DataFrame,
-        scenarios_by_column: Dict[Any, Session], update_set: set[str]
+        self,
+        excel_file: pd.ExcelFile,
+        main_df: pd.DataFrame,
+        scenarios_by_column: Dict[Any, Session],
+        update_set: set[str]
     ) -> None:
         """Import all data sheets from Excel file."""
         self._inputs.import_from_excel(excel_file, main_df, scenarios_by_column, update_set)
-        self._query_pack.load_from_dataframe(
-            excel_utils.parse_excel_sheet(
-                excel_file, self._query_pack.sheet_name, **self._query_pack.excel_read_kwargs()
-            )
+        gquery_df = excel_utils.parse_excel_sheet(
+            excel_file, self._query_pack.sheet_name, **self._query_pack.excel_read_kwargs()
         )
+        if gquery_df is not None:
+            self._query_pack.load_from_dataframe(gquery_df)
         self._import_scenario_specific_sheets(excel_file, main_df, scenarios_by_column, update_set)
         self._users.import_from_excel(excel_file, main_df, scenarios_by_column, update_set)
 
@@ -730,7 +741,7 @@ class ScenarioPacker(BaseModel):
         return scenarios_by_row
 
     def _create_scenario_from_row(
-        self, row_idx: Any, row_data: pd.Series, update_set: Optional[set[str]] = None
+        self, row_idx: Any, row_data: Series[Any], update_set: Optional[set[str]] = None
     ) -> Optional[Session]:
         """
         Create a scenario from a main sheet row.
@@ -741,7 +752,10 @@ class ScenarioPacker(BaseModel):
         - Default: False (SavedScenarioLoader)
         """
         is_session = cast_bool(row_data.get("session")) or False
-        loader = SessionLoader(self) if is_session else SavedScenarioLoader(self)
+        loader: ScenarioLoader = cast(
+            ScenarioLoader,
+            SessionLoader(self) if is_session else SavedScenarioLoader(self)
+        )
 
         row_params = self._extract_row_parameters(row_data, row_idx)
 
@@ -775,7 +789,7 @@ class ScenarioPacker(BaseModel):
             loader,
         )
 
-    def _extract_row_parameters(self, row_data: pd.Series, row_idx) -> Dict[str, Any]:
+    def _extract_row_parameters(self, row_data: Series[Any], row_idx: Any) -> Dict[str, Any]:
         """Extract scenario parameters from row data."""
         return {
             "scenario_id": cast_int(row_data.get("scenario_id")),
@@ -892,7 +906,7 @@ class ScenarioPacker(BaseModel):
         )
         return None
 
-    def _extract_metadata_updates(self, column_data: pd.Series) -> Dict[str, Any]:
+    def _extract_metadata_updates(self, column_data: Series[Any]) -> Dict[str, Any]:
         """Extract metadata updates from column data."""
         metadata: Dict[str, Any] = {}
 

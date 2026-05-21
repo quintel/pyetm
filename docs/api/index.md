@@ -39,7 +39,6 @@ Configuration management and settings.
 Utility functions and helpers.
 
 - **[Excel Utils](utils/excel_utils.md)** - Excel file operations
-- **[Scenario Excel Service](utils/scenario_excel_service.md)** - Scenario Excel export/import
 - **[Safe Cast](utils/safe_cast.md)** - Type conversion utilities
 - **[Singleton](utils/singleton.md)** - Singleton pattern implementation
 

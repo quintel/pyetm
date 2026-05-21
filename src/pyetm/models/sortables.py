@@ -269,7 +269,8 @@ class Sortables(Base):
         def _extract_order(series: pd.Series[Any]) -> List[Any]:
             s = series.dropna()
             if s.dtype == object:
-                s = s.astype(str).map(lambda v: v.strip()).replace({"": pd.NA}).dropna()  # type: ignore[dict-item]
+                s = s.astype(str).map(lambda v: v.strip())
+                s = s.replace("", pd.NA).dropna()
             return s.tolist()
 
         items: List[Sortable] = []

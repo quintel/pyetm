@@ -8,9 +8,10 @@ as an intermediate representation that can be used to export to any file format.
 
 from __future__ import annotations
 
-from typing import Optional, Dict
+from typing import Optional, Dict, Any, cast
 from pydantic import BaseModel, Field, ConfigDict
 import pandas as pd
+from pandas import Series
 
 from pyetm.models.export_config import ExportConfig
 
@@ -37,7 +38,7 @@ class ExportDataCollection(BaseModel):
         None, description="Sortable technology data across scenarios"
     )
 
-    custom_curves: Optional[Dict[str, Dict[str, pd.Series]]] = Field(
+    custom_curves: Optional[Dict[str, Dict[str, Series[Any]]]] = Field(
         None,
         description="Custom curves: {curve_name: {scenario_id: Series}}",
     )
@@ -74,35 +75,35 @@ class ExportDataCollection(BaseModel):
         arbitrary_types_allowed=True,  # Allow pandas DataFrames
     )
 
-    def _safe_to_dict(self, obj: pd.DataFrame | pd.Series) -> dict:
+    def _safe_to_dict(self, obj: pd.DataFrame | Series[Any]) -> dict[str, Any]:
         """Convert DataFrame or Series to JSON-serializable dict."""
         if isinstance(obj, pd.Series):
             return self._series_to_dict(obj)
         return self._dataframe_to_dict(obj)
 
-    def _series_to_dict(self, series: pd.Series) -> dict:
+    def _series_to_dict(self, series: Series[Any]) -> dict[str, Any]:
         """Convert Series to dict, handling MultiIndex."""
         if isinstance(series.index, pd.MultiIndex):
             return {str(idx): val for idx, val in series.items()}
-        return series.to_dict()
+        return cast(dict[str, Any], series.to_dict())
 
-    def _dataframe_to_dict(self, df: pd.DataFrame) -> dict:
+    def _dataframe_to_dict(self, df: pd.DataFrame) -> dict[str, Any]:
         """Convert DataFrame to dict, handling MultiIndex."""
         if isinstance(df.columns, pd.MultiIndex):
             return self._multiindex_columns_to_dict(df)
         if isinstance(df.index, pd.MultiIndex):
             return {str(idx): val for idx, val in df.to_dict(orient="index").items()}
-        return df.to_dict()
+        return cast(dict[str, Any], df.to_dict())
 
-    def _multiindex_columns_to_dict(self, df: pd.DataFrame) -> dict:
+    def _multiindex_columns_to_dict(self, df: pd.DataFrame) -> dict[str, Any]:
         """Convert DataFrame with MultiIndex columns to nested dict."""
-        result = {}
-        for scenario_id in df.columns.levels[0]:
+        result: dict[str, Any] = {}
+        for scenario_id in df.columns.get_level_values(0).unique():
             scenario_df = df[scenario_id]
             result[str(scenario_id)] = self._safe_to_dict(scenario_df)
         return result
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to nested dictionary structure."""
         result = {"main_info": self._safe_to_dict(self.main_info)}
 
@@ -121,7 +122,7 @@ class ExportDataCollection(BaseModel):
         result["config"] = self.config.model_dump()
         return result
 
-    def _convert_nested_dict(self, nested_dict: Dict) -> Dict:
+    def _convert_nested_dict(self, nested_dict: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Convert nested dict of DataFrames/Series to JSON-serializable structure."""
         return {
             outer_key: {

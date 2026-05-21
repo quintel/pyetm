@@ -331,7 +331,6 @@ class Scenarios(Base):
         Note: This exports the underlying session data from each SavedScenario.
         The scenario_id column will contain Scenario IDs (MyETM).
         """
-        from pyetm.utils.scenario_excel_service import ScenarioExcelService
 
         if not self.items:
             raise ValueError("No scenarios to export")

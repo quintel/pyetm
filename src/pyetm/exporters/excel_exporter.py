@@ -2,9 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import Optional, Sequence, Dict, List, TYPE_CHECKING
+from typing import Optional, Sequence, Dict, List, Any, TYPE_CHECKING, cast
 import pandas as pd
-from xlsxwriter import Workbook
+from pandas import Series
+from xlsxwriter import Workbook  # type: ignore[import-untyped]
 
 from pyetm.models.export_data_collection import ExportDataCollection
 from pyetm.utils import excel_utils
@@ -41,7 +42,7 @@ class MainSheetWriter:
     """Writes main scenario info sheet to Excel."""
 
     @staticmethod
-    def write(workbook: Workbook, main_info: pd.DataFrame, scenarios: list) -> None:
+    def write(workbook: Workbook, main_info: pd.DataFrame, scenarios: list[Any]) -> None:
         """Write main scenario information sheet."""
         if main_info.empty:
             return
@@ -61,14 +62,14 @@ class DataSheetWriter:
     """Writes data sheets (inputs, sortables, etc.) to Excel."""
 
     @staticmethod
-    def write_inputs(workbook: Workbook, inputs: pd.DataFrame) -> None:
+    def write_inputs(workbook: Workbook, inputs: Optional[pd.DataFrame]) -> None:
         """Write inputs sheet."""
         if inputs is None or inputs.empty:
             return
         excel_utils.add_frame("SLIDER_SETTINGS", inputs, workbook, column_width=18)
 
     @staticmethod
-    def write_inputs_detailed(workbook: Workbook, inputs_detailed: pd.DataFrame) -> None:
+    def write_inputs_detailed(workbook: Workbook, inputs_detailed: Optional[pd.DataFrame]) -> None:
         """Write detailed inputs sheet with defaults and min/max."""
         if inputs_detailed is None or inputs_detailed.empty:
             return
@@ -79,7 +80,7 @@ class DataSheetWriter:
         excel_utils.add_frame("INPUT_DETAILS", sanitized, workbook, column_width=18)
 
     @staticmethod
-    def write_sortables(workbook: Workbook, sortables: pd.DataFrame) -> None:
+    def write_sortables(workbook: Workbook, sortables: Optional[pd.DataFrame]) -> None:
         """Write sortables sheet."""
         if sortables is None or sortables.empty:
             return
@@ -87,7 +88,7 @@ class DataSheetWriter:
 
     @staticmethod
     def write_custom_curves(
-        workbook: Workbook, custom_curves: Dict[str, Dict[str, pd.Series]]
+        workbook: Workbook, custom_curves: Optional[Dict[str, Dict[str, Series[Any]]]]
     ) -> None:
         """Write custom curves sheet."""
         if not custom_curves:
@@ -97,7 +98,7 @@ class DataSheetWriter:
             excel_utils.add_frame("CUSTOM_CURVES", combined_df, workbook, column_width=18)
 
     @staticmethod
-    def _combine_custom_curves(curves_dict: Dict[str, Dict[str, pd.Series]]) -> Optional[pd.DataFrame]:
+    def _combine_custom_curves(curves_dict: Dict[str, Dict[str, Series[Any]]]) -> Optional[pd.DataFrame]:
         """Combine custom curves into single DataFrame."""
         all_series = []
         for curve_name, scenarios_data in curves_dict.items():
@@ -114,14 +115,14 @@ class DataSheetWriter:
         return combined
 
     @staticmethod
-    def write_gquery_results(workbook: Workbook, gquery_results: pd.DataFrame) -> None:
+    def write_gquery_results(workbook: Workbook, gquery_results: Optional[pd.DataFrame]) -> None:
         """Write gquery results sheet."""
         if gquery_results is None or gquery_results.empty:
             return
         excel_utils.add_frame("GQUERIES", gquery_results, workbook, column_width=18)
 
     @staticmethod
-    def write_users(workbook: Workbook, users: pd.DataFrame) -> None:
+    def write_users(workbook: Workbook, users: Optional[pd.DataFrame]) -> None:
         """Write users sheet."""
         if users is None or users.empty:
             return
@@ -171,7 +172,7 @@ class HourlyCurvesWriter:
         return carrier_curves
 
     @staticmethod
-    def _select_carriers(carrier_map: Dict, carriers: Optional[Sequence[str]]) -> List[str]:
+    def _select_carriers(carrier_map: Dict[str, Any], carriers: Optional[Sequence[str]]) -> List[str]:
         """Select which carriers to export."""
         valid_carriers = list(carrier_map.keys())
         selected = list(valid_carriers if carriers is None else carriers)
@@ -236,8 +237,8 @@ class HourlyCurvesWriter:
 
     @staticmethod
     def _normalize_to_series(
-        df: pd.DataFrame | pd.Series, scenario_id: str, curve_name: str
-    ) -> List:
+        df: pd.DataFrame | Series[Any], scenario_id: str, curve_name: str
+    ) -> List[tuple[tuple[str, str], Series[Any]]]:
         """Normalize DataFrame or Series to list of series entries."""
         if isinstance(df, pd.Series):
             return [((scenario_id, curve_name), df)]
@@ -306,7 +307,7 @@ class ExcelExporter:
 
     @staticmethod
     def write(
-        export_data: ExportDataCollection, path: str, scenarios: list
+        export_data: ExportDataCollection, path: str, scenarios: list[Any]
     ) -> Path:
         """
         Write export data collection to Excel format.
@@ -328,7 +329,7 @@ class ExcelExporter:
 
     @staticmethod
     def _write_main_workbook(
-        export_data: ExportDataCollection, path: str, scenarios: list
+        export_data: ExportDataCollection, path: str, scenarios: list[Any]
     ) -> None:
         """Write main workbook with all core data sheets."""
         workbook = Workbook(path)
@@ -361,7 +362,7 @@ class ExcelExporter:
 
     @staticmethod
     def _safe_write_hourly_curves(
-        curves_data: Dict, output_path: Path, carriers: Optional[Sequence[str]]
+        curves_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path, carriers: Optional[Sequence[str]]
     ) -> None:
         """Write hourly curves with error handling."""
         try:
@@ -370,7 +371,7 @@ class ExcelExporter:
             logger.warning("Failed exporting output curves workbook: %s", e)
 
     @staticmethod
-    def _safe_write_annual_exports(exports_data: Dict, output_path: Path) -> None:
+    def _safe_write_annual_exports(exports_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path) -> None:
         """Write annual exports with error handling."""
         try:
             AnnualExportsWriter.write(exports_data, output_path)

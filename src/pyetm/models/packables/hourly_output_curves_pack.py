@@ -5,6 +5,7 @@ from typing import ClassVar, Any, Optional, Sequence, Tuple, cast
 from xlsxwriter import Workbook  # type: ignore[import-untyped]
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 import pandas as pd
+from pandas import Series
 from pyetm.models.packables.packable import Packable
 from pyetm.utils import excel_utils
 
@@ -276,7 +277,7 @@ class HourlyOutputCurvesPack(Packable):
             scenarios_sorted = sorted(self.scenarios, key=lambda s: s.id)
 
             for carrier in selected:
-                series_entries: list[Tuple[Tuple[str, str], pd.Series]] = []
+                series_entries: list[Tuple[Tuple[str, str], Series[Any]]] = []
 
                 for scenario in scenarios_sorted:
                     # Scenario label
