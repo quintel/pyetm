@@ -11,12 +11,6 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for copying an existing scenario.
 
     POST /api/v3/scenarios
-
-    Args:
-        client: The HTTP client to use
-        scenario_id: ID of the scenario to copy
-        overrides: Optional dictionary of scenario attributes to override
-        **kwargs: Additional arguments passed to the request
     """
 
     # Fields that can be overridden when copying
@@ -37,6 +31,12 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Copy an existing scenario with optional attribute overrides.
+
+        Args:
+            client: The HTTP client to use
+            scenario_id: ID of the scenario to copy
+            overrides: Optional dictionary of scenario attributes to override
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = CopyScenarioRunner.run(

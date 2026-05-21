@@ -11,12 +11,6 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
     Runner for updating metadata fields on a scenario through the main scenario endpoint.
 
     PUT /api/v3/scenarios/{scenario_id}
-
-    Args:
-        client: The HTTP client to use
-        scenario: The scenario object (must have an 'id' attribute)
-        metadata: Dictionary of metadata updates to apply
-        **kwargs: Additional arguments passed to the request
     """
 
     META_KEYS = [
@@ -47,6 +41,12 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
 
         Fields in META_KEYS are set directly on the scenario.
         Other fields are automatically merged and nested under the 'metadata' field.
+
+        Args:
+            client: The HTTP client to use
+            scenario: The scenario object (must have an 'id' attribute)
+            metadata: Dictionary of metadata updates to apply
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = UpdateMetadataRunner.run(

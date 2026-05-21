@@ -11,11 +11,6 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for creating a SavedScenario in MyETM from a SessionID scenario.
 
     POST /api/v3/saved_scenarios
-
-    Args:
-        client: The HTTP client to use
-        saved_scenario_data: Dictionary with scenario_id, title, private
-        **kwargs: Additional arguments passed to the request
     """
 
     REQUIRED_KEYS = ["scenario_id", "title"]
@@ -27,6 +22,11 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Create a new SavedScenario in MyETM.
+
+        Args:
+            client: The HTTP client to use
+            saved_scenario_data: Dictionary with scenario_id, title, private
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = CreateSavedScenarioRunner.run(

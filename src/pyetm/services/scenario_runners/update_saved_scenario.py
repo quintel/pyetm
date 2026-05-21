@@ -11,12 +11,6 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for updating a SavedScenario in MyETM.
 
     PUT /api/v3/saved_scenarios/:id
-
-    Args:
-        client: The HTTP client to use
-        saved_scenario_id: ID of the SavedScenario to update
-        update_data: Dictionary with fields to update (title, private, discarded)
-        **kwargs: Additional arguments passed to the request
     """
 
     ALLOWED_KEYS = ["title", "scenario_id", "private", "discarded"]
@@ -30,6 +24,12 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update an existing SavedScenario in MyETM.
+
+        Args:
+            client: The HTTP client to use
+            saved_scenario_id: ID of the SavedScenario to update
+            update_data: Dictionary with fields to update (title, private, discarded)
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = UpdateSavedScenarioRunner.run(

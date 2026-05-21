@@ -11,12 +11,6 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
     Runner for updating inputs on a scenario through the main scenario endpoint.
 
     PUT /api/v3/scenarios/{scenario_id}
-
-    Args:
-        client: The HTTP client to use
-        scenario: The scenario object (must have an 'id' attribute)
-        inputs: Dictionary of input updates to apply (input_key -> value)
-        **kwargs: Additional arguments passed to the request
     """
 
     @staticmethod
@@ -44,6 +38,12 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update inputs for a scenario.
+
+        Args:
+            client: The HTTP client to use
+            scenario: The scenario object (must have an 'id' attribute)
+            inputs: Dictionary of input updates to apply (input_key -> value)
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = UpdateInputsRunner.run(

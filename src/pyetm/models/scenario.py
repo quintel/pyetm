@@ -282,7 +282,7 @@ class Scenario(Base):
             SavedScenario instance
 
         Raises:
-            SavedScenarioError if loading fails
+            SavedScenarioError: If loading fails
         """
         if client is None:
             client = BaseClient()
@@ -331,7 +331,7 @@ class Scenario(Base):
             SavedScenario instance
 
         Raises:
-            SavedScenarioError if creation fails
+            SavedScenarioError: If creation fails
         """
         import warnings
 
@@ -374,7 +374,7 @@ class Scenario(Base):
             SavedScenario instance
 
         Raises:
-            SavedScenarioError if creation fails
+            SavedScenarioError: If creation fails
         """
         import warnings
 

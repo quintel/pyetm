@@ -74,7 +74,9 @@ class AnnualExportsPack(Packable):
         """
         Build a dict organized by export type, then by scenario.
 
-        Returns dict[export_name][scenario_id] = DataFrame for that export and scenario.
+        Returns:
+            Dictionary with structure: dict\\[export_name\\]\\[scenario_id\\] = DataFrame,
+            where export_name is the export type and scenario_id is the scenario identifier.
         """
         result: dict[str, dict[str, pd.DataFrame]] = {}
 

@@ -186,7 +186,9 @@ class HourlyOutputCurvesPack(Packable):
         """
         Build a dict organized by curve type, then by scenario.
 
-        Returns dict[curve_name][scenario_id] = DataFrame for that curve and scenario.
+        Returns:
+            Dictionary with structure: dict\\[curve_name\\]\\[scenario_id\\] = DataFrame,
+            where curve_name is the curve type and scenario_id is the scenario identifier.
         """
         result: dict[str, dict[str, pd.DataFrame]] = {}
 

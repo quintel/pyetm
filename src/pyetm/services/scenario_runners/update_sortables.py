@@ -12,14 +12,6 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
 
     PUT /api/v3/scenarios/{scenario_id}/user_sortables/{sortable_type}
     PUT /api/v3/scenarios/{scenario_id}/user_sortables/{sortable_type}?subtype={subtype}
-
-    Args:
-        client: The HTTP client to use
-        scenario: The scenario object (must have an 'id' attribute)
-        sortable_type: The type of sortable (e.g., "demand", "heat_network")
-        order: The new order for the sortable
-        subtype: Optional subtype for heat_network (e.g., "lt", "mt", "ht")
-        **kwargs: Additional arguments passed to the request
     """
 
     @staticmethod
@@ -61,6 +53,13 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
         """
         Update a single sortable for a scenario - the endpoint doesn't handle bulk updates.
 
+        Args:
+            client: The HTTP client to use
+            scenario: The scenario object (must have an 'id' attribute)
+            sortable_type: The type of sortable (e.g., "demand", "heat_network")
+            order: The new order for the sortable
+            subtype: Optional subtype for heat_network (e.g., "lt", "mt", "ht")
+            **kwargs: Additional arguments passed to the request
         """
         path = f"/scenarios/{scenario.id}/user_sortables/{sortable_type}"
         if subtype:

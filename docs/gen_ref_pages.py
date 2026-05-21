@@ -29,12 +29,10 @@ for path in sorted(src_root.rglob("*.py")):
     if parts[-1] in ("__init__", "__main__"):
         continue
 
-    # Create document path (same as module path but under api/)
-    doc_path = Path(*parts).with_suffix(".md")
-    full_doc_path = reference_root / doc_path
-
-    # Navigation uses parts without 'pyetm' prefix
+    # Create document path without 'pyetm' prefix to avoid duplication
     nav_parts = parts[1:]  # Remove 'pyetm' prefix
+    doc_path = Path(*nav_parts).with_suffix(".md")
+    full_doc_path = reference_root / doc_path
 
     # Add to navigation
     if nav_parts:

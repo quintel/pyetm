@@ -14,11 +14,6 @@ class BreakPresetLinkRunner(BaseRunner[Dict[str, Any]]):
     from its parent preset scenario.
 
     PUT /api/v3/scenarios/{scenario_id}
-
-    Args:
-        client: The HTTP client to use
-        scenario: The scenario object (must have an 'id' attribute) or scenario ID
-        **kwargs: Additional arguments passed to the request
     """
 
     @staticmethod
@@ -30,6 +25,11 @@ class BreakPresetLinkRunner(BaseRunner[Dict[str, Any]]):
 
         This makes the scenario independent by removing its connection to the
         preset scenario it was copied from.
+
+        Args:
+            client: The HTTP client to use
+            scenario: The scenario object (must have an 'id' attribute) or scenario ID
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = BreakPresetLinkRunner.run(

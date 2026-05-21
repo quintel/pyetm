@@ -11,11 +11,6 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for creating a new scenario.
 
     POST /api/v3/scenarios
-
-    Args:
-        client: The HTTP client to use
-        scenario_data: Dictionary of scenario attributes for creation
-        **kwargs: Additional arguments passed to the request
     """
 
     # Required fields for scenario creation
@@ -43,6 +38,11 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Create a new scenario.
+
+        Args:
+            client: The HTTP client to use
+            scenario_data: Dictionary of scenario attributes for creation
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = CreateScenarioRunner.run(
