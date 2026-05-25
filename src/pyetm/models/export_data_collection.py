@@ -38,7 +38,7 @@ class ExportDataCollection(BaseModel):
         None, description="Sortable technology data across scenarios"
     )
 
-    custom_curves: Optional[Dict[str, Dict[str, Series[Any]]]] = Field(
+    custom_curves: Optional[Dict[str, Dict[str, Any]]] = Field(
         None,
         description="Custom curves: {curve_name: {scenario_id: Series}}",
     )

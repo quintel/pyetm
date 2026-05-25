@@ -73,13 +73,16 @@ class HourlyOutputCurve(Base):
     def available(self) -> bool:
         return bool(self.file_path)
 
-    def retrieve(self, client: Any, scenario: Any, force_refresh: bool = False) -> Optional[pd.DataFrame]:
+    def retrieve(
+        self, client: Any, scenario: Any, force_refresh: bool = False
+    ) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
         # Normalize to Session to get ETEngine session ID
         session = self._normalize_to_session(scenario)
 
         file_path = (
-            get_settings().path_to_tmp(str(session.id)) / f"{self.key.replace('/', '-')}.csv"
+            get_settings().path_to_tmp(str(session.id))
+            / f"{self.key.replace('/', '-')}.csv"
         )
 
         # Reuse a cached file if present unless explicitly refreshing.
@@ -116,7 +119,9 @@ class HourlyOutputCurve(Base):
                     return None
             else:
                 # API call failed or returned no data
-                errors = result.errors if hasattr(result, 'errors') else ['Unknown error']
+                errors = (
+                    result.errors if hasattr(result, "errors") else ["Unknown error"]
+                )
                 error_msg = f"Failed to download curve {self.key}: {errors}"
                 self.add_warning("download", error_msg)
                 logger.error(error_msg)
@@ -131,7 +136,9 @@ class HourlyOutputCurve(Base):
     def contents(self) -> Optional[pd.DataFrame]:
         """Open file from path and return contents"""
         if not self.available():
-            self.add_warning("file_path", f"Curve {self.key} not available - no file path set")
+            self.add_warning(
+                "file_path", f"Curve {self.key} not available - no file path set"
+            )
             return None
 
         try:
@@ -140,7 +147,9 @@ class HourlyOutputCurve(Base):
                 return None
             return _read_csv_cached(self.file_path)
         except Exception as e:
-            self.add_warning("file_path", f"Failed to read curve file for {self.key}: {e}")
+            self.add_warning(
+                "file_path", f"Failed to read curve file for {self.key}: {e}"
+            )
             return None
 
     def remove(self) -> bool:
@@ -153,7 +162,9 @@ class HourlyOutputCurve(Base):
             self.file_path = None
             return True
         except Exception as e:
-            self.add_warning("file_path", f"Failed to remove curve file for {self.key}: {e}")
+            self.add_warning(
+                "file_path", f"Failed to remove curve file for {self.key}: {e}"
+            )
             return False
 
     @classmethod
@@ -230,7 +241,8 @@ class HourlyOutputCurves(Base):
         if not curve.available():
             # Try to attach a cached file from disk first
             expected_path = (
-                get_settings().path_to_tmp(str(session.id)) / f"{curve.key.replace('/', '-')}.csv"
+                get_settings().path_to_tmp(str(session.id))
+                / f"{curve.key.replace('/', '-')}.csv"
             )
             if expected_path.is_file():
                 curve.file_path = expected_path
@@ -250,29 +262,30 @@ class HourlyOutputCurves(Base):
     @lru_cache(maxsize=1)
     def _load_carrier_mappings() -> dict[str, list[str]]:
         """Load carrier mappings from YAML config file"""
-        config_path = Path(__file__).parent.parent / "config" / "hourly_output_curve_mappings.yml"
+        config_path = (
+            Path(__file__).parent.parent / "config" / "hourly_output_curve_mappings.yml"
+        )
         try:
             with open(config_path, "r") as file:
                 config = yaml.safe_load(file)
                 if config is not None and isinstance(config, dict):
-                    return cast(dict[str, list[str]], config.get("carrier_mappings", {}))
+                    return cast(
+                        dict[str, list[str]], config.get("carrier_mappings", {})
+                    )
                 return {}
         except (FileNotFoundError, yaml.YAMLError):
             # Fallback to hardcoded mappings
             result: dict[str, list[str]] = {
-                "electricity": ["merit_order", "electricity_price", "residual_load"],
-                "heat": [
-                    "heat_network",
-                    "agriculture_heat",
-                    "household_heat",
-                    "buildings_heat",
-                ],
-                "hydrogen": ["hydrogen", "hydrogen_integral_cost"],
+                "electricity": ["merit_order"],
+                "heat": ["heat_network"],
+                "hydrogen": ["hydrogen"],
                 "methane": ["network_gas"],
             }
             return result
 
-    def get_curves_by_carrier_type(self, scenario: Any, carrier_type: str) -> dict[str, pd.DataFrame]:
+    def get_curves_by_carrier_type(
+        self, scenario: Any, carrier_type: str
+    ) -> dict[str, pd.DataFrame]:
         """
         Get all curves for a specific carrier type.
 
@@ -336,6 +349,7 @@ class HourlyOutputCurves(Base):
         """Create HourlyOutputCurves instance from service result"""
         # Normalize to Session to get ETEngine session ID
         from pyetm.models.scenario import Scenario
+
         session = scenario.session if isinstance(scenario, Scenario) else scenario
 
         if not service_result.success or not service_result.data:
@@ -367,7 +381,9 @@ class HourlyOutputCurves(Base):
                 curves_list.append(curve)
 
             except Exception as e:
-                basic_curve = HourlyOutputCurve.model_construct(key=curve_name, type="unknown")
+                basic_curve = HourlyOutputCurve.model_construct(
+                    key=curve_name, type="unknown"
+                )
                 basic_curve.add_warning("base", f"Failed to process curve data: {e}")
                 curves_list.append(basic_curve)
 
@@ -398,18 +414,23 @@ class HourlyOutputCurves(Base):
         return type_mapping.get(curve_name, "output_curve")
 
     @classmethod
-    def fetch_all(cls, scenario: Any, cache_curves: bool = True) -> "HourlyOutputCurves":
+    def fetch_all(
+        cls, scenario: Any, cache_curves: bool = True
+    ) -> "HourlyOutputCurves":
         """
         Convenience method to fetch all carrier curves for a scenario.
         """
         # Normalize to Session to get ETEngine session ID
         from pyetm.models.scenario import Scenario
+
         session = scenario.session if isinstance(scenario, Scenario) else scenario
 
         service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), session)
         return cls.from_service_result(service_result, session, cache_curves)
 
-    def _to_dataframe(self, curves: Optional[list[str]] = None, **kwargs: Any) -> pd.DataFrame:
+    def _to_dataframe(
+        self, curves: Optional[list[str]] = None, **kwargs: Any
+    ) -> pd.DataFrame:
         """
         Serialize HourlyOutputCurves collection to DataFrame with multi-index format.
         Returns a DataFrame with MultiIndex (hour, curve_name) containing curve values.
@@ -441,7 +462,9 @@ class HourlyOutputCurves(Base):
                         )
 
             except Exception as e:
-                self.add_warning("curves", f"Failed to serialize curve {curve.key}: {e}")
+                self.add_warning(
+                    "curves", f"Failed to serialize curve {curve.key}: {e}"
+                )
 
         if all_curve_data:
             result_df = pd.DataFrame(all_curve_data)

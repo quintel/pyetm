@@ -1,7 +1,7 @@
 """Hourly output curves packing utilities."""
 
 import logging
-from typing import ClassVar, Any, Optional, Sequence, Tuple, cast
+from typing import ClassVar, Any, Optional, Sequence, Tuple, cast, List
 from xlsxwriter import Workbook  # type: ignore[import-untyped]
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 import pandas as pd
@@ -25,6 +25,59 @@ class HourlyOutputCurvesPack(Packable):
 
     key: ClassVar[str] = "hourly_output_curves"
     sheet_name: ClassVar[str] = "HOURLY_OUTPUT_CURVES"
+
+    @classmethod
+    def validate_curve_config(cls, config_values: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Validate hourly curves configuration (carriers or curve names).
+
+        Users can specify either:
+        - Carrier types: electricity, heat, hydrogen, methane
+        - Specific curve names: merit_order, electricity_price, etc.
+
+        Args:
+            config_values: List of carrier names and/or curve names to validate
+
+        Returns:
+            Tuple of (valid_values, warnings)
+            - valid_values: List of validated entries (both carriers and curve names)
+            - warnings: List of warning messages for invalid entries
+        """
+        if not config_values:
+            return [], []
+
+        # Get valid carriers from the carrier mappings
+        carrier_map = HourlyOutputCurves._load_carrier_mappings()
+        valid_carriers = set(carrier_map.keys())
+
+        # Get valid curve names from the runner
+        from pyetm.services.scenario_runners.fetch_hourly_output_curves import (
+            FetchAllHourlyOutputCurvesRunner,
+        )
+        valid_curve_names = set(FetchAllHourlyOutputCurvesRunner.CURVE_TYPES)
+
+        # Validate each entry
+        valid_values = []
+        warnings = []
+
+        for value in config_values:
+            value_str = str(value).strip()
+            if not value_str:
+                continue
+
+            # Check if it's a valid carrier OR a valid curve name
+            if value_str in valid_carriers or value_str in valid_curve_names:
+                valid_values.append(value_str)
+            else:
+                # Invalid entry - create helpful warning message
+                warning = (
+                    f"Invalid hourly curve entry '{value_str}'. "
+                    f"Valid carriers: {', '.join(sorted(valid_carriers))}. "
+                    f"Valid curve names: {', '.join(sorted(valid_curve_names))}."
+                )
+                warnings.append(warning)
+
+        return valid_values, warnings
 
     def _build_dataframe_for_scenario(
         self,

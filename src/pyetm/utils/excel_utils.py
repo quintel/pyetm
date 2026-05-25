@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Dict, List, Optional, Set, Union, Tuple, cast
 import numpy as np
@@ -11,6 +12,8 @@ import datetime as dt
 from xlsxwriter.workbook import Workbook  # type: ignore[import-untyped]
 from xlsxwriter.worksheet import Worksheet  # type: ignore[import-untyped]
 from pyetm.models.export_config import ExportConfig
+
+logger = logging.getLogger(__name__)
 
 
 # Export config resolution
@@ -62,20 +65,86 @@ class ExportConfigResolver:
             rb = ExportConfigResolver.resolve_boolean
             get = row.get
 
-            # Hourly output curves / output_carriers logic
-            exports_val = get("hourly_output_curves")
+            def parse_boolean_field(value: Any) -> Optional[bool]:
+                """Parse boolean from string/int/bool, handling 'true'/'false' strings."""
+                import numpy as np
+                if value is None or (isinstance(value, float) and pd.isna(value)):
+                    return None
+                # Check for both Python bool and numpy bool
+                if isinstance(value, (bool, np.bool_)):
+                    return bool(value)
+                if isinstance(value, (int, float)):
+                    try:
+                        return bool(int(value))
+                    except Exception:
+                        return None
+                if isinstance(value, str):
+                    normalized = value.strip().lower()
+                    if normalized in {"true", "yes", "y", "1"}:
+                        return True
+                    if normalized in {"false", "no", "n", "0"}:
+                        return False
+                return None
+
+            # Hourly curves / output_carriers logic
+            from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
+
+            exports_val = get("hourly_curves")
             output_carriers = None
-            if rb(exports_val, None, False) is True:
+            exports_bool = parse_boolean_field(exports_val)
+            if exports_bool is True:
                 output_carriers = ["electricity", "hydrogen", "heat", "methane"]
-            elif rb(exports_val, None, False) is False:
+                logger.info("EXPORT_CONFIG: hourly_curves set to 'true', exporting all carriers: %s", output_carriers)
+            elif exports_bool is False:
                 output_carriers = None
+                logger.info("EXPORT_CONFIG: hourly_curves set to 'false', no hourly curves will be exported")
             else:
-                output_carriers = parse_carriers(get("output_carriers")) or parse_carriers(
+                # Not a boolean, try parsing as comma-separated carriers/curves
+                parsed_carriers = parse_carriers(get("output_carriers")) or parse_carriers(
                     exports_val
                 )
+                if parsed_carriers:
+                    # Validate using packable validation method
+                    output_carriers, warnings = HourlyOutputCurvesPack.validate_curve_config(parsed_carriers)
+                    for warning in warnings:
+                        logger.warning("EXPORT_CONFIG: %s", warning)
+                    if output_carriers:
+                        logger.info("EXPORT_CONFIG: hourly_curves set to specific carriers/curves: %s", output_carriers)
+                    else:
+                        logger.warning("EXPORT_CONFIG: All specified hourly curve entries were invalid, no hourly curves will be exported")
+                else:
+                    logger.warning("EXPORT_CONFIG: hourly_curves has no valid carriers specified, no hourly curves will be exported")
 
-            # Annual exports parsing (comma-separated list)
-            include_annual_exports = parse_carriers(get("include_annual_exports"))
+            # Annual exports parsing
+            from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
+            from pyetm.models.annual_exports import ANNUAL_EXPORT_TYPES
+
+            annual_exports_val = get("annual_exports")
+            include_annual_exports = None
+
+            # First check if it's a boolean (True/False from Excel)
+            exports_bool = parse_boolean_field(annual_exports_val)
+            if exports_bool is True:
+                # "true" means export all available annual export types (all 7 types)
+                include_annual_exports = list(ANNUAL_EXPORT_TYPES)
+                logger.info("EXPORT_CONFIG: annual_exports set to 'true', exporting all types: %s", include_annual_exports)
+            elif exports_bool is False:
+                include_annual_exports = None
+                logger.info("EXPORT_CONFIG: annual_exports set to 'false', no annual exports will be included")
+            elif isinstance(annual_exports_val, str):
+                # Parse as comma-separated list
+                parsed = parse_carriers(annual_exports_val)
+                if parsed:
+                    # Validate using packable validation method
+                    include_annual_exports, warnings = AnnualExportsPack.validate_export_types(parsed)
+                    for warning in warnings:
+                        logger.warning("EXPORT_CONFIG: %s", warning)
+                    if include_annual_exports:
+                        logger.info("EXPORT_CONFIG: annual_exports set to: %s", include_annual_exports)
+                    else:
+                        logger.warning("EXPORT_CONFIG: All specified annual export types were invalid, no annual exports will be included")
+                else:
+                    logger.warning("EXPORT_CONFIG: annual_exports could not be parsed, no annual exports will be included")
 
             config = ExportConfig(
                 include_inputs=rb(get("include_inputs"), get("inputs"), False),
@@ -83,9 +152,9 @@ class ExportConfigResolver:
                 include_custom_curves=rb(get("include_custom_curves"), get("custom_curves"), False),
                 include_gqueries=rb(get("include_gqueries"), get("gquery_results"), False)
                 or rb(get("gqueries"), None, False),
-                inputs_defaults=rb(get("defaults"), None, False),
-                inputs_min_max=rb(get("min_max"), None, False),
-                output_carriers=output_carriers,
+                include_input_defaults=rb(get("include_input_defaults"), get("defaults"), False),
+                include_input_min_max=rb(get("include_input_min_max"), get("min_max"), False),
+                hourly_curves=output_carriers,
                 include_annual_exports=include_annual_exports,
             )
             return config
@@ -126,10 +195,12 @@ class ExportConfigResolver:
 
         def parse_bool(value: Any) -> Optional[bool]:
             """Parse boolean from various formats."""
+            import numpy as np
             if value is None or (isinstance(value, float) and pd.isna(value)):
                 return None
-            if isinstance(value, bool):
-                return value
+            # Check for both Python bool and numpy bool
+            if isinstance(value, (bool, np.bool_)):
+                return bool(value)
             if isinstance(value, (int, float)):
                 try:
                     return bool(int(value))
@@ -157,7 +228,7 @@ class ExportConfigResolver:
                 return None
             return [carrier.strip() for carrier in value.split(",") if carrier.strip()]
 
-        exports_val = get_cell_value("hourly_output_curves")
+        exports_val = get_cell_value("hourly_curves")
         carriers_val = get_cell_value("output_carriers")
 
         exports_bool = parse_bool(exports_val)
@@ -168,14 +239,33 @@ class ExportConfigResolver:
         else:
             output_carriers = parse_carriers(carriers_val) or parse_carriers(exports_val)
 
+        # Annual exports parsing
+        VALID_ANNUAL_EXPORT_TYPES = {"energy_flow", "sankey", "production_parameters"}
+        annual_exports_val = get_cell_value("annual_exports")
+        include_annual_exports = None
+
+        # First check if it's a boolean (True/False from Excel)
+        exports_bool = parse_bool(annual_exports_val)
+        if exports_bool is True:
+            include_annual_exports = ["energy_flow", "sankey", "production_parameters"]
+        elif exports_bool is False:
+            include_annual_exports = None
+        elif isinstance(annual_exports_val, str):
+            # Parse as comma-separated list
+            parsed = parse_carriers(annual_exports_val)
+            if parsed:
+                valid_exports = [e for e in parsed if e in VALID_ANNUAL_EXPORT_TYPES]
+                include_annual_exports = valid_exports if valid_exports else None
+
         config = ExportConfig(
             include_inputs=parse_bool_field("include_inputs", "inputs"),
             include_sortables=parse_bool_field("include_sortables", "sortables"),
             include_custom_curves=parse_bool_field("include_custom_curves", "custom_curves"),
             include_gqueries=parse_bool_field("include_gqueries", "gquery_results", "gqueries"),
-            inputs_defaults=parse_bool(get_cell_value("defaults")),
-            inputs_min_max=parse_bool(get_cell_value("min_max")),
-            output_carriers=output_carriers,
+            include_input_defaults=parse_bool_field("include_input_defaults", "defaults"),
+            include_input_min_max=parse_bool_field("include_input_min_max", "min_max"),
+            hourly_curves=output_carriers,
+            include_annual_exports=include_annual_exports,
         )
         return config
 
@@ -190,8 +280,8 @@ def handle_numeric_value(
     nan_as_formula: bool = True,
     decimal_precision: int = 10,
 ) -> int:
-    """Handle numeric values with NaN support"""
-    if np.isnan(value):
+    """Handle numeric values with NaN and Inf support"""
+    if np.isnan(value) or np.isinf(value):
         if nan_as_formula:
             return cast(int, worksheet.write_formula(row, col, "=NA()", cell_format, "#N/A"))
         return cast(int, worksheet.write(row, col, "N/A", cell_format))
@@ -300,6 +390,7 @@ def add_frame(
     nan_as_formula: bool = True,
     decimal_precision: int = 10,
     scenario_styling: bool = True,
+    row_based_scenarios: bool = False,
 ) -> Worksheet:
     """Add DataFrame to Excel workbook as a new worksheet with formatting."""
 
@@ -400,7 +491,27 @@ def add_frame(
                     worksheet.write(row_num + row_offset, col_num + col_offset, write_value)
         else:
             # Single-level columns
-            if scenario_styling:
+            if scenario_styling and row_based_scenarios:
+                # Row-based scenario styling: scenarios are rows, not columns
+                # Use white header for all column headers
+                for col_num, value in enumerate(frame.columns.values):
+                    worksheet.write(row_offset - 1, col_num + col_offset, value, formats["white_header"])
+
+                # Alternate data backgrounds by scenario row
+                for row_num, row_data in enumerate(frame.values):
+                    is_grey = (row_num % 2) == 1
+                    data_format = formats["grey_data"] if is_grey else formats["white_data"]
+                    for col_num, value in enumerate(row_data):
+                        # Convert list values (e.g., curve results) to string representation
+                        write_value = str(value) if isinstance(value, list) else value
+                        worksheet.write(
+                            row_num + row_offset,
+                            col_num + col_offset,
+                            write_value,
+                            data_format,
+                        )
+            elif scenario_styling:
+                # Column-based scenario styling: scenarios are columns
                 # Alternate header backgrounds by scenario column
                 for col_num, value in enumerate(frame.columns.values):
                     is_grey = (col_num % 2) == 1
@@ -564,10 +675,15 @@ def build_excel_main_dataframe(main_df: pd.DataFrame, scenarios: List[Any]) -> p
 
 def apply_field_ordering(df: pd.DataFrame) -> pd.DataFrame:
     """Apply preferred field ordering to DataFrame columns (for pivoted main sheet)."""
+    # Fields to exclude from export (internal tracking only)
+    excluded_fields = ["id", "identifier", "scenario_id", "preset"]
+
+    # Preferred field order
     preferred_fields = [
         "title",
+        "session_id",
+        "saved_scenario_id",
         "description",
-        "scenario_id",
         "template_id",
         "area_code",
         "start_year",
@@ -580,9 +696,15 @@ def apply_field_ordering(df: pd.DataFrame) -> pd.DataFrame:
         "created_at",
         "updated_at",
     ]
-    present_fields = [field for field in preferred_fields if field in df.columns]
-    remaining_fields = [field for field in df.columns if field not in present_fields]
+
+    # Filter out excluded fields
+    available_columns = [col for col in df.columns if col not in excluded_fields]
+
+    # Build ordered field list
+    present_fields = [field for field in preferred_fields if field in available_columns]
+    remaining_fields = [field for field in available_columns if field not in present_fields]
     ordered_fields = present_fields + remaining_fields
+
     return df.loc[:, ordered_fields]
 
 

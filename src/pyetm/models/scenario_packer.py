@@ -1,5 +1,7 @@
 """Scenario packing utilities for creating multiple scenario variations."""
 
+from __future__ import annotations
+
 import pandas as pd
 from pandas import Series
 import logging
@@ -83,17 +85,15 @@ class ScenarioPacker(BaseModel):
         """
         Create main info DataFrame with scenarios as rows.
 
-        Returns DataFrame with scenario_id column (numeric ID), identifier column
-        (human-readable name), and scenario attributes as columns.
+        Returns DataFrame with scenario_id column (numeric ID for internal tracking)
+        and scenario attributes as columns. The session_id and saved_scenario_id
+        columns from _to_dataframe() provide the export-friendly IDs.
         """
         scenarios = self._scenarios()
         if not scenarios:
             return pd.DataFrame()
         df = pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
-        if "scenario_id" in df.index:
-            df = df.drop("scenario_id")
         result = df.T.reset_index(names=["scenario_id"])
-        result.insert(1, "identifier", [scenario.identifier() for scenario in scenarios])
         return result
 
     def inputs(self, fields: str = "user") -> pd.DataFrame:
@@ -213,25 +213,30 @@ class ScenarioPacker(BaseModel):
     def collect_export_data(
         self,
         *,
-        carriers: Optional[Sequence[str]] = None,
+        hourly_curves: Optional[Sequence[str]] = None,
         include_inputs: Optional[bool] = None,
         include_sortables: Optional[bool] = None,
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
-        include_hourly_output_curves: Optional[bool] = None,
+        include_hourly_curves: Optional[bool] = None,
+        include_input_defaults: Optional[bool] = None,
+        include_input_min_max: Optional[bool] = None,
         include_users: Optional[bool] = None,
         include_annual_exports: Optional[Sequence[str]] = None,
     ) -> ExportDataCollection:
         """
         Collect export data in format-agnostic structure.
-                Args:
-            carriers: Carrier types for hourly output curves (e.g., ["electricity", "heat"]).
-                     Only used if include_hourly_output_curves is True.
+
+        Args:
+            hourly_curves: Carrier types for hourly output curves (e.g., ["electricity", "heat"]).
+                          Only used if include_hourly_curves is True.
             include_inputs: Include input parameters. Defaults based on scenario export config.
             include_sortables: Include sortable technologies. Defaults to False.
             include_custom_curves: Include custom curves. Defaults to False.
             include_gqueries: Include query results. Defaults to False.
-            include_hourly_output_curves: Include hourly output curves. Defaults to False.
+            include_hourly_curves: Include hourly output curves. Defaults to False.
+            include_input_defaults: Include default values for inputs. Defaults to False.
+            include_input_min_max: Include min/max bounds for inputs. Defaults to False.
             include_users: Include user permissions. Defaults to False.
             include_annual_exports: List of annual export names to include.
                                    Examples: ["energy_flow", "sankey", "production_parameters"]
@@ -250,16 +255,18 @@ class ScenarioPacker(BaseModel):
             include_sortables,
             include_custom_curves,
             include_gqueries,
-            include_hourly_output_curves,
+            include_hourly_curves,
+            include_input_defaults,
+            include_input_min_max,
             include_users,
             include_annual_exports,
         )
 
-        output_carriers = self._determine_output_carriers(
-            carriers, resolved_flags, global_config
+        hourly_curve_carriers = self._determine_hourly_curve_carriers(
+            hourly_curves, resolved_flags, global_config
         )
-        config = self._build_export_config(resolved_flags, output_carriers)
-        collected_data = self._collect_data_by_flags(resolved_flags, output_carriers)
+        config = self._build_export_config(resolved_flags, hourly_curve_carriers)
+        collected_data = self._collect_data_by_flags(resolved_flags, hourly_curve_carriers)
 
         return ExportDataCollection(
             main_info=self.main_info(),
@@ -274,23 +281,23 @@ class ScenarioPacker(BaseModel):
             config=config,
         )
 
-    def _determine_output_carriers(
+    def _determine_hourly_curve_carriers(
         self,
-        carriers: Optional[Sequence[str]],
+        hourly_curves: Optional[Sequence[str]],
         resolved_flags: Dict[str, Any],
         global_config: Optional[ExportConfig],
     ) -> Optional[List[str]]:
-        """Determine output carriers from parameters or config."""
-        if not resolved_flags["include_hourly_output_curves"]:
+        """Determine hourly curve carriers from parameters or config."""
+        if not resolved_flags["include_hourly_curves"]:
             return None
-        if carriers is not None:
-            return list(carriers)
-        if global_config and global_config.output_carriers:
-            return list(global_config.output_carriers)
+        if hourly_curves is not None:
+            return list(hourly_curves)
+        if global_config and global_config.hourly_curves:
+            return list(global_config.hourly_curves)
         return None
 
     def _build_export_config(
-        self, resolved_flags: Dict[str, Any], output_carriers: Optional[List[str]]
+        self, resolved_flags: Dict[str, Any], hourly_curve_carriers: Optional[List[str]]
     ) -> ExportConfig:
         """Build ExportConfig from resolved flags."""
         return ExportConfig(
@@ -299,14 +306,14 @@ class ScenarioPacker(BaseModel):
             include_custom_curves=resolved_flags["include_custom_curves"],
             include_gqueries=resolved_flags["include_gqueries"],
             include_users=resolved_flags.get("include_users", False),
-            output_carriers=output_carriers,
+            hourly_curves=hourly_curve_carriers,
             include_annual_exports=resolved_flags.get("include_annual_exports"),
-            inputs_defaults=resolved_flags.get("inputs_defaults", False),
-            inputs_min_max=resolved_flags.get("inputs_min_max", False),
+            include_input_defaults=resolved_flags.get("include_input_defaults", False),
+            include_input_min_max=resolved_flags.get("include_input_min_max", False),
         )
 
     def _collect_data_by_flags(
-        self, resolved_flags: Dict[str, Any], output_carriers: Optional[List[str]]
+        self, resolved_flags: Dict[str, Any], hourly_curve_carriers: Optional[List[str]]
     ) -> Dict[str, Any]:
         """Collect all data based on resolved flags."""
         collected: Dict[str, Any] = {}
@@ -314,18 +321,20 @@ class ScenarioPacker(BaseModel):
         if resolved_flags["include_inputs"]:
             collected["inputs"] = self.inputs()
             # Collect inputs_detailed if defaults or min_max are requested
-            if resolved_flags.get("inputs_defaults") or resolved_flags.get("inputs_min_max"):
+            if resolved_flags.get("include_input_defaults") or resolved_flags.get(
+                "include_input_min_max"
+            ):
                 collected["inputs_detailed"] = self._inputs.to_dataframe(
-                    include_defaults=resolved_flags.get("inputs_defaults", False),
-                    include_min_max=resolved_flags.get("inputs_min_max", False),
+                    include_defaults=resolved_flags.get("include_input_defaults", False),
+                    include_min_max=resolved_flags.get("include_input_min_max", False),
                 )
         if resolved_flags["include_sortables"]:
             collected["sortables"] = self.sortables()
         if resolved_flags["include_custom_curves"]:
             collected["custom_curves"] = self.custom_curves(as_dict=True)
-        if resolved_flags["include_hourly_output_curves"]:
+        if resolved_flags["include_hourly_curves"]:
             collected["hourly_output_curves"] = self._collect_hourly_curves(
-                output_carriers
+                hourly_curve_carriers
             )
         if resolved_flags.get("include_annual_exports"):
             collected["annual_exports"] = self._annual_exports.to_dict_per_export(
@@ -338,7 +347,9 @@ class ScenarioPacker(BaseModel):
 
         return collected
 
-    def _collect_hourly_curves(self, output_carriers: Optional[List[str]]) -> Dict[str, Dict[str, pd.DataFrame]]:
+    def _collect_hourly_curves(
+        self, output_carriers: Optional[List[str]]
+    ) -> Dict[str, Dict[str, pd.DataFrame]]:
         """Collect hourly output curves based on carriers."""
         if output_carriers:
             curve_names = self._get_curves_for_carriers(output_carriers)
@@ -364,13 +375,14 @@ class ScenarioPacker(BaseModel):
         self,
         path: str,
         *,
-        carriers: Optional[Sequence[str]] = None,
+        hourly_curves: Optional[Sequence[str]] = None,
         include_inputs: Optional[bool] = None,
         include_sortables: Optional[bool] = None,
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
-        include_hourly_output_curves: Optional[bool] = None,
-        include_input_details: Optional[bool] = None,
+        include_hourly_curves: Optional[bool] = None,
+        include_input_defaults: Optional[bool] = None,
+        include_input_min_max: Optional[bool] = None,
         include_users: Optional[bool] = None,
         include_annual_exports: Optional[Sequence[str]] = None,
     ) -> None:
@@ -378,21 +390,17 @@ class ScenarioPacker(BaseModel):
         from pyetm.exporters.excel_exporter import ExcelExporter
 
         export_data = self.collect_export_data(
-            carriers=carriers,
+            hourly_curves=hourly_curves,
             include_inputs=include_inputs,
             include_sortables=include_sortables,
             include_custom_curves=include_custom_curves,
             include_gqueries=include_gqueries,
-            include_hourly_output_curves=include_hourly_output_curves,
+            include_hourly_curves=include_hourly_curves,
+            include_input_defaults=include_input_defaults,
+            include_input_min_max=include_input_min_max,
             include_users=include_users,
             include_annual_exports=include_annual_exports,
         )
-
-        # Add Excel-specific detailed inputs if requested
-        if include_input_details and self._inputs.scenarios:
-            export_data.inputs_detailed = self._inputs.to_dataframe(
-                include_defaults=True, include_min_max=True
-            )
 
         ExcelExporter.write(
             export_data=export_data, path=path, scenarios=list(self._scenarios())
@@ -401,9 +409,26 @@ class ScenarioPacker(BaseModel):
     def _get_global_export_config(self) -> Optional[ExportConfig]:
         """Get global export configuration from first scenario that has one."""
         for scenario in self._scenarios():
-            config = getattr(scenario, "_export_config", None)
-            if config is not None:
-                return cast(ExportConfig, config)
+            # Try method first (for real scenarios), then attribute (for mocks/tests)
+            config = None
+            if hasattr(scenario, "get_export_config") and callable(
+                getattr(scenario, "get_export_config", None)
+            ):
+                try:
+                    config = scenario.get_export_config()
+                    # Validate it's a real ExportConfig, not a Mock
+                    if config is not None and not isinstance(config, ExportConfig):
+                        config = None
+                except (AttributeError, TypeError):
+                    # Fallback if method doesn't work properly
+                    config = None
+
+            # Fallback to direct attribute access
+            if config is None:
+                config = getattr(scenario, "_export_config", None)
+
+            if config is not None and isinstance(config, ExportConfig):
+                return config
         return None
 
     def _resolve_export_flags(
@@ -413,7 +438,9 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool],
         include_custom_curves: Optional[bool],
         include_gqueries: Optional[bool],
-        include_hourly_output_curves: Optional[bool],
+        include_hourly_curves: Optional[bool],
+        include_input_defaults: Optional[bool],
+        include_input_min_max: Optional[bool],
         include_users: Optional[bool],
         include_annual_exports: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
@@ -457,24 +484,32 @@ class ScenarioPacker(BaseModel):
                 ),
                 False,
             ),
-            "include_hourly_output_curves": resolver.resolve_boolean(
-                include_hourly_output_curves,
+            "include_hourly_curves": resolver.resolve_boolean(
+                include_hourly_curves,
                 (
-                    (getattr(global_config, "output_carriers", None) is not None)
+                    (getattr(global_config, "hourly_curves", None) is not None)
                     if global_config
                     else None
                 ),
                 False,
             ),
-            "inputs_defaults": (
-                bool(getattr(global_config, "inputs_defaults", False))
-                if global_config
-                else False
+            "include_input_defaults": resolver.resolve_boolean(
+                include_input_defaults,
+                (
+                    getattr(global_config, "include_input_defaults", None)
+                    if global_config
+                    else None
+                ),
+                False,
             ),
-            "inputs_min_max": (
-                bool(getattr(global_config, "inputs_min_max", False))
-                if global_config
-                else False
+            "include_input_min_max": resolver.resolve_boolean(
+                include_input_min_max,
+                (
+                    getattr(global_config, "include_input_min_max", None)
+                    if global_config
+                    else None
+                ),
+                False,
             ),
             "include_users": resolver.resolve_boolean(
                 include_users,
@@ -518,8 +553,8 @@ class ScenarioPacker(BaseModel):
         if flags["include_inputs"]:
             self._inputs.add_to_workbook(
                 workbook,
-                include_defaults=flags["inputs_defaults"],
-                include_min_max=flags["inputs_min_max"],
+                include_defaults=flags["include_input_defaults"],
+                include_min_max=flags["include_input_min_max"],
             )
 
         if flags["include_sortables"]:
@@ -534,12 +569,12 @@ class ScenarioPacker(BaseModel):
     def _export_hourly_output_curves_if_needed(
         self,
         main_path: str,
-        carriers: Optional[Sequence[str]],
-        include_hourly_output_curves: bool,
+        hourly_curves: Optional[Sequence[str]],
+        include_hourly_curves: bool,
         global_config: Optional[ExportConfig],
     ) -> None:
         """Export output curves to separate file if needed."""
-        if not include_hourly_output_curves:
+        if not include_hourly_curves:
             return
 
         # Determine output file path
@@ -551,9 +586,9 @@ class ScenarioPacker(BaseModel):
         )
 
         # Determine carriers to export
-        chosen_carriers = list(carriers) if carriers else None
+        chosen_carriers = list(hourly_curves) if hourly_curves else None
         if chosen_carriers is None and global_config is not None:
-            config_carriers = getattr(global_config, "output_carriers", None)
+            config_carriers = getattr(global_config, "hourly_curves", None)
             chosen_carriers = list(config_carriers) if config_carriers else None
 
         try:
@@ -666,14 +701,21 @@ class ScenarioPacker(BaseModel):
     @staticmethod
     def _find_project_root(dir_name: str) -> Path:
         """Find project root by searching for a directory."""
-        for base in [Path.cwd(), *Path.cwd().parents, Path(__file__).resolve().parent, *Path(__file__).resolve().parents]:
+        for base in [
+            Path.cwd(),
+            *Path.cwd().parents,
+            Path(__file__).resolve().parent,
+            *Path(__file__).resolve().parents,
+        ]:
             candidate = base / dir_name
             if candidate.exists() and candidate.is_dir():
                 return base
         return Path.cwd()
 
     @staticmethod
-    def _open_excel_file(path: Path, original_path: PathLike[str] | str) -> Optional[pd.ExcelFile]:
+    def _open_excel_file(
+        path: Path, original_path: PathLike[str] | str
+    ) -> Optional[pd.ExcelFile]:
         """Open Excel file with error handling."""
         try:
             return pd.ExcelFile(str(path))
@@ -681,7 +723,9 @@ class ScenarioPacker(BaseModel):
             logger.warning("Could not open Excel file '%s': %s", original_path, e)
             return None
 
-    def _load_export_config_sheet(self, excel_file: pd.ExcelFile) -> Optional[pd.DataFrame]:
+    def _load_export_config_sheet(
+        self, excel_file: pd.ExcelFile
+    ) -> Optional[pd.DataFrame]:
         """Load and validate EXPORT_CONFIG sheet."""
         if "EXPORT_CONFIG" not in excel_file.sheet_names:
             logger.error("EXPORT_CONFIG sheet is required but not found in Excel file.")
@@ -697,17 +741,25 @@ class ScenarioPacker(BaseModel):
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
         scenarios_by_column: Dict[Any, Session],
-        update_set: set[str]
+        update_set: set[str],
     ) -> None:
         """Import all data sheets from Excel file."""
-        self._inputs.import_from_excel(excel_file, main_df, scenarios_by_column, update_set)
+        self._inputs.import_from_excel(
+            excel_file, main_df, scenarios_by_column, update_set
+        )
         gquery_df = excel_utils.parse_excel_sheet(
-            excel_file, self._query_pack.sheet_name, **self._query_pack.excel_read_kwargs()
+            excel_file,
+            self._query_pack.sheet_name,
+            **self._query_pack.excel_read_kwargs(),
         )
         if gquery_df is not None:
             self._query_pack.load_from_dataframe(gquery_df)
-        self._import_scenario_specific_sheets(excel_file, main_df, scenarios_by_column, update_set)
-        self._users.import_from_excel(excel_file, main_df, scenarios_by_column, update_set)
+        self._import_scenario_specific_sheets(
+            excel_file, main_df, scenarios_by_column, update_set
+        )
+        self._users.import_from_excel(
+            excel_file, main_df, scenarios_by_column, update_set
+        )
 
     def _import_main_sheet(self, excel_file: pd.ExcelFile) -> Optional[pd.DataFrame]:
         """Import and validate the main sheet."""
@@ -741,7 +793,10 @@ class ScenarioPacker(BaseModel):
         return scenarios_by_row
 
     def _create_scenario_from_row(
-        self, row_idx: Any, row_data: Series[Any], update_set: Optional[set[str]] = None
+        self,
+        row_idx: Any,
+        row_data: pd.Series[Any],
+        update_set: Optional[set[str]] = None,
     ) -> Optional[Session]:
         """
         Create a scenario from a main sheet row.
@@ -754,7 +809,7 @@ class ScenarioPacker(BaseModel):
         is_session = cast_bool(row_data.get("session")) or False
         loader: ScenarioLoader = cast(
             ScenarioLoader,
-            SessionLoader(self) if is_session else SavedScenarioLoader(self)
+            SessionLoader(self) if is_session else SavedScenarioLoader(self),
         )
 
         row_params = self._extract_row_parameters(row_data, row_idx)
@@ -789,7 +844,9 @@ class ScenarioPacker(BaseModel):
             loader,
         )
 
-    def _extract_row_parameters(self, row_data: Series[Any], row_idx: Any) -> Dict[str, Any]:
+    def _extract_row_parameters(
+        self, row_data: pd.Series[Any], row_idx: Any
+    ) -> Dict[str, Any]:
         """Extract scenario parameters from row data."""
         return {
             "scenario_id": cast_int(row_data.get("scenario_id")),
@@ -906,7 +963,7 @@ class ScenarioPacker(BaseModel):
         )
         return None
 
-    def _extract_metadata_updates(self, column_data: Series[Any]) -> Dict[str, Any]:
+    def _extract_metadata_updates(self, column_data: pd.Series[Any]) -> Dict[str, Any]:
         """Extract metadata updates from column data."""
         metadata: Dict[str, Any] = {}
 

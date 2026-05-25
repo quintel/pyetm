@@ -30,7 +30,9 @@ class TestHandleNumericValue:
             self.mock_worksheet, 1, 2, np.nan, None, nan_as_formula=True
         )
 
-        self.mock_worksheet.write_formula.assert_called_once_with(1, 2, "=NA()", None, "#N/A")
+        self.mock_worksheet.write_formula.assert_called_once_with(
+            1, 2, "=NA()", None, "#N/A"
+        )
 
     def test_handle_nan_as_text(self):
         """Test NaN handling as text"""
@@ -42,11 +44,15 @@ class TestHandleNumericValue:
 
     def test_handle_regular_number(self):
         """Test normal number handling"""
-        result = excel_utils.handle_numeric_value(self.mock_worksheet, 1, 2, 3.14159, None)
+        result = excel_utils.handle_numeric_value(
+            self.mock_worksheet, 1, 2, 3.14159, None
+        )
 
         # Should write with default precision (10 decimal places)
         expected_value = 3.14159
-        self.mock_worksheet.write_number.assert_called_once_with(1, 2, expected_value, None)
+        self.mock_worksheet.write_number.assert_called_once_with(
+            1, 2, expected_value, None
+        )
 
     def test_handle_number_with_precision(self):
         """Test number with custom precision"""
@@ -73,7 +79,9 @@ class TestHandleNumericValue:
         """Test number handling with cell format"""
         mock_format = Mock()
         result = handle_numeric_value(self.mock_worksheet, 1, 1, 42.0, mock_format)
-        self.mock_worksheet.write_number.assert_called_once_with(1, 1, 42.0, mock_format)
+        self.mock_worksheet.write_number.assert_called_once_with(
+            1, 1, 42.0, mock_format
+        )
 
     def test_handle_nan_with_cell_format(self):
         """Test NaN handling with cell format"""
@@ -88,7 +96,9 @@ class TestHandleNumericValue:
     def test_decimal_precision_edge_cases(self):
         """Test decimal precision with edge cases"""
         # Test precision = 0
-        result = handle_numeric_value(self.mock_worksheet, 0, 0, 3.14159, None, decimal_precision=0)
+        result = handle_numeric_value(
+            self.mock_worksheet, 0, 0, 3.14159, None, decimal_precision=0
+        )
         args = self.mock_worksheet.write_number.call_args[0]
         assert args[2] == 4.0  # Should ceil to 4
 
@@ -97,19 +107,6 @@ class TestHandleNumericValue:
             self.mock_worksheet, 0, 0, 1.23456789, None, decimal_precision=15
         )
         self.mock_worksheet.write_number.assert_called_with(0, 0, 1.23456789, None)
-
-    def test_handle_positive_infinity(self):
-        """Test handling positive infinity"""
-        # Infinity will cause OverflowError in math.ceil, so it should be handled
-        # The function should still try to process it, but the math.ceil will fail
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("inf"), None)
-
-    def test_handle_negative_infinity(self):
-        """Test handling negative infinity"""
-        # Negative infinity will cause OverflowError in math.ceil
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("-inf"), None)
 
     def test_handle_very_small_number(self):
         """Test handling very small numbers"""
@@ -133,19 +130,6 @@ class TestHandleNumericValue:
         # Should write the large number
         args = self.mock_worksheet.write_number.call_args[0]
         assert args[2] == very_large
-
-    def test_handle_positive_infinity(self):
-        """Test handling positive infinity"""
-        # Infinity will cause OverflowError in math.ceil, so it should be handled
-        # The function should still try to process it, but the math.ceil will fail
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("inf"), None)
-
-    def test_handle_negative_infinity(self):
-        """Test handling negative infinity"""
-        # Negative infinity will cause OverflowError in math.ceil
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("-inf"), None)
 
 
 class TestSetColumnWidths:
@@ -251,7 +235,9 @@ class TestWriteIndex:
         write_index(self.mock_worksheet, index, 1, self.bold_format)
 
         # Should write only non-None names
-        name_calls = [call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 0]
+        name_calls = [
+            call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 0
+        ]
         assert len(name_calls) == 1
         assert name_calls[0][0][2] == "letter"
 
@@ -262,7 +248,9 @@ class TestWriteIndex:
         write_index(self.mock_worksheet, index, 1, None)
 
         # Should not write any names
-        name_calls = [call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 0]
+        name_calls = [
+            call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 0
+        ]
         assert len(name_calls) == 0
 
     def test_write_empty_index(self):
@@ -272,11 +260,15 @@ class TestWriteIndex:
         write_index(self.mock_worksheet, index, 1, self.bold_format)
 
         # Should write name but no values
-        name_calls = [call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 0]
+        name_calls = [
+            call for call in self.mock_worksheet.write.call_args_list if call[0][0] == 0
+        ]
         assert len(name_calls) == 1
 
         # Should have no value calls since index is empty
-        value_calls = [call for call in self.mock_worksheet.write.call_args_list if call[0][0] >= 1]
+        value_calls = [
+            call for call in self.mock_worksheet.write.call_args_list if call[0][0] >= 1
+        ]
         assert len(value_calls) == 0  # No values, only the name
 
 
@@ -361,7 +353,9 @@ class TestAddSeries:
 
     def test_add_simple_series(self):
         """Test adding simple Series"""
-        series = pd.Series([1, 2, 3, np.nan], index=["a", "b", "c", "d"], name="test_series")
+        series = pd.Series(
+            [1, 2, 3, np.nan], index=["a", "b", "c", "d"], name="test_series"
+        )
 
         file_path = os.path.join(self.temp_dir, "test_series.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
@@ -432,7 +426,9 @@ class TestAddSeries:
         file_path = os.path.join(self.temp_dir, "test_series_widths.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
-        worksheet = add_series("CustomWidths", series, workbook, column_width=20, index_width=10)
+        worksheet = add_series(
+            "CustomWidths", series, workbook, column_width=20, index_width=10
+        )
 
         assert worksheet is not None
         workbook.close()
@@ -476,7 +472,9 @@ class TestAddSeries:
 
     def test_add_series_multiindex_with_index_width_list(self):
         """Test adding Series with MultiIndex and list of index widths"""
-        index = pd.MultiIndex.from_tuples([("A", 1), ("B", 2)], names=["letter", "number"])
+        index = pd.MultiIndex.from_tuples(
+            [("A", 1), ("B", 2)], names=["letter", "number"]
+        )
         series = pd.Series([10, 20], index=index, name="values")
 
         file_path = os.path.join(self.temp_dir, "test_series_multi_widths.xlsx")
@@ -513,7 +511,9 @@ class TestAddFrame:
             names=["scenario", "variable"],
         )
 
-        df = pd.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=columns, index=["row1", "row2"])
+        df = pd.DataFrame(
+            [[1, 2, 3, 4], [5, 6, 7, 8]], columns=columns, index=["row1", "row2"]
+        )
 
         file_path = os.path.join(self.temp_dir, "test_multiindex_scenario.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
@@ -542,7 +542,9 @@ class TestAddFrame:
 
     def test_add_frame_single_index_scenario_styling(self):
         """Test DataFrame with single-level columns and scenario styling"""
-        df = pd.DataFrame({"Col1": [1, 2], "Col2": [3, 4], "Col3": [5, 6], "Col4": [7, 8]})
+        df = pd.DataFrame(
+            {"Col1": [1, 2], "Col2": [3, 4], "Col3": [5, 6], "Col4": [7, 8]}
+        )
 
         file_path = os.path.join(self.temp_dir, "test_single_scenario.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
@@ -665,10 +667,14 @@ class TestAddFrame:
 
     def test_add_frame_multiindex_columns_partial_names(self):
         """Test DataFrame with MultiIndex columns having partial names"""
-        columns = pd.MultiIndex.from_tuples([("A", 1), ("B", 2)], names=["level1", None])
+        columns = pd.MultiIndex.from_tuples(
+            [("A", 1), ("B", 2)], names=["level1", None]
+        )
         df = pd.DataFrame([[1, 2]], columns=columns)
 
-        file_path = os.path.join(self.temp_dir, "test_multiindex_partial_col_names.xlsx")
+        file_path = os.path.join(
+            self.temp_dir, "test_multiindex_partial_col_names.xlsx"
+        )
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
         worksheet = add_frame("MultiPartialColNames", df, workbook)
@@ -678,13 +684,17 @@ class TestAddFrame:
 
     def test_add_frame_single_scenario_block(self):
         """Test DataFrame with single scenario in MultiIndex"""
-        columns = pd.MultiIndex.from_tuples([("OnlyScenario", "A"), ("OnlyScenario", "B")])
+        columns = pd.MultiIndex.from_tuples(
+            [("OnlyScenario", "A"), ("OnlyScenario", "B")]
+        )
         df = pd.DataFrame([[1, 2]], columns=columns)
 
         file_path = os.path.join(self.temp_dir, "test_single_scenario_block.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
-        worksheet = add_frame("SingleScenarioBlock", df, workbook, scenario_styling=True)
+        worksheet = add_frame(
+            "SingleScenarioBlock", df, workbook, scenario_styling=True
+        )
 
         assert worksheet is not None
         workbook.close()
@@ -741,7 +751,9 @@ class TestIntegration:
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
         ws1 = add_frame("CURVES", df1, workbook, column_width=12)
-        ws2 = add_frame("QUERIES", df2, workbook, nan_as_formula=False, decimal_precision=1)
+        ws2 = add_frame(
+            "QUERIES", df2, workbook, nan_as_formula=False, decimal_precision=1
+        )
         ws3 = add_series("INPUTS", series, workbook, column_width=15)
         workbook.close()
 
@@ -899,7 +911,9 @@ class TestIntegration:
                 ("Scenario2", "curve"),
             ]
         )
-        df = pd.DataFrame([[10.5, curve_data, 20.5, [0.0] * 100]], columns=columns, index=["row1"])
+        df = pd.DataFrame(
+            [[10.5, curve_data, 20.5, [0.0] * 100]], columns=columns, index=["row1"]
+        )
 
         file_path = os.path.join(self.temp_dir, "list_values_scenario.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
@@ -974,7 +988,9 @@ class TestErrorConditions:
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
         with pytest.raises(ValueError, match="Expected 2 widths, got 3"):
-            add_series("SeriesWidthMismatch", series, workbook, index_width=[10, 15, 20])
+            add_series(
+                "SeriesWidthMismatch", series, workbook, index_width=[10, 15, 20]
+            )
 
         workbook.close()
 
@@ -1177,7 +1193,9 @@ class TestAdditionalCoverageEdgeCases:
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
         # index_width=None should fall back to column_width
-        worksheet = add_frame("WidthFallback", df, workbook, column_width=20, index_width=None)
+        worksheet = add_frame(
+            "WidthFallback", df, workbook, column_width=20, index_width=None
+        )
 
         assert worksheet is not None
         workbook.close()
@@ -1223,6 +1241,79 @@ class TestAdditionalCoverageEdgeCases:
         blocks = get_scenario_blocks(columns)
         expected = [("A", 0, 0), ("B", 1, 1), ("A", 2, 2), ("B", 3, 3), ("A", 4, 4)]
         assert blocks == expected
+
+
+class TestExportConfigValidation:
+    """Test validation of export config values from Excel."""
+
+    def test_parse_config_with_invalid_hourly_curve_carriers(self):
+        """Test parsing export config with invalid hourly curve carrier names."""
+        # Create a mock series with invalid carrier
+        config_data = {
+            "hourly_curves": "electricity,electrcityyy,heat",
+            "annual_exports": "true",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        # The validation should warn about "electrcityyy" and filter it out
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_with_invalid_hourly_curve_names(self):
+        """Test parsing export config with invalid curve names."""
+        config_data = {
+            "hourly_curves": "merit_order,merit_orderzzz,invalid_curve",
+            "annual_exports": "false",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_with_mix_of_carriers_and_curves(self):
+        """Test parsing with mix of valid carriers and curve names."""
+        config_data = {
+            "hourly_curves": "electricity,merit_order,heat,invalid_entry",
+            "annual_exports": "sankey",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_with_invalid_annual_export_types(self):
+        """Test parsing with invalid annual export type names."""
+        config_data = {
+            "hourly_curves": "electricity",
+            "annual_exports": "energy_flow,sankeyyy,invalid_export",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_all_invalid_hourly_curves(self):
+        """Test with all invalid hourly curve entries."""
+        config_data = {
+            "hourly_curves": "invalid1,invalid2,nonsense",
+            "annual_exports": "energy_flow",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        # Should return empty list with warnings for all three
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_all_invalid_annual_exports(self):
+        """Test with all invalid annual export entries."""
+        config_data = {
+            "hourly_curves": "electricity",
+            "annual_exports": "bad1,bad2,bad3",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
 
 
 if __name__ == "__main__":

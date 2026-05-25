@@ -353,13 +353,13 @@ class Session(Base):
         """
         Return a single-column DataFrame describing this scenario.
 
-        The id field contains the ETEngine session ID.
-        The scenario_id field also contains the ETEngine session ID (for consistency with Scenario exports).
+        The session_id field contains the ETEngine session ID.
+        The saved_scenario_id field is None (sessions are not saved scenarios).
         """
         info: Dict[str, Any] = {
             "title": self.identifier(),
-            "id": self.id,
-            "scenario_id": self.id,  # Same as id, shows it's a session in mixed cases
+            "session_id": self.id,
+            "saved_scenario_id": None,
             "template_id": self.template_id,
             "area_code": self.area_code,
             "start_year": self.start_year,

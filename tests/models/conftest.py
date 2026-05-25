@@ -149,6 +149,11 @@ def sample_scenario():
         "end_year": scenario.end_year,
     }, name=scenario.id))
 
+    # Mock get_export_config method to return _export_config if present
+    def _get_export_config():
+        return getattr(scenario, "_export_config", None)
+    scenario.get_export_config = Mock(side_effect=_get_export_config)
+
     return scenario
 
 
@@ -179,6 +184,11 @@ def scenario_with_inputs():
         "area_code": scenario.area_code,
         "end_year": scenario.end_year,
     }, name=scenario.id))
+
+    # Mock get_export_config method to return _export_config if present
+    def _get_export_config():
+        return getattr(scenario, "_export_config", None)
+    scenario.get_export_config = Mock(side_effect=_get_export_config)
 
     return scenario
 
@@ -220,6 +230,11 @@ def scenario_with_queries():
         "end_year": scenario.end_year,
     }, name=scenario.id))
 
+    # Mock get_export_config method to return _export_config if present
+    def _get_export_config():
+        return getattr(scenario, "_export_config", None)
+    scenario.get_export_config = Mock(side_effect=_get_export_config)
+
     return scenario
 
 
@@ -252,6 +267,11 @@ def multiple_scenarios():
             "area_code": scenario.area_code,
             "end_year": scenario.end_year,
         }, name=scenario.id))
+
+        # Mock get_export_config method to return _export_config if present
+        def _get_export_config(s=scenario):
+            return getattr(s, "_export_config", None)
+        scenario.get_export_config = Mock(side_effect=_get_export_config)
 
         scenarios.append(scenario)
     return scenarios

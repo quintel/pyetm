@@ -1,5 +1,7 @@
 """Excel export functionality for scenario data."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Optional, Sequence, Dict, List, Any, TYPE_CHECKING, cast
@@ -55,6 +57,7 @@ class MainSheetWriter:
             workbook=workbook,
             column_width=18,
             scenario_styling=True,
+            row_based_scenarios=True,
         )
 
 
@@ -88,7 +91,7 @@ class DataSheetWriter:
 
     @staticmethod
     def write_custom_curves(
-        workbook: Workbook, custom_curves: Optional[Dict[str, Dict[str, Series[Any]]]]
+        workbook: Workbook, custom_curves: Optional[Dict[str, Dict[str, pd.Series[Any]]]]
     ) -> None:
         """Write custom curves sheet."""
         if not custom_curves:
@@ -98,7 +101,7 @@ class DataSheetWriter:
             excel_utils.add_frame("CUSTOM_CURVES", combined_df, workbook, column_width=18)
 
     @staticmethod
-    def _combine_custom_curves(curves_dict: Dict[str, Dict[str, Series[Any]]]) -> Optional[pd.DataFrame]:
+    def _combine_custom_curves(curves_dict: Dict[str, Dict[str, pd.Series[Any]]]) -> Optional[pd.DataFrame]:
         """Combine custom curves into single DataFrame."""
         all_series = []
         for curve_name, scenarios_data in curves_dict.items():
@@ -173,11 +176,29 @@ class HourlyCurvesWriter:
 
     @staticmethod
     def _select_carriers(carrier_map: Dict[str, Any], carriers: Optional[Sequence[str]]) -> List[str]:
-        """Select which carriers to export."""
+        """Select which carriers to export with validation."""
+        from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
+
         valid_carriers = list(carrier_map.keys())
-        selected = list(valid_carriers if carriers is None else carriers)
-        selected = [c for c in selected if c in valid_carriers]
-        return selected if selected else valid_carriers
+
+        if carriers is None:
+            return valid_carriers
+
+        # Validate carriers using packable validation
+        validated_carriers, warnings = HourlyOutputCurvesPack.validate_curve_config(list(carriers))
+        for warning in warnings:
+            logger.warning("Hourly curves export: %s", warning)
+
+        # Filter to only valid carriers (not curve names)
+        selected = [c for c in validated_carriers if c in valid_carriers]
+
+        if not selected:
+            logger.warning(
+                "Hourly curves export: No valid carriers specified, exporting all carriers"
+            )
+            return valid_carriers
+
+        return selected
 
     @staticmethod
     def _write_carrier_sheets(
@@ -197,7 +218,7 @@ class HourlyCurvesWriter:
                     continue
 
                 if workbook is None:
-                    workbook = Workbook(str(output_path))
+                    workbook = Workbook(str(output_path), {"nan_inf_to_errors": True})
 
                 excel_utils.add_frame(
                     name=carrier.upper(),
@@ -237,8 +258,8 @@ class HourlyCurvesWriter:
 
     @staticmethod
     def _normalize_to_series(
-        df: pd.DataFrame | Series[Any], scenario_id: str, curve_name: str
-    ) -> List[tuple[tuple[str, str], Series[Any]]]:
+        df: pd.DataFrame | pd.Series[Any], scenario_id: str, curve_name: str
+    ) -> List[tuple[tuple[str, str], pd.Series[Any]]]:
         """Normalize DataFrame or Series to list of series entries."""
         if isinstance(df, pd.Series):
             return [((scenario_id, curve_name), df)]
@@ -259,18 +280,35 @@ class AnnualExportsWriter:
 
     @staticmethod
     def write(exports_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path) -> None:
-        """Write annual exports to Excel file."""
+        """Write annual exports to Excel file with validation."""
         if not exports_data:
             logger.info("No export data available")
             return
 
+        # Validate export type names
+        from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
+
+        export_names = list(exports_data.keys())
+        validated_names, warnings = AnnualExportsPack.validate_export_types(export_names)
+        for warning in warnings:
+            logger.warning("Annual exports: %s", warning)
+
+        # Filter to only validated export types
+        filtered_exports = {
+            name: data for name, data in exports_data.items() if name in validated_names
+        }
+
+        if not filtered_exports:
+            logger.warning("Annual exports: No valid export types found, nothing to write")
+            return
+
         workbook = None
         try:
-            workbook = Workbook(str(output_path))
+            workbook = Workbook(str(output_path), {"nan_inf_to_errors": True})
 
-            for export_name in sorted(exports_data.keys()):
+            for export_name in sorted(filtered_exports.keys()):
                 AnnualExportsWriter._write_export_sheet(
-                    workbook, export_name, exports_data[export_name]
+                    workbook, export_name, filtered_exports[export_name]
                 )
         finally:
             if workbook is not None:
@@ -332,7 +370,7 @@ class ExcelExporter:
         export_data: ExportDataCollection, path: str, scenarios: list[Any]
     ) -> None:
         """Write main workbook with all core data sheets."""
-        workbook = Workbook(path)
+        workbook = Workbook(path, {"nan_inf_to_errors": True})
         try:
             MainSheetWriter.write(workbook, export_data.main_info, scenarios)
             DataSheetWriter.write_inputs(workbook, export_data.inputs)
@@ -351,7 +389,7 @@ class ExcelExporter:
             ExcelExporter._safe_write_hourly_curves(
                 export_data.hourly_output_curves,
                 PathManager.get_hourly_curves_path(main_path),
-                export_data.config.output_carriers,
+                export_data.config.hourly_curves,
             )
 
         if export_data.annual_exports:

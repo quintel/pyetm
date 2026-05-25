@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar, Set, Callable, Optional, Dict, Any, Union, TYPE_CHECKING
+from typing import ClassVar, Set, Callable, Optional, Dict, Any, Union, TYPE_CHECKING, List, Tuple
 import logging
 import pandas as pd
 from pydantic import BaseModel, Field, PrivateAttr
@@ -62,9 +62,30 @@ class Packable(BaseModel):
         Uses short name, identifier, or ID in that priority order."""
         return self._get_scenario_display_key(scenario)
 
+    def _scenario_short_name(self, scenario: Session) -> Optional[str]:
+        """Return short name, handling both Session and Scenario objects."""
+        # First check the short_names dictionary
+        dict_short_name = self._scenario_short_names.get(str(scenario.id))
+        if dict_short_name:
+            return dict_short_name
+
+        # Then check if scenario has a session attribute (for Scenario wrapping Session)
+        if hasattr(scenario, "session") and hasattr(scenario.session, "short_name"):
+            short_name = getattr(scenario.session, "short_name", None)
+            if short_name and isinstance(short_name, str):
+                return short_name
+
+        # Finally check if scenario directly has short_name (for Session)
+        if hasattr(scenario, "short_name"):
+            short_name = getattr(scenario, "short_name", None)
+            if short_name and isinstance(short_name, str):
+                return short_name
+
+        return None
+
     def _get_scenario_display_key(self, scenario: Session) -> str:
         """Get the display key for a scenario (short name, identifier, or ID)."""
-        short_name = self._scenario_short_names.get(str(scenario.id))
+        short_name = self._scenario_short_name(scenario)
         if short_name:
             return short_name
 
@@ -122,6 +143,22 @@ class Packable(BaseModel):
         """Should parse the df and call correct setters on identified scenarios"""
         raise NotImplementedError
 
+    @classmethod
+    def validate_config(cls, config: Any) -> Tuple[Any, List[str]]:
+        """
+        Optional validation hook for packable configurations.
+        Override in subclasses that need validation.
+
+        Args:
+            config: Configuration value to validate
+
+        Returns:
+            Tuple of (validated_config, warnings)
+            - validated_config: The filtered/validated configuration
+            - warnings: List of warning messages for invalid entries
+        """
+        return config, []
+
     def _to_dataframe(self, columns: Any = "", **kwargs: Any) -> pd.DataFrame:
         """Base implementation - kids should implement this or use build_pack_dataframe"""
         return pd.DataFrame()
@@ -148,7 +185,7 @@ class Packable(BaseModel):
 
         # Try short name first
         for scenario in self.scenarios:
-            if self._scenario_short_names.get(str(scenario.id)) == label_str:
+            if self._scenario_short_name(scenario) == label_str:
                 return scenario
 
         # Identifier/title
@@ -216,8 +253,8 @@ class Packable(BaseModel):
         row_keys = row_keys.loc[valid_mask]
         data_df.index = pd.Index(row_keys)
 
-        # Process scenario columns
-        scenario_columns = [col for col in data_df.columns if col != first_column]
+        # Process scenario columns (exclude first column by index, not value, to handle NaN)
+        scenario_columns = [col for i, col in enumerate(data_df.columns) if i != 0]
         data_df[scenario_columns] = data_df[scenario_columns].replace(
             {"": np.nan, "nan": np.nan}
         )

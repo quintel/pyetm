@@ -750,13 +750,14 @@ class Scenario(Base):
         Return a single-column DataFrame describing this saved scenario.
 
         Exports SavedScenario metadata merged with underlying session data.
-        The id field contains the SavedScenario ID (MyETM ID).
-        The scenario_id field contains the underlying ETEngine session ID.
+        The saved_scenario_id field contains the SavedScenario ID (MyETM ID).
+        The session_id field contains the underlying ETEngine session ID.
         """
         # Start with Scenario specific fields
         info: Dict[str, Any] = {
             "title": self.title,
-            "id": self.id,
+            "saved_scenario_id": self.id,
+            "session_id": self.scenario_id,
             "private": self.private,
         }
 
@@ -764,8 +765,6 @@ class Scenario(Base):
         session = self.session
         info.update(
             {
-                "session_id": self.scenario_id,
-                "preset": session.template_id,
                 "area_code": session.area_code,
                 "start_year": session.start_year,
                 "end_year": session.end_year,

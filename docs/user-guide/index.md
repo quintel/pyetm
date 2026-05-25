@@ -1,134 +1,184 @@
 # User Guide
 
-Welcome to the pyetm User Guide! This section provides in-depth guidance on using pyetm effectively for your energy modeling workflows.
+Welcome to the pyetm User Guide! This guide provides comprehensive documentation for using pyetm to work with the Energy Transition Model API.
 
 ## What You'll Learn
 
-This guide covers all major features of pyetm, from basic scenario creation to advanced batch processing and data analysis.
+This guide covers all major features of pyetm, from basic scenario creation to advanced workflows.
 
 ## Guide Contents
 
-### [Working with Scenarios](scenarios.md)
-Learn how to create, load, modify, and save ETM scenarios programmatically.
+### [Working with Excel](excel.md)
+Import and export scenarios using Excel files with full control over what data is included.
+
+**Topics covered:**
+
+- Excel file structure
+- Importing scenarios with the `update` parameter
+- Setting export configuration
+- Exporting scenarios, inputs, curves, and outputs
+
+### [Scenarios](scenarios.md)
+Learn how to create, load, copy, and manage ETM scenarios programmatically.
 
 **Topics covered:**
 
 - Creating new scenarios
+    - Session vs Scenario
 - Loading existing scenarios
-- Copying and modifying scenarios
-- Scenario properties and metadata
-- Error handling and validation
+- Properties and metadata
+- Copying scenarios (with and without preset links)
+- Collection classes (Scenarios, Sessions)
+- Bulk operations
 
-### [Managing Inputs](inputs.md)
-Master input handling, including bulk updates, validation, and working with Excel/CSV files.
-
-**Topics covered:**
-
-- Setting individual inputs
-- Bulk input updates
-- Input validation and bounds
-- Reading/writing Excel and CSV files
-- Input file formats
-
-### [Exports and Queries](exports.md)
-Query scenario results and export data in various formats.
+### [Inputs](inputs.md)
+Master input handling including user values, validation, and bulk updates.
 
 **Topics covered:**
 
-- Querying GQL results
-- Exporting hourly curves
-- Annual exports
-- Custom curve uploads
-- Data visualization
+- Getting and setting inputs
+- Validation and bounds
+- Resetting inputs
+- DataFrame integration
 
-### [Sessions and Authentication](sessions.md)
-Understand authentication, sessions, and managing multiple scenarios.
+### [Gqueries](gqueries.md)
+Query scenario results and retrieve calculated outputs.
 
 **Topics covered:**
 
-- Authentication with API tokens
-- Session management
-- Working with multiple scenarios
-- Public vs. private scenarios
-- Saved scenarios and collections
+- Adding queries to scenarios
+- Executing queries
+- Retrieving results as DataFrames
+
+### [Custom Curves](custom-curves.md)
+Upload and manage custom price and demand curves.
+
+**Topics covered:**
+
+- Viewing attached curves
+- Updating custom curves
+- Listing available curves
+- Checking attachment status
+
+### [Sortables](sortables.md)
+Control technology ordering in merit order and heat networks.
+
+**Topics covered:**
+
+- Setting sortable order
+- Viewing current configuration
+- Available sortables list
+- DataFrame import
+
+### [Outputs](outputs.md)
+Extract and analyze scenario outputs including hourly curves and annual exports.
+
+**Topics covered:**
+
+- Viewing submodels (inputs, sortables, custom_curves)
+- to_dataframe() methods
+- Annual exports (energy_flow, sankey, etc.)
+- Hourly output curves
+- Carrier type filtering (electricity, heat, hydrogen, methane)
 
 ### [Advanced Usage](advanced.md)
-Advanced patterns for power users and automation workflows.
+Advanced features for power users and automation workflows.
 
 **Topics covered:**
 
-- Batch processing scenarios
-- Scenario packing and unpacking
-- Async operations
-- Custom client configuration
-- Integration with other tools
+- Client configuration for multiple environments
+- ScenarioPacker architecture
+- Interpolation (creating intermediate scenarios)
+- Bulk operations (create_many, load_many)
+- User management (sharing scenarios)
 
 ## Common Workflows
 
-### Quick Reference: Create and Query a Scenario
+### Quick Reference: Create and Modify a Scenario
 
 ```python
 from pyetm import Scenario
 
 # Create scenario
-scenario = Scenario.create(area_code="nl", end_year=2050)
+scenario = Scenario.create(
+    title="Netherlands 2050",
+    area_code="nl",
+    end_year=2050
+)
 
-# Modify inputs
-scenario.user_values = {
-    "number_of_energy_power_solar_pv_solar_radiation": 50000000,
-}
+# Set inputs
+scenario.update_user_values({
+    "number_of_energy_power_solar_pv_solar_radiation": 50000,
+    "households_heater_district_heating_steam_hot_water_share": 30.0,
+})
 
-# Query results
-results = scenario.query_results({
+# Add queries and execute
+scenario.add_queries([
     "dashboard_renewability",
     "dashboard_co2_emissions",
-})
+])
+scenario.execute_queries()
+
+# Get results
+results = scenario.results(columns=["future"])
+print(results)
 ```
 
-### Quick Reference: Load and Export Data
+### Quick Reference: Excel Round-Trip
 
 ```python
-from pyetm import Scenario
+from pyetm import Scenarios
 
-# Load existing scenario
-scenario = Scenario.from_scenario_id(123456)
+# Import scenarios
+scenarios = Scenarios.from_excel("scenarios.xlsx", update=False)
 
-# Export hourly curves
-curves = scenario.fetch_hourly_electricity_curves()
-curves.to_csv("electricity_curves.csv")
+# Modify in Python
+for scenario in scenarios:
+    scenario.update_user_values({
+        "number_of_energy_power_solar_pv_solar_radiation": 100000
+    })
 
-# Query specific outputs
-cost = scenario.query_result("dashboard_total_costs")
-print(f"Total costs: {cost} billion €")
+# Export back to Excel
+scenarios.to_excel(
+    "modified_scenarios.xlsx",
+    include_inputs=True,
+    carriers=["electricity"]
+)
 ```
 
-### Quick Reference: Batch Process Scenarios
+### Quick Reference: Batch Processing
 
 ```python
-from pyetm import Scenario
-
-scenarios = []
+from pyetm import Scenarios
 
 # Create multiple scenarios
-for solar_capacity in [10000, 50000, 100000]:
-    scenario = Scenario.create(area_code="nl", end_year=2050)
-    scenario.user_values = {
-        "number_of_energy_power_solar_pv_solar_radiation": solar_capacity,
-    }
-    scenarios.append(scenario)
+scenario_configs = [
+    {"title": "Low Solar", "user_values": {"number_of_energy_power_solar_pv_solar_radiation": 25000}},
+    {"title": "Medium Solar", "user_values": {"number_of_energy_power_solar_pv_solar_radiation": 50000}},
+    {"title": "High Solar", "user_values": {"number_of_energy_power_solar_pv_solar_radiation": 100000}},
+]
 
-# Collect results
-for i, scenario in enumerate(scenarios):
-    renewability = scenario.renewable_percentage
-    print(f"Scenario {i+1}: {renewability:.1f}% renewable")
+scenarios = Scenarios.create_many(
+    scenario_configs,
+    area_code="nl",
+    end_year=2050
+)
+
+# Add queries to all
+for scenario in scenarios:
+    scenario.add_queries(["dashboard_renewability"])
+    scenario.execute_queries()
+
+# Export comparison
+scenarios.to_excel("comparison.xlsx")
 ```
 
 ## Getting Help
 
 - **API Reference**: See the [API Reference](../api/index.md) for detailed documentation of all classes and methods
-- **Examples**: Check the `examples/` directory in the repository for complete working examples
+- **Examples**: Check the user guide sections for complete working examples
 - **Issues**: Report problems or ask questions on [GitHub Issues](https://github.com/quintel/pyetm/issues)
 
 ## Next Steps
 
-Start with [Working with Scenarios](scenarios.md) to learn the fundamentals of scenario management in pyetm.
+Start with [Working with Excel](excel.md) if you want to import/export scenarios, or jump to [Scenarios](scenarios.md) to learn about scenario management fundamentals.

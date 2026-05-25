@@ -84,7 +84,7 @@ def full_export_data():
         include_custom_curves=True,
         include_gqueries=False,
         include_users=False,
-        output_carriers=["electricity"],
+        hourly_curves=["electricity"],
         include_annual_exports=["energy_flow"],
     )
 
@@ -519,3 +519,72 @@ class TestIntegration:
         # Verify annual exports content
         annual_excel = pd.ExcelFile(str(annual_path))
         assert "ENERGY_FLOW" in annual_excel.sheet_names
+
+
+class TestHourlyCurvesValidation:
+    """Test validation of hourly curves during export."""
+
+    def test_write_with_invalid_carrier_names(self):
+        """Test that invalid carrier names are filtered with warnings during write."""
+        # Create curves data with mix of valid and invalid carriers
+        curves_data = {
+            "merit_order": {
+                "test1": pd.DataFrame({"value": range(100)}),
+            },
+            "electricity_price": {
+                "test1": pd.DataFrame({"value": range(100)}),
+            },
+        }
+
+        # TODO: Add test implementation once validation is added
+        # Should filter invalid carriers and log warnings
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_write_with_all_invalid_carriers(self):
+        """Test behavior when all specified carriers are invalid."""
+        # TODO: Add test implementation once validation is added
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_write_with_invalid_curve_names(self):
+        """Test that invalid curve names are filtered during write."""
+        # TODO: Add test implementation once validation is added
+        pytest.skip("Test to be implemented after validation is added")
+
+
+class TestAnnualExportsValidation:
+    """Test validation of annual exports during export."""
+
+    def test_write_with_invalid_export_types(self):
+        """Test that invalid export types are filtered with warnings during write."""
+        exports_data = {
+            "energy_flow": {
+                "test1": pd.DataFrame({"carrier": ["electricity"], "value": [100]}),
+            },
+            "invalid_export": {  # This should be caught
+                "test1": pd.DataFrame({"data": [1, 2, 3]}),
+            },
+        }
+
+        # TODO: Add test implementation once validation is added
+        # Should filter invalid export types and log warnings
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_write_with_all_invalid_export_types(self):
+        """Test behavior when all export types are invalid."""
+        # TODO: Add test implementation once validation is added
+        pytest.skip("Test to be implemented after validation is added")
+
+
+class TestRoundTripValidation:
+    """Test round-trip scenarios: from_excel() → to_excel() → from_excel()."""
+
+    def test_round_trip_with_invalid_hourly_curves(self):
+        """Test that invalid hourly curves are handled consistently across round-trip."""
+        # TODO: Add test implementation once validation is added
+        # Write Excel with invalid carriers, read back, should have same result
+        pytest.skip("Test to be implemented after round-trip validation is added")
+
+    def test_round_trip_with_invalid_annual_exports(self):
+        """Test that invalid annual exports are handled consistently across round-trip."""
+        # TODO: Add test implementation once validation is added
+        pytest.skip("Test to be implemented after round-trip validation is added")

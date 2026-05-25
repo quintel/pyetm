@@ -18,11 +18,12 @@ class ExportConfig(BaseModel):
     include_custom_curves: Optional[bool] = None
     include_gqueries: Optional[bool] = None
     include_users: Optional[bool] = None
-    inputs_defaults: Optional[bool] = None
-    inputs_min_max: Optional[bool] = None
+    include_input_defaults: Optional[bool] = None
+    include_input_min_max: Optional[bool] = None
 
-    # Select which carriers to include in hourly output curves export; None means don't include hourly output curves
-    output_carriers: Optional[Sequence[str]] = None
+    # Select which hourly curves to export; None or empty list means don't include hourly curves
+    # Can be a list of carrier names (e.g., ["electricity", "heat"]) or True to export all
+    hourly_curves: Optional[Sequence[str]] = None
 
     # Select which annual exports to include; None means don't include any annual exports
     include_annual_exports: Optional[Sequence[str]] = None

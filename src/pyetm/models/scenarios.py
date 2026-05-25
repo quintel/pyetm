@@ -335,6 +335,8 @@ class Scenarios(Base):
         if not self.items:
             raise ValueError("No scenarios to export")
 
+        from pyetm.models.scenario_packer import ScenarioPacker
+
         packer = ScenarioPacker()
         packer.add(*self.items)
         packer.to_excel(str(Path(path).expanduser().resolve()), **export_options)
