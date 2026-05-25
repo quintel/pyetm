@@ -144,7 +144,7 @@ class Scenario(Base):
         if area_code is not None and end_year is not None:
             from pyetm.models.session import Session
 
-            session = Session.new(area_code=area_code, end_year=end_year, client=client)
+            session = Session.new(area_code=area_code, end_year=end_year)
             session_id = session.id
 
         # Create SavedScenario using the session_id
@@ -225,9 +225,26 @@ class Scenario(Base):
     ) -> None:
         """Apply a single data type to scenario with error handling."""
         try:
-            runner_class.run(client, scenario.session.id, data)
+            result = runner_class.run(client, scenario.session, data)
+
+            # Check if the API request failed and surface the errors
+            if hasattr(result, "success") and not result.success:
+                if hasattr(result, "errors") and result.errors:
+                    for error in result.errors:
+                        scenario.add_warning(warning_key, error)
+                else:
+                    scenario.add_warning(warning_key, f"Failed to apply {warning_key}")
+
+                # Auto-display data application warnings immediately
+                scenario.auto_show_warnings(
+                    f"SavedScenario #{scenario.id} (title='{scenario.title}')"
+                )
         except Exception as e:
             scenario.add_warning(warning_key, f"Failed to apply {warning_key}: {e}")
+            # Auto-display exception warnings immediately
+            scenario.auto_show_warnings(
+                f"SavedScenario #{scenario.id} (title='{scenario.title}')"
+            )
 
     @staticmethod
     def _apply_data_to_scenario(
@@ -267,6 +284,10 @@ class Scenario(Base):
                     scenario, data, runner_class, warning_key, client
                 )
 
+        # Invalidate both caches so next access fetches fresh data with updates
+        scenario._scenario_session = None
+        scenario.scenario = None
+
     @classmethod
     def load(
         cls, saved_scenario_id: int, client: Optional[BaseClient] = None
@@ -305,6 +326,11 @@ class Scenario(Base):
 
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
+
+        # Auto-display load warnings
+        saved_scenario.auto_show_warnings(
+            f"SavedScenario #{saved_scenario.id} (title='{saved_scenario.title}')"
+        )
 
         return saved_scenario
 

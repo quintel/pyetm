@@ -1,316 +1,321 @@
-# Working with Scenarios
+# Scenarios
 
-Scenarios are the core concept in pyetm. This guide explains how to create, load, modify, and manage ETM scenarios programmatically.
+Create, load, copy, and manage ETM scenarios programmatically.
+
+## Session vs Scenario
+
+pyetm has two scenario types with different purposes:
+
+Users are encouraged to use scenarios for most purposes/
+
+| Feature | Session | Scenario (SavedScenario) |
+|---------|---------|--------------------------|
+| **Level** | ETEngine | MyETM |
+| **Title** | Optional | Required |
+| **Sharing** | Public link only | User permissions (owner/collaborator/viewer) |
+| **Use Case** | Quick calculations, batch processing | Long-term storage, collaboration |
+
 
 ## Creating Scenarios
 
 ### Basic Creation
 
-Create a new scenario for a specific region and end year:
+**Minimal scenario:**
+```python
+from pyetm import Scenario
+
+scenario = Scenario.create(
+    title="Renewable Energy Transition",
+    area_code="nl2023",
+    end_year=2050
+)
+```
+
+**Minimal session:**
+```python
+from pyetm import Session
+
+session = Session.new(area_code="nl2023", end_year=2050)
+```
+
+!!! tip "Minimal Data"
+    You need at least an **area_code** and **end_year** to create a session, and also a **title** to create a scenario.
+
+### With Initial Data
 
 ```python
 from pyetm import Scenario
 
-# Create a scenario for the Netherlands in 2050
 scenario = Scenario.create(
-    title="Netherlands 2050",
+    title="High Solar Scenario",
+    area_code="nl2023",
+    end_year=2050,
+    user_values={
+        "battery_capacity_always_on_solar_pv_solar_radiation": 200,
+        "capacity_of_energy_battery_solar_pv_solar_radiation": 50.0,
+        "capacity_of_energy_heat_solar_ht_solar_thermal": 100,
+        "flh_of_energy_power_solar_pv_solar_radiation": 3000
+    },
+    private=False
+)
+```
+
+### From Template
+
+```python
+from pyetm import Session
+
+# Copy from existing scenario/preset
+session = Session.new(template_id=123456)
+```
+
+### Bulk Creation
+
+```python
+from pyetm import Scenarios
+
+scenario_configs = [
+    {
+        "title": "Low Solar",
+        "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1}
+    },
+    {
+        "title": "High Solar",
+        "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1200}
+    }
+]
+
+scenarios = Scenarios.create_many(
+    scenario_configs,
     area_code="nl2023",
     end_year=2050
 )
-
-print(f"Created scenario {scenario.id}")
-print(f"Session URL: {scenario.session.url}")
-```
-
-### With Custom Settings
-
-You can specify additional parameters when creating a scenario:
-
-```python
-from pyetm import Scenario, Client
-
-# Initialize authenticated client
-client = Client.from_env()
-
-# Create scenario with custom settings
-scenario = Scenario.create(
-    title="High Renewables Scenario",
-    area_code="nl2023",
-    end_year=2050,
-    client=client,
-    private=False,
-)
-```
-
-**Available parameters:**
-
-- `title` (required): Scenario title
-- `area_code` (required if not providing session_id): Region code (e.g., "nl2023", "de", "uk2050")
-- `end_year` (required if not providing session_id): Target year for the scenario (e.g., 2030, 2040, 2050)
-- `session_id` (alternative to area_code+end_year): ID of existing session to save
-- `client`: Authenticated client for saving
-- `private`: Whether the scenario is private (default: False)
-
-### From a Preset
-
-Start from an existing preset scenario:
-
-```python
-# Create from preset
-scenario = Scenario.from_scenario_id(
-    scenario_id=123456,  # Preset scenario ID
-    client=client,
-)
-
-# Modify and save as new scenario
-scenario.user_values = {"input_key": 100.0}
-new_scenario = scenario.save(title="Modified Preset")
 ```
 
 ## Loading Scenarios
 
-### Load by ID
+### Load Single
 
-Load an existing scenario by its ID:
+```python
+from pyetm import Scenario, Session
+
+# Load saved scenario
+scenario = Scenario.load(123456)
+
+# Load session
+session = Session.load(789012)
+```
+
+### Load Multiple
+
+```python
+from pyetm import Scenarios, Sessions
+
+scenarios = Scenarios.load_many([111111, 222222, 333333])
+sessions = Sessions.load_many([444444, 555555])
+```
+
+### With Custom Client
+
+```python
+from pyetm import Scenario
+from pyetm.clients import BaseClient
+
+beta_client = BaseClient(
+    token="your_beta_token",
+    base_url="https://beta-engine.energytransitionmodel.com"
+)
+
+scenario = Scenario.load(123456, client=beta_client)
+```
+
+## Properties and Metadata
+
+### Accessing Properties
 
 ```python
 from pyetm import Scenario
 
-# Load public scenario
-scenario = Scenario.from_scenario_id(123456)
+scenario = Scenario.load(123456)
 
-# Load private scenario (requires authentication)
-client = Client.from_env()
-scenario = Scenario.from_scenario_id(123456, client=client)
+# Key properties
+print(f"ID: {scenario.id}, Session: {scenario.scenario_id}")
+print(f"Title: {scenario.title}, Area: {scenario.area_code}")
+print(f"End year: {scenario.end_year}, private?: {scenario.private}")
 ```
 
-### Load by URL
+### Available Properties
 
-Load a scenario from its ETM URL:
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `int` | MyETM saved scenario ID (Scenario only) |
+| `scenario_id` | `int` | ETEngine session ID |
+| `title` | `str` | Scenario title (required for Scenario) |
+| `area_code` | `str` | Geographic region (e.g., "nl", "de", "uk") |
+| `start_year` | `int \| None` | Start year (typically 2019) |
+| `end_year` | `int` | Target end year |
+| `template_id` | `int \| None` | Preset scenario ID if copied from template |
+| `keep_compatible` | `bool \| None` | Update with preset changes |
+| `private` | `bool \| None` | Visibility (Scenario only) |
+| `source` | `str \| None` | Source identifier |
+| `url` | `str` | Full ETM URL |
+| `version` | `str` | ETM version (from URL) |
+| `created_at` | `datetime \| None` | Creation timestamp |
+| `updated_at` | `datetime \| None` | Last update timestamp |
+| `metadata` | `dict \| None` | Custom metadata |
+
+### Update Metadata
 
 ```python
-url = "https://energytransitionmodel.com/scenarios/123456"
-scenario = Scenario.from_url(url)
+scenario = Scenario.load(123456)
+
+# Update title/privacy
+scenario.update(title="Updated Title", private=True)
+
+# Custom metadata
+scenario.update_metadata(
+    author="Jane Doe",
+    project="Renewable Energy Analysis"
+)
 ```
 
-### Load Multiple Scenarios
-
-For batch processing, load multiple scenarios:
+### Set Identifier
 
 ```python
-scenario_ids = [123456, 123457, 123458]
-scenarios = [Scenario.from_scenario_id(sid) for sid in scenario_ids]
-
-# Process all scenarios
-for scenario in scenarios:
-    print(f"{scenario.title}: {scenario.renewable_percentage:.1f}% renewable")
-```
-
-## Modifying Scenarios
-
-### Setting Inputs
-
-Modify scenario inputs using the `user_values` attribute:
-
-```python
-# Set a single input
-scenario.user_values = {
-    "number_of_energy_power_solar_pv_solar_radiation": 50000000,
-}
-
-# Set multiple inputs
-scenario.user_values = {
-    "number_of_energy_power_solar_pv_solar_radiation": 50000000,
-    "number_of_energy_power_wind_turbine_inland": 5000,
-    "transport_car_using_electricity_share": 75.0,
-}
-```
-
-### Updating Inputs
-
-Add or update inputs without replacing existing ones:
-
-```python
-# Get current inputs
-current = scenario.user_values
-
-# Update with new values
-current.update({
-    "number_of_households_solar_pv_solar_radiation": 2000000,
-})
-
-# Apply updates
-scenario.user_values = current
-```
-
-### Resetting Inputs
-
-Reset specific inputs to their default values:
-
-```python
-# Reset by setting to None or removing from user_values
-scenario.user_values = {
-    k: v for k, v in scenario.user_values.items()
-    if k != "number_of_energy_power_solar_pv_solar_radiation"
-}
+scenario.set_short_name("RES_2050_HIGH")
+print(scenario.identifier())  # "RES_2050_HIGH"
 ```
 
 ## Copying Scenarios
 
-### Simple Copy
+### Copy Methods
 
-Create a copy of an existing scenario:
+| Method | Template Link |
+|--------|---------------|
+| `copy()` | No |
+| `copy_with_preset()` | Yes |
+
+### Independent Copy
 
 ```python
-from pyetm.services import copy_scenario
+from pyetm import Scenario
 
-# Copy a scenario
-new_scenario = copy_scenario(
-    scenario_id=123456,
-    client=client,
+original = Scenario.load(123456)
+copy = original.copy()
+
+print(f"Template link: {copy.template_id}")  # None
+```
+
+### Copy with Overrides
+
+```python
+original = Scenario.load(123456)
+
+modified = original.copy(
+    user_values={
+        "flh_of_energy_power_solar_pv_solar_radiation": 1300,
+    },
+    title="Modified Scenario",
+    private=True
 )
 ```
 
-### Copy with Modifications
-
-Copy and modify in one step:
+### Copy with Preset Link
 
 ```python
-# Load original
-original = Scenario.from_scenario_id(123456, client=client)
+original = Scenario.load(123456)
 
-# Copy and modify
-copy = original.copy()
-copy.user_values = {
-    "number_of_energy_power_solar_pv_solar_radiation": 100000000,
-}
+preset_copy = original.copy_with_preset()
 
-# Save as new scenario
-saved_copy = copy.save(title="High Solar Variant")
+print(f"Template ID: {preset_copy.template_id}")  # Points to original
 ```
 
-## Scenario Properties
 
-### Metadata
+## Collections and Bulk Operations
 
-Access scenario metadata:
+### Creating Collections
 
 ```python
-print(f"ID: {scenario.id}")
-print(f"Title: {scenario.title}")
-print(f"Area: {scenario.area_code}")
-print(f"End year: {scenario.end_year}")
-print(f"URL: {scenario.url}")
-print(f"Owner: {scenario.owner_email}")
-print(f"Created: {scenario.created_at}")
-print(f"Updated: {scenario.updated_at}")
+from pyetm import Scenarios, Scenario
+
+scenario_1 = Scenario.load(111111)
+scenario_2 = Scenario.load(222222)
+
+scenarios = Scenarios(items=[scenario_1, scenario_2])
 ```
 
-### Key Results
+### Collection Operations
 
-Access commonly-used results directly:
+| Operation | Method | Example |
+|-----------|--------|---------|
+| Add scenarios | `add(*scenarios)` | `scenarios.add(s1, s2)` |
+| Extend | `extend(iterable)` | `scenarios.extend([s3, s4])` |
+| Access by index | `[index]` | `scenarios[0]` |
+| Iterate | `for ... in` | `for s in scenarios:` |
+| Length | `len()` | `len(scenarios)` |
+| Bulk export | `to_excel()` | `scenarios.to_excel("file.xlsx")` |
+| Combined data | `.combine` | `packer = scenarios.combine` |
+| Hourly curves | `get_hourly_output_curves()` | `scenarios.get_hourly_output_curves("electricity")` |
+| Annual exports | `get_annual_exports()` | `scenarios.get_annual_exports(["energy_flow"])` |
+
+### Bulk Export
 
 ```python
-# Energy metrics
-print(f"Renewable %: {scenario.renewable_percentage:.1f}%")
-print(f"CO2 emissions: {scenario.co2_emissions:.1f} Mton")
-print(f"Total demand: {scenario.total_primary_demand:.1f} PJ")
+scenarios = Scenarios.load_many([111111, 222222, 333333])
 
-# Economic metrics
-print(f"Total costs: {scenario.total_costs:.1f} billion €")
-print(f"Electricity price: {scenario.electricity_price:.2f} €/kWh")
-
-# Electricity production
-print(f"Total production: {scenario.total_electricity_production:.1f} PJ")
+scenarios.to_excel(
+    "comparison.xlsx",
+    include_inputs=True,
+    hourly_curves=["electricity"]
+)
 ```
 
-### User Values
-
-Get all custom inputs:
+### Access Combined Data
 
 ```python
-# Get all user-modified inputs
-inputs = scenario.user_values
-print(f"Number of custom inputs: {len(inputs)}")
+scenarios = Scenarios.load_many([111111, 222222])
 
-for key, value in inputs.items():
-    print(f"{key}: {value}")
+# Via ScenarioPacker
+packer = scenarios.combine
+inputs_df = packer.inputs(fields="user")
+results_df = packer.gquery_results()
 ```
 
-## Saving Scenarios
+### Bulk Creation and Loading
 
-### Save New Scenario
+| Method | Purpose | Example |
+|--------|---------|---------|
+| `create_many()` | Create multiple scenarios | `Scenarios.create_many(configs, area_code="nl2023")` |
+| `load_many()` | Load multiple scenarios | `Scenarios.load_many([111, 222, 333])` |
+| `Sessions.load_many()` | Load multiple sessions | `Sessions.load_many([444, 555])` |
 
-Save a scenario to your account:
-
+**Example:**
 ```python
-from pyetm import Client
+from pyetm import Scenarios
 
-client = Client.from_env()
+configs = [
+    {"title": "Base", "user_values": {...}},
+    {"title": "Policy A", "user_values": {...}},
+]
 
-scenario = Scenario.create(
-    title="My Scenario",
+scenarios = Scenarios.create_many(
+    configs,
     area_code="nl2023",
     end_year=2050,
-    client=client,
-    private=False,
+    raise_on_data_errors=False
 )
-scenario.update_user_values({"input_key": 100.0})
-
-print(f"Saved scenario ID: {scenario.id}")
 ```
 
-### Update Existing Scenario
-
-Update a saved scenario:
+### Extract Underlying Sessions
 
 ```python
-# Load saved scenario
-scenario = Scenario.from_scenario_id(123456, client=client)
+scenarios = Scenarios(items=[Scenario.load(111), Session.load(222)])
 
-# Modify
-scenario.user_values = {"input_key": 200.0}
-
-# Update (saves to same ID)
-scenario.save()
+# Get list of Session objects
+sessions = scenarios.sessions
 ```
 
-## Error Handling
+## Deleting Scenarios
 
-### Common Errors
-
-Handle scenario-related errors:
-
-```python
-from pyetm.exceptions import ScenarioError
-
-try:
-    scenario = Scenario.from_scenario_id(999999)
-except ScenarioError as e:
-    print(f"Error loading scenario: {e}")
-```
-
-### Validation
-
-Validate scenario state before operations:
-
-```python
-if scenario.has_errors:
-    print("Scenario has errors:")
-    for error in scenario.errors:
-        print(f"  - {error}")
-```
-
-## Best Practices
-
-1. **Use authentication for saved scenarios**: Always use an authenticated client when saving or loading private scenarios
-2. **Check for errors**: Verify `scenario.has_errors` before relying on results
-3. **Handle rate limits**: ETM API has rate limits; implement delays for batch operations
-4. **Cache results**: Query results don't change unless inputs change; cache when appropriate
-5. **Use descriptive titles**: Make scenarios easy to identify later
-
-## Next Steps
-
-- [Managing Inputs](inputs.md) - Learn about input file formats and bulk updates
-- [Exports and Queries](exports.md) - Query results and export data
-- [API Reference: Scenario](../api/models/scenario.md) - Complete Scenario class documentation
+!!! warning "Not Implemented"
+    Scenario deletion is not currently supported in pyetm. Delete scenarios manually via the MyETM web interface or let sessions expire naturally.

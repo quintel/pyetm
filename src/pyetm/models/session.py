@@ -133,6 +133,14 @@ class Session(Base):
         for warning in result.errors:
             scenario.add_warning("base", warning)
 
+        # Auto-display creation warnings
+        area_code = getattr(scenario, "area_code", None)
+        end_year = getattr(scenario, "end_year", None)
+        context = f"Session #{scenario.id}"
+        if area_code or end_year:
+            context += f" (area_code={area_code}, end_year={end_year})"
+        scenario.auto_show_warnings(context)
+
         for field, value in scenario_data.items():
             if (
                 hasattr(scenario, field)
@@ -158,8 +166,39 @@ class Session(Base):
 
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
+
+        # Optional metadata fields that shouldn't trigger warnings
+        optional_fields = {
+            "title",
+            "preset_scenario_id",
+            "short_name",
+            "metadata",
+            "start_year",
+            "keep_compatible",
+            "private",
+            "source",
+            "url",
+            "scaling",
+        }
+
+        # Only add warnings for missing fields that are NOT optional
         for w in result.errors:
+            # Filter out "Missing field" warnings for optional fields
+            if "Missing field" in w:
+                # Extract field name from warning message
+                field_name = w.split("'")[-2] if "'" in w else None
+                if field_name in optional_fields:
+                    continue  # Skip this warning
             scenario.add_warning("metadata", w)
+
+        # Auto-display load warnings
+        area_code = getattr(scenario, "area_code", None)
+        end_year = getattr(scenario, "end_year", None)
+        context = f"Session #{scenario.id}"
+        if area_code or end_year:
+            context += f" (area_code={area_code}, end_year={end_year})"
+        scenario.auto_show_warnings(context)
+
         return scenario
 
     def copy_with_preset(self, **overrides: Any) -> "Session":

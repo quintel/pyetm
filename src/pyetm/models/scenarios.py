@@ -322,6 +322,26 @@ class Scenarios(Base):
                         logger.warning(f"Batch data application: {warning}")
                     scenarios.data_warnings.extend(failure_warnings)
 
+        # Auto-display warnings for all created scenarios
+        if saved_scenarios:
+            has_warnings = False
+            for scenario in saved_scenarios:
+                if len(scenario.warnings) > 0:
+                    if not has_warnings:
+                        print("\n=== Batch Creation Summary ===")
+                        has_warnings = True
+                    scenario.auto_show_warnings(
+                        f"SavedScenario #{scenario.id} (title='{scenario.title}')"
+                    )
+
+            # Also show data application warnings if any
+            if scenarios.data_warnings:
+                if not has_warnings:
+                    print("\n=== Batch Creation Summary ===")
+                print("\n=== Data Application Warnings ===")
+                for warning in scenarios.data_warnings:
+                    print(f"  {warning}")
+
         return scenarios
 
     def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:

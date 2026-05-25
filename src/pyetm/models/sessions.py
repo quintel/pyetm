@@ -70,6 +70,22 @@ class Sessions(Base):
                 scenarios.append(Session.new(area, year, **extra))
             except (ScenarioError, ValueError) as e:
                 print(f"Could not create scenario with {params}: {e}")
+
+        # Auto-display warnings for all created sessions
+        if scenarios:
+            has_warnings = False
+            for session in scenarios:
+                if len(session.warnings) > 0:
+                    if not has_warnings:
+                        print("\n=== Batch Creation Summary ===")
+                        has_warnings = True
+                    area_code = getattr(session, "area_code", None)
+                    end_year = getattr(session, "end_year", None)
+                    context = f"Session #{session.id}"
+                    if area_code or end_year:
+                        context += f" (area_code={area_code}, end_year={end_year})"
+                    session.auto_show_warnings(context)
+
         return cls(items=scenarios)
 
     def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:

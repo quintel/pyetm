@@ -6,6 +6,7 @@ from pyetm.models.session import Session
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_saved_scenario import (
     UpdateSavedScenarioRunner,
 )
@@ -156,6 +157,102 @@ def test_create_saved_scenario_preserves_params_not_in_response(
     )
     # private should be set from params since it wasn't in response
     assert saved_scenario.private is True
+
+
+def test_create_saved_scenario_with_user_values(
+    monkeypatch, ok_service_result, mock_client
+):
+    """Test that user_values applied during create are accessible after creation."""
+    from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+    from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
+
+    # Mock Session.new to return a session with id 123
+    session_data = {
+        "id": 123,
+        "area_code": "nl",
+        "end_year": 2050,
+        "user_values": {},  # Initial empty user_values
+    }
+
+    monkeypatch.setattr(
+        CreateScenarioRunner,
+        "run",
+        lambda client, params: ok_service_result(session_data),
+    )
+
+    # Create response with nested scenario data
+    created_data = {
+        "id": 792,
+        "scenario_id": 123,
+        "title": "Scenario with User Values",
+        "scenario": session_data.copy(),
+    }
+
+    # Mock the CreateSavedScenarioRunner
+    monkeypatch.setattr(
+        CreateSavedScenarioRunner,
+        "run",
+        lambda client, params: ok_service_result(created_data),
+    )
+
+    # Mock the UpdateInputsRunner to succeed
+    update_calls = []
+
+    def mock_update_inputs(client, session, inputs):
+        update_calls.append((session.id, inputs))
+        return ok_service_result(
+            {"scenario": {"id": session.id, "user_values": inputs}}
+        )
+
+    monkeypatch.setattr(UpdateInputsRunner, "run", mock_update_inputs)
+
+    # Mock FetchInputsRunner to return the updated values
+    def mock_fetch_inputs(client, scenario_id, defaults=None):
+        # Return the inputs with user values set
+        inputs_data = {
+            "flh_of_energy_power_solar_pv_solar_radiation": {
+                "default": 950.0,
+                "max": 3000.0,
+                "min": 0.0,
+                "unit": "hours",
+                "user": 3000.0,  # The value we set
+            }
+        }
+        return ok_service_result(inputs_data)
+
+    monkeypatch.setattr(FetchInputsRunner, "run", mock_fetch_inputs)
+
+    # Mock Session.load to return a session with updated user_values
+    def mock_session_load(scenario_id, client=None):
+        session = Session(id=123, area_code="nl", end_year=2050)
+        # Mock the inputs to return updated values
+        session._inputs = None  # Will trigger fetch via inputs property
+        return session
+
+    monkeypatch.setattr(Session, "load", staticmethod(mock_session_load))
+
+    # Create scenario with user_values
+    user_values = {"flh_of_energy_power_solar_pv_solar_radiation": 3000.0}
+    saved_scenario = Scenario.create(
+        title="Scenario with User Values",
+        area_code="nl",
+        end_year=2050,
+        user_values=user_values,
+        client=mock_client,
+    )
+
+    # Verify the update was called
+    assert len(update_calls) == 1
+    assert update_calls[0][0] == 123  # scenario_id
+    assert update_calls[0][1] == user_values
+
+    # Verify that accessing inputs returns the updated values
+    inputs = saved_scenario.inputs
+    solar_input = inputs["flh_of_energy_power_solar_pv_solar_radiation"]
+    assert solar_input.user == 3000.0
+
+    # Verify user_values() also returns the correct value
+    assert saved_scenario.user_values() == user_values
 
 
 # --- Update Tests --- #

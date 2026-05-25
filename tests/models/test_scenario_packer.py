@@ -621,7 +621,11 @@ class TestExportConfigResolver:
 
         config = ExportConfigResolver._parse_config_from_series(series)
 
-        assert config.include_annual_exports == ["energy_flow", "sankey", "production_parameters"]
+        assert config.include_annual_exports == [
+            "energy_flow",
+            "sankey",
+            "production_parameters",
+        ]
 
     def test_parse_config_from_series_annual_exports_false(self):
         """Test that annual_exports='false' in series exports nothing"""
@@ -661,7 +665,15 @@ class TestExportConfigResolver:
         config = ExportConfigResolver.extract_from_export_config_sheet(df)
 
         assert config is not None
-        assert config.include_annual_exports == ["energy_flow", "sankey", "production_parameters"]
+        assert config.include_annual_exports == [
+            "production_parameters",
+            "energy_flow",
+            "energy_flow_present",
+            "molecule_flow",
+            "sankey",
+            "storage_parameters",
+            "costs_parameters",
+        ]
 
     def test_extract_from_export_config_sheet_annual_exports_boolean_true(self):
         """Test that annual_exports=True (boolean from Excel) exports all types"""
@@ -674,7 +686,15 @@ class TestExportConfigResolver:
         config = ExportConfigResolver.extract_from_export_config_sheet(df)
 
         assert config is not None
-        assert config.include_annual_exports == ["energy_flow", "sankey", "production_parameters"]
+        assert config.include_annual_exports == [
+            "production_parameters",
+            "energy_flow",
+            "energy_flow_present",
+            "molecule_flow",
+            "sankey",
+            "storage_parameters",
+            "costs_parameters",
+        ]
 
     def test_extract_from_export_config_sheet_specific_carriers(self):
         """Test that specific carrier names work correctly"""
@@ -1644,9 +1664,7 @@ class TestExportIDColumns:
         scenario.identifier = Mock(return_value="Test")
 
         # Mock _to_dataframe to return simple test data
-        mock_df = pd.DataFrame(
-            {12345: ["nl", 2050]}, index=["area_code", "end_year"]
-        )
+        mock_df = pd.DataFrame({12345: ["nl", 2050]}, index=["area_code", "end_year"])
         scenario._to_dataframe = Mock(return_value=mock_df)
 
         packer = ScenarioPacker()

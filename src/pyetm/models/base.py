@@ -139,6 +139,18 @@ class Base(BaseModel):
         """Print all warnings to the console."""
         self._warning_collector.show_warnings()
 
+    def auto_show_warnings(self, context: str = "") -> None:
+        """
+        Automatically display warnings if any exist, with contextual information.
+
+        Args:
+            context: Additional context to display (e.g., "SavedScenario #123")
+        """
+        if len(self.warnings) > 0:
+            if context:
+                print(f"\n=== Warnings for {context} ===")
+            self.show_warnings()
+
     def log_warnings(
         self, logger: Any, level: str = "warning", prefix: str | None = None
     ) -> None:
