@@ -242,6 +242,39 @@ class TestInputs:
         assert not result.empty
         assert "input" in result.index.names
 
+    def test_inputs_default_field_is_value(self, scenario_with_inputs):
+        """Test that inputs() returns 'value' field by default (merged user || default)"""
+        # Create a mock DataFrame with both user and default values
+        mock_df = pd.DataFrame(
+            {
+                "value": [1000, 500],  # Merged: user value for first, default for second
+                "user": [1000, None],  # User only set first input
+                "default": [500, 500],  # Both have defaults
+                "unit": ["MW", "MW"],
+            },
+            index=["wind_capacity", "solar_capacity"],
+        )
+        mock_df.index.name = "input"
+        final_df = mock_df.set_index("unit", append=True)
+
+        # Mock the to_dataframe method to return our test data
+        scenario_with_inputs.inputs.to_dataframe = Mock(return_value=final_df)
+        scenario_with_inputs.identifier = Mock(return_value=scenario_with_inputs.id)
+
+        packer = ScenarioPacker()
+        packer.add_inputs(scenario_with_inputs)
+
+        # Call inputs() without specifying fields - should default to "value"
+        result = packer.inputs()
+
+        # Verify the result contains the value column
+        assert not result.empty
+        # Check that we get multi-index columns with scenario and field
+        assert isinstance(result.columns, pd.MultiIndex)
+        # Verify "value" is in the field level of the columns
+        field_level_values = [col[1] for col in result.columns]
+        assert "value" in field_level_values
+
 
 # TODO: FIX TEST
 # def test_inputs_multiple_scenarios(self, multiple_scenarios):

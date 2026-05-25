@@ -96,7 +96,7 @@ class ScenarioPacker(BaseModel):
         result = df.T.reset_index(names=["scenario_id"])
         return result
 
-    def inputs(self, fields: str = "user") -> pd.DataFrame:
+    def inputs(self, fields: str = "value") -> pd.DataFrame:
         return self._inputs.to_dataframe(fields=fields)
 
     def gquery_results(self, columns: str = "future") -> pd.DataFrame:
@@ -260,6 +260,7 @@ class ScenarioPacker(BaseModel):
             include_input_min_max,
             include_users,
             include_annual_exports,
+            hourly_curves,
         )
 
         hourly_curve_carriers = self._determine_hourly_curve_carriers(
@@ -443,6 +444,7 @@ class ScenarioPacker(BaseModel):
         include_input_min_max: Optional[bool],
         include_users: Optional[bool],
         include_annual_exports: Optional[Sequence[str]] = None,
+        hourly_curves: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """Resolve all export flags from parameters and configuration."""
         resolver = excel_utils.ExportConfigResolver()
@@ -491,7 +493,8 @@ class ScenarioPacker(BaseModel):
                     if global_config
                     else None
                 ),
-                False,
+                # Auto-enable if hourly_curves carriers are specified
+                hourly_curves is not None and len(hourly_curves) > 0,
             ),
             "include_input_defaults": resolver.resolve_boolean(
                 include_input_defaults,

@@ -215,7 +215,7 @@ def test_create_saved_scenario_with_user_values(
                 "max": 3000.0,
                 "min": 0.0,
                 "unit": "hours",
-                "user": 3000.0,  # The value we set
+                "user": 1000.0,
             }
         }
         return ok_service_result(inputs_data)
@@ -232,7 +232,7 @@ def test_create_saved_scenario_with_user_values(
     monkeypatch.setattr(Session, "load", staticmethod(mock_session_load))
 
     # Create scenario with user_values
-    user_values = {"flh_of_energy_power_solar_pv_solar_radiation": 3000.0}
+    user_values = {"flh_of_energy_power_solar_pv_solar_radiation": 1000.0}
     saved_scenario = Scenario.create(
         title="Scenario with User Values",
         area_code="nl",
@@ -249,7 +249,7 @@ def test_create_saved_scenario_with_user_values(
     # Verify that accessing inputs returns the updated values
     inputs = saved_scenario.inputs
     solar_input = inputs["flh_of_energy_power_solar_pv_solar_radiation"]
-    assert solar_input.user == 3000.0
+    assert solar_input.user == 1000.0
 
     # Verify user_values() also returns the correct value
     assert saved_scenario.user_values() == user_values

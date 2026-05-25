@@ -54,7 +54,7 @@ scenario = Scenario.create(
         "battery_capacity_always_on_solar_pv_solar_radiation": 200,
         "capacity_of_energy_battery_solar_pv_solar_radiation": 50.0,
         "capacity_of_energy_heat_solar_ht_solar_thermal": 100,
-        "flh_of_energy_power_solar_pv_solar_radiation": 3000
+        "flh_of_energy_power_solar_pv_solar_radiation": 1000
     },
     private=False
 )
@@ -77,11 +77,11 @@ from pyetm import Scenarios
 scenario_configs = [
     {
         "title": "Low Solar",
-        "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1}
+        "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 711}
     },
     {
         "title": "High Solar",
-        "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1200}
+        "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1110}
     }
 ]
 
@@ -242,6 +242,12 @@ scenario_1 = Scenario.load(111111)
 scenario_2 = Scenario.load(222222)
 
 scenarios = Scenarios(items=[scenario_1, scenario_2])
+```
+
+#### Main metadata
+
+```python
+scenario.combine.main_info()
 ```
 
 ### Collection Operations

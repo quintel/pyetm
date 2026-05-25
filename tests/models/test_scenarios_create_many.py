@@ -22,9 +22,11 @@ class TestCreateManyWithUserValues:
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.id = 10
         mock_saved_1.session = Mock(id=1)
+        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_2 = Mock(spec=Scenario)
         mock_saved_2.id = 20
         mock_saved_2.session = Mock(id=2)
+        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.side_effect = [mock_saved_1, mock_saved_2]
 
         # Mock data application to return no warnings
@@ -84,10 +86,13 @@ class TestCreateManyWithUserValues:
 
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.session = mock_session_1
+        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_2 = Mock(spec=Scenario)
         mock_saved_2.session = mock_session_2
+        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_3 = Mock(spec=Scenario)
         mock_saved_3.session = mock_session_3
+        mock_saved_3.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.side_effect = [mock_saved_1, mock_saved_2, mock_saved_3]
 
         mock_apply_data.return_value = []
@@ -148,8 +153,10 @@ class TestCreateManyWithCustomCurves:
 
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.session = mock_session_1
+        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_2 = Mock(spec=Scenario)
         mock_saved_2.session = mock_session_2
+        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.side_effect = [mock_saved_1, mock_saved_2]
 
         mock_apply_data.return_value = []
@@ -199,6 +206,7 @@ class TestCreateManyWithCustomCurves:
 
         mock_saved = Mock(spec=Scenario)
         mock_saved.session = mock_session
+        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.return_value = mock_saved
 
         mock_apply_data.return_value = []
@@ -248,8 +256,10 @@ class TestCreateManyWithSortables:
 
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.session = mock_session_1
+        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_2 = Mock(spec=Scenario)
         mock_saved_2.session = mock_session_2
+        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.side_effect = [mock_saved_1, mock_saved_2]
 
         mock_apply_data.return_value = []
@@ -306,6 +316,7 @@ class TestCreateManyCombined:
 
         mock_saved = Mock(spec=Scenario)
         mock_saved.session = mock_session
+        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.return_value = mock_saved
 
         mock_apply_data.return_value = []
@@ -356,8 +367,10 @@ class TestCreateManyErrorHandling:
 
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.session = mock_session_1
+        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_2 = Mock(spec=Scenario)
         mock_saved_2.session = mock_session_2
+        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.side_effect = [mock_saved_1, mock_saved_2]
 
         # Mock data application to return warnings
@@ -406,6 +419,7 @@ class TestCreateManyErrorHandling:
 
         mock_saved = Mock(spec=Scenario)
         mock_saved.session = mock_session
+        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.return_value = mock_saved
 
         # Mock data application to return errors
@@ -449,8 +463,10 @@ class TestCreateManyErrorHandling:
 
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.session = mock_session_1
+        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
         mock_saved_3 = Mock(spec=Scenario)
         mock_saved_3.session = mock_session_3
+        mock_saved_3.warnings = Mock(__len__=Mock(return_value=0))
 
         mock_create.side_effect = [mock_saved_1, mock_saved_3]
 
@@ -485,6 +501,7 @@ class TestCreateManyWithTemplateId:
         mock_saved = Mock(spec=Scenario)
         mock_saved.id = 10
         mock_saved.session = mock_session
+        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.return_value = mock_saved
 
         scenarios = Scenarios(client=Mock())
@@ -518,6 +535,7 @@ class TestCreateManyWithTemplateId:
 
         mock_saved = Mock(spec=Scenario)
         mock_saved.session = mock_session
+        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.return_value = mock_saved
 
         scenarios = Scenarios(client=Mock())
@@ -551,6 +569,7 @@ class TestCreateManyWithTemplateId:
 
         mock_saved = Mock(spec=Scenario)
         mock_saved.session = mock_session
+        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
         mock_create.return_value = mock_saved
 
         scenarios = Scenarios(client=Mock())

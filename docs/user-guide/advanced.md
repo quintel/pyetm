@@ -13,7 +13,7 @@ from pyetm.models import ScenarioPacker
 
 # Define input variations
 inputs = {
-    "number_of_energy_power_solar_pv_solar_radiation": [10000, 50000, 100000],
+    "flh_of_energy_power_solar_pv_solar_radiation": [800, 900, 1000],
     "transport_car_using_electricity_share": [25.0, 50.0, 75.0],
 }
 
@@ -37,7 +37,7 @@ results = []
 
 for scenario in scenarios:
     results.append({
-        "solar_pv": scenario.user_values["number_of_energy_power_solar_pv_solar_radiation"],
+        "solar_pv": scenario.user_values["flh_of_energy_power_solar_pv_solar_radiation"],
         "ev_share": scenario.user_values["transport_car_using_electricity_share"],
         "renewability": scenario.renewable_percentage,
         "costs": scenario.total_costs,

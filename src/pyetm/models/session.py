@@ -161,7 +161,7 @@ class Session(Base):
 
         if not result.success:
             raise ScenarioError(
-                f"Could not load scenario {scenario_id}: {result.errors}"
+                f"Could not load session {scenario_id}: {result.errors}"
             )
 
         # parse into a Scenario
@@ -344,7 +344,9 @@ class Session(Base):
                 "Title is required to save scenario. Provide title parameter or set scenario.title"
             )
 
-        private = kwargs.pop("private", self.private if self.private is not None else False)
+        private = kwargs.pop(
+            "private", self.private if self.private is not None else False
+        )
 
         return Scenario.create(
             title=save_title,
@@ -783,7 +785,9 @@ class Session(Base):
         # Check if queries need to be executed (none have been executed yet)
         if self._queries is not None:
             # Only execute if NO queries have data yet (all are None)
-            has_any_results = any(v is not None for v in self._queries.query_dict.values())
+            has_any_results = any(
+                v is not None for v in self._queries.query_dict.values()
+            )
             if not has_any_results:
                 self.execute_queries()
 

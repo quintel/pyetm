@@ -108,7 +108,7 @@ scenario = Scenario.create(
 
 # Set inputs
 scenario.update_user_values({
-    "number_of_energy_power_solar_pv_solar_radiation": 50000,
+    "flh_of_energy_power_solar_pv_solar_radiation": 1000,
     "households_heater_district_heating_steam_hot_water_share": 30.0,
 })
 
@@ -135,7 +135,7 @@ scenarios = Scenarios.from_excel("scenarios.xlsx", update=False)
 # Modify in Python
 for scenario in scenarios:
     scenario.update_user_values({
-        "number_of_energy_power_solar_pv_solar_radiation": 100000
+        "flh_of_energy_power_solar_pv_solar_radiation": 1000
     })
 
 # Export back to Excel
@@ -153,14 +153,14 @@ from pyetm import Scenarios
 
 # Create multiple scenarios
 scenario_configs = [
-    {"title": "Low Solar", "user_values": {"number_of_energy_power_solar_pv_solar_radiation": 25000}},
-    {"title": "Medium Solar", "user_values": {"number_of_energy_power_solar_pv_solar_radiation": 50000}},
-    {"title": "High Solar", "user_values": {"number_of_energy_power_solar_pv_solar_radiation": 100000}},
+    {"title": "Low Solar", "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 800}},
+    {"title": "Medium Solar", "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 900}},
+    {"title": "High Solar", "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1100}},
 ]
 
 scenarios = Scenarios.create_many(
     scenario_configs,
-    area_code="nl",
+    area_code="nl2023",
     end_year=2050
 )
 

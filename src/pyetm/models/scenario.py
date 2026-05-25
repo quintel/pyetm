@@ -236,14 +236,18 @@ class Scenario(Base):
                     scenario.add_warning(warning_key, f"Failed to apply {warning_key}")
 
                 # Auto-display data application warnings immediately
+                scenario_id_str = getattr(scenario, "id", "unknown")
+                scenario_title = getattr(scenario, "title", "Unknown")
                 scenario.auto_show_warnings(
-                    f"SavedScenario #{scenario.id} (title='{scenario.title}')"
+                    f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
                 )
         except Exception as e:
             scenario.add_warning(warning_key, f"Failed to apply {warning_key}: {e}")
             # Auto-display exception warnings immediately
+            scenario_id_str = getattr(scenario, "id", "unknown")
+            scenario_title = getattr(scenario, "title", "Unknown")
             scenario.auto_show_warnings(
-                f"SavedScenario #{scenario.id} (title='{scenario.title}')"
+                f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
             )
 
     @staticmethod
@@ -327,9 +331,11 @@ class Scenario(Base):
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
 
-        # Auto-display load warnings
+        # Auto-display load warnings (use getattr for safety)
+        scenario_id_str = getattr(saved_scenario, "id", saved_scenario_id)
+        scenario_title = getattr(saved_scenario, "title", "Unknown")
         saved_scenario.auto_show_warnings(
-            f"SavedScenario #{saved_scenario.id} (title='{saved_scenario.title}')"
+            f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
         )
 
         return saved_scenario
