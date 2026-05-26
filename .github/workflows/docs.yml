@@ -51,7 +51,7 @@ jobs:
           path: site/
 
   deploy:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/version-2')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/version-2' || github.ref == 'refs/heads/docs-n-typing')
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -70,31 +70,3 @@ jobs:
 
       - name: Deploy to GitHub Pages
         run: poetry run mkdocs gh-deploy --force
-
-  deploy-preview:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/docs-n-typing'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Deploy preview to GitHub Pages subdirectory
-        run: poetry run mkdocs gh-deploy --force --site-dir preview
