@@ -14,16 +14,18 @@ class DownloadCustomCurveRunner(BaseRunner[io.StringIO]):
     """
     Runner for downloading a specific custom curve as CSV data.
     GET /api/v3/scenarios/{scenario_id}/custom_curves/{curve_name}.csv
-
-    Returns:
-        ServiceResult.ok(data) where `data` is a StringIO object containing the CSV data.
-        ServiceResult.fail(errors) on any breaking error.
     """
 
     @staticmethod
     def run(
         client: BaseClient, scenario: Any, curve_name: str, **kwargs: Any
     ) -> ServiceResult[Any]:
+        """Execute the custom curve download operation.
+
+        Returns:
+            ServiceResult[io.StringIO]: Success case contains StringIO with CSV data;
+                failure case contains error messages.
+        """
         return GenericCurveDownloadRunner.run(client, scenario, curve_name, curve_type="custom")
 
 
@@ -31,14 +33,16 @@ class FetchAllCustomCurveDataRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for fetching metadata for all custom curves on a scenario.
     GET /api/v3/scenarios/{scenario_id}/custom_curves
-
-    Returns:
-        ServiceResult.ok(data) where `data` is a dict containing curve metadata.
-        ServiceResult.fail(errors) on any breaking error.
     """
 
     @staticmethod
     def run(client: BaseClient, scenario: Any, **kwargs: Any) -> ServiceResult[Dict[str, Any]]:
+        """Execute the fetch all custom curves metadata operation.
+
+        Returns:
+            ServiceResult[Dict[str, Any]]: Success case contains dict with curve metadata;
+                failure case contains error messages.
+        """
         return FetchAllCustomCurveDataRunner._make_request(
             client=client,
             method="get",

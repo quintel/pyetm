@@ -11,10 +11,6 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
     """
     Generic runner for downloading any curve as CSV data.
     Supports both custom curves and output curves.
-
-    Returns:
-        ServiceResult.ok(data) where `data` is a StringIO object containing the CSV data.
-        ServiceResult.fail(errors) on any breaking error.
     """
 
     @staticmethod
@@ -25,6 +21,12 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
         curve_type: Literal["custom", "output"] = "output",
         **kwargs: Any,
     ) -> ServiceResult[Any]:
+        """Execute the curve download operation.
+
+        Returns:
+            ServiceResult[io.StringIO]: Success case contains StringIO with CSV data;
+                failure case contains error messages.
+        """
         # Normalize to Session to get ETEngine session ID
         from pyetm.models.scenario import Scenario
         session = scenario.session if isinstance(scenario, Scenario) else scenario

@@ -100,7 +100,7 @@ nav:
     - Configuration: getting-started/configuration.md
   - User Guide:
     - Overview: user-guide/index.md
-    - Working with Excel: user-guide/excel.mp
+    - Working with Excel: user-guide/excel.md
     - Working with Scenarios: user-guide/scenarios.md
     - Sessions and Authentication: user-guide/management.md
     - Submodels: user-guide/submodels.md
@@ -117,4 +117,4 @@ extra:
     - icon: fontawesome/solid/globe
       link: https://energytransitionmodel.com
 
-copyright: Copyright &copy; 2024 Quintel Intelligence
+copyright: Copyright &copy; 2026 Quintel Intelligence

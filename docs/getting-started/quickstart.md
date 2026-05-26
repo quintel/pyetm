@@ -28,7 +28,7 @@ This command will:
 
 - Ask which environment to use (production, beta, or local)
 - Create a `.env` configuration file
-- Copy example Jupyter notebooks and helper files
+- Copy an example input excel
 
 After initialization, you'll need to manually add your API token to the `.env` file if you want to create or modify scenarios (see [Adding Your API Token](#adding-your-api-token) below).
 
@@ -130,7 +130,7 @@ scenario.to_excel("scenario.xlsx")
 
 ## Using Jupyter Notebooks
 
-pyetm works great with Jupyter notebooks! After running `pyetm init`, you'll have example notebooks in your directory to play around with. These notebooks are meant to **serve as inspiration for your own workflows**, rather than being 'ready to go' for scenario flows.
+pyetm works great with Jupyter notebooks! After running `pyetm init`, you'll have an example input excel you can fill and use with Jupyter notebooks.
 
 ### Setting Up Jupyter
 

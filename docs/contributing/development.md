@@ -156,7 +156,7 @@ pyetm/
 │   └── utils/          # Utility functions
 ├── tests/              # Test suite
 ├── docs/               # Documentation source
-├── examples/           # Example notebooks and scripts
+├── examples/           # Example inputs
 ├── pyproject.toml      # Project configuration
 └── mkdocs.yml          # Documentation configuration
 ```

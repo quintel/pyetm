@@ -97,4 +97,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Deploy preview to GitHub Pages subdirectory
-        run: poetry run mkdocs gh-deploy --force --dest-dir preview
+        run: poetry run mkdocs gh-deploy --force --site-dir preview

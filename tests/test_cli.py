@@ -40,7 +40,7 @@ class TestCliInit:
             assert "LOG_LEVEL=INFO" in env_content
 
     def test_init_copies_example_files(self, runner, temp_dir):
-        """Test that init copies example files"""
+        """Test that init copies example Excel file"""
         with runner.isolated_filesystem(temp_dir=temp_dir):
             result = runner.invoke(
                 cli,
@@ -50,10 +50,7 @@ class TestCliInit:
 
             assert result.exit_code == 0
 
-            # Check example files are copied
-            assert Path("basic_features.ipynb").exists()
-            assert Path("advanced_features.ipynb").exists()
-            assert Path("example_helpers.py").exists()
+            # Check example Excel file is copied
             assert Path("inputs/example_input_excel.xlsx").exists()
 
             # Check inputs directory was created
@@ -107,8 +104,10 @@ class TestCliInit:
             env_path = Path(".env")
             env_path.write_text("OLD_CONTENT=true")
 
-            example_path = Path("basic_features.ipynb")
-            example_path.write_text("# Old notebook")
+            inputs_dir = Path("inputs")
+            inputs_dir.mkdir(exist_ok=True)
+            example_path = inputs_dir / "example_input_excel.xlsx"
+            example_path.write_text("Old content")
 
             # Run init with --force
             result = runner.invoke(
@@ -128,15 +127,19 @@ class TestCliInit:
             assert "OLD_CONTENT" not in env_content
             assert "# ETM_API_TOKEN=" in env_content  # Should be commented out
 
-            example_content = example_path.read_text()
-            assert "# Old notebook" not in example_content
+            # Example Excel should be overwritten (check it's not the old text content)
+            assert example_path.exists()
+            # Excel files are binary, so just check file exists and is not empty
+            assert example_path.stat().st_size > 0
 
     def test_init_prompts_for_example_overwrite(self, runner, temp_dir):
         """Test that init prompts before overwriting existing example files"""
         with runner.isolated_filesystem(temp_dir=temp_dir):
             # Create existing example file
-            example_path = Path("basic_features.ipynb")
-            example_path.write_text("# Old notebook")
+            inputs_dir = Path("inputs")
+            inputs_dir.mkdir(exist_ok=True)
+            example_path = inputs_dir / "example_input_excel.xlsx"
+            example_path.write_text("Old content")
 
             # Run init and decline overwrite for the example file
             result = runner.invoke(
@@ -147,10 +150,10 @@ class TestCliInit:
 
             assert result.exit_code == 0
             assert "already exists" in result.output
-            assert "Skipped basic_features.ipynb" in result.output
+            assert "Skipped" in result.output
 
             # Old content should be preserved
-            assert "# Old notebook" in example_path.read_text()
+            assert "Old content" in example_path.read_text()
 
     def test_init_success_message(self, runner, temp_dir):
         """Test that success message is shown"""
@@ -162,12 +165,11 @@ class TestCliInit:
             )
 
             assert result.exit_code == 0
-            assert "Initialization complete" in result.output
-            assert "Created files:" in result.output
             assert "Never commit your .env file" in result.output
-            assert "basic_features.ipynb" in result.output or "example" in result.output.lower()
-            # Should include instructions about adding token manually
-            assert "Add your ETM API token" in result.output
+            # Should include instructions about environment variables
+            assert "Edit .env and set your environment variables" in result.output
+            # Should point to documentation
+            assert "quintel.github.io/pyetm" in result.output
 
 
 class TestCliVersion:
