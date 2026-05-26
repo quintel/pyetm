@@ -69,6 +69,7 @@ plugins:
             separate_signature: true
             merge_init_into_class: true
             signature_crossrefs: true
+            show_warnings: false
 
 markdown_extensions:
   - pymdownx.highlight:

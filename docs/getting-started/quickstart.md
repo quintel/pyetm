@@ -166,7 +166,6 @@ Now that you've created your first scenario, explore more advanced features:
 
 - [Configuration Guide](configuration.md) - Learn about environment setup and SSL configuration
 - [Working with Scenarios](../user-guide/scenarios.md) - Deep dive into scenario management
-- [Managing Inputs](../user-guide/inputs.md) - Learn about input handling and validation
 - [API Reference](../api/index.md) - Complete API documentation
 
 ## Common Issues
