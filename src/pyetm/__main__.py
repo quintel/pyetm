@@ -39,7 +39,9 @@ def write_file_safely(path: Path, content: str, force: bool = False) -> bool:
         True if file was written, False if skipped
     """
     if path.exists() and not force:
-        overwrite = click.confirm(f"  {path.name} already exists. Overwrite?", default=False)
+        overwrite = click.confirm(
+            f"  {path.name} already exists. Overwrite?", default=False
+        )
         if not overwrite:
             click.echo(f"  ⊗ Skipped {path.name}")
             return False
@@ -63,7 +65,9 @@ def get_examples_path() -> Path:
     return examples_path
 
 
-def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str], list[str]]:
+def copy_example_files(
+    target_dir: Path, force: bool = False
+) -> tuple[list[str], list[str]]:
     """
     Copy example files from the package to the target directory.
 
@@ -105,7 +109,7 @@ def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str]
 
     for source_path, dest_path in files_to_copy:
         if not source_path.exists():
-            click.echo(f"  ⚠ Warning: Source file not found: {source_path.name}")
+            click.echo(f"  Warning: Source file not found: {source_path.name}")
             continue
 
         # Create parent directory if needed (for inputs folder)
@@ -117,7 +121,7 @@ def copy_example_files(target_dir: Path, force: bool = False) -> tuple[list[str]
                 f"  {dest_path.name} already exists. Overwrite?", default=False
             )
             if not overwrite:
-                click.echo(f"  ⊗ Skipped {dest_path.name}")
+                click.echo(f"  Skipped {dest_path.name}")
                 skipped_files.append(dest_path.name)
                 continue
 
@@ -243,7 +247,9 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
     # Next steps
     click.echo("\nNext steps:")
     click.echo("  1. Add your ETM API token to .env (if needed):")
-    click.echo("     • Get token from: https://docs.energytransitionmodel.com/api/authentication")
+    click.echo(
+        "     • Get token from: https://docs.energytransitionmodel.com/api/authentication"
+    )
     click.echo("     • Uncomment the ETM_API_TOKEN line in .env")
     click.echo("     • Paste your token (format: etm_<JWT> or etm_beta_<JWT>)")
     click.echo("  2. Explore the example notebooks:")

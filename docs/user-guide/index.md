@@ -81,7 +81,7 @@ Extract and analyze scenario outputs including hourly curves and annual exports.
 - Hourly output curves
 - Carrier type filtering (electricity, heat, hydrogen, methane)
 
-### [Advanced Usage](advanced.md)
+### [Management](management.md)
 Advanced features for power users and automation workflows.
 
 **Topics covered:**
@@ -91,87 +91,6 @@ Advanced features for power users and automation workflows.
 - Interpolation (creating intermediate scenarios)
 - Bulk operations (create_many, load_many)
 - User management (sharing scenarios)
-
-## Common Workflows
-
-### Quick Reference: Create and Modify a Scenario
-
-```python
-from pyetm import Scenario
-
-# Create scenario
-scenario = Scenario.create(
-    title="Netherlands 2050",
-    area_code="nl",
-    end_year=2050
-)
-
-# Set inputs
-scenario.update_user_values({
-    "flh_of_energy_power_solar_pv_solar_radiation": 1000,
-    "households_heater_district_heating_steam_hot_water_share": 30.0,
-})
-
-# Add queries and execute
-scenario.add_queries([
-    "dashboard_renewability",
-    "dashboard_co2_emissions",
-])
-scenario.execute_queries()
-
-# Get results
-results = scenario.results(columns=["future"])
-print(results)
-```
-
-### Quick Reference: Excel Round-Trip
-
-```python
-from pyetm import Scenarios
-
-# Import scenarios
-scenarios = Scenarios.from_excel("scenarios.xlsx", update=False)
-
-# Modify in Python
-for scenario in scenarios:
-    scenario.update_user_values({
-        "flh_of_energy_power_solar_pv_solar_radiation": 1000
-    })
-
-# Export back to Excel
-scenarios.to_excel(
-    "modified_scenarios.xlsx",
-    include_inputs=True,
-    carriers=["electricity"]
-)
-```
-
-### Quick Reference: Batch Processing
-
-```python
-from pyetm import Scenarios
-
-# Create multiple scenarios
-scenario_configs = [
-    {"title": "Low Solar", "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 800}},
-    {"title": "Medium Solar", "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 900}},
-    {"title": "High Solar", "user_values": {"flh_of_energy_power_solar_pv_solar_radiation": 1100}},
-]
-
-scenarios = Scenarios.create_many(
-    scenario_configs,
-    area_code="nl2023",
-    end_year=2050
-)
-
-# Add queries to all
-for scenario in scenarios:
-    scenario.add_queries(["dashboard_renewability"])
-    scenario.execute_queries()
-
-# Export comparison
-scenarios.to_excel("comparison.xlsx")
-```
 
 ## Getting Help
 

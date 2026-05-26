@@ -32,7 +32,9 @@ class PathManager:
     @staticmethod
     def get_hourly_curves_path(main_path: Path) -> Path:
         """Get path for hourly curves workbook."""
-        return main_path.with_name(f"{main_path.stem}_hourly_output_curves{main_path.suffix}")
+        return main_path.with_name(
+            f"{main_path.stem}_hourly_output_curves{main_path.suffix}"
+        )
 
     @staticmethod
     def get_annual_exports_path(main_path: Path) -> Path:
@@ -44,7 +46,9 @@ class MainSheetWriter:
     """Writes main scenario info sheet to Excel."""
 
     @staticmethod
-    def write(workbook: Workbook, main_info: pd.DataFrame, scenarios: list[Any]) -> None:
+    def write(
+        workbook: Workbook, main_info: pd.DataFrame, scenarios: list[Any]
+    ) -> None:
         """Write main scenario information sheet."""
         if main_info.empty:
             return
@@ -72,7 +76,9 @@ class DataSheetWriter:
         excel_utils.add_frame("SLIDER_SETTINGS", inputs, workbook, column_width=18)
 
     @staticmethod
-    def write_inputs_detailed(workbook: Workbook, inputs_detailed: Optional[pd.DataFrame]) -> None:
+    def write_inputs_detailed(
+        workbook: Workbook, inputs_detailed: Optional[pd.DataFrame]
+    ) -> None:
         """Write detailed inputs sheet with defaults and min/max."""
         if inputs_detailed is None or inputs_detailed.empty:
             return
@@ -91,17 +97,22 @@ class DataSheetWriter:
 
     @staticmethod
     def write_custom_curves(
-        workbook: Workbook, custom_curves: Optional[Dict[str, Dict[str, pd.Series[Any]]]]
+        workbook: Workbook,
+        custom_curves: Optional[Dict[str, Dict[str, pd.Series[Any]]]],
     ) -> None:
         """Write custom curves sheet."""
         if not custom_curves:
             return
         combined_df = DataSheetWriter._combine_custom_curves(custom_curves)
         if combined_df is not None and not combined_df.empty:
-            excel_utils.add_frame("CUSTOM_CURVES", combined_df, workbook, column_width=18)
+            excel_utils.add_frame(
+                "CUSTOM_CURVES", combined_df, workbook, column_width=18
+            )
 
     @staticmethod
-    def _combine_custom_curves(curves_dict: Dict[str, Dict[str, pd.Series[Any]]]) -> Optional[pd.DataFrame]:
+    def _combine_custom_curves(
+        curves_dict: Dict[str, Dict[str, pd.Series[Any]]],
+    ) -> Optional[pd.DataFrame]:
         """Combine custom curves into single DataFrame."""
         all_series = []
         for curve_name, scenarios_data in curves_dict.items():
@@ -118,7 +129,9 @@ class DataSheetWriter:
         return combined
 
     @staticmethod
-    def write_gquery_results(workbook: Workbook, gquery_results: Optional[pd.DataFrame]) -> None:
+    def write_gquery_results(
+        workbook: Workbook, gquery_results: Optional[pd.DataFrame]
+    ) -> None:
         """Write gquery results sheet."""
         if gquery_results is None or gquery_results.empty:
             return
@@ -151,7 +164,8 @@ class HourlyCurvesWriter:
 
     @staticmethod
     def _organize_by_carrier(
-        curves_data: Dict[str, Dict[str, pd.DataFrame]], carriers: Optional[Sequence[str]]
+        curves_data: Dict[str, Dict[str, pd.DataFrame]],
+        carriers: Optional[Sequence[str]],
     ) -> Dict[str, Dict[str, Dict[str, pd.DataFrame]]]:
         """Organize curves by carrier type."""
         from pyetm.models.hourly_output_curves import HourlyOutputCurves
@@ -175,9 +189,13 @@ class HourlyCurvesWriter:
         return carrier_curves
 
     @staticmethod
-    def _select_carriers(carrier_map: Dict[str, Any], carriers: Optional[Sequence[str]]) -> List[str]:
+    def _select_carriers(
+        carrier_map: Dict[str, Any], carriers: Optional[Sequence[str]]
+    ) -> List[str]:
         """Select which carriers to export with validation."""
-        from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
+        from pyetm.models.packables.hourly_output_curves_pack import (
+            HourlyOutputCurvesPack,
+        )
 
         valid_carriers = list(carrier_map.keys())
 
@@ -185,7 +203,9 @@ class HourlyCurvesWriter:
             return valid_carriers
 
         # Validate carriers using packable validation
-        validated_carriers, warnings = HourlyOutputCurvesPack.validate_curve_config(list(carriers))
+        validated_carriers, warnings = HourlyOutputCurvesPack.validate_curve_config(
+            list(carriers)
+        )
         for warning in warnings:
             logger.warning("Hourly curves export: %s", warning)
 
@@ -234,7 +254,7 @@ class HourlyCurvesWriter:
 
     @staticmethod
     def _combine_carrier_curves(
-        curves: Dict[str, Dict[str, pd.DataFrame]]
+        curves: Dict[str, Dict[str, pd.DataFrame]],
     ) -> Optional[pd.DataFrame]:
         """Combine curves for a carrier into single DataFrame."""
         series_entries = []
@@ -244,7 +264,9 @@ class HourlyCurvesWriter:
                 if df is None or df.empty:
                     continue
 
-                entries = HourlyCurvesWriter._normalize_to_series(df, scenario_id, curve_name)
+                entries = HourlyCurvesWriter._normalize_to_series(
+                    df, scenario_id, curve_name
+                )
                 series_entries.extend(entries)
 
         if not series_entries:
@@ -268,8 +290,7 @@ class HourlyCurvesWriter:
             if df.shape[1] == 1:
                 return [((scenario_id, curve_name), df.iloc[:, 0])]
             return [
-                ((scenario_id, f"{curve_name}:{col}"), df[col])
-                for col in df.columns
+                ((scenario_id, f"{curve_name}:{col}"), df[col]) for col in df.columns
             ]
 
         return []
@@ -279,7 +300,9 @@ class AnnualExportsWriter:
     """Writes annual exports to separate Excel file."""
 
     @staticmethod
-    def write(exports_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path) -> None:
+    def write(
+        exports_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path
+    ) -> None:
         """Write annual exports to Excel file with validation."""
         if not exports_data:
             logger.info("No export data available")
@@ -289,7 +312,9 @@ class AnnualExportsWriter:
         from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
 
         export_names = list(exports_data.keys())
-        validated_names, warnings = AnnualExportsPack.validate_export_types(export_names)
+        validated_names, warnings = AnnualExportsPack.validate_export_types(
+            export_names
+        )
         for warning in warnings:
             logger.warning("Annual exports: %s", warning)
 
@@ -299,7 +324,9 @@ class AnnualExportsWriter:
         }
 
         if not filtered_exports:
-            logger.warning("Annual exports: No valid export types found, nothing to write")
+            logger.warning(
+                "Annual exports: No valid export types found, nothing to write"
+            )
             return
 
         workbook = None
@@ -318,26 +345,100 @@ class AnnualExportsWriter:
     def _write_export_sheet(
         workbook: Workbook, export_name: str, scenarios_data: Dict[str, pd.DataFrame]
     ) -> None:
-        """Write a single export sheet."""
+        """Write a single export sheet with scenarios arranged horizontally."""
         if not scenarios_data:
             return
 
-        frames = []
-        for scenario_key, df in scenarios_data.items():
-            df_copy = df.copy()
-            df_copy.insert(0, "scenario", scenario_key)
-            frames.append(df_copy)
+        # Separate index columns from data columns
+        index_columns_df: Optional[pd.DataFrame] = None
+        data_series_entries = []
+        index_column_names: List[str] = []
 
-        if frames:
-            combined = pd.concat(frames, ignore_index=True)
-            sheet_name = export_name.upper()[:31]
-            excel_utils.add_frame(
-                name=sheet_name,
-                frame=combined,
-                workbook=workbook,
-                column_width=18,
-                scenario_styling=False,
+        for scenario_key, df in sorted(scenarios_data.items()):
+            if df is None or df.empty:
+                continue
+
+            df_copy = df.copy()
+
+            # Check if DataFrame has a non-default index that should be extracted
+            has_named_index = (
+                not isinstance(df_copy.index, pd.RangeIndex)
+                or df_copy.index.name is not None
             )
+
+            if has_named_index:
+                # Extract index as separate columns (will be shared across scenarios)
+                if index_columns_df is None:
+                    # First scenario: extract index columns
+                    if isinstance(df_copy.index, pd.MultiIndex):
+                        # MultiIndex: create column for each level
+                        index_column_names = [
+                            str(name) if name else f"level_{i}"
+                            for i, name in enumerate(df_copy.index.names)
+                        ]
+                        index_data = {
+                            name: df_copy.index.get_level_values(i)
+                            for i, name in enumerate(index_column_names)
+                        }
+                        index_columns_df = pd.DataFrame(index_data)
+                    else:
+                        # Single index: create one column
+                        index_name = str(df_copy.index.name) if df_copy.index.name else "index"
+                        index_column_names = [index_name]
+                        index_columns_df = pd.DataFrame({index_name: df_copy.index})
+
+                # Don't reset index - keep DataFrame with its index for alignment
+                # Create series entries for data columns only (not index)
+                for col_name in df_copy.columns:
+                    data_series_entries.append(
+                        ((scenario_key, col_name), df_copy[col_name])
+                    )
+            else:
+                # No named index, include all columns in the scenario MultiIndex
+                for col_name in df_copy.columns:
+                    data_series_entries.append(
+                        ((scenario_key, col_name), df_copy[col_name])
+                    )
+
+        if not data_series_entries:
+            return
+
+        # Build data DataFrame with MultiIndex columns (Scenario, Column)
+        cols = [key for key, _ in data_series_entries]
+        data = [s for _, s in data_series_entries]
+        data_df = pd.concat(data, axis=1)
+        data_df.columns = pd.MultiIndex.from_tuples(cols, names=["Scenario", "Column"])
+
+        # Combine index columns (if any) with data columns
+        if index_columns_df is not None:
+            # Reset index on data_df to align with index_columns_df
+            data_df = data_df.reset_index(drop=True)
+
+            # Convert index columns to have MultiIndex structure matching data_df
+            # so they concatenate properly
+            index_multiindex_cols = []
+            for col_name in index_columns_df.columns:
+                # Index columns have no scenario, use empty string for top level
+                index_multiindex_cols.append(("", col_name))
+
+            index_columns_df.columns = pd.MultiIndex.from_tuples(
+                index_multiindex_cols, names=["Scenario", "Column"]
+            )
+
+            # Concatenate: index columns first, then scenario data
+            combined = pd.concat([index_columns_df, data_df], axis=1)
+        else:
+            combined = data_df
+
+        sheet_name = export_name.upper()[:31]
+        excel_utils.add_frame(
+            name=sheet_name,
+            frame=combined,
+            workbook=workbook,
+            column_width=18,
+            scenario_styling=True,  # Enable grey/white alternating backgrounds
+            index=False,
+        )
 
 
 class ExcelExporter:
@@ -383,7 +484,9 @@ class ExcelExporter:
             workbook.close()
 
     @staticmethod
-    def _write_separate_workbooks(export_data: ExportDataCollection, main_path: Path) -> None:
+    def _write_separate_workbooks(
+        export_data: ExportDataCollection, main_path: Path
+    ) -> None:
         """Write separate workbooks for hourly curves and annual exports."""
         if export_data.hourly_output_curves:
             ExcelExporter._safe_write_hourly_curves(
@@ -400,7 +503,9 @@ class ExcelExporter:
 
     @staticmethod
     def _safe_write_hourly_curves(
-        curves_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path, carriers: Optional[Sequence[str]]
+        curves_data: Dict[str, Dict[str, pd.DataFrame]],
+        output_path: Path,
+        carriers: Optional[Sequence[str]],
     ) -> None:
         """Write hourly curves with error handling."""
         try:
@@ -409,7 +514,9 @@ class ExcelExporter:
             logger.warning("Failed exporting output curves workbook: %s", e)
 
     @staticmethod
-    def _safe_write_annual_exports(exports_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path) -> None:
+    def _safe_write_annual_exports(
+        exports_data: Dict[str, Dict[str, pd.DataFrame]], output_path: Path
+    ) -> None:
         """Write annual exports with error handling."""
         try:
             AnnualExportsWriter.write(exports_data, output_path)

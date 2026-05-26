@@ -298,8 +298,8 @@ class TestAnnualExportsWriter:
         excel_file = pd.ExcelFile(str(output_path))
         assert "ENERGY_FLOW" in excel_file.sheet_names
 
-    def test_write_export_sheet_adds_scenario_column(self, tmp_path):
-        """Test that scenario column is added to export sheets."""
+    def test_write_export_sheet_with_horizontal_layout(self, tmp_path):
+        """Test that scenarios are arranged horizontally with MultiIndex columns."""
         output_path = tmp_path / "exports.xlsx"
         exports_data = {
             "energy_flow": {
@@ -309,9 +309,289 @@ class TestAnnualExportsWriter:
 
         AnnualExportsWriter.write(exports_data, output_path)
 
-        df = pd.read_excel(str(output_path), sheet_name="ENERGY_FLOW")
-        assert "scenario" in df.columns
-        assert df["scenario"].iloc[0] == "test1"
+        df = pd.read_excel(str(output_path), sheet_name="ENERGY_FLOW", header=[0, 1])
+        # With horizontal layout, the first row contains scenario names
+        assert "test1" in df.columns.get_level_values(0)
+        # Verify the data structure
+        assert df[("test1", "carrier")].iloc[0] == "electricity"
+        assert df[("test1", "value")].iloc[0] == 100
+
+    def test_write_with_schema_mismatch_numeric(self, tmp_path, caplog):
+        """Test writing exports with schema mismatch - numeric columns."""
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        output_path = tmp_path / "exports.xlsx"
+        exports_data = {
+            "energy_flow": {
+                "scenario1": pd.DataFrame({
+                    "carrier": ["electricity", "gas"],
+                    "value": [100.0, 200.0]
+                }),
+                "scenario2": pd.DataFrame({
+                    "carrier": ["electricity", "gas"],
+                    "value": [150.0, 250.0],
+                    "cost": [10.0, 20.0]  # Extra column
+                }),
+            }
+        }
+
+        AnnualExportsWriter.write(exports_data, output_path)
+
+        # Verify file exists and can be read with MultiIndex columns
+        assert output_path.exists()
+        df = pd.read_excel(str(output_path), sheet_name="ENERGY_FLOW", header=[0, 1])
+
+        # Verify both scenarios are present in column index
+        scenarios = df.columns.get_level_values(0).unique()
+        assert "scenario1" in scenarios
+        assert "scenario2" in scenarios
+
+        # Verify scenario1 has carrier and value columns (no cost)
+        assert "carrier" in df["scenario1"].columns
+        assert "value" in df["scenario1"].columns
+
+        # Verify scenario2 has carrier, value, and cost columns
+        assert "carrier" in df["scenario2"].columns
+        assert "value" in df["scenario2"].columns
+        assert "cost" in df["scenario2"].columns
+
+        # Verify data values
+        assert df[("scenario1", "value")].iloc[0] == 100.0
+        assert df[("scenario2", "cost")].iloc[0] == 10.0
+
+    def test_write_with_schema_mismatch_string(self, tmp_path, caplog):
+        """Test writing exports with schema mismatch - string columns."""
+        import logging
+        caplog.set_level(logging.INFO)  # Changed from WARNING to capture INFO logs
+
+        output_path = tmp_path / "exports.xlsx"
+        exports_data = {
+            "sankey": {
+                "scenario1": pd.DataFrame({
+                    "carrier": ["electricity"],
+                    "from": ["production"],
+                    "to": ["demand"]
+                }),
+                "scenario2": pd.DataFrame({
+                    "carrier": ["gas"],
+                    "from": ["import"],
+                    "to": ["conversion"],
+                    "unit": ["MWh"]  # Extra string column
+                }),
+            }
+        }
+
+        AnnualExportsWriter.write(exports_data, output_path)
+
+        # Verify file was created successfully despite schema mismatch
+        assert output_path.exists()
+        df = pd.read_excel(str(output_path), sheet_name="SANKEY", header=[0, 1])
+
+        # Verify scenarios appear as top-level columns
+        assert "scenario1" in df.columns.get_level_values(0)
+        assert "scenario2" in df.columns.get_level_values(0)
+
+        # Check that scenario2 has the unit column with actual value
+        assert ("scenario2", "unit") in df.columns
+        assert df[("scenario2", "unit")].iloc[0] == "MWh"
+
+        # Check that scenario1 does NOT have unit column (it's not in the schema)
+        assert ("scenario1", "unit") not in df.columns, "scenario1 should not have unit column"
+
+    def test_write_with_schema_mismatch_mixed_types(self, tmp_path, caplog):
+        """Test writing exports with multiple missing columns of different types."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        output_path = tmp_path / "exports.xlsx"
+        exports_data = {
+            "production_parameters": {
+                "scenario1": pd.DataFrame({
+                    "technology": ["solar_pv"],
+                    "capacity": [100.0]
+                }),
+                "scenario2": pd.DataFrame({
+                    "technology": ["wind_turbine"],
+                    "capacity": [200.0],
+                    "efficiency": [0.95],  # Extra numeric
+                    "region": ["north"]    # Extra string
+                }),
+            }
+        }
+
+        AnnualExportsWriter.write(exports_data, output_path)
+
+        # Verify file was created successfully
+        assert output_path.exists()
+        df = pd.read_excel(str(output_path), sheet_name="PRODUCTION_PARAMETERS", header=[0, 1])
+
+        # Verify scenarios appear as top-level columns
+        assert "scenario1" in df.columns.get_level_values(0)
+        assert "scenario2" in df.columns.get_level_values(0)
+
+        # Check scenario2 has the extra columns with actual values
+        assert ("scenario2", "efficiency") in df.columns
+        assert ("scenario2", "region") in df.columns
+        assert df[("scenario2", "efficiency")].iloc[0] == 0.95
+        assert df[("scenario2", "region")].iloc[0] == "north"
+
+        # Check scenario1 does NOT have the extra columns
+        assert ("scenario1", "efficiency") not in df.columns, "scenario1 should not have efficiency column"
+        assert ("scenario1", "region") not in df.columns, "scenario1 should not have region column"
+
+    def test_write_no_nan_when_schemas_match(self, tmp_path, caplog):
+        """Test that no NaN filling occurs when schemas match."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        output_path = tmp_path / "exports.xlsx"
+        exports_data = {
+            "energy_flow": {
+                "scenario1": pd.DataFrame({
+                    "carrier": ["electricity"],
+                    "value": [100.0]
+                }),
+                "scenario2": pd.DataFrame({
+                    "carrier": ["gas"],
+                    "value": [200.0]
+                }),
+            }
+        }
+
+        AnnualExportsWriter.write(exports_data, output_path)
+
+        assert output_path.exists()
+
+        # Verify no NaN values in result when schemas match
+        df = pd.read_excel(str(output_path), sheet_name="ENERGY_FLOW", header=[0, 1])
+        assert not df.isna().any().any(), "No NaN values should exist when schemas match"
+
+    def test_write_with_indexed_dataframes(self, tmp_path):
+        """Test writing DataFrames with indices (as from API CSV parsing with index_col=0)."""
+        output_path = tmp_path / "exports.xlsx"
+
+        # Simulate DataFrames as they come from API with index_col=0
+        # The first column becomes the index
+        df1 = pd.DataFrame({
+            "electricity": [100.0, 200.0],
+            "gas": [50.0, 75.0],
+        }, index=pd.Index(["production", "demand"], name="carrier"))
+
+        df2 = pd.DataFrame({
+            "electricity": [150.0, 250.0],
+            "gas": [60.0, 85.0],
+        }, index=pd.Index(["production", "demand"], name="carrier"))
+
+        exports_data = {
+            "energy_flow": {
+                "scenario1": df1,
+                "scenario2": df2,
+            }
+        }
+
+        AnnualExportsWriter.write(exports_data, output_path)
+
+        assert output_path.exists()
+
+        # Read back and verify horizontal MultiIndex structure
+        df = pd.read_excel(str(output_path), sheet_name="ENERGY_FLOW", header=[0, 1])
+
+        # Verify scenarios appear as top-level columns
+        assert "scenario1" in df.columns.get_level_values(0)
+        assert "scenario2" in df.columns.get_level_values(0)
+
+        # Should have 2 rows (from the 2 index values: production, demand)
+        assert len(df) == 2, f"Expected 2 rows, got {len(df)}"
+
+        # Verify carrier column exists as SHARED column (not under scenarios)
+        # The empty string "" for shared columns becomes "Unnamed: 0_level_0" when read from Excel
+        shared_col_names = [col for col in df.columns if "Unnamed" in str(col[0])]
+        assert len(shared_col_names) > 0, "Should have at least one shared column"
+
+        # Find the carrier column (should be first column with "carrier" in name)
+        carrier_col = None
+        for col in df.columns:
+            if "carrier" in str(col[1]).lower():
+                carrier_col = col
+                break
+
+        assert carrier_col is not None, "carrier column should exist"
+
+        # Verify carrier values are present (not NaN)
+        assert set(df[carrier_col]) == {"production", "demand"}
+        assert not df[carrier_col].isna().any(), "carrier column should not have NaN values"
+
+        # Verify data values are correct for scenario1
+        production_idx = df[df[carrier_col] == "production"].index[0]
+        demand_idx = df[df[carrier_col] == "demand"].index[0]
+        assert df.loc[production_idx, ("scenario1", "electricity")] == 100.0
+        assert df.loc[demand_idx, ("scenario1", "electricity")] == 200.0
+
+    def test_write_with_multi_index_dataframes(self, tmp_path):
+        """Test writing DataFrames with multi-level indices."""
+        output_path = tmp_path / "exports.xlsx"
+
+        # Create DataFrames with multi-level index
+        df1 = pd.DataFrame({
+            "value": [100.0, 200.0, 150.0, 250.0],
+        }, index=pd.MultiIndex.from_tuples([
+            ("electricity", "production"),
+            ("electricity", "demand"),
+            ("gas", "production"),
+            ("gas", "demand"),
+        ], names=["carrier", "type"]))
+
+        df2 = pd.DataFrame({
+            "value": [110.0, 210.0, 160.0, 260.0],
+        }, index=pd.MultiIndex.from_tuples([
+            ("electricity", "production"),
+            ("electricity", "demand"),
+            ("gas", "production"),
+            ("gas", "demand"),
+        ], names=["carrier", "type"]))
+
+        exports_data = {
+            "energy_flow": {
+                "scenario1": df1,
+                "scenario2": df2,
+            }
+        }
+
+        AnnualExportsWriter.write(exports_data, output_path)
+
+        assert output_path.exists()
+
+        # Read back and verify horizontal MultiIndex structure
+        df = pd.read_excel(str(output_path), sheet_name="ENERGY_FLOW", header=[0, 1])
+
+        # Verify scenarios appear as top-level columns
+        assert "scenario1" in df.columns.get_level_values(0)
+        assert "scenario2" in df.columns.get_level_values(0)
+
+        # Should have 4 rows (from the 4 index combinations)
+        assert len(df) == 4
+
+        # Verify index columns exist as SHARED columns (not under scenarios)
+        # Both carrier and type should be shared since they're from a MultiIndex
+        shared_cols = [col for col in df.columns if "Unnamed" in str(col[0])]
+        assert len(shared_cols) >= 2, "Should have at least 2 shared columns (carrier and type)"
+
+        # Find the carrier and type columns
+        carrier_col = None
+        type_col = None
+        for col in df.columns:
+            if "carrier" in str(col[1]).lower():
+                carrier_col = col
+            elif "type" in str(col[1]).lower():
+                type_col = col
+
+        assert carrier_col is not None, "carrier column should exist as shared column"
+        assert type_col is not None, "type column should exist as shared column"
+
+        # Verify no NaN in index columns
+        assert not df[carrier_col].isna().any()
+        assert not df[type_col].isna().any()
 
 
 class TestExcelExporter:

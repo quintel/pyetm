@@ -87,3 +87,39 @@ def test_annual_exports_to_dataframe_heterogeneous_schemas():
     # The dataframe should have columns from both exports
     # Note: exact column names depend on implementation details
     assert len(df) > 0
+
+
+def test_annual_export_csv_parsing_with_index():
+    """Test that pd.read_csv uses index_col=0 to properly parse CSV data."""
+    from io import StringIO
+    from pyetm.models.annual_exports import AnnualExport
+
+    # Mock CSV data that mimics ETM API response
+    # First column should become the index, not a data column
+    csv_data = StringIO("""carrier,output,demand
+electricity,1000,800
+gas,500,450
+heat,200,180""")
+
+    # Create mock result
+    result = Mock()
+    result.success = True
+    result.data = csv_data
+    result.errors = None
+
+    # Create export
+    export = AnnualExport(name="energy_flow")
+
+    # Mock the runner to return our test CSV
+    with patch("pyetm.models.annual_exports.DownloadAnnualExportRunner.run", return_value=result):
+        df = export.retrieve(client=Mock(), scenario=Mock())
+
+    # Verify that the first column became the index
+    assert df is not None
+    assert list(df.index) == ["electricity", "gas", "heat"], "First column should be the index"
+    assert "carrier" not in df.columns, "carrier should not be a column, it should be the index"
+    assert list(df.columns) == ["output", "demand"], "Only output and demand should be columns"
+
+    # Verify we can access rows by index
+    assert df.loc["electricity", "output"] == 1000
+    assert df.loc["gas", "demand"] == 450

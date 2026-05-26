@@ -19,7 +19,9 @@ class AnnualExportsPack(Packable):
     sheet_name: ClassVar[str] = "ANNUAL_EXPORTS"
 
     @classmethod
-    def validate_export_types(cls, export_types: List[str]) -> Tuple[List[str], List[str]]:
+    def validate_export_types(
+        cls, export_types: List[str]
+    ) -> Tuple[List[str], List[str]]:
         """
         Validate annual export type names.
 
@@ -120,7 +122,9 @@ class AnnualExportsPack(Packable):
             Dictionary with structure: dict\\[export_name\\]\\[scenario_id\\] = DataFrame,
             where export_name is the export type and scenario_id is the scenario identifier.
         """
-        result: dict[str, dict[str, pd.DataFrame]] = {}
+        # First pass: collect data with temporary keys
+        temp_result: dict[str, dict[str, tuple[Any, pd.DataFrame]]] = {}
+        scenario_keys: dict[str, list[Any]] = {}  # Maps key -> list of scenarios
 
         if exports:
             logger.debug(
@@ -169,24 +173,27 @@ class AnnualExportsPack(Packable):
                         # Handle case where exports isn't iterable
                         pass
 
-                # Get multi-index dataframe from model
-                df = scenario.annual_exports.to_dataframe(exports=exports)
+                # Directly access export contents instead of using to_dataframe()
+                # to_dataframe() concatenates all exports with outer join, causing NaN proliferation
+                exports_to_process = (
+                    exports if exports else scenario.annual_exports.exports.keys()
+                )
 
-                if df is None or df.empty:
-                    logger.debug(
-                        "No annual export data available for scenario %s after retrieval",
-                        scenario.identifier(),
-                    )
-                    continue
+                # Track scenarios by their keys for duplicate detection
+                if scenario_key not in scenario_keys:
+                    scenario_keys[scenario_key] = []
+                scenario_keys[scenario_key].append(scenario)
 
-                for export_name in df.index.get_level_values("export_name").unique():
-                    export_df_raw = df.xs(export_name, level="export_name")
-                    # Ensure it's a DataFrame
-                    export_df = export_df_raw if isinstance(export_df_raw, pd.DataFrame) else export_df_raw.to_frame()
+                for export_name in exports_to_process:
+                    if export_name in scenario.annual_exports.exports:
+                        export_obj = scenario.annual_exports.exports[export_name]
+                        export_df = export_obj.contents()
 
-                    if export_name not in result:
-                        result[export_name] = {}
-                    result[export_name][scenario_key] = export_df
+                        if export_df is not None and not export_df.empty:
+                            if export_name not in temp_result:
+                                temp_result[export_name] = {}
+                            # Store both scenario object and dataframe for deduplication
+                            temp_result[export_name][scenario_key] = (scenario, export_df)
 
             except Exception as e:
                 logger.warning(
@@ -195,6 +202,36 @@ class AnnualExportsPack(Packable):
                     e,
                 )
                 continue
+
+        # Second pass: deduplicate scenario keys and build final result
+        result: dict[str, dict[str, pd.DataFrame]] = {}
+
+        # Build mapping of old keys to new deduplicated keys
+        key_mapping: dict[str, dict[Any, str]] = {}  # Maps original_key -> {scenario: deduplicated_key}
+
+        for original_key, scenarios_list in scenario_keys.items():
+            if len(scenarios_list) == 1:
+                # No duplicates, use original key
+                key_mapping[original_key] = {scenarios_list[0]: original_key}
+            else:
+                # Duplicates found, append IDs
+                key_mapping[original_key] = {}
+                for scen in scenarios_list:
+                    deduplicated_key = f"{original_key} ({scen.id})"
+                    key_mapping[original_key][scen] = deduplicated_key
+                    logger.debug(
+                        "Duplicate scenario key '%s' renamed to '%s' for scenario %s",
+                        original_key,
+                        deduplicated_key,
+                        scen.identifier(),
+                    )
+
+        # Apply deduplication to temp_result
+        for export_name, scenarios_data in temp_result.items():
+            result[export_name] = {}
+            for original_key, (scenario, df) in scenarios_data.items():
+                deduplicated_key = key_mapping[original_key][scenario]
+                result[export_name][deduplicated_key] = df
 
         # Log summary
         if exports:
@@ -205,7 +242,10 @@ class AnnualExportsPack(Packable):
                 fetch_stats["failed"],
             )
 
-            if fetch_stats["failed"] == fetch_stats["requested"] and fetch_stats["requested"] > 0:
+            if (
+                fetch_stats["failed"] == fetch_stats["requested"]
+                and fetch_stats["requested"] > 0
+            ):
                 logger.warning(
                     "All annual export retrievals failed. Possible causes: "
                     "(1) Scenarios don't have export data available, "
