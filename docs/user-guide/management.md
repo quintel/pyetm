@@ -82,9 +82,88 @@ prod_scenario = Scenario.create(title="Prod Test", area_code="nl2023", end_year=
 beta_scenario = Scenario.create(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
 ```
 
-# Managing your scenarios
+# Managing Your Scenarios
 
-### List Your Scenarios
+PyETM provides convenient methods to list and manage all your scenarios and saved scenarios.
 
-!!! warning "Not Implemented"
-    Scenario management is not yet supported in pyetm. Manage scenarios manually via the MyETM web interface or let sessions expire naturally.
+## Listing ETEngine Sessions
+
+Use `Sessions.load_all()` to fetch all ETEngine sessions (temporary scenarios) belonging to the authenticated user:
+
+```python
+from pyetm import Sessions
+
+# Fetch all your ETEngine sessions - automatically fetches all pages
+sessions = Sessions.load_all()
+
+# Iterate through sessions
+for session in sessions:
+    print(f"Session {session.id}: {session.title} ({session.area_code}, {session.end_year})")
+```
+
+### Pagination Control
+
+By default, `load_all()` fetches all pages automatically. To fetch a specific page:
+
+```python
+# Fetch only page 1
+sessions = Sessions.load_all(page=1)
+
+# Fetch only page 2 with custom page size
+sessions = Sessions.load_all(page=2, per_page=50)
+
+# Control batch size when fetching all pages
+sessions = Sessions.load_all(per_page=100)  # Fetches all pages, 100 at a time
+```
+
+## Listing MyETM Saved Scenarios
+
+Use `Scenarios.load_all()` to fetch all your saved scenarios from MyETM:
+
+```python
+from pyetm import Scenarios
+
+# Fetch all your saved scenarios
+scenarios = Scenarios.load_all()
+
+# Iterate through saved scenarios
+for scenario in scenarios:
+    print(f"Saved Scenario {scenario.id}: {scenario.title}")
+    print(f"  - Based on session: {scenario.session.id}")
+    print(f"  - Area: {scenario.session.area_code}")
+    print(f"  - Private: {scenario.private}")
+```
+
+## Bulk Operations
+
+Once you've loaded your scenarios, you can perform bulk operations:
+
+```python
+from pyetm import Scenarios
+
+# Load all saved scenarios
+scenarios = Scenarios.load_all()
+
+# Export all to Excel - if you have a lot of scenarios this could take a while!
+scenarios.to_excel("my_scenarios.xlsx")
+```
+
+## Filtering and Selection
+
+Filter scenarios after loading them:
+
+```python
+from pyetm import Sessions
+
+# Load all sessions
+sessions = Sessions.load_all()
+
+# Filter by area
+nl_sessions = [s for s in sessions if s.area_code == "nl2023"]
+
+# Filter by end year
+sessions_2050 = [s for s in sessions if s.end_year >= 2050]
+
+# Find specific session
+my_session = next((s for s in sessions if "experiment" in (s.title or "")), None)
+```

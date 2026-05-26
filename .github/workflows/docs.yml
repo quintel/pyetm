@@ -2,7 +2,7 @@ name: Documentation
 
 on:
   push:
-    branches: [main, version-2, docs-n-typing]
+    branches: [main, version-2]
   pull_request:
     branches: [main, version-2]
   workflow_dispatch:
@@ -51,7 +51,7 @@ jobs:
           path: site/
 
   deploy:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/version-2' || github.ref == 'refs/heads/docs-n-typing')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/version-2')
     needs: build
     runs-on: ubuntu-latest
     steps:

@@ -36,7 +36,60 @@ class Sessions(Base):
         self.items.extend(list(scenarios))
 
     @classmethod
-    def load_many(cls, scenario_ids: Iterable[int], client: Optional[BaseClient] = None) -> "Sessions":
+    def load_all(
+        cls,
+        page: Optional[int] = None,
+        per_page: Optional[int] = None,
+        client: Optional[BaseClient] = None,
+    ) -> "Sessions":
+        """Load scenarios belonging to the authenticated user.
+
+        Fetches ETEngine sessions for the authenticated user. By default, automatically
+        fetches all pages. If page parameter is provided, fetches only that specific page.
+
+        Args:
+            page: Optional page number (1-indexed). If provided, fetches only that page.
+                  If None, fetches all pages automatically.
+            per_page: Optional number of results per page
+            client: Optional BaseClient instance for API communication
+
+        Returns:
+            Sessions collection containing user's sessions
+
+        Raises:
+            ValueError: If authentication fails or API request fails
+        """
+        from pyetm.services.scenario_runners.fetch_user_scenarios import (
+            FetchUserScenariosRunner,
+        )
+
+        if client is None:
+            from pyetm.clients import BaseClient
+
+            client = BaseClient()
+
+        result = FetchUserScenariosRunner.run(
+            client=client,
+            page=page,
+            per_page=per_page,
+        )
+
+        if not result.success:
+            raise ValueError(
+                f"Failed to fetch user scenarios: {'; '.join(result.errors)}"
+            )
+
+        if result.data is None:
+            raise ValueError("No data returned from API")
+
+        # Use model_validate to avoid N+1 API calls
+        scenarios = [Session.model_validate(data) for data in result.data]
+        return cls(items=scenarios)
+
+    @classmethod
+    def load_many(
+        cls, scenario_ids: Iterable[int], client: Optional[BaseClient] = None
+    ) -> "Sessions":
         """Load multiple Session objects by their ETEngine session IDs.
 
         Args:

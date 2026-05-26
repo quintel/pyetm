@@ -78,10 +78,10 @@ The `hourly_curves` field has three modes:
    ```
 
 **Available carrier types**:
-- `electricity` - Includes: `merit_order`, `electricity_price`, `residual_load`
-- `heat` - Includes: `heat_network`, `agriculture_heat`, `household_heat`, `buildings_heat`
-- `hydrogen` - Includes: `hydrogen`, `hydrogen_integral_cost`
-- `methane` - Includes: `network_gas`
+- `electricity` - Maps to ETM: `merit_order``
+- `heat` - Maps to ETM: `heat_network`
+- `hydrogen` - Maps to ETM: `hydrogen`,
+- `methane` - Maps to ETM: `network_gas`
 
 **Available curve names** (can be specified individually):
 `merit_order`, `electricity_price`, `heat_network`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen`, `network_gas`, `residual_load`, `hydrogen_integral_cost`

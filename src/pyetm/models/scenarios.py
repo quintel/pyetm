@@ -149,6 +149,46 @@ class Scenarios(Base):
         return self.combine.annual_exports(exports)
 
     @classmethod
+    def load_all(
+        cls,
+        client: Optional[BaseClient] = None,
+    ) -> "Scenarios":
+        """Load all saved scenarios belonging to the authenticated user.
+
+        Fetches all MyETM saved scenarios for the authenticated user in a single request.
+        Returns all saved scenarios the user has access to (owned or shared).
+
+        Args:
+            client: Optional BaseClient instance for API communication
+
+        Returns:
+            Scenarios collection containing all user's saved scenarios
+
+        Raises:
+            ValueError: If authentication fails or API request fails
+        """
+        from pyetm.services.scenario_runners.fetch_user_saved_scenarios import (
+            FetchUserSavedScenariosRunner,
+        )
+
+        if client is None:
+            client = get_client()
+
+        result = FetchUserSavedScenariosRunner.run(client=client)
+
+        if not result.success:
+            raise ValueError(
+                f"Failed to fetch user saved scenarios: {'; '.join(result.errors)}"
+            )
+
+        if result.data is None:
+            raise ValueError("No data returned from API")
+
+        # Use model_validate to avoid N+1 API calls
+        saved_scenarios = [Scenario.model_validate(data) for data in result.data]
+        return cls(items=cast(List[Union[Scenario, Session]], saved_scenarios))
+
+    @classmethod
     def load_many(cls, saved_scenario_ids: Iterable[int], client: Optional[BaseClient] = None) -> "Scenarios":
         """
         Load multiple SavedScenario objects by their MyETM saved scenario IDs.
