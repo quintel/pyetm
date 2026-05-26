@@ -12,7 +12,7 @@ from pyetm.models.couplings import Couplings
 from pyetm.models.inputs import Inputs
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 from pyetm.models.annual_exports import AnnualExports
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
@@ -103,7 +103,11 @@ class Session(Base):
 
     @classmethod
     def new(
-        cls, area_code: str | None = None, end_year: int | None = None, **kwargs: Any
+        cls,
+        area_code: str | None = None,
+        end_year: int | None = None,
+        client: Optional[BaseClient] = None,
+        **kwargs: Any
     ) -> "Session":
         """
         Create a new scenario with the specified parameters.
@@ -111,6 +115,7 @@ class Session(Base):
         Args:
             area_code: Area code for the scenario (optional if template_id is provided)
             end_year: End year for the scenario (optional if template_id is provided)
+            client: Optional BaseClient instance for API communication
             **kwargs: Additional parameters including:
                 - template_id: Session ID to use as template
                 - private, keep_compatible, source, title, metadata, start_year, scaling, url
@@ -124,7 +129,7 @@ class Session(Base):
         if end_year is not None:
             scenario_data["end_year"] = end_year
 
-        result = CreateScenarioRunner.run(BaseClient(), scenario_data)
+        result = CreateScenarioRunner.run(client or get_client(), scenario_data)
 
         if not result.success:
             raise ScenarioError(f"Could not create scenario: {result.errors}")
@@ -152,12 +157,16 @@ class Session(Base):
         return scenario
 
     @classmethod
-    def load(cls, scenario_id: int) -> Session:
+    def load(cls, scenario_id: int, client: Optional[BaseClient] = None) -> Session:
         """
         Fetch metadata for scenario_id, return a Scenario (with warnings if any keys missing).
+
+        Args:
+            scenario_id: ETEngine session ID to load
+            client: Optional BaseClient instance for API communication
         """
         template = type("T", (), {"id": scenario_id})
-        result = FetchMetadataRunner.run(BaseClient(), template)
+        result = FetchMetadataRunner.run(client or get_client(), template)
 
         if not result.success:
             raise ScenarioError(
@@ -206,7 +215,7 @@ class Session(Base):
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
         """
-        result = CopyScenarioRunner.run(BaseClient(), self.id, overrides=overrides)
+        result = CopyScenarioRunner.run(get_client(), self.id, overrides=overrides)
 
         if not result.success:
             raise ScenarioError(f"Failed to copy scenario: {result.errors}")
@@ -223,7 +232,7 @@ class Session(Base):
         """
         new_scenario = self.copy_with_preset(**overrides)
 
-        result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
+        result = BreakPresetLinkRunner.run(get_client(), new_scenario)
 
         if not result.success:
             raise ScenarioError(
@@ -250,7 +259,7 @@ class Session(Base):
         """
         Interpolate one or more sessions to create scenarios at target years.
         """
-        client = client or BaseClient()
+        client = client or get_client()
 
         session_list = sessions if isinstance(sessions, list) else [sessions]
 
@@ -336,7 +345,7 @@ class Session(Base):
         """
         from pyetm.models.scenario import Scenario
 
-        client = client or BaseClient()
+        client = client or get_client()
 
         save_title = title or self.title
         if not save_title:
@@ -360,7 +369,7 @@ class Session(Base):
         """
         Update metadata for this scenario.
         """
-        result = UpdateMetadataRunner.run(BaseClient(), self, kwargs)
+        result = UpdateMetadataRunner.run(get_client(), self, kwargs)
 
         if not result.success:
             raise ScenarioError(f"Could not update metadata: {result.errors}")
@@ -468,7 +477,7 @@ class Session(Base):
             return self._inputs
 
         # Otherwise fetch and cache
-        result = FetchInputsRunner.run(BaseClient(), self, defaults="original")
+        result = FetchInputsRunner.run(get_client(), self, defaults="original")
         if not result.success:
             raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
 
@@ -514,7 +523,7 @@ class Session(Base):
             validity_errors = self.inputs.is_valid_update(update_inputs)
             self._handle_validity_errors(validity_errors, "user values")
 
-            result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
+            result = UpdateInputsRunner.run(get_client(), self, update_inputs)
 
             if not result.success:
                 raise ScenarioError(f"Could not update user values: {result.errors}")
@@ -529,7 +538,7 @@ class Session(Base):
             input_keys: List or set of input keys to reset to default values
         """
         reset_inputs = {key: "reset" for key in input_keys}
-        result = UpdateInputsRunner.run(BaseClient(), self, reset_inputs)
+        result = UpdateInputsRunner.run(get_client(), self, reset_inputs)
 
         if not result.success:
             raise ScenarioError(f"Could not remove inputs: {result.errors}")
@@ -542,7 +551,7 @@ class Session(Base):
         if self._sortables is not None:
             return self._sortables
 
-        result = FetchSortablesRunner.run(BaseClient(), self)
+        result = FetchSortablesRunner.run(get_client(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve sortables: {result.errors}")
 
@@ -594,10 +603,10 @@ class Session(Base):
                 if name.startswith("heat_network_"):
                     subtype = name.replace("heat_network_", "")
                     result = UpdateSortablesRunner.run(
-                        BaseClient(), self, "heat_network", order, subtype=subtype
+                        get_client(), self, "heat_network", order, subtype=subtype
                     )
                 else:
-                    result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
+                    result = UpdateSortablesRunner.run(get_client(), self, name, order)
 
                 if not result.success:
                     raise ScenarioError(
@@ -619,10 +628,10 @@ class Session(Base):
                 # Handle heat_network with subtype
                 subtype = name.replace("heat_network_", "")
                 result = UpdateSortablesRunner.run(
-                    BaseClient(), self, "heat_network", [], subtype=subtype
+                    get_client(), self, "heat_network", [], subtype=subtype
                 )
             else:
-                result = UpdateSortablesRunner.run(BaseClient(), self, name, [])
+                result = UpdateSortablesRunner.run(get_client(), self, name, [])
 
             if not result.success:
                 raise ScenarioError(
@@ -637,7 +646,7 @@ class Session(Base):
         if self._custom_curves is not None:
             return self._custom_curves
 
-        result = FetchAllCustomCurveDataRunner.run(BaseClient(), self)
+        result = FetchAllCustomCurveDataRunner.run(get_client(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
@@ -685,7 +694,7 @@ class Session(Base):
             self._handle_validity_errors(validity_errors, "custom curves")
 
             # Upload curves
-            result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
+            result = UpdateCustomCurvesRunner.run(get_client(), self, custom_curves)
             if not result.success:
                 raise ScenarioError(f"Could not update custom curves: {result.errors}")
 
@@ -737,7 +746,7 @@ class Session(Base):
 
     def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
         """Get a single annual export by name."""
-        return self.annual_exports.retrieve(BaseClient(), self, export_name)
+        return self.annual_exports.retrieve(get_client(), self, export_name)
 
     def get_annual_exports(
         self, export_names: AnnualExportType | list[AnnualExportType]
@@ -745,7 +754,7 @@ class Session(Base):
         """Get multiple annual exports by name."""
         validated_names = validate_export_names(cast("str | list[str]", export_names))
         return self.annual_exports.retrieve_multiple(
-            BaseClient(), self, validated_names
+            get_client(), self, validated_names
         )
 
     def set_export_config(self, config: ExportConfig | None) -> None:
@@ -769,7 +778,7 @@ class Session(Base):
         ready collecting all of them
         """
         if self._queries is not None:
-            self._queries.execute(BaseClient(), self)
+            self._queries.execute(get_client(), self)
             self._merge_submodel_warnings(self._queries)
 
     def results(self, columns: Optional[Any] = None) -> pd.DataFrame:
@@ -863,7 +872,7 @@ class Session(Base):
         if self._couplings is not None:
             return self._couplings
 
-        result = FetchCouplingsRunner.run(BaseClient(), self)
+        result = FetchCouplingsRunner.run(get_client(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve couplings: {result.errors}")
 
@@ -883,7 +892,7 @@ class Session(Base):
     ) -> None:
 
         result = UpdateCouplingsRunner.run(
-            BaseClient(), self, coupling_groups, action, force
+            get_client(), self, coupling_groups, action, force
         )
 
         if not result.success:
@@ -901,7 +910,7 @@ class Session(Base):
         """
         Fetch all users with access to this scenario.
         """
-        result = ScenarioUsersIndexRunner.run(BaseClient(), self.id)
+        result = ScenarioUsersIndexRunner.run(get_client(), self.id)
 
         if not result.success:
             raise ScenarioError(f"Could not fetch users: {result.errors}")
@@ -979,21 +988,21 @@ class Session(Base):
 
     def _remove_user(self, email: str) -> None:
         result = ScenarioUsersDestroyRunner.run(
-            BaseClient(), self.id, [{"user_email": email}]
+            get_client(), self.id, [{"user_email": email}]
         )
         if not result.success:
             raise ScenarioError(f"Could not remove user: {result.errors}")
 
     def _update_user_role(self, email: str, role: str) -> None:
         result = ScenarioUsersUpdateRunner.run(
-            BaseClient(), self.id, [{"user_email": email, "role": role}]
+            get_client(), self.id, [{"user_email": email, "role": role}]
         )
         if not result.success:
             raise ScenarioError(f"Could not update user: {result.errors}")
 
     def _add_user(self, email: str, role: str) -> None:
         result = ScenarioUsersCreateRunner.run(
-            BaseClient(), self.id, [{"user_email": email, "role": role}]
+            get_client(), self.id, [{"user_email": email, "role": role}]
         )
         if not result.success:
             raise ScenarioError(f"Could not add user: {result.errors}")

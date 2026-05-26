@@ -3,9 +3,10 @@
 from __future__ import annotations
 from os import PathLike
 from pathlib import Path
-from typing import Any, Iterable, Iterator, List, Union, cast, TYPE_CHECKING
+from typing import Any, Iterable, Iterator, List, Optional, Union, cast, TYPE_CHECKING
 from pydantic import Field
 from pyetm.models.base import Base
+from pyetm.clients import BaseClient
 from .session import Session, ScenarioError
 
 if TYPE_CHECKING:
@@ -35,11 +36,17 @@ class Sessions(Base):
         self.items.extend(list(scenarios))
 
     @classmethod
-    def load_many(cls, scenario_ids: Iterable[int]) -> "Sessions":
+    def load_many(cls, scenario_ids: Iterable[int], client: Optional[BaseClient] = None) -> "Sessions":
+        """Load multiple Session objects by their ETEngine session IDs.
+
+        Args:
+            scenario_ids: Iterable of ETEngine session IDs to load
+            client: Optional BaseClient instance for API communication
+        """
         scenarios = []
         for sid in scenario_ids:
             try:
-                scenarios.append(Session.load(sid))
+                scenarios.append(Session.load(sid, client=client))
             except ScenarioError as e:
                 print(f"Could not load scenario {sid}: {e}")
         return cls(items=scenarios)

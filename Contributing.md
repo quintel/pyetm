@@ -315,12 +315,16 @@ When multiple scenarios have configs the first one encountered is used as a “g
 
 ### Low-Level API Client Access
 
-Most high-level actions go through the singleton `BaseClient` internally. If you need to batch raw HTTP operations:
+Most high-level actions use a default cached `BaseClient` internally. If you need to batch raw HTTP operations:
 
 ```python
-from pyetm.clients.base_client import BaseClient, make_batch_requests
+from pyetm.clients.base_client import BaseClient, make_batch_requests, get_client
 
-client = BaseClient()  # picks up ETM_API_TOKEN + base_url
+# Option 1: Use the default cached client (picks up ETM_API_TOKEN + base_url from env)
+client = get_client()
+
+# Option 2: Create a new client instance with custom config
+client = BaseClient(token="etm_custom_token", base_url="https://beta.engine.energytransitionmodel.com/api/v3")
 
 requests = [
    {"method": "GET", "url": "/api/v3/scenarios/"},
@@ -333,6 +337,27 @@ for r in results:
       print(r.data)
    else:
       print("Error:", r.errors)
+```
+
+### Using Multiple Clients
+
+You can create multiple client instances to interact with different environments or use different tokens:
+
+```python
+from pyetm import BaseClient, Scenario
+
+# Production client
+prod_client = BaseClient()  # Uses env vars
+
+# Beta environment client
+beta_client = BaseClient(
+    base_url="https://beta.engine.energytransitionmodel.com/api/v3",
+    token="etm_beta_..."
+)
+
+# Create scenarios on different environments
+prod_scenario = Scenario.create(title="Prod Test", client=prod_client)
+beta_scenario = Scenario.create(title="Beta Test", client=beta_client)
 ```
 
 ### Next Steps

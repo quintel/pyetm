@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING, cast
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.types import AnnualExportType, CarrierType
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
@@ -69,6 +69,7 @@ class Scenario(Base):
 
     _scenario_session: Optional[Session] = PrivateAttr(None)
     _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
+    _client: Optional[BaseClient] = PrivateAttr(None)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Scenario):
@@ -181,7 +182,7 @@ class Scenario(Base):
             SavedScenario instance
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
         result = CreateSavedScenarioRunner.run(client, params)
 
         if not result.success:
@@ -197,6 +198,9 @@ class Scenario(Base):
             raise SavedScenarioError(error_msg)
 
         saved_scenario = cls.model_validate(result.data)
+
+        # Store client for future operations
+        saved_scenario._client = client
 
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
@@ -310,7 +314,7 @@ class Scenario(Base):
             SavedScenarioError: If loading fails
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         # Create a simple object with id attribute for the runner
         template = type("T", (), {"id": saved_scenario_id})()
@@ -327,6 +331,9 @@ class Scenario(Base):
             )
 
         saved_scenario = cls.model_validate(result.data)
+
+        # Store client for future operations
+        saved_scenario._client = client
 
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
@@ -446,8 +453,8 @@ class Scenario(Base):
             self._scenario_session = Session.model_validate(self.scenario)
             return self._scenario_session
 
-        # Fetch fresh from ETEngine API
-        self._scenario_session = Session.load(self.scenario_id)
+        # Fetch fresh from ETEngine API using stored client
+        self._scenario_session = Session.load(self.scenario_id, client=self._client)
         return self._scenario_session
 
     def update(self, client: Optional[BaseClient] = None, **kwargs: Any) -> None:
@@ -459,7 +466,7 @@ class Scenario(Base):
             **kwargs: Fields to update (title, private, discarded)
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
         result = UpdateSavedScenarioRunner.run(client, self.id, kwargs)
 
         if not result.success:
@@ -716,9 +723,9 @@ class Scenario(Base):
 
         # Apply data parameters if provided
         if user_values or custom_curves or sortables:
-            from pyetm.clients import BaseClient
+            from pyetm.clients import BaseClient, get_client
 
-            client = BaseClient()
+            client = get_client()
             Scenario._apply_data_to_scenario(
                 copied_scenario, user_values, custom_curves, sortables, client
             )
@@ -827,7 +834,7 @@ class Scenario(Base):
         Fetch all users with access to this saved scenario.
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         result = SavedScenarioUsersIndexRunner.run(client, self.id)
 
@@ -854,7 +861,7 @@ class Scenario(Base):
         - skip_upload: If True, store data locally without uploading (can be applied later)
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         role = self._normalize_role(role)
 
@@ -879,7 +886,7 @@ class Scenario(Base):
             return 0
 
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         count = 0
         for email, role in list(self._pending_users.items()):

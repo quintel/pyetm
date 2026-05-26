@@ -99,11 +99,10 @@ nav:
     - Configuration: getting-started/configuration.md
   - User Guide:
     - Overview: user-guide/index.md
+    - Working with Excel: user-guide/excel.mp
     - Working with Scenarios: user-guide/scenarios.md
-    - Managing Inputs: user-guide/inputs.md
-    - Exports and Queries: user-guide/exports.md
-    - Sessions and Authentication: user-guide/sessions.md
-    - Advanced Usage: user-guide/advanced.md
+    - Sessions and Authentication: user-guide/management.md
+    - Submodels: user-guide/submodels.md
   - API Reference: api/
   - Contributing:
     - Guide: contributing/guide.md

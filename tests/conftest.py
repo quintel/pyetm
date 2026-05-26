@@ -26,15 +26,35 @@ def api_url():
 # Mount the requests-mock adapter onto BaseClient.session so that
 # requests_mock.get(...) actually intercepts client.session.get(...)
 @pytest.fixture(autouse=True)
-def _mount_requests_mock(requests_mock, client):
+def _mount_requests_mock(request, requests_mock):
     """
     requests_mock._adapter is the HTTPAdapter instance used
     by the pytest-requests-mock plugin.
+
+    Only mounts if the test uses the 'client' fixture to avoid
+    unnecessary BaseClient creation and threading overhead.
     """
+    if "client" not in request.fixturenames:
+        return
+
+    client = request.getfixturevalue("client")
     adapter = getattr(requests_mock, "_adapter", None)
     if adapter and hasattr(client, "session") and hasattr(client.session, "session"):
         client.session.session.mount("http://", adapter)
         client.session.session.mount("https://", adapter)
+
+
+# Clear LRU caches after each test to prevent test pollution
+@pytest.fixture(autouse=True)
+def clear_client_caches():
+    """Clear client and settings caches after each test to prevent pollution."""
+    yield  # Run the test
+    # Clear caches after test completes
+    from pyetm.clients.base_client import get_client
+    from pyetm.config.settings import get_settings
+
+    get_client.cache_clear()
+    get_settings.cache_clear()
 
 
 # Lazy‐import BaseClient
@@ -42,6 +62,7 @@ def _mount_requests_mock(requests_mock, client):
 def client():
     from pyetm.clients.base_client import BaseClient
 
+    # Create a new client instance for each test (not using get_client())
     return BaseClient()
 
 

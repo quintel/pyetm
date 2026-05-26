@@ -143,7 +143,8 @@ class ETMSession:
 
         self._loop_thread = threading.Thread(target=run_loop, daemon=True)
         self._loop_thread.start()
-        self._loop_started.wait()
+        if not self._loop_started.wait(timeout=5.0):
+            raise RuntimeError("Event loop thread failed to start within 5 seconds")
 
     def _ensure_session(self) -> None:
         """Ensure aiohttp session exists."""

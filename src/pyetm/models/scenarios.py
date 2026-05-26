@@ -20,7 +20,7 @@ from typing import (
 from pydantic import Field, PrivateAttr
 from pyetm.models.session import Session
 from pyetm.models.base import Base
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.clients.base_client import AsyncBatchRunner, MAX_CONCURRENT
 from pyetm.types import AnnualExportType, HourlyCurveType, CarrierType
 from .scenario import Scenario, SavedScenarioError
@@ -149,12 +149,13 @@ class Scenarios(Base):
         return self.combine.annual_exports(exports)
 
     @classmethod
-    def load_many(cls, saved_scenario_ids: Iterable[int]) -> "Scenarios":
+    def load_many(cls, saved_scenario_ids: Iterable[int], client: Optional[BaseClient] = None) -> "Scenarios":
         """
         Load multiple SavedScenario objects by their MyETM saved scenario IDs.
 
         Args:
             saved_scenario_ids: Iterable of MyETM saved scenario IDs to load
+            client: Optional BaseClient instance for API communication
 
         Returns:
             SavedScenarios collection containing the loaded SavedScenario objects
@@ -162,7 +163,7 @@ class Scenarios(Base):
         saved_scenarios = []
         for ssid in saved_scenario_ids:
             try:
-                saved_scenarios.append(Scenario.load(ssid))
+                saved_scenarios.append(Scenario.load(ssid, client=client))
             except SavedScenarioError as e:
                 print(f"Could not load saved scenario {ssid}: {e}")
         return cls(items=cast(List[Union[Scenario, Session]], saved_scenarios))
@@ -204,7 +205,7 @@ class Scenarios(Base):
                       any errors from applying user_values, custom_curves, or sortables.
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         # Separate data parameters from creation parameters
         DATA_PARAMS = ["user_values", "custom_curves", "sortables"]
@@ -278,7 +279,7 @@ class Scenarios(Base):
 
                     # For template_id, we need to create session first, then wrap it
                     if "template_id" in extra_params:
-                        session = Session.new(area, year, **extra_params)
+                        session = Session.new(area, year, client=client, **extra_params)
                         saved_scenarios.append(
                             Scenario.create(
                                 title=title,

@@ -4,7 +4,7 @@ Integration tests for Scenarios.create_many() with user_values, custom_curves, a
 
 import pytest
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock, call
+from unittest.mock import Mock, patch, MagicMock, call, ANY
 from pyetm.models.scenarios import Scenarios, ScenarioCreationParams
 from pyetm.models.scenario import Scenario
 from pyetm.models.session import Session
@@ -521,7 +521,7 @@ class TestCreateManyWithTemplateId:
 
         # Verify Session.new was called with None for area_code and end_year
         # and template_id parameter passed through
-        mock_session_new.assert_called_once_with(None, None, template_id=100000)
+        mock_session_new.assert_called_once_with(None, None, client=ANY, template_id=100000)
 
     @patch("pyetm.models.scenario.Scenario.create")
     @patch("pyetm.models.session.Session.new")
@@ -555,7 +555,7 @@ class TestCreateManyWithTemplateId:
         assert len(result.items) == 1
 
         # Verify Session.new was called with explicit values
-        mock_session_new.assert_called_once_with("de", 2040, template_id=100000)
+        mock_session_new.assert_called_once_with("de", 2040, client=ANY, template_id=100000)
 
     @patch("pyetm.models.scenario.Scenario.create")
     @patch("pyetm.models.session.Session.new")
@@ -587,4 +587,4 @@ class TestCreateManyWithTemplateId:
         assert len(result.items) == 1
 
         # Verify Session.new was called with defaults (not None)
-        mock_session_new.assert_called_once_with("nl", 2050, template_id=100000)
+        mock_session_new.assert_called_once_with("nl", 2050, client=ANY, template_id=100000)

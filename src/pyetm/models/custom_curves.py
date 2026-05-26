@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, Any
 from pyetm.models.warnings import WarningCollector
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.models.base import Base
 from pydantic import PrivateAttr
 from pyetm.services.scenario_runners.fetch_custom_curves import (
@@ -249,7 +249,7 @@ class CustomCurves(Base):
 
         if not curve.available():
             # Try to retrieve it
-            result = curve.retrieve(BaseClient(), scenario)
+            result = curve.retrieve(get_client(), scenario)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -295,7 +295,7 @@ class CustomCurves(Base):
             try:
                 if not curve.available() and getattr(self, "_scenario", None) is not None:
                     try:
-                        curve.retrieve(BaseClient(), self._scenario)
+                        curve.retrieve(get_client(), self._scenario)
                     except Exception:
                         pass
                 curve_df = curve._to_dataframe(**kwargs)

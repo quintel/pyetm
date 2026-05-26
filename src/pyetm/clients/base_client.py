@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from typing import Optional, Any, List, Dict
 
-from pyetm.utils.singleton import SingletonMeta
 from pyetm.services.service_result import ServiceResult
 from .session import ETMSession
 from pyetm.config.settings import get_settings
@@ -13,10 +13,12 @@ from pyetm.config.settings import get_settings
 MAX_CONCURRENT = 2
 
 
-# TODO: like this it feels unnecessary
-class BaseClient(metaclass=SingletonMeta):
+class BaseClient:
     """
-    Singleton HTTP client with async capabilities.
+    HTTP client with async capabilities for ETM API communication.
+
+    Each instance is independent and can be configured with different
+    tokens and base URLs, allowing multiple clients in the same script.
     """
 
     def __init__(self, token: Optional[str] = None, base_url: Optional[str] = None):
@@ -50,6 +52,29 @@ class BaseClient(metaclass=SingletonMeta):
         release network connections and other resources.
         """
         self.session.close()
+
+
+@functools.lru_cache(maxsize=1)
+def get_client() -> BaseClient:
+    """
+    Get the default BaseClient instance.
+
+    This function returns a cached client instance configured with settings
+    from environment variables or .env file. For simple use cases, this provides
+    a convenient default client without needing to explicitly create one.
+
+    For advanced use cases requiring multiple clients with different configurations,
+    create BaseClient instances directly.
+
+    Returns:
+        BaseClient: Cached default client instance
+
+    Example:
+        >>> from pyetm.clients import get_client
+        >>> client = get_client()  # Uses env vars
+        >>> response = client.session.get("/scenarios/123")
+    """
+    return BaseClient()
 
 
 class AsyncBatchRunner:

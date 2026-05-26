@@ -486,9 +486,11 @@ def saved_scenario_data():
 
 
 @pytest.fixture
-def saved_scenario(saved_scenario_data):
+def saved_scenario(saved_scenario_data, mock_client):
     """A basic SavedScenario instance for testing."""
-    return Scenario.model_validate(saved_scenario_data)
+    scenario = Scenario.model_validate(saved_scenario_data)
+    scenario._client = mock_client  # Set client for property access
+    return scenario
 
 
 @pytest.fixture

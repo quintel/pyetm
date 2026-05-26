@@ -61,110 +61,30 @@ scenario = Scenario.create(
 scenario = Scenario.from_scenario_id(123456, client=client)
 ```
 
-## Public vs. Private Scenarios
+### Using Multiple Clients
 
-### Public Scenarios
-
-- Anyone can view
-- No authentication required to load
-- Cannot be modified by others
+You can create multiple client instances to interact with different environments or use different tokens:
 
 ```python
-# Create public scenario
-scenario = Scenario.create(area_code="nl", end_year=2050)
-saved = scenario.save(private=False, client=client)
-```
+from pyetm import BaseClient, Scenario
 
-### Private Scenarios
+# Production client
+prod_client = BaseClient()  # Uses env vars
 
-- Only you can view
-- Requires authentication
-- Full control over modifications
-
-```python
-# Create private scenario
-scenario = Scenario.create(area_code="nl", end_year=2050, client=client)
-saved = scenario.save(private=True)
-```
-
-## Saved Scenarios
-
-### Saving
-
-Save a scenario to your account:
-
-```python
-scenario = Scenario.create(area_code="nl", end_year=2050, client=client)
-scenario.user_values = {"input_key": 100.0}
-
-saved = scenario.save(
-    title="My Scenario",
-    description="Test scenario for 2050",
-    private=False,
+# Beta environment client
+beta_client = BaseClient(
+    base_url="https://beta.engine.energytransitionmodel.com/api/v3",
+    token="etm_beta_..."
 )
 
-print(f"Saved scenario: {saved.url}")
+# Create scenarios on different environments
+prod_scenario = Scenario.create(title="Prod Test", area_code="nl2023", end_year=2050, client=prod_client)
+beta_scenario = Scenario.create(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
 ```
 
-### Updating
-
-Update an existing saved scenario:
-
-```python
-# Load saved scenario
-scenario = Scenario.from_scenario_id(123456, client=client)
-
-# Modify
-scenario.user_values = {"input_key": 200.0}
-
-# Save changes (same ID)
-scenario.save()
-```
-
-### Deleting
-
-Delete a scenario from your account:
-
-```python
-scenario.delete(client=client)
-```
-
-## Managing Multiple Scenarios
+# Managing your scenarios
 
 ### List Your Scenarios
 
-```python
-# Get all scenarios for authenticated user
-scenarios = client.get_my_scenarios()
-
-for scenario in scenarios:
-    print(f"{scenario.id}: {scenario.title}")
-```
-
-### Batch Operations
-
-Work with multiple scenarios efficiently:
-
-```python
-# Load multiple scenarios
-scenario_ids = [123456, 123457, 123458]
-scenarios = [
-    Scenario.from_scenario_id(sid, client=client)
-    for sid in scenario_ids
-]
-
-# Process all
-results = []
-for scenario in scenarios:
-    results.append({
-        "id": scenario.id,
-        "renewability": scenario.renewable_percentage,
-        "costs": scenario.total_costs,
-    })
-```
-
-## Next Steps
-
-- [Advanced Usage](advanced.md) - Batch processing and automation
-- [API Reference: Client](../api/clients/base_client.md) - Complete Client documentation
-- [Configuration Guide](../getting-started/configuration.md) - Environment setup
+!!! warning "Not Implemented"
+    Scenario management is not yet supported in pyetm. Manage scenarios manually via the MyETM web interface or let sessions expire naturally.

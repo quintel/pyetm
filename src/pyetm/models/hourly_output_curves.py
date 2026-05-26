@@ -11,7 +11,7 @@ import os
 import yaml
 
 logger = logging.getLogger(__name__)
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.models.base import Base
 from pyetm.models.warnings import WarningCollector
 from pyetm.config.settings import get_settings
@@ -250,7 +250,7 @@ class HourlyOutputCurves(Base):
                 self._merge_submodel_warnings(curve, key_attr="key")
                 return contents
 
-            result = curve.retrieve(BaseClient(), session)
+            result = curve.retrieve(get_client(), session)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -425,7 +425,7 @@ class HourlyOutputCurves(Base):
 
         session = scenario.session if isinstance(scenario, Scenario) else scenario
 
-        service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), session)
+        service_result = FetchAllHourlyOutputCurvesRunner.run(get_client(), session)
         return cls.from_service_result(service_result, session, cache_curves)
 
     def _to_dataframe(

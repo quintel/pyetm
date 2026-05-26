@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, ANY
 import pytest
 from datetime import datetime
 from pyetm.models.scenario import Scenario, SavedScenarioError
@@ -447,7 +447,7 @@ def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario)
     with patch.object(Session, "load", return_value=fetched_scenario) as mock_load:
         scenario = saved_scenario.session
 
-        mock_load.assert_called_once_with(123)
+        mock_load.assert_called_once_with(123, client=ANY)
         assert scenario is fetched_scenario
 
 

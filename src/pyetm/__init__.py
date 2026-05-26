@@ -19,7 +19,7 @@ from pyetm.models import (
 )
 
 # Client
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 
 __version__ = version("pyetm")
 
@@ -37,4 +37,5 @@ __all__ = [
     "Gqueries",
     # Client
     "BaseClient",
+    "get_client",
 ]

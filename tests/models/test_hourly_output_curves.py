@@ -244,7 +244,7 @@ def test_hourly_output_curves_fetch_all():
     mock_curves = HourlyOutputCurves(curves=[])
 
     with (
-        patch("pyetm.models.hourly_output_curves.BaseClient") as mock_client_class,
+        patch("pyetm.models.hourly_output_curves.get_client") as mock_get_client,
         patch(
             "pyetm.models.hourly_output_curves.FetchAllHourlyOutputCurvesRunner"
         ) as mock_runner_class,
@@ -257,7 +257,7 @@ def test_hourly_output_curves_fetch_all():
         result = HourlyOutputCurves.fetch_all(mock_scenario)
 
         # Verify the runner was called with the correct arguments
-        mock_runner_class.run.assert_called_once_with(mock_client_class.return_value, mock_scenario)
+        mock_runner_class.run.assert_called_once_with(mock_get_client.return_value, mock_scenario)
 
         # Verify from_service_result was called with the correct arguments
         mock_from_result.assert_called_once_with(mock_service_result, mock_scenario, True)
