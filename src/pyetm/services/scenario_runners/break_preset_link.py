@@ -1,3 +1,5 @@
+"""Service for breaking preset scenario links."""
+
 from typing import Any, Dict, Union
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -12,24 +14,22 @@ class BreakPresetLinkRunner(BaseRunner[Dict[str, Any]]):
     from its parent preset scenario.
 
     PUT /api/v3/scenarios/{scenario_id}
-
-    Args:
-        client: The HTTP client to use
-        scenario: The scenario object (must have an 'id' attribute) or scenario ID
-        **kwargs: Additional arguments passed to the request
     """
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Union[Any, int],
-        **kwargs
+        client: BaseClient, scenario: Union[Any, int], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Break the preset link for a scenario.
 
         This makes the scenario independent by removing its connection to the
         preset scenario it was copied from.
+
+        Args:
+            client: The HTTP client to use
+            scenario: The scenario object (must have an 'id' attribute) or scenario ID
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = BreakPresetLinkRunner.run(

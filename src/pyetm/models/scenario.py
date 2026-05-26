@@ -1,9 +1,11 @@
+"""Scenario model for ETM scenario management."""
+
 from __future__ import annotations
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING, cast
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.types import AnnualExportType, CarrierType
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
@@ -28,6 +30,7 @@ from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
 )
 import pandas as pd
 from os import PathLike
+from typing import Generator
 
 if TYPE_CHECKING:
     from pyetm.models.session import Session
@@ -39,6 +42,7 @@ if TYPE_CHECKING:
     from pyetm.models.couplings import Couplings
     from pyetm.models.gqueries import Gqueries
     from pyetm.models.export_config import ExportConfig
+    from pyetm.models.export_data_collection import ExportDataCollection
 
 
 class SavedScenarioError(Exception):
@@ -65,15 +69,98 @@ class Scenario(Base):
 
     _scenario_session: Optional[Session] = PrivateAttr(None)
     _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
+    _client: Optional[BaseClient] = PrivateAttr(None)
 
-    def __eq__(self, other: "Scenario"):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Scenario):
+            return NotImplemented
         return self.id == other.id
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.id, self.area_code, self.end_year))
 
     @classmethod
     def create(
+        cls,
+        title: str,
+        session_id: Optional[int] = None,
+        area_code: Optional[str] = None,
+        end_year: Optional[int] = None,
+        client: Optional[BaseClient] = None,
+        user_values: Optional[Dict[str, Any]] = None,
+        custom_curves: Optional[Dict[str, Any]] = None,
+        sortables: Optional[Dict[str, Any]] = None,
+        private: bool = False,
+        **kwargs: Any,
+    ) -> "Scenario":
+        """
+        Create a SavedScenario in MyETM - either from an existing session or by creating a new one.
+
+        Provide EITHER session_id OR (area_code + end_year), not both.
+
+        Args:
+            title: Title for the saved scenario (required)
+            session_id: ID of existing Session to save (optional)
+            area_code: Region code for new session, e.g., "nl2023", "de" (optional)
+            end_year: End year for new session (optional)
+            client: Optional BaseClient instance
+            user_values: Optional dict of user input values to apply after creation
+            custom_curves: Optional dict of custom curves to upload after creation
+            sortables: Optional dict of sortables to apply after creation
+            private: Whether the scenario should be private (default: False)
+            **kwargs: Additional parameters (e.g., description)
+
+        Returns:
+            SavedScenario instance
+
+        Raises:
+            SavedScenarioError: If creation fails
+            ValueError: If parameter combination is invalid
+
+        Example:
+            >>> # Create new scenario (creates new session + saves it)
+            >>> scenario = Scenario.create(
+            ...     title="High Solar 2050",
+            ...     area_code="nl2023",
+            ...     end_year=2050
+            ... )
+
+            >>> # Save existing session
+            >>> scenario = Scenario.create(
+            ...     title="My Scenario",
+            ...     session_id=existing_session.id
+            ... )
+        """
+        # Validation
+        if session_id is not None and (area_code is not None or end_year is not None):
+            raise ValueError(
+                "Provide either session_id OR (area_code + end_year), not both"
+            )
+        if session_id is None and (area_code is None or end_year is None):
+            raise ValueError(
+                "Must provide either session_id OR both area_code and end_year"
+            )
+
+        # Create new session if area_code and end_year are provided
+        if area_code is not None and end_year is not None:
+            from pyetm.models.session import Session
+
+            session = Session.new(area_code=area_code, end_year=end_year)
+            session_id = session.id
+
+        # Create SavedScenario using the session_id
+        params = {
+            "scenario_id": session_id,
+            "title": title,
+            "private": private,
+            **kwargs,
+        }
+        return cls._create_from_params(
+            params, client, user_values, custom_curves, sortables
+        )
+
+    @classmethod
+    def _create_from_params(
         cls,
         params: Dict[str, Any],
         client: Optional[BaseClient] = None,
@@ -82,11 +169,10 @@ class Scenario(Base):
         sortables: Optional[Dict[str, Any]] = None,
     ) -> "Scenario":
         """
-        Create a new SavedScenario in MyETM from an existing session scenario.
+        Internal helper to create SavedScenario from params dict.
 
         Args:
             params: Dictionary with required keys (scenario_id, title) and optional keys
-                   (private)
             client: Optional BaseClient instance
             user_values: Optional dict of user input values to apply after creation
             custom_curves: Optional dict of custom curves to upload after creation
@@ -94,12 +180,9 @@ class Scenario(Base):
 
         Returns:
             SavedScenario instance
-
-        Raises:
-            SavedScenarioError if creation fails
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
         result = CreateSavedScenarioRunner.run(client, params)
 
         if not result.success:
@@ -107,13 +190,25 @@ class Scenario(Base):
                 f"Could not create saved scenario: {result.errors}"
             )
 
+        # Validate that we received data before attempting to create the model
+        if result.data is None:
+            error_msg = "Could not create saved scenario: API returned no data"
+            if result.errors:
+                error_msg += f". Errors: {result.errors}"
+            raise SavedScenarioError(error_msg)
+
         saved_scenario = cls.model_validate(result.data)
+
+        # Store client for future operations
+        saved_scenario._client = client
 
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
 
         for field, value in params.items():
-            if hasattr(saved_scenario, field) and field not in result.data:
+            if hasattr(saved_scenario, field) and (
+                result.data is None or field not in result.data
+            ):
                 setattr(saved_scenario, field, value)
 
         # Apply data parameters if provided
@@ -128,15 +223,36 @@ class Scenario(Base):
     def _apply_submodel(
         scenario: "Scenario",
         data: Any,
-        runner_class: type,
+        runner_class: type[Any],
         warning_key: str,
         client: BaseClient,
     ) -> None:
         """Apply a single data type to scenario with error handling."""
         try:
-            runner_class.run(client, scenario.session.id, data)
+            result = runner_class.run(client, scenario.session, data)
+
+            # Check if the API request failed and surface the errors
+            if hasattr(result, "success") and not result.success:
+                if hasattr(result, "errors") and result.errors:
+                    for error in result.errors:
+                        scenario.add_warning(warning_key, error)
+                else:
+                    scenario.add_warning(warning_key, f"Failed to apply {warning_key}")
+
+                # Auto-display data application warnings immediately
+                scenario_id_str = getattr(scenario, "id", "unknown")
+                scenario_title = getattr(scenario, "title", "Unknown")
+                scenario.auto_show_warnings(
+                    f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
+                )
         except Exception as e:
             scenario.add_warning(warning_key, f"Failed to apply {warning_key}: {e}")
+            # Auto-display exception warnings immediately
+            scenario_id_str = getattr(scenario, "id", "unknown")
+            scenario_title = getattr(scenario, "title", "Unknown")
+            scenario.auto_show_warnings(
+                f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
+            )
 
     @staticmethod
     def _apply_data_to_scenario(
@@ -176,28 +292,9 @@ class Scenario(Base):
                     scenario, data, runner_class, warning_key, client
                 )
 
-    @classmethod
-    def from_scenario(
-        cls,
-        scenario: "Session",
-        title: str,
-        client: Optional[BaseClient] = None,
-        **kwargs,
-    ) -> "Scenario":
-        """
-        Convenience method to create SavedScenario from a Scenario instance.
-
-        Args:
-            scenario: Scenario instance to save
-            title: Title for the saved scenario
-            client: Optional BaseClient instance
-            **kwargs: Optional params (private)
-
-        Returns:
-            SavedScenario instance
-        """
-        params = {"scenario_id": scenario.id, "title": title, **kwargs}
-        return cls.create(params, client=client)
+        # Invalidate both caches so next access fetches fresh data with updates
+        scenario._scenario_session = None
+        scenario.scenario = None
 
     @classmethod
     def load(
@@ -214,12 +311,13 @@ class Scenario(Base):
             SavedScenario instance
 
         Raises:
-            SavedScenarioError if loading fails
+            SavedScenarioError: If loading fails
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
-        template = type("T", (), {"id": saved_scenario_id})
+        # Create a simple object with id attribute for the runner
+        template = type("T", (), {"id": saved_scenario_id})()
         result = FetchSavedScenarioRunner.run(client, template)
 
         if not result.success:
@@ -234,8 +332,18 @@ class Scenario(Base):
 
         saved_scenario = cls.model_validate(result.data)
 
+        # Store client for future operations
+        saved_scenario._client = client
+
         for warning in result.errors:
             saved_scenario.add_warning("base", warning)
+
+        # Auto-display load warnings (use getattr for safety)
+        scenario_id_str = getattr(saved_scenario, "id", saved_scenario_id)
+        scenario_title = getattr(saved_scenario, "title", "Unknown")
+        saved_scenario.auto_show_warnings(
+            f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
+        )
 
         return saved_scenario
 
@@ -245,13 +353,15 @@ class Scenario(Base):
         scenario_id: int,
         title: str,
         client: Optional[BaseClient] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> "Scenario":
         """
-        Create a new SavedScenario from an ETEngine scenario ID.
+        DEPRECATED: Use Scenario.create(title=..., session_id=...) instead.
+
+        Create a new SavedScenario from an ETEngine session ID.
 
         Args:
-            scenario_id: The ETEngine scenario ID to save
+            scenario_id: The ETEngine session ID to save
             title: Title for the saved scenario
             client: Optional BaseClient instance
             **kwargs: Optional params (private)
@@ -260,10 +370,69 @@ class Scenario(Base):
             SavedScenario instance
 
         Raises:
-            SavedScenarioError if creation fails
+            SavedScenarioError: If creation fails
         """
-        params = {"scenario_id": scenario_id, "title": title, **kwargs}
-        return cls.create(params, client=client)
+        import warnings
+
+        warnings.warn(
+            "Scenario.new() is deprecated. "
+            "Use Scenario.create(title=..., session_id=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.create(title=title, session_id=scenario_id, client=client, **kwargs)
+
+    @classmethod
+    def create_new(
+        cls,
+        title: str,
+        area_code: str = "nl2023",
+        end_year: int = 2050,
+        client: Optional[BaseClient] = None,
+        user_values: Optional[Dict[str, Any]] = None,
+        custom_curves: Optional[Dict[str, Any]] = None,
+        sortables: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> "Scenario":
+        """
+        DEPRECATED: Use Scenario.create(title=..., area_code=..., end_year=...) instead.
+
+        Create a new ETEngine session and save it to MyETM in one step.
+
+        Args:
+            title: Title for the saved scenario
+            area_code: Region code (e.g., "nl2023", "de", "uk2050"). Default: "nl2023"
+            end_year: Target end year for the scenario. Default: 2050
+            client: Optional BaseClient instance
+            user_values: Optional dict of user input values to apply
+            custom_curves: Optional dict of custom curves to upload
+            sortables: Optional dict of sortables to apply
+            **kwargs: Additional parameters for scenario creation (e.g., private=True)
+
+        Returns:
+            SavedScenario instance
+
+        Raises:
+            SavedScenarioError: If creation fails
+        """
+        import warnings
+
+        warnings.warn(
+            "Scenario.create_new() is deprecated. "
+            "Use Scenario.create(title=..., area_code=..., end_year=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.create(
+            title=title,
+            area_code=area_code,
+            end_year=end_year,
+            client=client,
+            user_values=user_values,
+            custom_curves=custom_curves,
+            sortables=sortables,
+            **kwargs,
+        )
 
     @property
     def session(self) -> "Session":
@@ -284,11 +453,11 @@ class Scenario(Base):
             self._scenario_session = Session.model_validate(self.scenario)
             return self._scenario_session
 
-        # Fetch fresh from ETEngine API
-        self._scenario_session = Session.load(self.scenario_id)
+        # Fetch fresh from ETEngine API using stored client
+        self._scenario_session = Session.load(self.scenario_id, client=self._client)
         return self._scenario_session
 
-    def update(self, client: Optional[BaseClient] = None, **kwargs) -> None:
+    def update(self, client: Optional[BaseClient] = None, **kwargs: Any) -> None:
         """
         Update this SavedScenario
 
@@ -297,7 +466,7 @@ class Scenario(Base):
             **kwargs: Fields to update (title, private, discarded)
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
         result = UpdateSavedScenarioRunner.run(client, self.id, kwargs)
 
         if not result.success:
@@ -409,23 +578,25 @@ class Scenario(Base):
         """Set sortables from dataframe on the underlying session."""
         self.session.set_sortables_from_dataframe(dataframe, skip_upload=skip_upload)
 
-    def update_custom_curves(self, custom_curves, skip_upload: bool = False) -> None:
+    def update_custom_curves(
+        self, custom_curves: Any, skip_upload: bool = False
+    ) -> None:
         """Update custom curves on the underlying session."""
         self.session.update_custom_curves(custom_curves, skip_upload=skip_upload)
 
-    def custom_curve_series(self, curve_name: str) -> pd.Series:
+    def custom_curve_series(self, curve_name: str) -> Optional[pd.Series[Any]]:
         """Get a custom curve series from the underlying session."""
         return self.session.custom_curve_series(curve_name)
 
-    def custom_curves_series(self):
+    def custom_curves_series(self) -> Any:  # Returns generator
         """Yield all custom curve series from the underlying session."""
         return self.session.custom_curves_series()
 
-    def get_output_curve(self, curve_name: str) -> pd.DataFrame:
+    def get_output_curve(self, curve_name: str) -> Optional[pd.DataFrame]:
         """Get a single hourly output curve by name from the underlying session."""
         return self.session.get_output_curve(curve_name)
 
-    def all_hourly_output_curves(self):
+    def all_hourly_output_curves(self) -> Any:  # Returns generator
         """Yield all output curves from the underlying session."""
         return self.session.all_hourly_output_curves()
 
@@ -435,7 +606,7 @@ class Scenario(Base):
         """Get output curves by carrier type from the underlying session."""
         return self.session.get_hourly_output_curves(carrier_type)
 
-    def get_annual_export(self, export_name: str) -> pd.DataFrame:
+    def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
         """Get a single annual export by name from the underlying session."""
         return self.session.get_annual_export(export_name)
 
@@ -459,7 +630,7 @@ class Scenario(Base):
         """Execute queries on the underlying session."""
         self.session.execute_queries()
 
-    def results(self, columns=None) -> pd.DataFrame:
+    def results(self, columns: Any = None) -> pd.DataFrame:
         """Get query results from the underlying session."""
         return self.session.results(columns)
 
@@ -495,11 +666,11 @@ class Scenario(Base):
         """Set short name on the underlying session."""
         self.session.set_short_name(short_name)
 
-    def update_metadata(self, **kwargs) -> Dict[str, Any]:
+    def update_metadata(self, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Update metadata on the underlying session."""
         return self.session.update_metadata(**kwargs)
 
-    def copy_with_preset(self, **overrides) -> "Scenario":
+    def copy_with_preset(self, **overrides: Any) -> "Scenario":
         """
         Create a copy of the underlying session with a linked preset and save it to MyETM.
         """
@@ -515,14 +686,14 @@ class Scenario(Base):
         if private is not None:
             save_params["private"] = private
 
-        return copied_session.save(**save_params)
+        return cast("Scenario", copied_session.save(**save_params))
 
     def copy(
         self,
         user_values: Optional[Dict[str, Any]] = None,
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
-        **overrides,
+        **overrides: Any,
     ) -> "Scenario":
         """
         Create a copy with no template link to the original scenario and save it to MyETM.
@@ -552,14 +723,14 @@ class Scenario(Base):
 
         # Apply data parameters if provided
         if user_values or custom_curves or sortables:
-            from pyetm.clients import BaseClient
+            from pyetm.clients import BaseClient, get_client
 
-            client = BaseClient()
+            client = get_client()
             Scenario._apply_data_to_scenario(
                 copied_scenario, user_values, custom_curves, sortables, client
             )
 
-        return copied_scenario
+        return cast("Scenario", copied_scenario)
 
     @classmethod
     def interpolate(
@@ -568,7 +739,7 @@ class Scenario(Base):
         *end_years: int,
         titles: Optional[List[str]] = None,
         client: Optional[BaseClient] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> List["Scenario"]:
         """
         Interpolate one or more saved scenarios to target years and save to MyETM.
@@ -602,29 +773,30 @@ class Scenario(Base):
 
         return saved_scenarios_list
 
-    def to_excel(self, path: PathLike | str, **export_options) -> None:
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
         """Export this saved scenario to Excel."""
         self.session.to_excel(path, **export_options)
 
-    def collect_export_data(self, **export_options):
+    def collect_export_data(self, **export_options: Any) -> "ExportDataCollection":
         """
         Returns ExportDataCollection containing pandas DataFrames and dictionaries
         that can be exported to any file format (Parquet, CSV, JSON, etc.).
         """
         return self.session.collect_export_data(**export_options)
 
-    def _to_dataframe(self, **kwargs) -> "pd.DataFrame":
+    def _to_dataframe(self, **kwargs: Any) -> "pd.DataFrame":
         """
         Return a single-column DataFrame describing this saved scenario.
 
         Exports SavedScenario metadata merged with underlying session data.
-        The id field contains the SavedScenario ID (MyETM ID).
-        The scenario_id field contains the underlying ETEngine session ID.
+        The saved_scenario_id field contains the SavedScenario ID (MyETM ID).
+        The session_id field contains the underlying ETEngine session ID.
         """
         # Start with Scenario specific fields
         info: Dict[str, Any] = {
             "title": self.title,
-            "id": self.id,
+            "saved_scenario_id": self.id,
+            "session_id": self.scenario_id,
             "private": self.private,
         }
 
@@ -632,8 +804,6 @@ class Scenario(Base):
         session = self.session
         info.update(
             {
-                "session_id": self.scenario_id,
-                "preset": session.template_id,
                 "area_code": session.area_code,
                 "start_year": session.start_year,
                 "end_year": session.end_year,
@@ -664,12 +834,15 @@ class Scenario(Base):
         Fetch all users with access to this saved scenario.
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         result = SavedScenarioUsersIndexRunner.run(client, self.id)
 
         if not result.success:
             raise SavedScenarioError(f"Could not fetch users: {result.errors}")
+
+        if result.data is None:
+            return []
 
         for user in result.data:
             user["role"] = user["role"].replace("scenario_", "", 1)
@@ -688,7 +861,7 @@ class Scenario(Base):
         - skip_upload: If True, store data locally without uploading (can be applied later)
         """
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         role = self._normalize_role(role)
 
@@ -713,7 +886,7 @@ class Scenario(Base):
             return 0
 
         if client is None:
-            client = BaseClient()
+            client = get_client()
 
         count = 0
         for email, role in list(self._pending_users.items()):

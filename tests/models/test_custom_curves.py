@@ -24,7 +24,6 @@ def test_custom_curve_retrieve_success():
         patch("pyetm.models.custom_curves.get_settings") as mock_settings,
         patch("pandas.Series.to_csv") as mock_to_csv,
     ):
-
         mock_settings.return_value.path_to_tmp.return_value = Path("/tmp/123")
 
         curve = CustomCurve(key="test_curve", type="custom")
@@ -52,7 +51,6 @@ def test_custom_curve_retrieve_processing_error():
         ),
         patch("pyetm.models.custom_curves.get_settings") as mock_settings,
     ):
-
         mock_settings.return_value.path_to_tmp.return_value = Path("/tmp/123")
 
         curve = CustomCurve(key="test_curve", type="custom")
@@ -105,9 +103,7 @@ def test_custom_curve_retrieve_unexpected_error():
         assert len(curve.warnings) > 0
         key_warnings = curve.warnings.get_by_field(curve.key)
         assert len(key_warnings) > 0
-        assert (
-            "Unexpected error retrieving curve: Unexpected" in key_warnings[0].message
-        )
+        assert "Unexpected error retrieving curve: Unexpected" in key_warnings[0].message
 
 
 def test_custom_curve_contents_not_available():
@@ -124,9 +120,7 @@ def test_custom_curve_contents_not_available():
 
 def test_custom_curve_contents_file_error():
     """Test contents with file reading error"""
-    curve = CustomCurve(
-        key="test_curve", type="custom", file_path=Path("/nonexistent/file.csv")
-    )
+    curve = CustomCurve(key="test_curve", type="custom", file_path=Path("/nonexistent/file.csv"))
     result = curve.contents()
 
     assert result is None
@@ -147,9 +141,7 @@ def test_custom_curve_remove_not_available():
 def test_custom_curve_remove_file_error():
     """Test remove with file deletion error"""
     with patch("pathlib.Path.unlink", side_effect=OSError("Permission denied")):
-        curve = CustomCurve(
-            key="test_curve", type="custom", file_path=Path("/test/file.csv")
-        )
+        curve = CustomCurve(key="test_curve", type="custom", file_path=Path("/test/file.csv"))
         result = curve.remove()
 
         assert result is False
@@ -191,9 +183,7 @@ def test_custom_curves_from_json_with_invalid_curve():
         assert len(curves.curves) == 2  # 1 valid curve + 1 fallback curve
         assert len(curves.warnings) > 0
         # The key for the warnings appears to be based on the fallback curve that was created
-        fallback_curve_key = (
-            "CustomCurve(key=unknown).unknown"  # This is the actual key generated
-        )
+        fallback_curve_key = "CustomCurve(key=unknown).unknown"  # This is the actual key generated
         fallback_curve_warnings = curves.warnings.get_by_field(fallback_curve_key)
         assert len(fallback_curve_warnings) > 0
         assert "Skipped invalid curve data" in fallback_curve_warnings[0].message
@@ -215,9 +205,7 @@ def test_custom_curve_from_json_failure_adds_warning():
     # Fallback returns a constructed model; ensure a warning was recorded
     assert len(curve.warnings) > 0
     base_warnings = curve.warnings.get_by_field("base")
-    assert (
-        base_warnings and "Failed to create curve from data" in base_warnings[0].message
-    )
+    assert base_warnings and "Failed to create curve from data" in base_warnings[0].message
 
 
 def test_custom_curve_from_dataframe_basic_roundtrip():
@@ -409,9 +397,7 @@ def test_custom_curves_from_dataframe_collection_roundtrip():
                 file_path.unlink()
 
         # Clean up any files created during deserialization
-        for curve in (
-            restored_collection.curves if "restored_collection" in locals() else []
-        ):
+        for curve in restored_collection.curves if "restored_collection" in locals() else []:
             if curve.file_path and curve.file_path.exists():
                 curve.file_path.unlink()
 
@@ -582,9 +568,7 @@ def test_custom_curves_from_dataframe_handles_per_column_error():
         assert len(col.curves) == 2
         # Warning for the bad column on collection
         # Field names are prefixed; check presence by message
-        assert any(
-            "Failed to create curve from column bad" in w.message for w in col.warnings
-        )
+        assert any("Failed to create curve from column bad" in w.message for w in col.warnings)
 
 
 # --- Validate for Upload Tests --- #
@@ -607,9 +591,7 @@ def test_validate_for_upload_valid_curves():
         pd.Series(valid_data).to_csv(valid_file, header=False, index=False)
 
         curves = CustomCurves(
-            curves=[
-                CustomCurve(key="valid_curve", type="profile", file_path=valid_file)
-            ]
+            curves=[CustomCurve(key="valid_curve", type="profile", file_path=valid_file)]
         )
 
         validation_errors = curves.validate_for_upload()
@@ -655,9 +637,7 @@ def test_validate_for_upload_wrong_length():
         pd.Series(short_data).to_csv(short_file, header=False, index=False)
 
         curves = CustomCurves(
-            curves=[
-                CustomCurve(key="short_curve", type="profile", file_path=short_file)
-            ]
+            curves=[CustomCurve(key="short_curve", type="profile", file_path=short_file)]
         )
 
         validation_errors = curves.validate_for_upload()
@@ -667,10 +647,7 @@ def test_validate_for_upload_wrong_length():
         warnings_collector = validation_errors["short_curve"]
         assert len(warnings_collector) == 1
         warnings_list = list(warnings_collector)
-        assert (
-            "Curve must contain exactly 8,760 values, found 100"
-            in warnings_list[0].message
-        )
+        assert "Curve must contain exactly 8,760 values, found 100" in warnings_list[0].message
 
     finally:
         # Cleanup - remove entire directory tree
@@ -699,9 +676,7 @@ def test_validate_for_upload_non_numeric_values():
 
         curves = CustomCurves(
             curves=[
-                CustomCurve(
-                    key="non_numeric_curve", type="profile", file_path=non_numeric_file
-                )
+                CustomCurve(key="non_numeric_curve", type="profile", file_path=non_numeric_file)
             ]
         )
 
@@ -733,9 +708,7 @@ def test_validate_for_upload_empty_curve():
         empty_file.touch()
 
         curves = CustomCurves(
-            curves=[
-                CustomCurve(key="empty_curve", type="profile", file_path=empty_file)
-            ]
+            curves=[CustomCurve(key="empty_curve", type="profile", file_path=empty_file)]
         )
 
         validation_errors = curves.validate_for_upload()
@@ -760,11 +733,7 @@ def test_validate_for_upload_file_read_error():
     non_existent_file = Path("/tmp/non_existent_curve.csv")
 
     curves = CustomCurves(
-        curves=[
-            CustomCurve(
-                key="unreadable_curve", type="profile", file_path=non_existent_file
-            )
-        ]
+        curves=[CustomCurve(key="unreadable_curve", type="profile", file_path=non_existent_file)]
     )
 
     validation_errors = curves.validate_for_upload()
@@ -860,9 +829,7 @@ def test_validate_for_upload_multiple_curves_mixed_validity():
         curves = CustomCurves(
             curves=[
                 CustomCurve(key="valid_curve", type="profile", file_path=valid_file),
-                CustomCurve(
-                    key="invalid_curve", type="profile", file_path=invalid_file
-                ),
+                CustomCurve(key="invalid_curve", type="profile", file_path=invalid_file),
                 CustomCurve(key="no_data_curve", type="profile"),  # No file path
             ]
         )
@@ -878,10 +845,7 @@ def test_validate_for_upload_multiple_curves_mixed_validity():
         # Check specific error messages
         invalid_warnings = list(validation_errors["invalid_curve"])
         no_data_warnings = list(validation_errors["no_data_curve"])
-        assert (
-            "Curve must contain exactly 8,760 values, found 100"
-            in invalid_warnings[0].message
-        )
+        assert "Curve must contain exactly 8,760 values, found 100" in invalid_warnings[0].message
         assert "Curve has no data available" in no_data_warnings[0].message
 
     finally:

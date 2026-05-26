@@ -1,6 +1,6 @@
 # pre-commit configuration
 
-default_stages: [commit, push]
+default_stages: [pre-commit, pre-push]
 fail_fast: true
 minimum_pre_commit_version: 2.15.0
 
@@ -28,10 +28,29 @@ repos:
       - id: ruff-format
         pass_filenames: false
 
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.7.1
-  #   hooks:
-  #     - id: mypy
-  #       additional_dependencies:
-  #         - 'numpy'
-  #       pass_filenames: false
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.1.0
+    hooks:
+      - id: mypy
+        args: [src/pyetm]
+        additional_dependencies:
+          - 'pydantic==2.12.4'
+          - 'pydantic-settings>=2.7.0,<3.0.0'
+          - 'pandas-stubs'
+          - 'types-requests'
+          - 'types-pyyaml'
+          - 'aiohttp>=3.8.0'
+          - 'click>=8.0.0'
+          - 'xlsxwriter>=3.0.0'
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: poetry run pytest
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
+        args: [-x, --tb=short, --no-cov, -q]

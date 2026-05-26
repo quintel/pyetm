@@ -1,3 +1,5 @@
+"""Service for interpolate scenarios operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -18,7 +20,7 @@ class InterpolateScenariosRunner(BaseRunner[List[Dict[str, Any]]]):
         client: BaseClient,
         scenario_ids: List[int],
         end_years: List[int],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[List[Dict[str, Any]]]:
         payload = {
             "scenario_ids": scenario_ids,

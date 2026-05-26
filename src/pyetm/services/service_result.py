@@ -1,8 +1,11 @@
+"""Service result wrapper for operation outcomes."""
+
 from __future__ import annotations
-from typing import Generic, TypeVar, Optional
+from typing import Generic, TypeVar, Optional, Any, cast
 from pydantic import BaseModel
 
 T = TypeVar("T")
+
 
 class ServiceResult(BaseModel, Generic[T]):
     """
@@ -25,7 +28,7 @@ class ServiceResult(BaseModel, Generic[T]):
         return cls(success=True, data=data, errors=err_copy)
 
     @classmethod
-    def fail(cls, errors: list[str]) -> ServiceResult[None]:
+    def fail(cls, errors: list[str]) -> ServiceResult[Any]:
         """Use when a critical error happened and you cannot proceed."""
         err_copy: list[str] = list(errors)
         return cls(success=False, data=None, errors=err_copy)

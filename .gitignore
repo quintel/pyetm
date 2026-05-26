@@ -19,6 +19,8 @@ config.yml
 import_graph.svg
 tmp/
 examples/outputs/*
+# MkDocs build output
+/site/
 
 *.xlsx
 # Keep the examples

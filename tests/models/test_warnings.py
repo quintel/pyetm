@@ -16,9 +16,7 @@ def test_warning_creation():
 
 def test_warning_with_custom_severity():
     """Test ModelWarning creation with custom severity."""
-    warning = ModelWarning(
-        field="error_field", message="Error message", severity="error"
-    )
+    warning = ModelWarning(field="error_field", message="Error message", severity="error")
 
     assert warning.field == "error_field"
     assert warning.message == "Error message"

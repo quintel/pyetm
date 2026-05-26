@@ -341,9 +341,7 @@ def test_update_inputs_success(monkeypatch, inputs_json, scenario, ok_service_re
     assert targeted_input.user == 42.5
 
 
-def test_update_inputs_single_input(
-    monkeypatch, scenario, ok_service_result, inputs_json
-):
+def test_update_inputs_single_input(monkeypatch, scenario, ok_service_result, inputs_json):
     """Test updating a single input"""
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -351,9 +349,7 @@ def test_update_inputs_single_input(
     targeted_input = next(iter(scenario._inputs))
     new_value = 80.0
 
-    updated_data = {
-        "scenario": {"id": scenario.id, "user_values": {targeted_input.key: new_value}}
-    }
+    updated_data = {"scenario": {"id": scenario.id, "user_values": {targeted_input.key: new_value}}}
 
     monkeypatch.setattr(
         UpdateInputsRunner,
@@ -372,9 +368,7 @@ def test_update_inputs_single_input(
     assert len(scenario.warnings) == 0
 
 
-def test_update_inputs_with_warnings(
-    monkeypatch, scenario, inputs_json, ok_service_result
-):
+def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_service_result):
     """Test inputs update with warnings"""
     # Set up a cached inputs object first
     scenario._inputs = Inputs.from_json(inputs_json)
@@ -408,9 +402,7 @@ def test_update_inputs_failure(monkeypatch, scenario, inputs_json, fail_service_
         scenario.update_user_values({"invalid_input": "bad_value"})
 
 
-def test_update_inputs_empty_dict(
-    monkeypatch, scenario, ok_service_result, inputs_json
-):
+def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inputs_json):
     """Test inputs update with empty dictionary"""
     scenario._inputs = Inputs.from_json(inputs_json)
 
@@ -463,9 +455,7 @@ def test_update_inputs_preserves_existing_warnings(scenario, inputs_json):
 
     finally:
         # Restore original method
-        pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = (
-            original_run
-        )
+        pyetm.services.scenario_runners.update_inputs.UpdateInputsRunner.run = original_run
 
 
 # ------ sortables ------ #
@@ -478,9 +468,7 @@ def patch_sortables_from_json(monkeypatch):
     return dummy
 
 
-def test_sortables_success(
-    monkeypatch, patch_sortables_from_json, scenario, ok_service_result
-):
+def test_sortables_success(monkeypatch, patch_sortables_from_json, scenario, ok_service_result):
     sort_data = {"forecast_storage": [1, 2]}
 
     monkeypatch.setattr(
@@ -550,9 +538,7 @@ def test_update_sortables(monkeypatch, scenario, ok_service_result):
     mock_sortables.update = Mock()
     scenario._sortables = mock_sortables
 
-    monkeypatch.setattr(
-        UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({})
-    )
+    monkeypatch.setattr(UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({}))
 
     scenario.update_sortables(updates)
 
@@ -566,9 +552,7 @@ def test_update_sortables_validation_error(scenario):
     updates = {"nonexistent": [1, 2, 3]}
 
     mock_sortables = Mock()
-    error_collector = WarningCollector.with_warning(
-        "nonexistent", "Sortable does not exist"
-    )
+    error_collector = WarningCollector.with_warning("nonexistent", "Sortable does not exist")
     mock_sortables.is_valid_update.return_value = {"nonexistent": error_collector}
     scenario._sortables = mock_sortables
 
@@ -583,9 +567,7 @@ def test_remove_sortables(monkeypatch, scenario, ok_service_result):
     mock_sortables.update = Mock()
     scenario._sortables = mock_sortables
 
-    monkeypatch.setattr(
-        UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({})
-    )
+    monkeypatch.setattr(UpdateSortablesRunner, "run", lambda *args, **kwargs: ok_service_result({}))
 
     scenario.remove_sortables(sortable_names)
 
@@ -801,9 +783,7 @@ def test_scenario_update_custom_curves_runner_failure(monkeypatch, fail_service_
     assert "HTTP 500: Internal server error" in str(exc_info.value)
 
 
-def test_scenario_update_custom_curves_updates_existing_curve(
-    monkeypatch, ok_service_result
-):
+def test_scenario_update_custom_curves_updates_existing_curve(monkeypatch, ok_service_result):
     """Test that updating existing curves replaces file_path"""
     from pyetm.models.custom_curves import CustomCurve, CustomCurves
     from pyetm.services.scenario_runners.update_custom_curves import (
@@ -820,9 +800,7 @@ def test_scenario_update_custom_curves_updates_existing_curve(
     scenario._custom_curves = CustomCurves(curves=[existing_curve])
 
     # Create new curves with same key but different file path
-    new_curve = CustomCurve(
-        key="existing_curve", type="profile", file_path=Path("/new/path.csv")
-    )
+    new_curve = CustomCurve(key="existing_curve", type="profile", file_path=Path("/new/path.csv"))
     custom_curves = CustomCurves(curves=[new_curve])
 
     # Mock validate_for_upload to return no errors
@@ -869,9 +847,7 @@ def test_scenario_update_custom_curves_adds_new_curve(monkeypatch, ok_service_re
     scenario._custom_curves = CustomCurves(curves=[existing_curve])
 
     # Create new curve with different key
-    new_curve = CustomCurve(
-        key="new_curve", type="availability", file_path=Path("/new/path.csv")
-    )
+    new_curve = CustomCurve(key="new_curve", type="availability", file_path=Path("/new/path.csv"))
     custom_curves = CustomCurves(curves=[new_curve])
 
     # Mock validate_for_upload to return no errors
@@ -974,9 +950,7 @@ def test_copy_scenario_success_minimal(monkeypatch, ok_service_result, dummy_sce
     assert len(scenario.warnings) == 0
 
 
-def test_copy_scenario_with_title_override(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_copy_scenario_with_title_override(monkeypatch, ok_service_result, dummy_scenario):
     """Test successful scenario copy with title override"""
     copied_scenario_data = {
         "id": 67891,
@@ -998,9 +972,7 @@ def test_copy_scenario_with_title_override(
     assert len(scenario.warnings) == 0
 
 
-def test_copy_scenario_with_multiple_overrides(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_copy_scenario_with_multiple_overrides(monkeypatch, ok_service_result, dummy_scenario):
     """Test successful scenario copy with multiple overrides"""
     copied_scenario_data = {
         "id": 67892,
@@ -1018,9 +990,7 @@ def test_copy_scenario_with_multiple_overrides(
     )
 
     original = dummy_scenario(12345)
-    scenario = original.copy_with_preset(
-        title="Private Copy", private=True, source="test"
-    )
+    scenario = original.copy_with_preset(title="Private Copy", private=True, source="test")
     assert scenario.id == 67892
     assert scenario.title == "Private Copy"
     assert scenario.private is True
@@ -1036,9 +1006,7 @@ def test_copy_scenario_with_warnings(monkeypatch, ok_service_result, dummy_scena
     monkeypatch.setattr(
         CopyScenarioRunner,
         "run",
-        lambda client, scenario_id, overrides: ok_service_result(
-            copied_scenario_data, warnings
-        ),
+        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data, warnings),
     )
 
     original = dummy_scenario(12345)
@@ -1054,9 +1022,7 @@ def test_copy_scenario_failure(monkeypatch, fail_service_result, dummy_scenario)
     monkeypatch.setattr(
         CopyScenarioRunner,
         "run",
-        lambda client, scenario_id, overrides: fail_service_result(
-            ["Scenario not found"]
-        ),
+        lambda client, scenario_id, overrides: fail_service_result(["Scenario not found"]),
     )
 
     original = dummy_scenario(99999)
@@ -1064,9 +1030,7 @@ def test_copy_scenario_failure(monkeypatch, fail_service_result, dummy_scenario)
         original.copy_with_preset()
 
 
-def test_copy_scenario_with_preset_scenario_id(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_copy_scenario_with_preset_scenario_id(monkeypatch, ok_service_result, dummy_scenario):
     """Test that template is visible in copied scenarios"""
     copied_scenario_data = {
         "id": 67894,
@@ -1088,9 +1052,7 @@ def test_copy_scenario_with_preset_scenario_id(
     assert len(scenario.warnings) == 0
 
 
-def test_copy_scenario_deep_copy_success(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_copy_scenario_deep_copy_success(monkeypatch, ok_service_result, dummy_scenario):
     """Test successful copy that breaks the preset link"""
     copied_scenario_data = {
         "id": 67894,
@@ -1159,15 +1121,11 @@ def test_copy_scenario_deep_copy_break_link_failure(
     )
 
     original = dummy_scenario(12345)
-    with pytest.raises(
-        ScenarioError, match="Copied scenario but failed to break template link"
-    ):
+    with pytest.raises(ScenarioError, match="Copied scenario but failed to break template link"):
         original.copy()
 
 
-def test_copy_scenario_deep_false_doesnt_break_link(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_copy_scenario_deep_false_doesnt_break_link(monkeypatch, ok_service_result, dummy_scenario):
     """Test that copy_with_preset() doesn't call BreakPresetLinkRunner"""
     copied_scenario_data = {
         "id": 67896,
@@ -1201,9 +1159,7 @@ def test_copy_scenario_deep_false_doesnt_break_link(
 # ------ interpolate ------ #
 
 
-def test_interpolate_success_two_scenarios(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_interpolate_success_two_scenarios(monkeypatch, ok_service_result, dummy_scenario):
     """Test successful batch interpolation with two scenarios"""
     interpolated_data = [
         {
@@ -1232,9 +1188,7 @@ def test_interpolate_success_two_scenarios(
     assert len(interpolated[0].warnings) == 0
 
 
-def test_interpolate_success_three_scenarios(
-    monkeypatch, ok_service_result, dummy_scenario
-):
+def test_interpolate_success_three_scenarios(monkeypatch, ok_service_result, dummy_scenario):
     """Test batch interpolation with three scenarios and two target years"""
     interpolated_data = [
         {
@@ -1263,9 +1217,7 @@ def test_interpolate_success_three_scenarios(
     scenario_2050 = dummy_scenario(45678, end_year=2050)
     scenario_2070 = dummy_scenario(67890, end_year=2070)
 
-    interpolated = Session.interpolate(
-        [scenario_2030, scenario_2050, scenario_2070], 2040, 2060
-    )
+    interpolated = Session.interpolate([scenario_2030, scenario_2050, scenario_2070], 2040, 2060)
 
     assert len(interpolated) == 2
     assert interpolated[0].id == 88881
@@ -1277,17 +1229,13 @@ def test_interpolate_success_three_scenarios(
 
 def test_interpolate_with_warnings(monkeypatch, ok_service_result, dummy_scenario):
     """Test batch interpolation with warnings"""
-    interpolated_data = [
-        {"id": 88883, "area_code": "nl", "end_year": 2040, "start_year": 2023}
-    ]
+    interpolated_data = [{"id": 88883, "area_code": "nl", "end_year": 2040, "start_year": 2023}]
     warnings = ["Some inputs could not be interpolated"]
 
     monkeypatch.setattr(
         InterpolateScenariosRunner,
         "run",
-        lambda client, scenario_ids, end_years: ok_service_result(
-            interpolated_data, warnings
-        ),
+        lambda client, scenario_ids, end_years: ok_service_result(interpolated_data, warnings),
     )
 
     scenario_2030 = dummy_scenario(12345, end_year=2030)
@@ -1302,9 +1250,7 @@ def test_interpolate_with_warnings(monkeypatch, ok_service_result, dummy_scenari
     assert base_warnings[0].message == warnings[0]
 
 
-def test_interpolate_failure_too_few_scenarios(
-    monkeypatch, fail_service_result, dummy_scenario
-):
+def test_interpolate_failure_too_few_scenarios(monkeypatch, fail_service_result, dummy_scenario):
     """Test batch interpolation failure with too few scenarios"""
     monkeypatch.setattr(
         InterpolateScenariosRunner,
@@ -1320,9 +1266,7 @@ def test_interpolate_failure_too_few_scenarios(
         Session.interpolate([scenario], 2040)
 
 
-def test_interpolate_failure_validation_error(
-    monkeypatch, fail_service_result, dummy_scenario
-):
+def test_interpolate_failure_validation_error(monkeypatch, fail_service_result, dummy_scenario):
     """Test batch interpolation with validation error"""
     monkeypatch.setattr(
         InterpolateScenariosRunner,
@@ -1343,9 +1287,7 @@ def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_sc
     """Test batch interpolation with custom client"""
     from pyetm.clients import BaseClient
 
-    interpolated_data = [
-        {"id": 88884, "area_code": "nl", "end_year": 2040, "start_year": 2023}
-    ]
+    interpolated_data = [{"id": 88884, "area_code": "nl", "end_year": 2040, "start_year": 2023}]
 
     mock_client = BaseClient()
 
@@ -1360,9 +1302,7 @@ def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_sc
     scenario_2030 = dummy_scenario(12345, end_year=2030)
     scenario_2050 = dummy_scenario(67890, end_year=2050)
 
-    interpolated = Session.interpolate(
-        [scenario_2030, scenario_2050], 2040, client=mock_client
-    )
+    interpolated = Session.interpolate([scenario_2030, scenario_2050], 2040, client=mock_client)
 
     assert len(interpolated) == 1
     assert interpolated[0].id == 88884
@@ -1422,9 +1362,7 @@ def test_get_annual_exports_mixed_valid_and_invalid(scenario):
     assert "bad_export" in error_message
 
 
-def test_get_annual_exports_auto_converts_single_string(
-    monkeypatch, scenario, ok_service_result
-):
+def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, ok_service_result):
     """Test that get_annual_exports auto-converts single string to list"""
     # Mock the retrieve_multiple method to capture the arguments
     calls = []

@@ -1,5 +1,7 @@
+"""Utilities for loading scenarios from various sources."""
+
 import logging
-from typing import Protocol, Optional, Dict, Any
+from typing import Protocol, Optional, Dict, Any, cast
 from pyetm.models.session import Session
 
 logger = logging.getLogger(__name__)
@@ -52,7 +54,7 @@ class SessionLoader:
     Interprets IDs as ETEngine scenario/session IDs.
     """
 
-    def __init__(self, packer_helper):
+    def __init__(self, packer_helper: Any) -> None:
         """
         Args:
             packer_helper: Reference to ScenarioPacker instance for helper methods
@@ -74,7 +76,7 @@ class SessionLoader:
         if scenario is None:
             return None
         self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
-        return scenario
+        return cast(Session, scenario)
 
     def copy(
         self,
@@ -109,7 +111,7 @@ class SessionLoader:
         if scenario is None:
             return None
         self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
-        return scenario
+        return cast(Session, scenario)
 
 
 class SavedScenarioLoader:
@@ -119,7 +121,7 @@ class SavedScenarioLoader:
     Interprets IDs as MyETM SavedScenario IDs and automatically saves new scenarios.
     """
 
-    def __init__(self, packer_helper):
+    def __init__(self, packer_helper: Any) -> None:
         """
         Args:
             packer_helper: Reference to ScenarioPacker instance for helper methods
@@ -139,7 +141,7 @@ class SavedScenarioLoader:
 
         try:
             saved_scenario = Scenario.load(scenario_id)
-            return saved_scenario
+            return cast(Session, saved_scenario)
         except Exception as e:
             error_msg = str(e)
             if "does not exist" in error_msg or "not found" in error_msg.lower():
@@ -178,7 +180,7 @@ class SavedScenarioLoader:
                     saved_copy.id,
                     saved_copy.scenario_id,
                 )
-                return saved_copy
+                return cast(Session, saved_copy)
             except Exception as save_error:
                 logger.warning(
                     "Failed to save copy to MyETM for row '%s': %s. Returning session instead.",
@@ -229,11 +231,11 @@ class SavedScenarioLoader:
                 saved_scenario.id,
                 saved_scenario.scenario_id,
             )
-            return saved_scenario
+            return cast(Session, saved_scenario)
         except Exception as e:
             logger.warning(
                 "Failed to save new scenario to MyETM for row '%s': %s. Returning session instead.",
                 row_label,
                 e,
             )
-            return scenario
+            return cast(Session, scenario)

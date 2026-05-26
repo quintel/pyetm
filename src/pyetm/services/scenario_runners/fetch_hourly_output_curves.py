@@ -1,3 +1,7 @@
+"""Service for fetch hourly output curves operations."""
+
+from __future__ import annotations
+
 import io
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
@@ -14,13 +18,9 @@ class DownloadHourlyOutputCurveRunner(BaseRunner[io.StringIO]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
-        curve_name: str,
+        client: BaseClient, scenario: Any, curve_name: str, **kwargs: Any
     ) -> ServiceResult[Any]:
-        return GenericCurveDownloadRunner.run(
-            client, scenario, curve_name, curve_type="output"
-        )
+        return GenericCurveDownloadRunner.run(client, scenario, curve_name, curve_type="output")
 
 
 class FetchAllHourlyOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
@@ -42,9 +42,7 @@ class FetchAllHourlyOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        scenario: Any,
-        batch_size: int | None = None,
+        client: BaseClient, scenario: Any, batch_size: int | None = None, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         return GenericCurveBulkRunner.run(
             client,

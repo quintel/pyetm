@@ -18,7 +18,6 @@ from pyetm.utils.excel_utils import ExportConfigResolver
 
 
 class TestScenarioPackerInit:
-
     def test_init_creates_empty_collections(self):
         """Test that initialization creates empty collections"""
         packer = ScenarioPacker()
@@ -28,7 +27,6 @@ class TestScenarioPackerInit:
 
 
 class TestScenarioPackerAdd:
-
     def test_add_single_scenario(self, sample_scenario):
         """Test adding a single scenario"""
         packer = ScenarioPacker()
@@ -85,7 +83,6 @@ class TestScenarioPackerAdd:
 
 
 class TestScenarioPackerDataExtraction:
-
     def test_scenarios_empty(self):
         """Test _scenarios with empty packer"""
         packer = ScenarioPacker()
@@ -124,7 +121,6 @@ class TestScenarioPackerDataExtraction:
 
 
 class TestMainInfo:
-
     def test_main_info_empty(self):
         """Test main_info with no scenarios"""
         packer = ScenarioPacker()
@@ -152,10 +148,11 @@ class TestMainInfo:
         # After transpose and reset_index: scenarios are rows, scenario_id is a column
         assert "scenario_id" in result.columns
         assert sample_scenario.id in result["scenario_id"].values
-        assert "identifier" in result.columns
-        assert sample_scenario.identifier() in result["identifier"].values
         assert "area_code" in result.columns
-        assert result[result["scenario_id"] == sample_scenario.id]["area_code"].iloc[0] == "nl2015"
+        assert (
+            result[result["scenario_id"] == sample_scenario.id]["area_code"].iloc[0]
+            == "nl2015"
+        )
 
     def test_main_info_multiple_scenarios(self, multiple_scenarios):
         """Test main_info with multiple scenarios (scenarios as rows with scenario_id column)"""
@@ -174,15 +171,13 @@ class TestMainInfo:
         # After transpose and reset_index: 3 scenarios = 3 rows
         assert len(result) == 3
         assert "scenario_id" in result.columns
-        assert "identifier" in result.columns
         assert "area_code" in result.columns
         assert "end_year" in result.columns
         for scenario in multiple_scenarios:
             assert scenario.id in result["scenario_id"].values
-            assert scenario.identifier() in result["identifier"].values
 
-    def test_main_info_identifier_column_order(self, sample_scenario):
-        """Test that identifier column comes right after scenario_id"""
+    def test_main_info_column_order(self, sample_scenario):
+        """Test that scenario_id is the first column"""
         mock_df = pd.DataFrame(
             {sample_scenario.id: ["nl2015", 2050]},
             index=["area_code", "end_year"],
@@ -198,7 +193,6 @@ class TestMainInfo:
         # Check column order
         columns = list(result.columns)
         assert columns[0] == "scenario_id"
-        assert columns[1] == "identifier"
 
 
 class TestCouplings:
@@ -212,7 +206,6 @@ class TestCouplings:
 
 
 class TestInputs:
-
     def test_inputs_empty(self):
         """Test inputs with no scenarios"""
         packer = ScenarioPacker()
@@ -248,6 +241,39 @@ class TestInputs:
 
         assert not result.empty
         assert "input" in result.index.names
+
+    def test_inputs_default_field_is_value(self, scenario_with_inputs):
+        """Test that inputs() returns 'value' field by default (merged user || default)"""
+        # Create a mock DataFrame with both user and default values
+        mock_df = pd.DataFrame(
+            {
+                "value": [1000, 500],  # Merged: user value for first, default for second
+                "user": [1000, None],  # User only set first input
+                "default": [500, 500],  # Both have defaults
+                "unit": ["MW", "MW"],
+            },
+            index=["wind_capacity", "solar_capacity"],
+        )
+        mock_df.index.name = "input"
+        final_df = mock_df.set_index("unit", append=True)
+
+        # Mock the to_dataframe method to return our test data
+        scenario_with_inputs.inputs.to_dataframe = Mock(return_value=final_df)
+        scenario_with_inputs.identifier = Mock(return_value=scenario_with_inputs.id)
+
+        packer = ScenarioPacker()
+        packer.add_inputs(scenario_with_inputs)
+
+        # Call inputs() without specifying fields - should default to "value"
+        result = packer.inputs()
+
+        # Verify the result contains the value column
+        assert not result.empty
+        # Check that we get multi-index columns with scenario and field
+        assert isinstance(result.columns, pd.MultiIndex)
+        # Verify "value" is in the field level of the columns
+        field_level_values = [col[1] for col in result.columns]
+        assert "value" in field_level_values
 
 
 # TODO: FIX TEST
@@ -289,7 +315,6 @@ class TestInputs:
 
 
 class TestGqueryResults:
-
     def test_gquery_results_empty(self):
         """Test gquery_results with no scenarios"""
         packer = ScenarioPacker()
@@ -335,7 +360,7 @@ class TestGqueryResults:
 
             mock_results = pd.DataFrame(
                 {"future": [100 + i * 10, 200 + i * 20], "unit": ["MW", "GWh"]},
-                index=[f"query_1", f"query_{i+2}"],
+                index=[f"query_1", f"query_{i + 2}"],
             )
             mock_results.index.name = "gquery"
 
@@ -356,7 +381,6 @@ class TestGqueryResults:
 
 
 class TestDataExtractionMethods:
-
     def test_sortables_empty(self):
         """Test sortables with no scenarios"""
         packer = ScenarioPacker()
@@ -433,7 +457,6 @@ class TestDataExtractionMethods:
 
 
 class TestExcelExport:
-
     def setup_method(self):
         """Setup temp directory for Excel files"""
         self.temp_dir = tempfile.mkdtemp()
@@ -480,7 +503,6 @@ class TestExcelExport:
                 HourlyOutputCurvesPack, "to_dataframe", return_value=dummy_empty_df
             ),
         ):
-
             file_path = os.path.join(self.temp_dir, "test_export.xlsx")
             packer.to_excel(file_path)
 
@@ -540,7 +562,6 @@ class TestExcelExport:
 
 
 class TestUtilityMethods:
-
     def test_clear(self, multiple_scenarios):
         """Test clear method"""
         packer = ScenarioPacker()
@@ -609,7 +630,8 @@ class TestExportConfigResolver:
                 "sortables": "no",
                 "defaults": "1",
                 "min_max": "0",
-                "hourly_output_curves": "electricity,gas",
+                "hourly_curves": "electricity,gas",
+                "annual_exports": "energy_flow, sankey",
             }
         )
 
@@ -617,13 +639,128 @@ class TestExportConfigResolver:
 
         assert config.include_inputs == True
         assert config.include_sortables == False
-        assert config.inputs_defaults == True
-        assert config.inputs_min_max == False
-        assert config.output_carriers == ["electricity", "gas"]
+        assert config.include_input_defaults == True
+        assert config.include_input_min_max == False
+        assert config.hourly_curves == ["electricity", "gas"]
+        assert config.include_annual_exports == ["energy_flow", "sankey"]
+
+    def test_parse_config_from_series_annual_exports_true(self):
+        """Test that annual_exports='true' in series exports all types"""
+        series = pd.Series(
+            {
+                "annual_exports": "true",
+            }
+        )
+
+        config = ExportConfigResolver._parse_config_from_series(series)
+
+        assert config.include_annual_exports == [
+            "energy_flow",
+            "sankey",
+            "production_parameters",
+        ]
+
+    def test_parse_config_from_series_annual_exports_false(self):
+        """Test that annual_exports='false' in series exports nothing"""
+        series = pd.Series(
+            {
+                "annual_exports": "false",
+            }
+        )
+
+        config = ExportConfigResolver._parse_config_from_series(series)
+
+        assert config.include_annual_exports is None
+
+    def test_extract_from_export_config_sheet_hourly_curves_true(self):
+        """Test that hourly_curves='true' exports all carriers"""
+        df = pd.DataFrame(
+            {
+                "include_inputs": ["true"],
+                "hourly_curves": ["true"],
+            }
+        )
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config is not None
+        assert config.include_inputs == True
+        assert config.hourly_curves == ["electricity", "hydrogen", "heat", "methane"]
+
+    def test_extract_from_export_config_sheet_annual_exports_true(self):
+        """Test that annual_exports='true' (string) exports all types"""
+        df = pd.DataFrame(
+            {
+                "annual_exports": ["true"],
+            }
+        )
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config is not None
+        assert config.include_annual_exports == [
+            "production_parameters",
+            "energy_flow",
+            "energy_flow_present",
+            "molecule_flow",
+            "sankey",
+            "storage_parameters",
+            "costs_parameters",
+        ]
+
+    def test_extract_from_export_config_sheet_annual_exports_boolean_true(self):
+        """Test that annual_exports=True (boolean from Excel) exports all types"""
+        df = pd.DataFrame(
+            {
+                "annual_exports": [True],  # Boolean True (what Excel stores)
+            }
+        )
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config is not None
+        assert config.include_annual_exports == [
+            "production_parameters",
+            "energy_flow",
+            "energy_flow_present",
+            "molecule_flow",
+            "sankey",
+            "storage_parameters",
+            "costs_parameters",
+        ]
+
+    def test_extract_from_export_config_sheet_specific_carriers(self):
+        """Test that specific carrier names work correctly"""
+        df = pd.DataFrame(
+            {
+                "hourly_curves": ["electricity, heat"],
+                "annual_exports": ["energy_flow, sankey"],
+            }
+        )
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config is not None
+        assert config.hourly_curves == ["electricity", "heat"]
+        assert config.include_annual_exports == ["energy_flow", "sankey"]
+
+    def test_extract_from_export_config_sheet_false_values(self):
+        """Test that 'false' values result in None"""
+        df = pd.DataFrame(
+            {
+                "hourly_curves": ["false"],
+                "annual_exports": ["false"],
+            }
+        )
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config is not None
+        assert config.hourly_curves is None
+        assert config.include_annual_exports is None
 
 
 class TestScenarioPackerHelpers:
-
     def test_load_or_create_scenario_load_new_and_failures(self, monkeypatch):
         """Test _load_or_create_scenario method"""
         packer = ScenarioPacker()
@@ -696,7 +833,6 @@ class TestScenarioPackerHelpers:
 
 
 class TestCreateScenarioFromColumn:
-
     def test_create_scenario_from_row_loads_and_updates(self, monkeypatch):
         """Test _create_scenario_from_row method with loading existing scenario"""
         packer = ScenarioPacker()
@@ -767,7 +903,6 @@ class TestInputsPackIntegration:
 
 
 class TestExportConfigResolverExtras:
-
     def test_extract_from_main_sheet_skips_helper_and_parses(self):
         # First column is a helper and must be skipped
         main = pd.DataFrame(
@@ -780,7 +915,7 @@ class TestExportConfigResolverExtras:
                     "gqueries": "1",
                     "defaults": "1",
                     "min_max": "0",
-                    "hourly_output_curves": "electricity, gas ",
+                    "hourly_curves": "electricity, gas ",
                 },
             }
         )
@@ -791,16 +926,15 @@ class TestExportConfigResolverExtras:
         assert cfg.include_sortables is False
         assert cfg.include_custom_curves is True
         assert cfg.include_gqueries is True
-        assert cfg.inputs_defaults is True
-        assert cfg.inputs_min_max is False
-        assert cfg.output_carriers == ["electricity", "gas"]
+        assert cfg.include_input_defaults is True
+        assert cfg.include_input_min_max is False
+        assert cfg.hourly_curves == ["electricity", "gas"]
 
     def test_extract_from_main_sheet_empty_or_error(self):
         assert ExportConfigResolver.extract_from_main_sheet(pd.DataFrame(), []) is None
 
 
 class TestScenarioPackerExtras:
-
     def test_get_global_export_config_first_available(self):
         packer = ScenarioPacker()
 
@@ -864,10 +998,20 @@ class TestScenarioPackerExtras:
 
         # Make packs return non-empty DataFrames
         with (
-            patch.object(SortablePack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})),
-            patch.object(CustomCurvesPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})),
-            patch.object(QueryPack, "to_dataframe", return_value=pd.DataFrame({"future": [1]}, index=["q"])),
-            patch.object(InputsPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})),
+            patch.object(
+                SortablePack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
+            patch.object(
+                CustomCurvesPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
+            patch.object(
+                QueryPack,
+                "to_dataframe",
+                return_value=pd.DataFrame({"future": [1]}, index=["q"]),
+            ),
+            patch.object(
+                InputsPack, "to_dataframe", return_value=pd.DataFrame({"v": [1]})
+            ),
             patch("pyetm.exporters.excel_exporter.ExcelExporter.write") as mock_write,
         ):
             tmp = os.path.join(tempfile.gettempdir(), "with_packs.xlsx")
@@ -881,7 +1025,7 @@ class TestScenarioPackerExtras:
             # Verify ExcelExporter.write was called
             assert mock_write.called
             call_args = mock_write.call_args
-            export_data = call_args.kwargs['export_data']
+            export_data = call_args.kwargs["export_data"]
 
             # Verify all requested data is in the ExportDataCollection
             assert export_data.main_info is not None
@@ -889,6 +1033,7 @@ class TestScenarioPackerExtras:
             assert export_data.sortables is not None
             assert export_data.custom_curves is not None
             assert export_data.gquery_results is not None
+
 
 def test_clear_and_remove_scenario_swallow_errors():
     packer = ScenarioPacker()
@@ -907,7 +1052,6 @@ def test_clear_and_remove_scenario_swallow_errors():
 
 
 class TestNormalizeUpdate:
-
     def test_normalize_update_false(self):
         """Test normalizing update=False returns empty set"""
         result = ScenarioPacker._normalize_update(False)
@@ -1229,7 +1373,6 @@ class TestPackerValidation:
         assert "Invalid export names" in error_message
         assert "bad_export" in error_message
 
-
     def test_annual_exports_valid_list(self):
         """Test that valid export lists work without errors"""
         packer = ScenarioPacker()
@@ -1370,8 +1513,7 @@ class TestScenarioPackerCollectExportData:
 
         # Create scenario with export config
         sample_scenario._export_config = ExportConfig(
-            include_inputs=True,
-            include_sortables=True
+            include_inputs=True, include_sortables=True
         )
 
         packer = ScenarioPacker()
@@ -1403,7 +1545,9 @@ class TestScenarioPackerCollectExportData:
         assert export_data.config.include_inputs is False
         assert export_data.inputs is None
 
-    def test_collect_export_data_all_options(self, sample_scenario, scenario_with_inputs, scenario_with_queries):
+    def test_collect_export_data_all_options(
+        self, sample_scenario, scenario_with_inputs, scenario_with_queries
+    ):
         """Test collecting export data with all options enabled"""
         from pyetm.models.export_data_collection import ExportDataCollection
 
@@ -1458,3 +1602,168 @@ class TestScenarioPackerCollectExportData:
         # Both collections should be independent
         assert export_data1.config.include_inputs is True
         assert export_data2.config.include_inputs is False
+
+
+class TestExportIDColumns:
+    """Test that export IDs are correctly formatted across all export methods."""
+
+    def test_scenario_dataframe_has_correct_id_columns(self):
+        """Test Scenario._to_dataframe() exports session_id and saved_scenario_id"""
+        from pyetm.models.scenario import Scenario
+
+        # Create mock scenario
+        scenario = Mock(spec=Scenario)
+        scenario.id = 12345  # SavedScenario ID
+        scenario.scenario_id = 67890  # ETEngine session ID
+        scenario.title = "Test Scenario"
+        scenario.private = False
+
+        # Mock the session
+        mock_session = Mock()
+        mock_session.template_id = None
+        mock_session.area_code = "nl"
+        mock_session.start_year = 2019
+        mock_session.end_year = 2050
+        mock_session.keep_compatible = True
+        mock_session.source = None
+        mock_session.url = "https://test.energytransitionmodel.com"
+        mock_session.version = 1
+        mock_session.created_at = "2023-01-01T00:00:00Z"
+        mock_session.updated_at = "2023-01-01T00:00:00Z"
+        mock_session.short_name = None
+        mock_session.metadata = {}
+
+        scenario.session = mock_session
+
+        # Call the actual _to_dataframe method
+        from pyetm.models.scenario import Scenario as RealScenario
+
+        result = RealScenario._to_dataframe(scenario)
+
+        # Verify the DataFrame structure - column is scenario.id
+        col_name = str(scenario.id)
+        assert "saved_scenario_id" in result.index
+        assert "session_id" in result.index
+        assert result.loc["saved_scenario_id", col_name] == 12345
+        assert result.loc["session_id", col_name] == 67890
+
+        # Ensure old column names don't exist
+        assert "id" not in result.index
+        assert "preset" not in result.index
+
+    def test_session_dataframe_has_correct_id_columns(self):
+        """Test Session._to_dataframe() exports session_id and empty saved_scenario_id"""
+        from pyetm.models.session import Session
+
+        # Create mock session
+        session = Mock(spec=Session)
+        session.id = 67890  # ETEngine session ID
+        session.identifier = Mock(return_value="Test Session")
+        session.template_id = None
+        session.area_code = "nl"
+        session.start_year = 2019
+        session.end_year = 2050
+        session.keep_compatible = True
+        session.private = False
+        session.source = None
+        session.url = "https://test.energytransitionmodel.com"
+        session.version = 1
+        session.created_at = "2023-01-01T00:00:00Z"
+        session.updated_at = "2023-01-01T00:00:00Z"
+        session.metadata = {}
+
+        # Call the actual _to_dataframe method
+        from pyetm.models.session import Session as RealSession
+
+        result = RealSession._to_dataframe(session)
+
+        # Verify the DataFrame structure - column is session identifier
+        col_name = "Test Session"
+        assert "session_id" in result.index
+        assert "saved_scenario_id" in result.index
+        assert result.loc["session_id", col_name] == 67890
+        assert result.loc["saved_scenario_id", col_name] is None
+
+        # Ensure old column names don't exist
+        assert "id" not in result.index
+        assert "scenario_id" not in result.index
+
+    def test_main_info_no_identifier_column(self):
+        """Test that main_info() doesn't include the old identifier column"""
+        from pyetm.models.scenario import Scenario
+
+        scenario = Mock(spec=Scenario)
+        scenario.id = 12345
+        scenario.identifier = Mock(return_value="Test")
+
+        # Mock _to_dataframe to return simple test data
+        mock_df = pd.DataFrame({12345: ["nl", 2050]}, index=["area_code", "end_year"])
+        scenario._to_dataframe = Mock(return_value=mock_df)
+
+        packer = ScenarioPacker()
+        packer.add(scenario)
+        result = packer.main_info()
+
+        # Verify identifier column is not present
+        assert "identifier" not in result.columns
+        # scenario_id should still be there for internal tracking
+        assert "scenario_id" in result.columns
+
+    def test_excel_export_filters_excluded_columns(self, tmp_path):
+        """Test that to_excel() excludes id, identifier, scenario_id, preset columns"""
+        from pyetm.models.scenario import Scenario
+        from pyetm.utils.excel_utils import apply_field_ordering
+
+        # Create a DataFrame simulating the main_info output
+        test_df = pd.DataFrame(
+            {
+                "title": ["Test Scenario"],
+                "session_id": [67890],
+                "saved_scenario_id": [12345],
+                "id": [99999],  # Should be filtered
+                "identifier": ["TEST"],  # Should be filtered
+                "scenario_id": [67890],  # Should be filtered
+                "preset": [None],  # Should be filtered
+                "area_code": ["nl"],
+                "end_year": [2050],
+            }
+        )
+
+        # Apply field ordering (which includes filtering)
+        result = apply_field_ordering(test_df)
+
+        # Verify excluded columns are removed
+        assert "id" not in result.columns
+        assert "identifier" not in result.columns
+        assert "scenario_id" not in result.columns
+        assert "preset" not in result.columns
+
+        # Verify expected columns remain
+        assert "session_id" in result.columns
+        assert "saved_scenario_id" in result.columns
+        assert "title" in result.columns
+        assert "area_code" in result.columns
+
+    def test_excel_export_column_order(self):
+        """Test that session_id and saved_scenario_id come right after title"""
+        from pyetm.utils.excel_utils import apply_field_ordering
+
+        # Create a DataFrame with various columns
+        test_df = pd.DataFrame(
+            {
+                "area_code": ["nl"],
+                "title": ["Test"],
+                "end_year": [2050],
+                "session_id": [67890],
+                "saved_scenario_id": [12345],
+                "start_year": [2019],
+            }
+        )
+
+        result = apply_field_ordering(test_df)
+        columns = list(result.columns)
+
+        # Verify the order: title should be first, then session_id, then saved_scenario_id
+        assert columns[0] == "title"
+        assert columns[1] == "session_id"
+        assert columns[2] == "saved_scenario_id"

@@ -1,7 +1,10 @@
+"""Async HTTP session management for ETM API."""
+
 from __future__ import annotations
+import logging
 import pandas as pd
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union, cast
 from urllib.parse import urlparse
 from pydantic import Field, PrivateAttr, ConfigDict
 from os import PathLike
@@ -9,12 +12,13 @@ from pyetm.models.couplings import Couplings
 from pyetm.models.inputs import Inputs
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 from pyetm.models.annual_exports import AnnualExports
-from pyetm.clients import BaseClient
+from pyetm.clients import BaseClient, get_client
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.models.export_config import ExportConfig
+from pyetm.models.export_data_collection import ExportDataCollection
 from pyetm.types import AnnualExportType, CarrierType
 from pyetm.validators import validate_carrier_type, validate_export_names
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
@@ -49,6 +53,8 @@ from pyetm.services.scenario_runners.scenario_users_destroy import (
 from pyetm.services.scenario_runners.interpolate_scenarios import (
     InterpolateScenariosRunner,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ScenarioError(Exception):
@@ -97,7 +103,11 @@ class Session(Base):
 
     @classmethod
     def new(
-        cls, area_code: str | None = None, end_year: int | None = None, **kwargs
+        cls,
+        area_code: str | None = None,
+        end_year: int | None = None,
+        client: Optional[BaseClient] = None,
+        **kwargs: Any
     ) -> "Session":
         """
         Create a new scenario with the specified parameters.
@@ -105,6 +115,7 @@ class Session(Base):
         Args:
             area_code: Area code for the scenario (optional if template_id is provided)
             end_year: End year for the scenario (optional if template_id is provided)
+            client: Optional BaseClient instance for API communication
             **kwargs: Additional parameters including:
                 - template_id: Session ID to use as template
                 - private, keep_compatible, source, title, metadata, start_year, scaling, url
@@ -118,7 +129,7 @@ class Session(Base):
         if end_year is not None:
             scenario_data["end_year"] = end_year
 
-        result = CreateScenarioRunner.run(BaseClient(), scenario_data)
+        result = CreateScenarioRunner.run(client or get_client(), scenario_data)
 
         if not result.success:
             raise ScenarioError(f"Could not create scenario: {result.errors}")
@@ -127,37 +138,84 @@ class Session(Base):
         for warning in result.errors:
             scenario.add_warning("base", warning)
 
+        # Auto-display creation warnings
+        area_code = getattr(scenario, "area_code", None)
+        end_year = getattr(scenario, "end_year", None)
+        context = f"Session #{scenario.id}"
+        if area_code or end_year:
+            context += f" (area_code={area_code}, end_year={end_year})"
+        scenario.auto_show_warnings(context)
+
         for field, value in scenario_data.items():
-            if hasattr(scenario, field) and field not in result.data:
+            if (
+                hasattr(scenario, field)
+                and result.data is not None
+                and field not in result.data
+            ):
                 setattr(scenario, field, value)
 
         return scenario
 
     @classmethod
-    def load(cls, scenario_id: int) -> Session:
+    def load(cls, scenario_id: int, client: Optional[BaseClient] = None) -> Session:
         """
         Fetch metadata for scenario_id, return a Scenario (with warnings if any keys missing).
+
+        Args:
+            scenario_id: ETEngine session ID to load
+            client: Optional BaseClient instance for API communication
         """
         template = type("T", (), {"id": scenario_id})
-        result = FetchMetadataRunner.run(BaseClient(), template)
+        result = FetchMetadataRunner.run(client or get_client(), template)
 
         if not result.success:
             raise ScenarioError(
-                f"Could not load scenario {scenario_id}: {result.errors}"
+                f"Could not load session {scenario_id}: {result.errors}"
             )
 
         # parse into a Scenario
         scenario = cls.model_validate(result.data)
+
+        # Optional metadata fields that shouldn't trigger warnings
+        optional_fields = {
+            "title",
+            "preset_scenario_id",
+            "short_name",
+            "metadata",
+            "start_year",
+            "keep_compatible",
+            "private",
+            "source",
+            "url",
+            "scaling",
+        }
+
+        # Only add warnings for missing fields that are NOT optional
         for w in result.errors:
+            # Filter out "Missing field" warnings for optional fields
+            if "Missing field" in w:
+                # Extract field name from warning message
+                field_name = w.split("'")[-2] if "'" in w else None
+                if field_name in optional_fields:
+                    continue  # Skip this warning
             scenario.add_warning("metadata", w)
+
+        # Auto-display load warnings
+        area_code = getattr(scenario, "area_code", None)
+        end_year = getattr(scenario, "end_year", None)
+        context = f"Session #{scenario.id}"
+        if area_code or end_year:
+            context += f" (area_code={area_code}, end_year={end_year})"
+        scenario.auto_show_warnings(context)
+
         return scenario
 
-    def copy_with_preset(self, **overrides) -> "Session":
+    def copy_with_preset(self, **overrides: Any) -> "Session":
         """
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
         """
-        result = CopyScenarioRunner.run(BaseClient(), self.id, overrides=overrides)
+        result = CopyScenarioRunner.run(get_client(), self.id, overrides=overrides)
 
         if not result.success:
             raise ScenarioError(f"Failed to copy scenario: {result.errors}")
@@ -168,13 +226,13 @@ class Session(Base):
 
         return scenario
 
-    def copy(self, **overrides) -> "Session":
+    def copy(self, **overrides: Any) -> "Session":
         """
         Create a copy with no template link to the original scenario.
         """
         new_scenario = self.copy_with_preset(**overrides)
 
-        result = BreakPresetLinkRunner.run(BaseClient(), new_scenario)
+        result = BreakPresetLinkRunner.run(get_client(), new_scenario)
 
         if not result.success:
             raise ScenarioError(
@@ -201,7 +259,7 @@ class Session(Base):
         """
         Interpolate one or more sessions to create scenarios at target years.
         """
-        client = client or BaseClient()
+        client = client or get_client()
 
         session_list = sessions if isinstance(sessions, list) else [sessions]
 
@@ -209,8 +267,7 @@ class Session(Base):
         area_codes = [s.area_code for s in session_list]
         if len(set(area_codes)) > 1:
             raise ValueError(
-                f"All sessions must have the same area_code. "
-                f"Found: {set(area_codes)}"
+                f"All sessions must have the same area_code. Found: {set(area_codes)}"
             )
 
         # Validate no duplicate end years
@@ -222,8 +279,7 @@ class Session(Base):
         ]
         if duplicates:
             raise ValueError(
-                f"Sessions must have unique end_year values. "
-                f"Found duplicate(s): {duplicates}"
+                f"Sessions must have unique end_year values. Found duplicate(s): {duplicates}"
             )
 
         scenario_ids = [s.id for s in session_list]
@@ -235,17 +291,18 @@ class Session(Base):
             raise ScenarioError(f"Interpolation failed: {result.errors}")
 
         # Create Session instances from the response data
-        interpolated_sessions = []
-        for scenario_data in result.data:
-            scenario = cls.model_validate(scenario_data)
-            for warning in result.errors:
-                scenario.add_warning("base", warning)
-            interpolated_sessions.append(scenario)
+        interpolated_sessions: List[Session] = []
+        if result.data is not None:
+            for scenario_data in result.data:
+                scenario = cls.model_validate(scenario_data)
+                for warning in result.errors:
+                    scenario.add_warning("base", warning)
+                interpolated_sessions.append(scenario)
 
         return interpolated_sessions
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Session":
+    def from_excel(cls, xlsx_path: PathLike[str] | str) -> "Session":
         """Load a single scenario from Excel."""
         from pyetm.models.scenario_packer import ScenarioPacker
 
@@ -258,15 +315,15 @@ class Session(Base):
             )
         return scenarios[0]
 
-    def to_excel(self, path: PathLike | str, **export_options) -> None:
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
         """Export this scenario to Excel."""
         from pyetm.models.scenario_packer import ScenarioPacker
 
         packer = ScenarioPacker()
         packer.add(self)
-        packer.to_excel(path, **export_options)
+        packer.to_excel(str(path), **export_options)
 
-    def collect_export_data(self, **export_options):
+    def collect_export_data(self, **export_options: Any) -> ExportDataCollection:
         """Collect export data in format-agnostic structure."""
         from pyetm.models.scenario_packer import ScenarioPacker
 
@@ -275,8 +332,11 @@ class Session(Base):
         return packer.collect_export_data(**export_options)
 
     def save(
-        self, client: Optional[BaseClient] = None, title: Optional[str] = None, **kwargs
-    ):
+        self,
+        client: Optional[BaseClient] = None,
+        title: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         Save this scenario to MyETM as a SavedScenario.
 
@@ -285,7 +345,7 @@ class Session(Base):
         """
         from pyetm.models.scenario import Scenario
 
-        client = client or BaseClient()
+        client = client or get_client()
 
         save_title = title or self.title
         if not save_title:
@@ -293,22 +353,23 @@ class Session(Base):
                 "Title is required to save scenario. Provide title parameter or set scenario.title"
             )
 
-        params = {
-            "scenario_id": self.id,
-            "title": save_title,
+        private = kwargs.pop(
+            "private", self.private if self.private is not None else False
+        )
+
+        return Scenario.create(
+            title=save_title,
+            session_id=self.id,
+            client=client,
+            private=private,
             **kwargs,
-        }
+        )
 
-        if self.private is not None:
-            params.setdefault("private", self.private)
-
-        return Scenario.create(params, client=client)
-
-    def update_metadata(self, **kwargs) -> Dict[str, Any]:
+    def update_metadata(self, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """
         Update metadata for this scenario.
         """
-        result = UpdateMetadataRunner.run(BaseClient(), self, kwargs)
+        result = UpdateMetadataRunner.run(get_client(), self, kwargs)
 
         if not result.success:
             raise ScenarioError(f"Could not update metadata: {result.errors}")
@@ -330,23 +391,25 @@ class Session(Base):
 
         return result.data
 
-    def __eq__(self, other: "Session"):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Session):
+            return NotImplemented
         return self.id == other.id
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.id, self.area_code, self.end_year))
 
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
         """
         Return a single-column DataFrame describing this scenario.
 
-        The id field contains the ETEngine session ID.
-        The scenario_id field also contains the ETEngine session ID (for consistency with Scenario exports).
+        The session_id field contains the ETEngine session ID.
+        The saved_scenario_id field is None (sessions are not saved scenarios).
         """
         info: Dict[str, Any] = {
             "title": self.identifier(),
-            "id": self.id,
-            "scenario_id": self.id,  # Same as id, shows it's a session in mixed cases
+            "session_id": self.id,
+            "saved_scenario_id": None,
             "template_id": self.template_id,
             "area_code": self.area_code,
             "start_year": self.start_year,
@@ -372,7 +435,7 @@ class Session(Base):
         )
         return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
 
-    def set_short_name(self, short_name: str):
+    def set_short_name(self, short_name: str) -> None:
         """Set the short_name attribute and persist in metadata."""
         self.short_name = str(short_name)
         if self.metadata is not None:
@@ -380,7 +443,7 @@ class Session(Base):
         else:
             self.metadata = {"short_name": str(short_name)}
 
-    def identifier(self):
+    def identifier(self) -> Union[str, int]:
         if self.short_name:
             return self.short_name
         if self.title:
@@ -414,9 +477,12 @@ class Session(Base):
             return self._inputs
 
         # Otherwise fetch and cache
-        result = FetchInputsRunner.run(BaseClient(), self, defaults="original")
+        result = FetchInputsRunner.run(get_client(), self, defaults="original")
         if not result.success:
             raise ScenarioError(f"Could not retrieve inputs: {result.errors}")
+
+        if result.data is None:
+            raise ScenarioError("No data returned for inputs")
 
         coll = Inputs.from_json(result.data)
         # merge runner warnings and any item‐level warnings
@@ -439,7 +505,10 @@ class Session(Base):
             series.index.names or []
         ):
             series = series.droplevel("unit")
-        self.update_user_values(series.fillna("reset").to_dict())
+        user_values_dict: Dict[str, Any] = {
+            str(k): v for k, v in series.fillna("reset").to_dict().items()
+        }
+        self.update_user_values(user_values_dict)
 
     def update_user_values(
         self, update_inputs: Dict[str, Any], skip_upload: bool = False
@@ -454,7 +523,7 @@ class Session(Base):
             validity_errors = self.inputs.is_valid_update(update_inputs)
             self._handle_validity_errors(validity_errors, "user values")
 
-            result = UpdateInputsRunner.run(BaseClient(), self, update_inputs)
+            result = UpdateInputsRunner.run(get_client(), self, update_inputs)
 
             if not result.success:
                 raise ScenarioError(f"Could not update user values: {result.errors}")
@@ -469,7 +538,7 @@ class Session(Base):
             input_keys: List or set of input keys to reset to default values
         """
         reset_inputs = {key: "reset" for key in input_keys}
-        result = UpdateInputsRunner.run(BaseClient(), self, reset_inputs)
+        result = UpdateInputsRunner.run(get_client(), self, reset_inputs)
 
         if not result.success:
             raise ScenarioError(f"Could not remove inputs: {result.errors}")
@@ -482,9 +551,12 @@ class Session(Base):
         if self._sortables is not None:
             return self._sortables
 
-        result = FetchSortablesRunner.run(BaseClient(), self)
+        result = FetchSortablesRunner.run(get_client(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve sortables: {result.errors}")
+
+        if result.data is None:
+            raise ScenarioError("No data returned for sortables")
 
         coll = Sortables.from_json(result.data)
         for w in result.errors:
@@ -531,10 +603,10 @@ class Session(Base):
                 if name.startswith("heat_network_"):
                     subtype = name.replace("heat_network_", "")
                     result = UpdateSortablesRunner.run(
-                        BaseClient(), self, "heat_network", order, subtype=subtype
+                        get_client(), self, "heat_network", order, subtype=subtype
                     )
                 else:
-                    result = UpdateSortablesRunner.run(BaseClient(), self, name, order)
+                    result = UpdateSortablesRunner.run(get_client(), self, name, order)
 
                 if not result.success:
                     raise ScenarioError(
@@ -556,17 +628,17 @@ class Session(Base):
                 # Handle heat_network with subtype
                 subtype = name.replace("heat_network_", "")
                 result = UpdateSortablesRunner.run(
-                    BaseClient(), self, "heat_network", [], subtype=subtype
+                    get_client(), self, "heat_network", [], subtype=subtype
                 )
             else:
-                result = UpdateSortablesRunner.run(BaseClient(), self, name, [])
+                result = UpdateSortablesRunner.run(get_client(), self, name, [])
 
             if not result.success:
                 raise ScenarioError(
                     f"Could not remove sortable '{name}': {result.errors}"
                 )
 
-        reset_sortables = {name: [] for name in sortable_names}
+        reset_sortables: Dict[str, List[Any]] = {name: [] for name in sortable_names}
         self.sortables.update(reset_sortables)
 
     @property
@@ -574,11 +646,15 @@ class Session(Base):
         if self._custom_curves is not None:
             return self._custom_curves
 
-        result = FetchAllCustomCurveDataRunner.run(BaseClient(), self)
+        result = FetchAllCustomCurveDataRunner.run(get_client(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve custom_curves: {result.errors}")
 
-        coll = CustomCurves.from_json(result.data)
+        if result.data is None:
+            raise ScenarioError("No data returned for custom curves")
+
+        # FetchAllCustomCurveDataRunner returns data in the format expected by from_json
+        coll = CustomCurves.from_json(cast(list[dict[str, Any]], result.data))
         try:
             coll._scenario = self
         except Exception:
@@ -591,15 +667,20 @@ class Session(Base):
         self._custom_curves = coll
         return coll
 
-    def custom_curve_series(self, curve_name: str) -> pd.Series:
-        return self.custom_curves.get_contents(self, curve_name)
+    def custom_curve_series(self, curve_name: str) -> Optional[pd.Series[Any]]:
+        result = self.custom_curves.get_contents(self, curve_name)
+        if isinstance(result, pd.Series):
+            return result
+        return None
 
-    def custom_curves_series(self):
+    def custom_curves_series(self) -> Any:
         """Yield all Series"""
         for key in self.custom_curves.attached_keys():
             yield self.custom_curve_series(key)
 
-    def update_custom_curves(self, custom_curves, skip_upload: bool = False) -> None:
+    def update_custom_curves(
+        self, custom_curves: Any, skip_upload: bool = False
+    ) -> None:
         """
         Upload/update custom curves for this scenario.
 
@@ -613,7 +694,7 @@ class Session(Base):
             self._handle_validity_errors(validity_errors, "custom curves")
 
             # Upload curves
-            result = UpdateCustomCurvesRunner.run(BaseClient(), self, custom_curves)
+            result = UpdateCustomCurvesRunner.run(get_client(), self, custom_curves)
             if not result.success:
                 raise ScenarioError(f"Could not update custom curves: {result.errors}")
 
@@ -639,11 +720,11 @@ class Session(Base):
         self._hourly_output_curves = HourlyOutputCurves.create_empty_collection()
         return self._hourly_output_curves
 
-    def get_output_curve(self, curve_name: str) -> pd.DataFrame:
+    def get_output_curve(self, curve_name: str) -> Optional[pd.DataFrame]:
         """Get a single hourly output curve by name."""
         return self.hourly_output_curves.get_contents(self, curve_name)
 
-    def all_hourly_output_curves(self):
+    def all_hourly_output_curves(self) -> Any:
         for key in self.hourly_output_curves.attached_keys():
             yield self.get_output_curve(key)
 
@@ -663,17 +744,17 @@ class Session(Base):
         self._annual_exports = AnnualExports.create_empty_collection()
         return self._annual_exports
 
-    def get_annual_export(self, export_name: str) -> pd.DataFrame:
+    def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
         """Get a single annual export by name."""
-        return self.annual_exports.retrieve(BaseClient(), self, export_name)
+        return self.annual_exports.retrieve(get_client(), self, export_name)
 
     def get_annual_exports(
         self, export_names: AnnualExportType | list[AnnualExportType]
     ) -> dict[str, pd.DataFrame]:
         """Get multiple annual exports by name."""
-        validated_names = validate_export_names(export_names)
+        validated_names = validate_export_names(cast("str | list[str]", export_names))
         return self.annual_exports.retrieve_multiple(
-            BaseClient(), self, validated_names
+            get_client(), self, validated_names
         )
 
     def set_export_config(self, config: ExportConfig | None) -> None:
@@ -682,21 +763,25 @@ class Session(Base):
     def get_export_config(self) -> ExportConfig | None:
         return self._export_config
 
-    def add_queries(self, gquery_keys: list[str] | set[str]):
+    def add_queries(self, gquery_keys: list[str] | set[str]) -> None:
+        query_list = (
+            list(gquery_keys) if not isinstance(gquery_keys, list) else gquery_keys
+        )
         if self._queries is None:
-            self._queries = Gqueries.from_list(gquery_keys)
+            self._queries = Gqueries.from_list(query_list)
         else:
-            self._queries.add(*gquery_keys)
+            self._queries.add(*query_list)
 
-    def execute_queries(self):
+    def execute_queries(self) -> None:
         """
         Queries are executed explicitly, as we need to know when the user is
         ready collecting all of them
         """
-        self._queries.execute(BaseClient(), self)
-        self._merge_submodel_warnings(self._queries)
+        if self._queries is not None:
+            self._queries.execute(get_client(), self)
+            self._merge_submodel_warnings(self._queries)
 
-    def results(self, columns=None) -> pd.DataFrame:
+    def results(self, columns: Optional[Any] = None) -> pd.DataFrame:
         """
         Returns the results of the requested queries in a dataframe
         """
@@ -706,12 +791,30 @@ class Session(Base):
         if not self.queries_requested():
             return pd.DataFrame()
 
-        if not self._queries.is_ready():
-            self.execute_queries()
+        # Check if queries need to be executed (none have been executed yet)
+        if self._queries is not None:
+            # Only execute if NO queries have data yet (all are None)
+            has_any_results = any(
+                v is not None for v in self._queries.query_dict.values()
+            )
+            if not has_any_results:
+                self.execute_queries()
 
-        return self._queries.to_dataframe(columns=columns)
+            # Show warning for any failed queries
+            failed = [k for k, v in self._queries.query_dict.items() if v is None]
+            if failed:
+                print(f"WARNING: {len(failed)} query(ies) failed:")
+                # Get specific error messages from warnings
+                query_warnings = self._queries.warnings.get_by_field("results")
+                for w in query_warnings:
+                    print(f"  - {w.message}")
 
-    def queries_requested(self):
+        if self._queries is not None:
+            return self._queries.to_dataframe(columns=columns)
+
+        return pd.DataFrame()
+
+    def queries_requested(self) -> bool:
         """
         Returns True if queries have been requested
         """
@@ -769,9 +872,12 @@ class Session(Base):
         if self._couplings is not None:
             return self._couplings
 
-        result = FetchCouplingsRunner.run(BaseClient(), self)
+        result = FetchCouplingsRunner.run(get_client(), self)
         if not result.success:
             raise ScenarioError(f"Could not retrieve couplings: {result.errors}")
+
+        if result.data is None:
+            raise ScenarioError("No data returned for couplings")
 
         coll = Couplings.from_json(result.data)
         for w in result.errors:
@@ -786,14 +892,14 @@ class Session(Base):
     ) -> None:
 
         result = UpdateCouplingsRunner.run(
-            BaseClient(), self, coupling_groups, action, force
+            get_client(), self, coupling_groups, action, force
         )
 
         if not result.success:
             raise ScenarioError(f"Could not update couplings: {result.errors}")
 
         # Update the cached couplings with the response data
-        if self._couplings is not None:
+        if self._couplings is not None and result.data is not None:
             updated_couplings = Couplings.from_json(result.data)
             self._couplings = updated_couplings
 
@@ -804,10 +910,13 @@ class Session(Base):
         """
         Fetch all users with access to this scenario.
         """
-        result = ScenarioUsersIndexRunner.run(BaseClient(), self.id)
+        result = ScenarioUsersIndexRunner.run(get_client(), self.id)
 
         if not result.success:
             raise ScenarioError(f"Could not fetch users: {result.errors}")
+
+        if result.data is None:
+            return []
 
         for user in result.data:
             user["role"] = user["role"].replace("scenario_", "", 1)
@@ -879,21 +988,21 @@ class Session(Base):
 
     def _remove_user(self, email: str) -> None:
         result = ScenarioUsersDestroyRunner.run(
-            BaseClient(), self.id, [{"user_email": email}]
+            get_client(), self.id, [{"user_email": email}]
         )
         if not result.success:
             raise ScenarioError(f"Could not remove user: {result.errors}")
 
     def _update_user_role(self, email: str, role: str) -> None:
         result = ScenarioUsersUpdateRunner.run(
-            BaseClient(), self.id, [{"user_email": email, "role": role}]
+            get_client(), self.id, [{"user_email": email, "role": role}]
         )
         if not result.success:
             raise ScenarioError(f"Could not update user: {result.errors}")
 
     def _add_user(self, email: str, role: str) -> None:
         result = ScenarioUsersCreateRunner.run(
-            BaseClient(), self.id, [{"user_email": email, "role": role}]
+            get_client(), self.id, [{"user_email": email, "role": role}]
         )
         if not result.success:
             raise ScenarioError(f"Could not add user: {result.errors}")

@@ -1,3 +1,5 @@
+"""Service for update couplings operations."""
+
 from typing import Any, Dict, List, Union
 
 from pyetm.services.scenario_runners.base_runner import BaseRunner
@@ -20,6 +22,7 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
         coupling_groups: List[str],
         action: str = "couple",
         force: bool = False,
+        **kwargs: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update coupling groups for a scenario.
@@ -32,7 +35,7 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
             force: If True and action is "uncouple", force uncouple all groups
         """
         if action not in ["couple", "uncouple"]:
-            return ServiceResult.error(
+            return ServiceResult.fail(
                 errors=[f"Invalid action: {action}. Must be 'couple' or 'uncouple'"]
             )
 
@@ -46,7 +49,7 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
             client=client,
             method="post",
             path=f"/scenarios/{scenario.id}/{action}",
-            json=data,
+            payload=data,
         )
 
         if not result.success:
@@ -64,8 +67,8 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
         ]
 
         for key in coupling_keys:
-            if key in body:
-                coupling_data[key] = body[key]
+            if key in body:  # type: ignore[operator]
+                coupling_data[key] = body[key]  # type: ignore[index]
             else:
                 coupling_data[key] = None
                 warnings.append(f"Missing coupling field in response: {key!r}")

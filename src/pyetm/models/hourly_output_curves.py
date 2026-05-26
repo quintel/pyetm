@@ -1,12 +1,17 @@
+"""Hourly output curve data models."""
+
 from __future__ import annotations
 from functools import lru_cache
+import logging
 import pandas as pd
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 import os
 
 import yaml
-from pyetm.clients import BaseClient
+
+logger = logging.getLogger(__name__)
+from pyetm.clients import BaseClient, get_client
 from pyetm.models.base import Base
 from pyetm.models.warnings import WarningCollector
 from pyetm.config.settings import get_settings
@@ -44,52 +49,88 @@ class HourlyOutputCurve(Base):
     type: str
     file_path: Optional[Path] = None
 
+    @staticmethod
+    def _normalize_to_session(scenario: Any) -> Any:
+        """
+        Normalize scenario parameter to Session object to extract ETEngine session ID.
+
+        Args:
+            scenario: Either a Session object or a Scenario (SavedScenario) object
+
+        Returns:
+            Session object with the ETEngine session ID
+        """
+        # Import at function level to avoid circular imports
+        from pyetm.models.scenario import Scenario
+
+        # If it's a SavedScenario, extract the underlying Session
+        if isinstance(scenario, Scenario):
+            return scenario.session
+
+        # Otherwise assume it's already a Session
+        return scenario
+
     def available(self) -> bool:
         return bool(self.file_path)
 
     def retrieve(
-        self, client, scenario, force_refresh: bool = False
+        self, client: Any, scenario: Any, force_refresh: bool = False
     ) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
+        # Normalize to Session to get ETEngine session ID
+        session = self._normalize_to_session(scenario)
+
         file_path = (
-            get_settings().path_to_tmp(str(scenario.id))
-            / f"{self.key.replace('/','-')}.csv"
+            get_settings().path_to_tmp(str(session.id))
+            / f"{self.key.replace('/', '-')}.csv"
         )
 
         # Reuse a cached file if present unless explicitly refreshing.
         if not force_refresh and file_path.is_file():
             self.file_path = file_path
-            try:
-                return _read_csv_cached(self.file_path)
-            except Exception as e:
-                # Fall through to re-download on cache read failure
-                self.add_warning(
-                    "file_path",
-                    f"Failed to read cached curve file for {self.key}: {e}; refetching",
-                )
+            if self.file_path is not None:
+                try:
+                    return _read_csv_cached(self.file_path)
+                except Exception as e:
+                    # Fall through to re-download on cache read failure
+                    self.add_warning(
+                        "file_path",
+                        f"Failed to read cached curve file for {self.key}: {e}; refetching",
+                    )
         try:
-            result = DownloadHourlyOutputCurveRunner.run(client, scenario, self.key)
-            if result.success:
+            result = DownloadHourlyOutputCurveRunner.run(client, session, self.key)
+            if result.success and result.data is not None:
                 try:
                     result.data.seek(0)
                     df = pd.read_csv(result.data, index_col=0)
                     df_clean = df.dropna(how="all")
-                    df_clean.index = range(len(df_clean))
+                    df_clean.index = pd.RangeIndex(len(df_clean))
+                    # Create parent directory before saving
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    df_clean.to_csv(file_path, index=True)
+                    # Only set file_path after successful save
                     self.file_path = file_path
-                    df_clean.to_csv(self.file_path, index=True)
                     return df_clean
 
                 except Exception as e:
-                    self.add_warning(
-                        "data", f"Failed to process curve data for {self.key}: {e}"
-                    )
+                    error_msg = f"Failed to process curve data for {self.key}: {e}"
+                    self.add_warning("data", error_msg)
+                    logger.exception(error_msg)
                     return None
+            else:
+                # API call failed or returned no data
+                errors = (
+                    result.errors if hasattr(result, "errors") else ["Unknown error"]
+                )
+                error_msg = f"Failed to download curve {self.key}: {errors}"
+                self.add_warning("download", error_msg)
+                logger.error(error_msg)
+                return None
 
         except Exception as e:
-            # Unexpected error - add warning
-            self.add_warning(
-                "base", f"Unexpected error retrieving curve {self.key}: {e}"
-            )
+            error_msg = f"Unexpected error retrieving curve {self.key}: {e}"
+            self.add_warning("base", error_msg)
+            logger.exception(error_msg)
             return None
 
     def contents(self) -> Optional[pd.DataFrame]:
@@ -101,6 +142,9 @@ class HourlyOutputCurve(Base):
             return None
 
         try:
+            if self.file_path is None:
+                self.add_warning("file_path", f"Curve {self.key} has no file path set")
+                return None
             return _read_csv_cached(self.file_path)
         except Exception as e:
             self.add_warning(
@@ -110,7 +154,7 @@ class HourlyOutputCurve(Base):
 
     def remove(self) -> bool:
         """Remove file and clear path"""
-        if not self.available():
+        if not self.available() or self.file_path is None:
             return True
 
         try:
@@ -124,7 +168,7 @@ class HourlyOutputCurve(Base):
             return False
 
     @classmethod
-    def from_json(cls, data: dict) -> "HourlyOutputCurve":
+    def from_json(cls, data: dict[str, Any]) -> "HourlyOutputCurve":
         """
         Initialize a HourlyOutputCurve from JSON data
         """
@@ -149,10 +193,31 @@ class HourlyOutputCurves(Base):
 
     curves: list[HourlyOutputCurve]
 
+    @staticmethod
+    def _normalize_to_session(scenario: Any) -> Any:
+        """
+        Normalize scenario parameter to Session object to extract ETEngine session ID.
+
+        Args:
+            scenario: Either a Session object or a Scenario (SavedScenario) object
+
+        Returns:
+            Session object with the ETEngine session ID
+        """
+        # Import at function level to avoid circular imports
+        from pyetm.models.scenario import Scenario
+
+        # If it's a SavedScenario, extract the underlying Session
+        if isinstance(scenario, Scenario):
+            return scenario.session
+
+        # Otherwise assume it's already a Session
+        return scenario
+
     def __len__(self) -> int:
         return len(self.curves)
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         yield from iter(self.curves)
 
     def is_attached(self, curve_name: str) -> bool:
@@ -163,7 +228,10 @@ class HourlyOutputCurves(Base):
         """Returns the keys of attached curves."""
         return [curve.key for curve in self.curves]
 
-    def get_contents(self, scenario, curve_name: str) -> Optional[pd.DataFrame]:
+    def get_contents(self, scenario: Any, curve_name: str) -> Optional[pd.DataFrame]:
+        # Normalize to Session to get ETEngine session ID
+        session = self._normalize_to_session(scenario)
+
         curve = self._find(curve_name)
 
         if not curve:
@@ -173,7 +241,7 @@ class HourlyOutputCurves(Base):
         if not curve.available():
             # Try to attach a cached file from disk first
             expected_path = (
-                get_settings().path_to_tmp(str(scenario.id))
+                get_settings().path_to_tmp(str(session.id))
                 / f"{curve.key.replace('/', '-')}.csv"
             )
             if expected_path.is_file():
@@ -182,7 +250,7 @@ class HourlyOutputCurves(Base):
                 self._merge_submodel_warnings(curve, key_attr="key")
                 return contents
 
-            result = curve.retrieve(BaseClient(), scenario)
+            result = curve.retrieve(get_client(), session)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -192,7 +260,7 @@ class HourlyOutputCurves(Base):
 
     @staticmethod
     @lru_cache(maxsize=1)
-    def _load_carrier_mappings() -> dict:
+    def _load_carrier_mappings() -> dict[str, list[str]]:
         """Load carrier mappings from YAML config file"""
         config_path = (
             Path(__file__).parent.parent / "config" / "hourly_output_curve_mappings.yml"
@@ -200,23 +268,23 @@ class HourlyOutputCurves(Base):
         try:
             with open(config_path, "r") as file:
                 config = yaml.safe_load(file)
-                return config.get("carrier_mappings", {})
+                if config is not None and isinstance(config, dict):
+                    return cast(
+                        dict[str, list[str]], config.get("carrier_mappings", {})
+                    )
+                return {}
         except (FileNotFoundError, yaml.YAMLError):
             # Fallback to hardcoded mappings
-            return {
-                "electricity": ["merit_order", "electricity_price", "residual_load"],
-                "heat": [
-                    "heat_network",
-                    "agriculture_heat",
-                    "household_heat",
-                    "buildings_heat",
-                ],
-                "hydrogen": ["hydrogen", "hydrogen_integral_cost"],
+            result: dict[str, list[str]] = {
+                "electricity": ["merit_order"],
+                "heat": ["heat_network"],
+                "hydrogen": ["hydrogen"],
                 "methane": ["network_gas"],
             }
+            return result
 
     def get_curves_by_carrier_type(
-        self, scenario, carrier_type: str
+        self, scenario: Any, carrier_type: str
     ) -> dict[str, pd.DataFrame]:
         """
         Get all curves for a specific carrier type.
@@ -250,7 +318,7 @@ class HourlyOutputCurves(Base):
         return next((c for c in self.curves if c.key == curve_name), None)
 
     @classmethod
-    def from_json(cls, data: list[dict]) -> HourlyOutputCurves:
+    def from_json(cls, data: list[dict[str, Any]]) -> "HourlyOutputCurves":
         """
         Initialize HourlyOutputCurves collection from JSON data
         """
@@ -276,9 +344,14 @@ class HourlyOutputCurves(Base):
 
     @classmethod
     def from_service_result(
-        cls, service_result, scenario, cache_curves: bool = True
+        cls, service_result: Any, scenario: Any, cache_curves: bool = True
     ) -> "HourlyOutputCurves":
         """Create HourlyOutputCurves instance from service result"""
+        # Normalize to Session to get ETEngine session ID
+        from pyetm.models.scenario import Scenario
+
+        session = scenario.session if isinstance(scenario, Scenario) else scenario
+
         if not service_result.success or not service_result.data:
             empty_curves = cls(curves=[])
             for error in service_result.errors:
@@ -288,7 +361,7 @@ class HourlyOutputCurves(Base):
         curves_list = []
 
         if cache_curves:
-            cache_dir = get_settings().path_to_tmp(str(scenario.id))
+            cache_dir = get_settings().path_to_tmp(str(session.id))
             cache_dir.mkdir(parents=True, exist_ok=True)
 
         for curve_name, curve_data in service_result.data.items():
@@ -341,15 +414,22 @@ class HourlyOutputCurves(Base):
         return type_mapping.get(curve_name, "output_curve")
 
     @classmethod
-    def fetch_all(cls, scenario, cache_curves: bool = True) -> "HourlyOutputCurves":
+    def fetch_all(
+        cls, scenario: Any, cache_curves: bool = True
+    ) -> "HourlyOutputCurves":
         """
         Convenience method to fetch all carrier curves for a scenario.
         """
-        service_result = FetchAllHourlyOutputCurvesRunner.run(BaseClient(), scenario)
-        return cls.from_service_result(service_result, scenario, cache_curves)
+        # Normalize to Session to get ETEngine session ID
+        from pyetm.models.scenario import Scenario
+
+        session = scenario.session if isinstance(scenario, Scenario) else scenario
+
+        service_result = FetchAllHourlyOutputCurvesRunner.run(get_client(), session)
+        return cls.from_service_result(service_result, session, cache_curves)
 
     def _to_dataframe(
-        self, curves: Optional[list[str]] = None, **kwargs
+        self, curves: Optional[list[str]] = None, **kwargs: Any
     ) -> pd.DataFrame:
         """
         Serialize HourlyOutputCurves collection to DataFrame with multi-index format.

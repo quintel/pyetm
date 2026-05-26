@@ -1,3 +1,5 @@
+"""Service for fetch saved scenario operations."""
+
 from typing import Dict, Any
 from pyetm.services.scenario_runners.base_runner import BaseRunner, ScenarioIdentifier
 from ..service_result import ServiceResult
@@ -22,8 +24,7 @@ class FetchSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient,
-        saved_scenario: ScenarioIdentifier,
+        client: BaseClient, saved_scenario: ScenarioIdentifier, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Fetch a single SavedScenario by ID.
@@ -49,8 +50,27 @@ class FetchSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
                     )
             return result
 
+        if result.data is None:
+            return ServiceResult.fail(["No data returned from API"])
+
+        # Check if the API returned an error payload in a successful response
+        # MyETM API sometimes returns 200 OK with {"errors": [...], "scenario": null}
+        if isinstance(result.data, dict) and "errors" in result.data:
+            errors = result.data.get("errors", [])
+            if errors:
+                # Check for "not found" errors
+                for error in errors:
+                    if isinstance(error, str) and "not found" in error.lower():
+                        return ServiceResult.fail(
+                            [f"SavedScenario {saved_scenario.id} not found on this environment"]
+                        )
+                # Return generic failure with the error messages
+                return ServiceResult.fail(errors if isinstance(errors, list) else [str(errors)])
+
         _, warnings = FetchSavedScenarioRunner._validate_response_keys(
-            result.data, FetchSavedScenarioRunner.REQUIRED_KEYS, fill_missing=False
+            result.data,
+            FetchSavedScenarioRunner.REQUIRED_KEYS,
+            fill_missing=False,
         )
 
         return ServiceResult.ok(data=result.data, errors=warnings)

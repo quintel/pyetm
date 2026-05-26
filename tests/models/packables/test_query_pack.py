@@ -8,9 +8,9 @@ def make_scenario(id_val="S"):
     s = Mock()
     s.identifier = Mock(return_value=str(id_val))
     s.results = Mock(
-        return_value=pd.DataFrame(
-            {"future": [1], "unit": ["MW"]}, index=["q1"]
-        ).set_index("unit", append=True).rename_axis(("gquery", "unit"))
+        return_value=pd.DataFrame({"future": [1], "unit": ["MW"]}, index=["q1"])
+        .set_index("unit", append=True)
+        .rename_axis(("gquery", "unit"))
     )
     s.add_queries = Mock()
     return s

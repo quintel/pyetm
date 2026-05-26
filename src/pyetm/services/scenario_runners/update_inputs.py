@@ -1,3 +1,5 @@
+"""Service for updating inputs on a session."""
+
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -9,12 +11,6 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
     Runner for updating inputs on a scenario through the main scenario endpoint.
 
     PUT /api/v3/scenarios/{scenario_id}
-
-    Args:
-        client: The HTTP client to use
-        scenario: The scenario object (must have an 'id' attribute)
-        inputs: Dictionary of input updates to apply (input_key -> value)
-        **kwargs: Additional arguments passed to the request
     """
 
     @staticmethod
@@ -33,15 +29,21 @@ class UpdateInputsRunner(BaseRunner[Dict[str, Any]]):
             "method": "put",
             "path": f"/scenarios/{scenario.id}",
             "payload": {"scenario": {"user_values": inputs}},
-            "kwargs": {}
+            "kwargs": {},
         }
 
     @staticmethod
     def run(
-        client: BaseClient, scenario: Any, inputs: Dict[str, Any], **kwargs
+        client: BaseClient, scenario: Any, inputs: Dict[str, Any], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update inputs for a scenario.
+
+        Args:
+            client: The HTTP client to use
+            scenario: The scenario object (must have an 'id' attribute)
+            inputs: Dictionary of input updates to apply (input_key -> value)
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = UpdateInputsRunner.run(

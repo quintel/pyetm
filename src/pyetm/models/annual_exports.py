@@ -1,6 +1,8 @@
+"""Annual export data models and configurations."""
+
 from __future__ import annotations
 import pandas as pd
-from typing import Optional
+from typing import Any, Optional
 from pydantic import ConfigDict
 
 from pyetm.clients import BaseClient
@@ -8,7 +10,6 @@ from pyetm.models.base import Base
 from pyetm.services.scenario_runners.fetch_annual_exports import (
     DownloadAnnualExportRunner,
 )
-
 
 # Available annual export types - see https://docs.energytransitionmodel.com/api/exports
 ANNUAL_EXPORT_TYPES = [
@@ -41,7 +42,7 @@ class AnnualExport(Base):
         return self.data is not None
 
     def retrieve(
-        self, client: BaseClient, scenario, force_refresh: bool = False
+        self, client: BaseClient, scenario: Any, force_refresh: bool = False
     ) -> Optional[pd.DataFrame]:
         """Fetch export data from API"""
         # Return cached data unless explicitly refreshing
@@ -53,7 +54,15 @@ class AnnualExport(Base):
             if result.success and result.data:
                 try:
                     result.data.seek(0)
-                    df = pd.read_csv(result.data)
+                    df = pd.read_csv(result.data, index_col=0)
+
+                    if df.notna().sum().sum() == 0 and len(df) > 0:
+                        self.add_warning(
+                            "data",
+                            f"CSV parsing resulted in all NaN values for {self.name}.",
+                        )
+                        return None
+
                     # Clean up any completely empty rows
                     df_clean = df.dropna(how="all")
                     self.data = df_clean
@@ -106,7 +115,7 @@ class AnnualExports(Base):
     def __len__(self) -> int:
         return len(self.exports)
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         """Iterate over export objects"""
         yield from self.exports.values()
 
@@ -134,7 +143,7 @@ class AnnualExports(Base):
         return contents
 
     def retrieve(
-        self, client: BaseClient, scenario, name: str, force_refresh: bool = False
+        self, client: BaseClient, scenario: Any, name: str, force_refresh: bool = False
     ) -> Optional[pd.DataFrame]:
         """
         Retrieve a specific export by name.
@@ -150,7 +159,7 @@ class AnnualExports(Base):
     def retrieve_multiple(
         self,
         client: BaseClient,
-        scenario,
+        scenario: Any,
         names: list[str],
         force_refresh: bool = False,
     ) -> dict[str, pd.DataFrame]:
@@ -165,7 +174,7 @@ class AnnualExports(Base):
         return results
 
     def _to_dataframe(
-        self, exports: Optional[list[str]] = None, **kwargs
+        self, exports: Optional[list[str]] = None, **kwargs: Any
     ) -> pd.DataFrame:
         """
         Serialize AnnualExports collection to DataFrame with multi-index format.
@@ -202,10 +211,13 @@ class AnnualExports(Base):
                         "export_name", append=True
                     )
                     # Reorder index levels so export_name is first
+                    remaining_names: list[str] = [
+                        str(n) for n in export_df_copy.index.names if n != "export_name"
+                    ]
                     export_df_copy = export_df_copy.reorder_levels(
-                        ["export_name"]
-                        + [n for n in export_df_copy.index.names if n != "export_name"]
+                        ["export_name"] + remaining_names
                     )
+
                     dataframes_to_concat.append(export_df_copy)
 
             except Exception as e:

@@ -1,4 +1,4 @@
-# Setting up everything for you!
+"""Helper functions for example notebooks."""
 
 
 def setup_logging(level="WARNING"):
@@ -34,9 +34,7 @@ def setup_logging(level="WARNING"):
         handler.setLevel(getattr(logging, level.upper()))
 
         # Create formatter
-        formatter = logging.Formatter(
-            "%(levelname)s [%(name)s.%(module)s]: %(message)s"
-        )
+        formatter = logging.Formatter("%(levelname)s [%(name)s.%(module)s]: %(message)s")
         handler.setFormatter(formatter)
 
         logger.addHandler(handler)
@@ -129,9 +127,7 @@ def setup_notebook(debug=False, logging_level="WARNING"):
 
                         if isinstance(obj, pd.DataFrame):
                             cols = [str(c) for c in obj.columns]
-                            preview = ", ".join(cols[:8]) + (
-                                "…" if len(cols) > 8 else ""
-                            )
+                            preview = ", ".join(cols[:8]) + ("…" if len(cols) > 8 else "")
                             meta = f" — 0 rows, {obj.shape[1]} columns"
                             extra = f" (columns: {escape(preview)})" if cols else ""
                             msg = f"Empty DataFrame{meta}{extra}"
@@ -158,11 +154,7 @@ def setup_notebook(debug=False, logging_level="WARNING"):
         _orig_print = builtins.print
 
         def _smart_print(*args, **kwargs):
-            if (
-                len(args) == 1
-                and not kwargs
-                and isinstance(args[0], (pd.DataFrame, pd.Series))
-            ):
+            if len(args) == 1 and not kwargs and isinstance(args[0], (pd.DataFrame, pd.Series)):
                 show(args[0])
             else:
                 _orig_print(*args, **kwargs)

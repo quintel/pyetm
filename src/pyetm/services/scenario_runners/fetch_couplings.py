@@ -1,3 +1,5 @@
+"""Service for fetch couplings operations."""
+
 from typing import Any, Dict
 
 from pyetm.services.scenario_runners.base_runner import BaseRunner
@@ -18,10 +20,7 @@ class FetchCouplingsRunner(BaseRunner[Dict[str, Any]]):
     ]
 
     @staticmethod
-    def run(
-        client: BaseClient,
-        scenario: Any,
-    ) -> ServiceResult[Dict[str, Any]]:
+    def run(client: BaseClient, scenario: Any, **kwargs: Any) -> ServiceResult[Dict[str, Any]]:
         result = FetchCouplingsRunner._make_request(
             client=client, method="get", path=f"/scenarios/{scenario.id}"
         )
@@ -35,8 +34,8 @@ class FetchCouplingsRunner(BaseRunner[Dict[str, Any]]):
         warnings: list[str] = []
 
         for key in FetchCouplingsRunner.COUPLING_KEYS:
-            if key in body:
-                coupling_data[key] = body[key]
+            if key in body:  # type: ignore[operator]
+                coupling_data[key] = body[key]  # type: ignore[index]
             else:
                 # non-breaking: warning for missing coupling data
                 coupling_data[key] = None

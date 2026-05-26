@@ -1,3 +1,5 @@
+"""Service for updating an existing saved scenario."""
+
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -9,12 +11,6 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for updating a SavedScenario in MyETM.
 
     PUT /api/v3/saved_scenarios/:id
-
-    Args:
-        client: The HTTP client to use
-        saved_scenario_id: ID of the SavedScenario to update
-        update_data: Dictionary with fields to update (title, private, discarded)
-        **kwargs: Additional arguments passed to the request
     """
 
     ALLOWED_KEYS = ["title", "scenario_id", "private", "discarded"]
@@ -24,10 +20,16 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
         client: BaseClient,
         saved_scenario_id: int,
         update_data: Dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Update an existing SavedScenario in MyETM.
+
+        Args:
+            client: The HTTP client to use
+            saved_scenario_id: ID of the SavedScenario to update
+            update_data: Dictionary with fields to update (title, private, discarded)
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = UpdateSavedScenarioRunner.run(
@@ -65,6 +67,7 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
         if result.success and warnings:
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

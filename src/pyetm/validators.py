@@ -4,7 +4,9 @@ This module provides validation functionsthat raise clear ValueError exceptions
 when invalid curve types, carrier types, or export names are provided.
 """
 
-from typing import TypeVar, get_args
+from __future__ import annotations
+
+from typing import TypeVar, get_args, Any, cast
 from pydantic import TypeAdapter, ValidationError
 from pyetm.types import AnnualExportType, CarrierType, HourlyCurveType
 
@@ -13,10 +15,10 @@ T = TypeVar("T")
 
 def _validate_literal_type(
     value: str | list[str],
-    literal_type: type[T],
+    literal_type: Any,  # Accept Literal type aliases
     error_label: str,
     singular: bool = False,
-) -> str | list[str]:
+) -> Any:
     """Generic helper to validate values against a Literal type."""
     if singular:
         values_to_validate = value
@@ -47,16 +49,21 @@ def _validate_literal_type(
 
 def validate_carrier_type(carrier_type: str) -> str:
     """Validate that carrier_type is a valid carrier type."""
-    return _validate_literal_type(
-        carrier_type, CarrierType, "carrier type", singular=True
+    return cast(
+        str,
+        _validate_literal_type(carrier_type, CarrierType, "carrier type", singular=True),
     )
 
 
 def validate_export_names(export_names: str | list[str]) -> list[str]:
     """Validate and normalize export names."""
-    return _validate_literal_type(export_names, AnnualExportType, "export names")
+    return cast(
+        list[str], _validate_literal_type(export_names, AnnualExportType, "export names")
+    )
 
 
 def validate_hourly_curve_names(curve_names: str | list[str]) -> list[str]:
     """Validate and normalize hourly curve names."""
-    return _validate_literal_type(curve_names, HourlyCurveType, "curve names")
+    return cast(
+        list[str], _validate_literal_type(curve_names, HourlyCurveType, "curve names")
+    )

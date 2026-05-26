@@ -1,6 +1,8 @@
+"""Input packing utilities for batch scenario operations."""
+
 import logging
 from typing import ClassVar, Dict, Any, List, Optional
-from openpyxl import Workbook
+from openpyxl import Workbook  # type: ignore[import-untyped]
 import pandas as pd
 import numpy as np
 from pyetm.models.packables.packable import Packable
@@ -62,18 +64,25 @@ class InputsPack(Packable):
             else pd.DataFrame()
         )
 
-    def _to_dataframe(self, fields="value", **kwargs):
+    def _to_dataframe(self, columns: Any = "value", **kwargs: Any) -> pd.DataFrame:
+        """Internal dataframe generation matching parent signature."""
+        # Map 'columns' parameter from parent to 'fields' for our implementation
+        # TODO: FIX COLUMNS V FIELDS
+        fields = columns if columns != "value" else "value"
         return self.to_dataframe(fields=fields)
 
     def add_to_workbook(
         self,
-        workbook: Workbook,
-        include_defaults: bool = False,
-        include_min_max: bool = False,
-        sheet_name: str = None,
-    ):
+        workbook: Any,
+        sheet_name: Optional[str] = "SLIDER_SETTINGS",
+        **kwargs: Any,
+    ) -> None:
         """Add inputs sheet with proper field handling. Optionally override sheet name."""
-        name = sheet_name if sheet_name else self.sheet_name
+        # Extract our specific parameters from kwargs
+        include_defaults = kwargs.get("include_defaults", False)
+        include_min_max = kwargs.get("include_min_max", False)
+
+        name = sheet_name or "SLIDER_SETTINGS"
         df = self.to_dataframe(
             include_defaults=include_defaults, include_min_max=include_min_max
         )
@@ -85,12 +94,12 @@ class InputsPack(Packable):
             )
             self._add_dataframe_to_workbook(workbook, name, df)
 
-    def from_dataframe(self, df, update_set: set[str] = None):
+    def from_dataframe(self, df: Any, update_set: Optional[set[str]] = None) -> None:
         """Import input values from DataFrame."""
         if df is None or getattr(df, "empty", False):
             return
 
-        skip_upload = not self._should_include_upload(update_set)
+        skip_upload = not self._should_include_upload(update_set or set())
 
         try:
             # Extract grid data using base class helper

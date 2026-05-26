@@ -93,7 +93,7 @@ def full_export_data(
     config = ExportConfig(
         include_inputs=True,
         include_custom_curves=True,
-        output_carriers=["electricity"],
+        hourly_curves=["electricity"],
         include_annual_exports=["energy_flow"],
     )
 
@@ -480,7 +480,7 @@ class TestMultiIndexConversion:
     def test_nested_dataframes_with_multiindex(self):
         """Test that nested DataFrames (hourly_output_curves, annual_exports) handle MultiIndex"""
         config = ExportConfig(
-            output_carriers=["electricity"], include_annual_exports=["energy_flow"]
+            hourly_curves=["electricity"], include_annual_exports=["energy_flow"]
         )
 
         main_info = pd.DataFrame({"scenario_5": ["Test"]}, index=["title"])

@@ -1,3 +1,5 @@
+"""Service for update custom curves operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -8,9 +10,7 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
     """Runner for uploading custom curves to a scenario."""
 
     @staticmethod
-    def build_requests(
-        scenario: Any, custom_curves: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    def build_requests(scenario: Any, custom_curves: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Build custom curve upload requests for concurrent batching.
 
@@ -68,7 +68,7 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario: Any, custom_curves: Any, **kwargs
+        client: BaseClient, scenario: Any, custom_curves: Any, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         requests = []
         curve_keys = []

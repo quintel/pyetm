@@ -1,5 +1,7 @@
+"""Annual exports packing utilities."""
+
 import logging
-from typing import ClassVar, Any, Optional, Sequence
+from typing import ClassVar, Any, Optional, Sequence, List, Tuple
 import pandas as pd
 from pyetm.models.packables.packable import Packable
 
@@ -16,13 +18,57 @@ class AnnualExportsPack(Packable):
     key: ClassVar[str] = "annual_exports"
     sheet_name: ClassVar[str] = "ANNUAL_EXPORTS"
 
+    @classmethod
+    def validate_export_types(
+        cls, export_types: List[str]
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Validate annual export type names.
+
+        Args:
+            export_types: List of export type names to validate
+
+        Returns:
+            Tuple of (valid_types, warnings)
+            - valid_types: List of validated export type names
+            - warnings: List of warning messages for invalid entries
+        """
+        if not export_types:
+            return [], []
+
+        # Import the valid export types from the annual_exports model
+        from pyetm.models.annual_exports import ANNUAL_EXPORT_TYPES
+
+        valid_export_types = set(ANNUAL_EXPORT_TYPES)
+
+        # Validate each entry
+        valid_types = []
+        warnings = []
+
+        for export_type in export_types:
+            export_type_str = str(export_type).strip()
+            if not export_type_str:
+                continue
+
+            if export_type_str in valid_export_types:
+                valid_types.append(export_type_str)
+            else:
+                # Invalid entry - create helpful warning message
+                warning = (
+                    f"Invalid annual export type '{export_type_str}'. "
+                    f"Valid types: {', '.join(sorted(valid_export_types))}."
+                )
+                warnings.append(warning)
+
+        return valid_types, warnings
+
     def _build_dataframe_for_scenario(
         self,
         scenario: Any,
         columns: str = "",
         exports: Optional[Sequence[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> Optional[pd.DataFrame]:
         """
         Build a DataFrame for one scenario by delegating to the model's to_dataframe() method.
 
@@ -35,7 +81,7 @@ class AnnualExportsPack(Packable):
                 return None
 
             # Fetch the requested exports from the API
-            if hasattr(scenario, 'get_annual_export') and exports:
+            if hasattr(scenario, "get_annual_export") and exports:
                 try:
                     for export_name in exports:
                         try:
@@ -72,23 +118,53 @@ class AnnualExportsPack(Packable):
         """
         Build a dict organized by export type, then by scenario.
 
-        Returns dict[export_name][scenario_id] = DataFrame for that export and scenario.
+        Returns:
+            Dictionary with structure: dict\\[export_name\\]\\[scenario_id\\] = DataFrame,
+            where export_name is the export type and scenario_id is the scenario identifier.
         """
-        result = {}
+        # First pass: collect data with temporary keys
+        temp_result: dict[str, dict[str, tuple[Any, pd.DataFrame]]] = {}
+        scenario_keys: dict[str, list[Any]] = {}  # Maps key -> list of scenarios
+
+        if exports:
+            logger.debug(
+                "Requesting annual exports %s for %d scenarios",
+                exports,
+                len(self.scenarios),
+            )
+
+        fetch_stats = {"requested": 0, "succeeded": 0, "failed": 0}
 
         for scenario in self.scenarios:
             try:
                 scenario_key = self._key_for(scenario)
 
                 # Fetch the requested exports from the API
-                if hasattr(scenario, 'get_annual_export') and exports:
+                if hasattr(scenario, "get_annual_export") and exports:
                     try:
                         for export_name in exports:
+                            fetch_stats["requested"] += 1
                             try:
-                                scenario.get_annual_export(export_name)
+                                result_df = scenario.get_annual_export(export_name)
+                                if result_df is not None and not result_df.empty:
+                                    fetch_stats["succeeded"] += 1
+                                    logger.debug(
+                                        "Retrieved export '%s' for scenario %s: %d rows",
+                                        export_name,
+                                        scenario.identifier(),
+                                        len(result_df),
+                                    )
+                                else:
+                                    fetch_stats["failed"] += 1
+                                    logger.info(
+                                        "Export '%s' returned no data for scenario %s - this export may not be available for this scenario",
+                                        export_name,
+                                        scenario.identifier(),
+                                    )
                             except Exception as e:
+                                fetch_stats["failed"] += 1
                                 logger.warning(
-                                    "Failed to fetch export %s for scenario %s: %s",
+                                    "Failed to fetch export '%s' for scenario %s: %s. Check if the scenario has this export available.",
                                     export_name,
                                     scenario.identifier(),
                                     e,
@@ -97,18 +173,27 @@ class AnnualExportsPack(Packable):
                         # Handle case where exports isn't iterable
                         pass
 
-                # Get multi-index dataframe from model
-                df = scenario.annual_exports.to_dataframe(exports=exports)
+                # Directly access export contents instead of using to_dataframe()
+                # to_dataframe() concatenates all exports with outer join, causing NaN proliferation
+                exports_to_process = (
+                    exports if exports else scenario.annual_exports.exports.keys()
+                )
 
-                if df is None or df.empty:
-                    continue
+                # Track scenarios by their keys for duplicate detection
+                if scenario_key not in scenario_keys:
+                    scenario_keys[scenario_key] = []
+                scenario_keys[scenario_key].append(scenario)
 
-                for export_name in df.index.get_level_values("export_name").unique():
-                    export_df = df.xs(export_name, level="export_name")
+                for export_name in exports_to_process:
+                    if export_name in scenario.annual_exports.exports:
+                        export_obj = scenario.annual_exports.exports[export_name]
+                        export_df = export_obj.contents()
 
-                    if export_name not in result:
-                        result[export_name] = {}
-                    result[export_name][scenario_key] = export_df
+                        if export_df is not None and not export_df.empty:
+                            if export_name not in temp_result:
+                                temp_result[export_name] = {}
+                            # Store both scenario object and dataframe for deduplication
+                            temp_result[export_name][scenario_key] = (scenario, export_df)
 
             except Exception as e:
                 logger.warning(
@@ -117,6 +202,63 @@ class AnnualExportsPack(Packable):
                     e,
                 )
                 continue
+
+        # Second pass: deduplicate scenario keys and build final result
+        result: dict[str, dict[str, pd.DataFrame]] = {}
+
+        # Build mapping of old keys to new deduplicated keys
+        key_mapping: dict[str, dict[Any, str]] = {}  # Maps original_key -> {scenario: deduplicated_key}
+
+        for original_key, scenarios_list in scenario_keys.items():
+            if len(scenarios_list) == 1:
+                # No duplicates, use original key
+                key_mapping[original_key] = {scenarios_list[0]: original_key}
+            else:
+                # Duplicates found, append IDs
+                key_mapping[original_key] = {}
+                for scen in scenarios_list:
+                    deduplicated_key = f"{original_key} ({scen.id})"
+                    key_mapping[original_key][scen] = deduplicated_key
+                    logger.debug(
+                        "Duplicate scenario key '%s' renamed to '%s' for scenario %s",
+                        original_key,
+                        deduplicated_key,
+                        scen.identifier(),
+                    )
+
+        # Apply deduplication to temp_result
+        for export_name, scenarios_data in temp_result.items():
+            result[export_name] = {}
+            for original_key, (scenario, df) in scenarios_data.items():
+                deduplicated_key = key_mapping[original_key][scenario]
+                result[export_name][deduplicated_key] = df
+
+        # Log summary
+        if exports:
+            logger.info(
+                "Annual exports fetch complete: %d/%d succeeded, %d failed",
+                fetch_stats["succeeded"],
+                fetch_stats["requested"],
+                fetch_stats["failed"],
+            )
+
+            if (
+                fetch_stats["failed"] == fetch_stats["requested"]
+                and fetch_stats["requested"] > 0
+            ):
+                logger.warning(
+                    "All annual export retrievals failed. Possible causes: "
+                    "(1) Scenarios don't have export data available, "
+                    "(2) API connection issues, "
+                    "(3) Invalid export names requested"
+                )
+
+        if not result and exports:
+            logger.warning(
+                "No annual export data collected despite requesting %s. "
+                "Check if the scenarios have this data available in the ETM.",
+                exports,
+            )
 
         return result
 
@@ -127,7 +269,7 @@ class AnnualExportsPack(Packable):
         Each export type becomes a separate worksheet.
         Within each worksheet, scenarios are concatenated with a scenario identifier column.
         """
-        from xlsxwriter import Workbook
+        from xlsxwriter import Workbook  # type: ignore[import-untyped]
         from pyetm.utils import excel_utils
 
         if not self.scenarios:

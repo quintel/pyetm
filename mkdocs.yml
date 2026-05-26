@@ -1,0 +1,120 @@
+site_name: pyetm Documentation
+site_description: Python client library for the Energy Transition Model API
+site_author: Quintel Intelligence
+site_url: https://github.com/quintel/pyetm
+repo_url: https://github.com/quintel/pyetm
+repo_name: quintel/pyetm
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/pyetm_logo.png
+  favicon: assets/pyetm_logo.png
+  palette:
+    # Palette toggle for light mode
+    - scheme: default # TODO: Update to ETM colours?
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            docstring_section_style: table
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            show_bases: true
+            show_inheritance_diagram: false
+            members_order: source
+            group_by_category: true
+            show_category_heading: true
+            show_if_no_docstring: false
+            annotations_path: brief
+            line_length: 100
+            separate_signature: true
+            merge_init_into_class: true
+            signature_crossrefs: true
+            show_warnings: false
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - attr_list
+  - md_in_html
+  - tables
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+  - User Guide:
+    - Overview: user-guide/index.md
+    - Working with Excel: user-guide/excel.md
+    - Working with Scenarios: user-guide/scenarios.md
+    - Sessions and Authentication: user-guide/management.md
+    - Submodels: user-guide/submodels.md
+  - API Reference: api/
+  - Contributing:
+    - Guide: contributing/guide.md
+    - Development: contributing/development.md
+    - Testing: contributing/testing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/quintel/pyetm
+    - icon: fontawesome/solid/globe
+      link: https://energytransitionmodel.com
+
+copyright: Copyright &copy; 2026 Quintel Intelligence

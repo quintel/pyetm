@@ -75,9 +75,7 @@ def test_config_loads_env_file_values(clean_settings_env):
 # Test environment variables override .env file
 def test_env_vars_override_env_file(clean_settings_env, monkeypatch):
     env_file = clean_settings_env
-    write_env_file(
-        env_file, {"ETM_API_TOKEN": "etm_from.env.file", "LOG_LEVEL": "DEBUG"}
-    )
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_from.env.file", "LOG_LEVEL": "DEBUG"})
 
     # ENV var should override file
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
@@ -91,16 +89,12 @@ def test_env_vars_override_env_file(clean_settings_env, monkeypatch):
 # Test base_url inference from environment
 def test_base_url_inference_from_environment(clean_settings_env):
     env_file = clean_settings_env
-    write_env_file(
-        env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ENVIRONMENT": "beta"}
-    )
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ENVIRONMENT": "beta"})
 
     config = AppConfig()
 
     assert config.environment == "beta"
-    assert config.base_url == HttpUrl(
-        "https://beta.engine.energytransitionmodel.com/api/v3"
-    )
+    assert config.base_url == HttpUrl("https://beta.engine.energytransitionmodel.com/api/v3")
 
 
 # Test no .env file, only environment variables
@@ -132,8 +126,7 @@ def test_optional_token_no_error(clean_settings_env, caplog):
 
     # Should have logged a warning
     assert any(
-        "No ETM_API_TOKEN provided" in record.message
-        and "public scenarios" in record.message
+        "No ETM_API_TOKEN provided" in record.message and "public scenarios" in record.message
         for record in caplog.records
     )
 

@@ -1,3 +1,5 @@
+"""Service for create scenario operations."""
+
 from typing import Any, Dict
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -9,11 +11,6 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for creating a new scenario.
 
     POST /api/v3/scenarios
-
-    Args:
-        client: The HTTP client to use
-        scenario_data: Dictionary of scenario attributes for creation
-        **kwargs: Additional arguments passed to the request
     """
 
     # Required fields for scenario creation
@@ -37,10 +34,15 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario_data: Dict[str, Any], **kwargs
+        client: BaseClient, scenario_data: Dict[str, Any], **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Create a new scenario.
+
+        Args:
+            client: The HTTP client to use
+            scenario_data: Dictionary of scenario attributes for creation
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = CreateScenarioRunner.run(
@@ -93,6 +95,7 @@ class CreateScenarioRunner(BaseRunner[Dict[str, Any]]):
         if result.success and warnings:
             # Merge our warnings with any from the API call
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

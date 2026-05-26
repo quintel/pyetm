@@ -1,3 +1,5 @@
+"""Service for saved scenario users create operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -9,18 +11,6 @@ class SavedScenarioUsersCreateRunner(BaseRunner[List[Dict[str, Any]]]):
     Runner for adding users to a SavedScenario.
 
     POST /api/v3/saved_scenarios/:saved_scenario_id/users
-
-    Args:
-        client: The HTTP client to use
-        saved_scenario_id: ID of the SavedScenario
-        users: List of user objects to add, each containing:
-            - user_email: Email address (required)
-            - role: User role - scenario_owner, scenario_collaborator, or scenario_viewer (required)
-            - user_id: ID of existing user (optional, will be auto-coupled if email matches)
-        **kwargs: Additional arguments passed to the request
-
-    Returns:
-        ServiceResult containing list of created user objects
 
     Note:
         When a user is added to a saved scenario, they are also automatically added to:
@@ -35,10 +25,22 @@ class SavedScenarioUsersCreateRunner(BaseRunner[List[Dict[str, Any]]]):
         client: BaseClient,
         saved_scenario_id: int,
         users: List[Dict[str, Any]],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[List[Dict[str, Any]]]:
         """
         Add users to a saved scenario with specified roles.
+
+        Args:
+            client: The HTTP client to use
+            saved_scenario_id: ID of the SavedScenario
+            users: List of user objects to add, each containing:
+                - user_email: Email address (required)
+                - role: User role - scenario_owner, scenario_collaborator, or scenario_viewer (required)
+                - user_id: ID of existing user (optional, will be auto-coupled if email matches)
+            **kwargs: Additional arguments passed to the request
+
+        Returns:
+            ServiceResult containing list of created user objects
         """
         if not users:
             return ServiceResult.fail(["No users provided"])

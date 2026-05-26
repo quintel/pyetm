@@ -1,11 +1,16 @@
+"""Session management utilities."""
+
 from __future__ import annotations
 from os import PathLike
 from pathlib import Path
-from typing import Iterable, Iterator, List
+from typing import Any, Iterable, Iterator, List, Optional, Union, cast, TYPE_CHECKING
 from pydantic import Field
 from pyetm.models.base import Base
+from pyetm.clients import BaseClient
 from .session import Session, ScenarioError
-from pathlib import Path
+
+if TYPE_CHECKING:
+    from pyetm.models.scenario import Scenario
 
 
 class Sessions(Base):
@@ -15,7 +20,7 @@ class Sessions(Base):
 
     items: List[Session] = Field(default_factory=list)
 
-    def __iter__(self) -> Iterator[Session]:
+    def __iter__(self) -> Iterator[Session]:  # type: ignore[override]
         return iter(self.items)
 
     def __len__(self) -> int:
@@ -31,11 +36,17 @@ class Sessions(Base):
         self.items.extend(list(scenarios))
 
     @classmethod
-    def load_many(cls, scenario_ids: Iterable[int]) -> "Sessions":
+    def load_many(cls, scenario_ids: Iterable[int], client: Optional[BaseClient] = None) -> "Sessions":
+        """Load multiple Session objects by their ETEngine session IDs.
+
+        Args:
+            scenario_ids: Iterable of ETEngine session IDs to load
+            client: Optional BaseClient instance for API communication
+        """
         scenarios = []
         for sid in scenario_ids:
             try:
-                scenarios.append(Session.load(sid))
+                scenarios.append(Session.load(sid, client=client))
             except ScenarioError as e:
                 print(f"Could not load scenario {sid}: {e}")
         return cls(items=scenarios)
@@ -43,7 +54,7 @@ class Sessions(Base):
     @classmethod
     def create_many(
         cls,
-        scenario_params: Iterable[dict],
+        scenario_params: Iterable[dict[str, Any]],
         area_code: str | None = None,
         end_year: int | None = None,
     ) -> "Sessions":
@@ -66,9 +77,25 @@ class Sessions(Base):
                 scenarios.append(Session.new(area, year, **extra))
             except (ScenarioError, ValueError) as e:
                 print(f"Could not create scenario with {params}: {e}")
+
+        # Auto-display warnings for all created sessions
+        if scenarios:
+            has_warnings = False
+            for session in scenarios:
+                if len(session.warnings) > 0:
+                    if not has_warnings:
+                        print("\n=== Batch Creation Summary ===")
+                        has_warnings = True
+                    area_code = getattr(session, "area_code", None)
+                    end_year = getattr(session, "end_year", None)
+                    context = f"Session #{session.id}"
+                    if area_code or end_year:
+                        context += f" (area_code={area_code}, end_year={end_year})"
+                    session.auto_show_warnings(context)
+
         return cls(items=scenarios)
 
-    def to_excel(self, path: PathLike | str, **export_options) -> None:
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
         """Export all scenarios to Excel."""
         from pyetm.models.scenario_packer import ScenarioPacker
 
@@ -80,7 +107,7 @@ class Sessions(Base):
         packer.to_excel(str(Path(path).expanduser().resolve()), **export_options)
 
     @classmethod
-    def from_excel(cls, xlsx_path: PathLike | str) -> "Sessions":
+    def from_excel(cls, xlsx_path: PathLike[str] | str) -> "Sessions":
         """
         Import scenarios (Sessions) from Excel file.
 

@@ -1,3 +1,5 @@
+"""Service for copying scenarios."""
+
 from typing import Any, Dict, Optional
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -9,12 +11,6 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
     Runner for copying an existing scenario.
 
     POST /api/v3/scenarios
-
-    Args:
-        client: The HTTP client to use
-        scenario_id: ID of the scenario to copy
-        overrides: Optional dictionary of scenario attributes to override
-        **kwargs: Additional arguments passed to the request
     """
 
     # Fields that can be overridden when copying
@@ -31,10 +27,16 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         client: BaseClient,
         scenario_id: int,
         overrides: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[Dict[str, Any]]:
         """
         Copy an existing scenario with optional attribute overrides.
+
+        Args:
+            client: The HTTP client to use
+            scenario_id: ID of the scenario to copy
+            overrides: Optional dictionary of scenario attributes to override
+            **kwargs: Additional arguments passed to the request
 
         Example usage:
             result = CopyScenarioRunner.run(
@@ -82,6 +84,7 @@ class CopyScenarioRunner(BaseRunner[Dict[str, Any]]):
         if result.success and warnings:
             # Merge our warnings with any from the API call
             combined_errors = list(result.errors) + warnings
+            assert result.data is not None, "Success result must have data"
             return ServiceResult.ok(data=result.data, errors=combined_errors)
 
         return result

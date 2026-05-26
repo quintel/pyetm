@@ -1,3 +1,5 @@
+"""Service for session users create operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -15,7 +17,7 @@ class ScenarioUsersCreateRunner(BaseRunner[List[Dict[str, Any]]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario_id: int, users: List[Dict[str, Any]], **kwargs
+        client: BaseClient, scenario_id: int, users: List[Dict[str, Any]], **kwargs: Any
     ) -> ServiceResult[List[Dict[str, Any]]]:
         if not users:
             return ServiceResult.fail(["No users provided"])

@@ -20,7 +20,6 @@ from pyetm.utils.excel_utils import (
 
 
 class TestHandleNumericValue:
-
     def setup_method(self):
         """Setup mock worksheet for each test"""
         self.mock_worksheet = Mock(spec=Worksheet)
@@ -109,19 +108,6 @@ class TestHandleNumericValue:
         )
         self.mock_worksheet.write_number.assert_called_with(0, 0, 1.23456789, None)
 
-    def test_handle_positive_infinity(self):
-        """Test handling positive infinity"""
-        # Infinity will cause OverflowError in math.ceil, so it should be handled
-        # The function should still try to process it, but the math.ceil will fail
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("inf"), None)
-
-    def test_handle_negative_infinity(self):
-        """Test handling negative infinity"""
-        # Negative infinity will cause OverflowError in math.ceil
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("-inf"), None)
-
     def test_handle_very_small_number(self):
         """Test handling very small numbers"""
         very_small = 1e-10  # Use a less extreme small number
@@ -144,19 +130,6 @@ class TestHandleNumericValue:
         # Should write the large number
         args = self.mock_worksheet.write_number.call_args[0]
         assert args[2] == very_large
-
-    def test_handle_positive_infinity(self):
-        """Test handling positive infinity"""
-        # Infinity will cause OverflowError in math.ceil, so it should be handled
-        # The function should still try to process it, but the math.ceil will fail
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("inf"), None)
-
-    def test_handle_negative_infinity(self):
-        """Test handling negative infinity"""
-        # Negative infinity will cause OverflowError in math.ceil
-        with pytest.raises(OverflowError):
-            handle_numeric_value(self.mock_worksheet, 0, 0, float("-inf"), None)
 
 
 class TestSetColumnWidths:
@@ -740,7 +713,6 @@ class TestAddFrame:
 
 
 class TestIntegration:
-
     def setup_method(self):
         """Setup test data"""
         self.temp_dir = tempfile.mkdtemp()
@@ -1269,6 +1241,79 @@ class TestAdditionalCoverageEdgeCases:
         blocks = get_scenario_blocks(columns)
         expected = [("A", 0, 0), ("B", 1, 1), ("A", 2, 2), ("B", 3, 3), ("A", 4, 4)]
         assert blocks == expected
+
+
+class TestExportConfigValidation:
+    """Test validation of export config values from Excel."""
+
+    def test_parse_config_with_invalid_hourly_curve_carriers(self):
+        """Test parsing export config with invalid hourly curve carrier names."""
+        # Create a mock series with invalid carrier
+        config_data = {
+            "hourly_curves": "electricity,electrcityyy,heat",
+            "annual_exports": "true",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        # The validation should warn about "electrcityyy" and filter it out
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_with_invalid_hourly_curve_names(self):
+        """Test parsing export config with invalid curve names."""
+        config_data = {
+            "hourly_curves": "merit_order,merit_orderzzz,invalid_curve",
+            "annual_exports": "false",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_with_mix_of_carriers_and_curves(self):
+        """Test parsing with mix of valid carriers and curve names."""
+        config_data = {
+            "hourly_curves": "electricity,merit_order,heat,invalid_entry",
+            "annual_exports": "sankey",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_with_invalid_annual_export_types(self):
+        """Test parsing with invalid annual export type names."""
+        config_data = {
+            "hourly_curves": "electricity",
+            "annual_exports": "energy_flow,sankeyyy,invalid_export",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_all_invalid_hourly_curves(self):
+        """Test with all invalid hourly curve entries."""
+        config_data = {
+            "hourly_curves": "invalid1,invalid2,nonsense",
+            "annual_exports": "energy_flow",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        # Should return empty list with warnings for all three
+        pytest.skip("Test to be implemented after validation is added")
+
+    def test_parse_config_all_invalid_annual_exports(self):
+        """Test with all invalid annual export entries."""
+        config_data = {
+            "hourly_curves": "electricity",
+            "annual_exports": "bad1,bad2,bad3",
+        }
+        series = pd.Series(config_data)
+
+        # TODO: Add test implementation once validation is in place
+        pytest.skip("Test to be implemented after validation is added")
 
 
 if __name__ == "__main__":

@@ -20,14 +20,10 @@ def test_create_saved_scenario_success_minimal(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios", {"json": {"saved_scenario": saved_scenario_data}})
-    ]
+    assert client.calls == [("/saved_scenarios", {"json": {"saved_scenario": saved_scenario_data}})]
 
 
-def test_create_saved_scenario_success_with_optional_fields(
-    dummy_client, fake_response
-):
+def test_create_saved_scenario_success_with_optional_fields(dummy_client, fake_response):
     """Test creating a SavedScenario with all fields."""
     body = {
         "id": 457,
@@ -48,14 +44,10 @@ def test_create_saved_scenario_success_with_optional_fields(
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/saved_scenarios", {"json": {"saved_scenario": saved_scenario_data}})
-    ]
+    assert client.calls == [("/saved_scenarios", {"json": {"saved_scenario": saved_scenario_data}})]
 
 
-def test_create_saved_scenario_missing_required_field_scenario_id(
-    dummy_client, fake_response
-):
+def test_create_saved_scenario_missing_required_field_scenario_id(dummy_client, fake_response):
     """Test that missing scenario_id returns an error."""
     client = dummy_client({}, method="post")
 
@@ -68,9 +60,7 @@ def test_create_saved_scenario_missing_required_field_scenario_id(
     assert len(client.calls) == 0  # Should not make API call
 
 
-def test_create_saved_scenario_missing_required_field_title(
-    dummy_client, fake_response
-):
+def test_create_saved_scenario_missing_required_field_title(dummy_client, fake_response):
     """Test that missing title returns an error."""
     client = dummy_client({}, method="post")
 
@@ -83,9 +73,7 @@ def test_create_saved_scenario_missing_required_field_title(
     assert len(client.calls) == 0  # Should not make API call
 
 
-def test_create_saved_scenario_missing_both_required_fields(
-    dummy_client, fake_response
-):
+def test_create_saved_scenario_missing_both_required_fields(dummy_client, fake_response):
     """Test that missing both required fields returns an error."""
     client = dummy_client({}, method="post")
 

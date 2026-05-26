@@ -4,7 +4,6 @@ Centralized fixtures for model tests. They will automatically be included.
 
 # TODO: Convert the 'literal' fixtures into factory methods to be used in the other tests for more flexibility
 
-
 from unittest.mock import Mock
 import pandas as pd
 import pytest
@@ -150,6 +149,11 @@ def sample_scenario():
         "end_year": scenario.end_year,
     }, name=scenario.id))
 
+    # Mock get_export_config method to return _export_config if present
+    def _get_export_config():
+        return getattr(scenario, "_export_config", None)
+    scenario.get_export_config = Mock(side_effect=_get_export_config)
+
     return scenario
 
 
@@ -180,6 +184,11 @@ def scenario_with_inputs():
         "area_code": scenario.area_code,
         "end_year": scenario.end_year,
     }, name=scenario.id))
+
+    # Mock get_export_config method to return _export_config if present
+    def _get_export_config():
+        return getattr(scenario, "_export_config", None)
+    scenario.get_export_config = Mock(side_effect=_get_export_config)
 
     return scenario
 
@@ -221,6 +230,11 @@ def scenario_with_queries():
         "end_year": scenario.end_year,
     }, name=scenario.id))
 
+    # Mock get_export_config method to return _export_config if present
+    def _get_export_config():
+        return getattr(scenario, "_export_config", None)
+    scenario.get_export_config = Mock(side_effect=_get_export_config)
+
     return scenario
 
 
@@ -253,6 +267,11 @@ def multiple_scenarios():
             "area_code": scenario.area_code,
             "end_year": scenario.end_year,
         }, name=scenario.id))
+
+        # Mock get_export_config method to return _export_config if present
+        def _get_export_config(s=scenario):
+            return getattr(s, "_export_config", None)
+        scenario.get_export_config = Mock(side_effect=_get_export_config)
 
         scenarios.append(scenario)
     return scenarios
@@ -298,9 +317,7 @@ def enum_input_json():
 @pytest.fixture
 def bool_input_json():
     """JSON data for a boolean input"""
-    return {
-        "has_electricity_storage": {"min": 0, "max": 1, "default": 0, "unit": "bool"}
-    }
+    return {"has_electricity_storage": {"min": 0, "max": 1, "default": 0, "unit": "bool"}}
 
 
 @pytest.fixture
@@ -318,9 +335,7 @@ def disabled_input_json():
 
 
 @pytest.fixture
-def inputs_json(
-    float_input_json, enum_input_json, bool_input_json, disabled_input_json
-):
+def inputs_json(float_input_json, enum_input_json, bool_input_json, disabled_input_json):
     """Combined input collection JSON"""
     result = {}
     result.update(float_input_json)
@@ -471,9 +486,11 @@ def saved_scenario_data():
 
 
 @pytest.fixture
-def saved_scenario(saved_scenario_data):
+def saved_scenario(saved_scenario_data, mock_client):
     """A basic SavedScenario instance for testing."""
-    return Scenario.model_validate(saved_scenario_data)
+    scenario = Scenario.model_validate(saved_scenario_data)
+    scenario._client = mock_client  # Set client for property access
+    return scenario
 
 
 @pytest.fixture

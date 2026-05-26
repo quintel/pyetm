@@ -1,9 +1,11 @@
+"""Application configuration and settings management."""
+
 from pathlib import Path
 import functools
 import logging
 import re
 import tempfile
-from typing import Optional, ClassVar, List, Annotated
+from typing import Optional, ClassVar, List, Annotated, Any
 from pydantic import Field, ValidationError, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -72,7 +74,7 @@ class AppConfig(BaseSettings):
     temp_folder: Optional[Path] = Path(tempfile.gettempdir()) / "pyetm"
 
     @model_validator(mode="after")
-    def validate_ssl_cert_path(self):
+    def validate_ssl_cert_path(self) -> "AppConfig":
         """Validate that SSL cert path exists if provided."""
         if self.ssl_cert_path is not None and not self.ssl_cert_path.exists():
             raise ValueError(
@@ -90,9 +92,7 @@ class AppConfig(BaseSettings):
 
         # Token must start with etm_ prefix
         if not v.startswith("etm_"):
-            raise ValueError(
-                "Invalid ETM API token: must start with 'etm_' prefix"
-            )
+            raise ValueError("Invalid ETM API token: must start with 'etm_' prefix")
 
         # Extract body (handle both etm_ and etm_beta_ prefixes)
         if v.startswith("etm_beta_"):
@@ -112,9 +112,7 @@ class AppConfig(BaseSettings):
         if len(segs) == 3:
             # Validate JWT format
             if any(" " in seg for seg in segs):
-                raise ValueError(
-                    "Invalid ETM API token: JWT segments must not contain spaces"
-                )
+                raise ValueError("Invalid ETM API token: JWT segments must not contain spaces")
         elif "." in body:
             # Has dots but not exactly 3 segments - might be malformed JWT
             raise ValueError(
@@ -124,10 +122,10 @@ class AppConfig(BaseSettings):
 
         return v
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Post-initialization to handle base_url inference and token warnings."""
         if not self.base_url:
-            self.base_url = HttpUrl(_infer_base_url_from_env(self.environment))
+            self.base_url = HttpUrl(_infer_base_url_from_env(self.environment or "production"))
 
         # Warn if no token is provided
         if not self.etm_api_token:
@@ -135,11 +133,12 @@ class AppConfig(BaseSettings):
                 "No ETM_API_TOKEN provided. You will only be able to access public scenarios without authentication."
             )
 
-    def path_to_tmp(self, subfolder: str):
+    def path_to_tmp(self, subfolder: str) -> Path:
+        if self.temp_folder is None:
+            raise ValueError("temp_folder is not configured")
         folder = self.temp_folder / subfolder
         folder.mkdir(parents=True, exist_ok=True)
         return folder
-
 
 
 @functools.lru_cache(maxsize=1)
@@ -150,7 +149,7 @@ def get_settings() -> AppConfig:
     Cached to ensure only one AppConfig instance is created per session.
     """
     try:
-        return AppConfig()
+        return AppConfig()  # type: ignore[call-arg]
     except ValidationError as exc:
         missing_or_invalid: List[str] = []
         for err in exc.errors():

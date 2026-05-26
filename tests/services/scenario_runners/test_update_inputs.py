@@ -12,9 +12,7 @@ def test_update_inputs_success(dummy_client, fake_response, dummy_scenario):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios/1", {"json": {"scenario": {"user_values": inputs}}})
-    ]
+    assert client.calls == [("/scenarios/1", {"json": {"scenario": {"user_values": inputs}}})]
 
 
 def test_update_inputs_single_input(dummy_client, fake_response, dummy_scenario):
@@ -29,9 +27,7 @@ def test_update_inputs_single_input(dummy_client, fake_response, dummy_scenario)
     print(result.data)
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios/2", {"json": {"scenario": {"user_values": inputs}}})
-    ]
+    assert client.calls == [("/scenarios/2", {"json": {"scenario": {"user_values": inputs}}})]
 
 
 def test_update_inputs_empty_inputs(dummy_client, fake_response, dummy_scenario):
@@ -45,9 +41,7 @@ def test_update_inputs_empty_inputs(dummy_client, fake_response, dummy_scenario)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [
-        ("/scenarios/3", {"json": {"scenario": {"user_values": {}}}})
-    ]
+    assert client.calls == [("/scenarios/3", {"json": {"scenario": {"user_values": {}}}})]
 
 
 def test_update_inputs_with_kwargs(dummy_client, fake_response, dummy_scenario):
@@ -149,13 +143,7 @@ def test_update_inputs_payload_structure(dummy_client, fake_response, dummy_scen
     # Verify the exact payload structure
     expected_call = (
         "/scenarios/10",
-        {
-            "json": {
-                "scenario": {
-                    "user_values": {"input_a": 1.0, "input_b": 2.0, "input_c": 3.0}
-                }
-            }
-        },
+        {"json": {"scenario": {"user_values": {"input_a": 1.0, "input_b": 2.0, "input_c": 3.0}}}},
     )
     assert client.calls == [expected_call]
 

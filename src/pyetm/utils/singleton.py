@@ -1,4 +1,7 @@
+"""Singleton metaclass implementation."""
+
 import threading
+from typing import Any, Dict, Type
 
 
 class SingletonMeta(type):
@@ -10,10 +13,10 @@ class SingletonMeta(type):
         _lock (threading.Lock): Thread lock to ensure thread-safe instance creation
     """
 
-    _instances = {}
+    _instances: Dict[Type[Any], Any] = {}
     _lock = threading.Lock()
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         with cls._lock:
             if cls not in cls._instances:
                 cls._instances[cls] = super().__call__(*args, **kwargs)

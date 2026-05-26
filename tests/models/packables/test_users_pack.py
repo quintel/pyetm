@@ -259,14 +259,14 @@ class TestUsersPack:
         pack.add(s1)
 
         # Create proper grid format: first row is header, following rows are data
-        df = pd.DataFrame(
-            [[np.nan, "S1"], ["user@example.com", "invalid_role"]]
-        )
+        df = pd.DataFrame([[np.nan, "S1"], ["user@example.com", "invalid_role"]])
 
         pack.from_dataframe(df, {"users"})
 
         # Invalid roles are now passed to update_users which will handle validation
-        s1.update_users.assert_called_once_with("user@example.com", "invalid_role", skip_upload=False)
+        s1.update_users.assert_called_once_with(
+            "user@example.com", "invalid_role", skip_upload=False
+        )
 
     def test_from_dataframe_skips_nan_values(self):
         s1 = make_scenario(id_val=1, identifier="S1")
@@ -320,9 +320,7 @@ class TestUsersPack:
 
         # Verify update_users was called with skip_upload=True
         # Note: roles are passed as-is; normalization happens in update_users()
-        s1.update_users.assert_called_once_with(
-            "user@example.com", "owner", skip_upload=True
-        )
+        s1.update_users.assert_called_once_with("user@example.com", "owner", skip_upload=True)
 
     def test_apply_pending_users_uploads_stored_data(self):
         """Test that apply_pending_users() uploads the stored user data"""

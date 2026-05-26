@@ -105,7 +105,7 @@ def test_interpolate_failure_too_few_scenarios(dummy_client, fake_response):
     assert result.success is False
     assert result.data is None
     assert len(result.errors) > 0
-    assert "422:" in result.errors[0]
+    assert "scenario_ids: must contain at least 2 scenarios" == result.errors[0]
 
 
 def test_interpolate_failure_empty_end_years(dummy_client, fake_response):

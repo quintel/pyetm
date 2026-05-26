@@ -136,9 +136,7 @@ def test_create_scenario_filters_invalid_fields(dummy_client, fake_response):
         assert warning in result.errors
 
     # Should only send valid fields
-    expected_payload = {
-        "scenario": {"area_code": "uk", "end_year": 2050, "private": True}
-    }
+    expected_payload = {"scenario": {"area_code": "uk", "end_year": 2050, "private": True}}
     assert client.calls == [("/scenarios", {"json": expected_payload})]
 
 
@@ -248,7 +246,7 @@ def test_create_scenario_with_template_only(dummy_client, fake_response):
     body = {
         "id": 99999,
         "area_code": "nl",  # Inherited from template
-        "end_year": 2050,   # Inherited from template
+        "end_year": 2050,  # Inherited from template
         "preset_scenario_id": 100000,
     }
     response = fake_response(ok=True, status_code=201, json_data=body)

@@ -1,3 +1,5 @@
+"""Sortable items management for scenarios."""
+
 from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -23,7 +25,7 @@ class Sortable(Base):
     order: list[Any]
     subtype: Optional[str] = None
 
-    def name(self):
+    def name(self) -> str:
         """
         Returns the display name
         """
@@ -39,8 +41,13 @@ class Sortable(Base):
         new_obj_dict = self.model_dump()
         new_obj_dict["order"] = new_order
 
-        warnings_obj = self.__class__(**new_obj_dict)
-        return warnings_obj.warnings
+        try:
+            warnings_obj = self.__class__(**new_obj_dict)
+            if isinstance(warnings_obj.warnings, WarningCollector):
+                return warnings_obj.warnings
+            return WarningCollector()
+        except Exception:
+            return WarningCollector()
 
     @field_validator("type")
     @classmethod
@@ -114,9 +121,7 @@ class Sortable(Base):
         else:
             # Create basic sortable with warning for unexpected payload
             sortable = cls(type=sort_type, order=[])
-            sortable.add_warning(
-                "payload", f"Unexpected payload for '{sort_type}': {payload!r}"
-            )
+            sortable.add_warning("payload", f"Unexpected payload for '{sort_type}': {payload!r}")
             yield sortable
 
 
@@ -131,7 +136,7 @@ class Sortables(Base):
     def __len__(self) -> int:
         return len(self.sortables)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Sortable]:  # type: ignore[override]
         yield from self.sortables
 
     def keys(self) -> List[str]:
@@ -142,9 +147,7 @@ class Sortables(Base):
         """Get all sortable names (including subtype suffixes)"""
         return [s.name() for s in self.sortables]
 
-    def is_valid_update(
-        self, updates: Dict[str, list[Any]]
-    ) -> Dict[str, WarningCollector]:
+    def is_valid_update(self, updates: Dict[str, list[Any]]) -> Dict[str, WarningCollector]:
         """
         Returns a dict mapping sortable names to their WarningCollectors when errors were found
 
@@ -163,21 +166,17 @@ class Sortables(Base):
                 if len(sortable_warnings) > 0:
                     warnings[name] = sortable_warnings
             else:
-                warnings[name] = WarningCollector.with_warning(
-                    name, "Sortable does not exist"
-                )
+                warnings[name] = WarningCollector.with_warning(name, "Sortable does not exist")
 
         # Check for non-existent sortables
         non_existent_names = set(updates.keys()) - set(self.names())
         for name in non_existent_names:
             if name not in warnings:  # Don't overwrite existing warnings
-                warnings[name] = WarningCollector.with_warning(
-                    name, "Sortable does not exist"
-                )
+                warnings[name] = WarningCollector.with_warning(name, "Sortable does not exist")
 
         return warnings
 
-    def update(self, updates: Dict[str, list[Any]]):
+    def update(self, updates: Dict[str, list[Any]]) -> None:
         """
         Update the orders of specified sortables
 
@@ -251,16 +250,15 @@ class Sortables(Base):
                 result[s.type] = s.order
         return result
 
-    def _to_dataframe(self, **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
         """
         Serialize the Sortables collection to DataFrame.
         """
-        return pd.DataFrame.from_dict(
-            {s.name(): s.order for s in self.sortables}, orient="index"
-        ).T
+        df_data: Dict[str, List[Any]] = {s.name(): s.order for s in self.sortables}
+        return pd.DataFrame.from_dict(df_data, orient="index").T
 
     @classmethod
-    def _from_dataframe(cls, df: pd.DataFrame, **kwargs) -> "Sortables":
+    def _from_dataframe(cls, df: pd.DataFrame, **kwargs: Any) -> "Sortables":
         if df is None:
             return cls(sortables=[])
 
@@ -268,10 +266,11 @@ class Sortables(Base):
         if isinstance(df, pd.Series):
             df = df.to_frame(name=str(df.name))
 
-        def _extract_order(series: pd.Series) -> List[Any]:
+        def _extract_order(series: pd.Series[Any]) -> List[Any]:
             s = series.dropna()
             if s.dtype == object:
-                s = s.astype(str).map(lambda v: v.strip()).replace({"": pd.NA}).dropna()
+                s = s.astype(str).map(lambda v: v.strip())
+                s = s.replace("", pd.NA).dropna()
             return s.tolist()
 
         items: List[Sortable] = []
@@ -283,9 +282,7 @@ class Sortables(Base):
 
             if name.startswith("heat_network_"):
                 subtype = name[len("heat_network_") :]
-                items.append(
-                    Sortable(type="heat_network", subtype=subtype, order=order)
-                )
+                items.append(Sortable(type="heat_network", subtype=subtype, order=order))
             else:
                 items.append(Sortable(type=name, order=order))
 

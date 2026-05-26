@@ -78,76 +78,29 @@ pyetm init
 ```
 
 This will:
-- Prompt you for your ETM API token ([get your token here](https://docs.energytransitionmodel.com/api/authentication))
 - Ask which environment you want to use (production, beta, or local)
 - Create a `.env` configuration file
-- Copy example Jupyter notebooks and helper files to your current directory
+- Copy an example Excel file to `inputs/example_input_excel.xlsx`
 
-**Non-interactive mode**: You can also provide options directly:
-```bash
-pyetm init --token etm_your.token.here --environment pro --log-level INFO
-```
+After initialization, you'll need to manually add your API token to the `.env` file:
 
-Options:
-- `--token`: Your ETM API token
+1. Open `.env` in your text editor
+2. Find the commented `# ETM_API_TOKEN=` line
+3. Uncomment it by removing the `#`
+4. Paste your full token after the `=` sign (get your token [here](https://docs.energytransitionmodel.com/api/authentication))
+5. Save the file
+
+**Note:** API tokens are very long (1000+ characters). Make sure you paste the entire token.
+
+**Command options**:
 - `--environment`: Target environment (`pro`, `beta`, or `local`)
 - `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
 
----
-
-## Using Jupyter Notebooks
-
-After running `pyetm init`, you'll have example notebooks in your current directory. Here's how to set them up:
-
-### 1. Install Jupyter
-
-In your virtual environment:
+Example:
 ```bash
-pip install notebook ipykernel
+pyetm init --environment pro --log-level INFO
 ```
-
-### 2. Create a Jupyter Kernel
-
-Register your virtual environment as a Jupyter kernel:
-```bash
-python -m ipykernel install --user --name=pyetm-env --display-name "Python (pyetm)"
-```
-
-This creates a kernel called "Python (pyetm)" that Jupyter can use.
-
-### 3. Launch Jupyter
-
-```bash
-jupyter notebook
-```
-
-### 4. Select the Kernel
-
-When you open a notebook:
-1. Click **Kernel** → **Change kernel**
-2. Select **Python (pyetm)**
-
-### Using VS Code
-
-If you prefer VS Code:
-
-1. Install the [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python) and [Jupyter](https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter) extensions
-2. Open a `.ipynb` file
-3. Click **Select Kernel** at the top right
-4. Choose **Python (pyetm)** from the list
-
-### Important notes
-
-The notebooks are set up to run against scenarios on pro. You will need to make some edits to the paths in these notebooks, for example in `basic_features.ipynb` the examples attempt to read from:
-```
-"../examples/inputs/example_input_excel.xlsx"
-```
-Whereas your example_input_excel.xlsx is more likely to be at:
-```
-"inputs/example_input_excel.xlsx"
-```
-You can change the paths or move the files!
 
 ---
 
@@ -256,7 +209,7 @@ print(comparison)
 scenarios.combine.to_excel("outputs/results.xlsx")
 ```
 
-For more examples, check the notebooks created by `pyetm init` or visit our [documentation](https://docs.energytransitionmodel.com/main/pyetm/introduction).
+For more examples and tutorials, visit our [documentation](https://quintel.github.io/pyetm/examples/).
 
 ---
 

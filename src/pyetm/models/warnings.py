@@ -1,6 +1,8 @@
+"""Warning collection and management for scenarios."""
+
 from __future__ import annotations
 from typing import Any, Optional, Dict, List, Union, Literal
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime
 
 
@@ -11,7 +13,7 @@ class ModelWarning:
     field: str
     message: str
     severity: Literal["info", "warning", "error"] = "warning"
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = dataclass_field(default_factory=lambda: datetime.now())
 
     def __str__(self) -> str:
         return f"{self.field}: {self.message}"
@@ -32,7 +34,7 @@ class ModelWarning:
 class WarningCollector:
     """Manages warnings for a model instance with a clean API."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._warnings: List[ModelWarning] = []
 
     @classmethod
@@ -55,15 +57,20 @@ class WarningCollector:
         """
         Add warning(s) to the collection.
         """
+        # Ensure severity is valid
+        sev: Literal["info", "warning", "error"] = "warning"
+        if severity in ("info", "warning", "error"):
+            sev = severity  # type: ignore[assignment]
+
         if isinstance(message, str):
-            self._warnings.append(ModelWarning(field, message, severity))
+            self._warnings.append(ModelWarning(field, message, sev))
 
         elif isinstance(message, list):
             for msg in message:
                 if isinstance(msg, str):
-                    self._warnings.append(ModelWarning(field, msg, severity))
+                    self._warnings.append(ModelWarning(field, msg, sev))
                 else:
-                    self._warnings.append(ModelWarning(field, str(msg), severity))
+                    self._warnings.append(ModelWarning(field, str(msg), sev))
 
         elif isinstance(message, dict):
             # Handle nested warning dictionaries (like from submodels)
@@ -72,7 +79,7 @@ class WarningCollector:
                 self.add(nested_field, sub_messages, severity)
         else:
             # Fallback for any other type
-            self._warnings.append(ModelWarning(field, str(message), severity))
+            self._warnings.append(ModelWarning(field, str(message), sev))
 
     def clear(self, field: Optional[str] = None) -> None:
         """Clear warnings. If field is specified, clear only that field."""
@@ -97,7 +104,7 @@ class WarningCollector:
 
     def to_dict(self) -> Dict[str, List[Dict[str, Any]]]:
         """Convert to dictionary grouped by field."""
-        result = {}
+        result: Dict[str, List[Dict[str, Any]]] = {}
         for warning in self._warnings:
             if warning.field not in result:
                 result[warning.field] = []
@@ -119,9 +126,7 @@ class WarningCollector:
                 )
             )
 
-    def merge_submodel_warnings(
-        self, *submodels, key_attr: Optional[str] = None
-    ) -> None:
+    def merge_submodel_warnings(self, *submodels: Any, key_attr: Optional[str] = None) -> None:
         """
         Merge warnings from Base model instances.
         """
@@ -142,7 +147,7 @@ class WarningCollector:
             return
 
         print("Warnings:")
-        grouped = {}
+        grouped: Dict[str, List[ModelWarning]] = {}
         for warning in self._warnings:
             if warning.field not in grouped:
                 grouped[warning.field] = []
@@ -154,7 +159,9 @@ class WarningCollector:
                 severity_indicator = (
                     "[WARNING]"
                     if warning.severity == "warning"
-                    else "[ERROR]" if warning.severity == "error" else "[INFO]"
+                    else "[ERROR]"
+                    if warning.severity == "error"
+                    else "[INFO]"
                 )
                 print(f"    {severity_indicator} {warning.message}")
 
@@ -166,7 +173,7 @@ class WarningCollector:
         """Return True if there are warnings."""
         return len(self._warnings) > 0
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         """Iterate over warnings."""
         return iter(self._warnings)
 
@@ -176,8 +183,8 @@ class WarningCollector:
             return "WarningCollector(no warnings)"
 
         # Group by field for summary
-        field_counts = {}
-        severity_counts = {"error": 0, "warning": 0, "info": 0}
+        field_counts: Dict[str, int] = {}
+        severity_counts: Dict[str, int] = {"error": 0, "warning": 0, "info": 0}
 
         for warning in self._warnings:
             field_counts[warning.field] = field_counts.get(warning.field, 0) + 1
@@ -191,10 +198,6 @@ class WarningCollector:
                 severity_parts.append(f"{count} {sev}")
 
         severity_str = ", ".join(severity_parts)
-        field_summary = (
-            f"{len(field_counts)} fields" if len(field_counts) != 1 else "1 field"
-        )
+        field_summary = f"{len(field_counts)} fields" if len(field_counts) != 1 else "1 field"
 
-        return (
-            f"WarningCollector({total} warnings: {severity_str} across {field_summary})"
-        )
+        return f"WarningCollector({total} warnings: {severity_str} across {field_summary})"

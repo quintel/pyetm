@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, ANY
 import pytest
 from datetime import datetime
 from pyetm.models.scenario import Scenario, SavedScenarioError
@@ -6,13 +6,13 @@ from pyetm.models.session import Session
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_saved_scenario import (
     UpdateSavedScenarioRunner,
 )
 from pyetm.services.scenario_runners.fetch_saved_scenario import (
     FetchSavedScenarioRunner,
 )
-
 
 # --- Model Validation Tests --- #
 
@@ -77,13 +77,12 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
         lambda client, params: ok_service_result(created_data),
     )
 
-    params = {
-        "scenario_id": 123,
-        "title": "New Saved Scenario",
-        "private": True,
-    }
-
-    saved_scenario = Scenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(
+        title="New Saved Scenario",
+        session_id=123,
+        private=True,
+        client=mock_client,
+    )
     assert saved_scenario.id == 789
     assert saved_scenario.scenario_id == 123
     assert saved_scenario.title == "New Saved Scenario"
@@ -108,13 +107,11 @@ def test_create_saved_scenario_with_warnings(
         lambda client, params: ok_service_result(created_data, warnings),
     )
 
-    params = {
-        "scenario_id": 123,
-        "title": "Saved Scenario",
-        "invalid_field": "should_be_ignored",
-    }
-
-    saved_scenario = Scenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(
+        title="Saved Scenario",
+        session_id=123,
+        client=mock_client,
+    )
     assert saved_scenario.id == 790
     base_warnings = saved_scenario.warnings.get_by_field("base")
     assert len(base_warnings) == 1
@@ -129,10 +126,10 @@ def test_create_saved_scenario_failure(monkeypatch, fail_service_result, mock_cl
         lambda client, params: fail_service_result(["Missing required field: title"]),
     )
 
-    params = {"scenario_id": 123}  # Missing title
-
+    # Missing title - should trigger SavedScenarioError when API call fails
     with pytest.raises(SavedScenarioError, match="Could not create saved scenario"):
-        Scenario.create(params, client=mock_client)
+        # This creates with empty title which will fail at API level
+        Scenario.create(title="", session_id=123, client=mock_client)
 
 
 def test_create_saved_scenario_preserves_params_not_in_response(
@@ -152,79 +149,110 @@ def test_create_saved_scenario_preserves_params_not_in_response(
         lambda client, params: ok_service_result(created_data),
     )
 
-    params = {
-        "scenario_id": 123,
-        "title": "Saved Scenario",
-        "private": True,
-    }
-
-    saved_scenario = Scenario.create(params, client=mock_client)
+    saved_scenario = Scenario.create(
+        title="Saved Scenario",
+        session_id=123,
+        private=True,
+        client=mock_client,
+    )
     # private should be set from params since it wasn't in response
     assert saved_scenario.private is True
 
 
-# --- from_scenario Tests --- #
+def test_create_saved_scenario_with_user_values(
+    monkeypatch, ok_service_result, mock_client
+):
+    """Test that user_values applied during create are accessible after creation."""
+    from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+    from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 
-
-def test_from_scenario_success(monkeypatch, ok_service_result, mock_client):
-    """Test creating SavedScenario from a Scenario instance."""
-    # Create a mock scenario
-    scenario = Mock(spec=Session)
-    scenario.id = 999
-
-    created_data = {
-        "id": 800,
-        "scenario_id": 999,
-        "title": "From Scenario",
-        "private": False,
+    # Mock Session.new to return a session with id 123
+    session_data = {
+        "id": 123,
+        "area_code": "nl",
+        "end_year": 2050,
+        "user_values": {},  # Initial empty user_values
     }
 
+    monkeypatch.setattr(
+        CreateScenarioRunner,
+        "run",
+        lambda client, params: ok_service_result(session_data),
+    )
+
+    # Create response with nested scenario data
+    created_data = {
+        "id": 792,
+        "scenario_id": 123,
+        "title": "Scenario with User Values",
+        "scenario": session_data.copy(),
+    }
+
+    # Mock the CreateSavedScenarioRunner
     monkeypatch.setattr(
         CreateSavedScenarioRunner,
         "run",
         lambda client, params: ok_service_result(created_data),
     )
 
-    saved_scenario = Scenario.from_scenario(
-        scenario,
-        title="From Scenario",
+    # Mock the UpdateInputsRunner to succeed
+    update_calls = []
+
+    def mock_update_inputs(client, session, inputs):
+        update_calls.append((session.id, inputs))
+        return ok_service_result(
+            {"scenario": {"id": session.id, "user_values": inputs}}
+        )
+
+    monkeypatch.setattr(UpdateInputsRunner, "run", mock_update_inputs)
+
+    # Mock FetchInputsRunner to return the updated values
+    def mock_fetch_inputs(client, scenario_id, defaults=None):
+        # Return the inputs with user values set
+        inputs_data = {
+            "flh_of_energy_power_solar_pv_solar_radiation": {
+                "default": 950.0,
+                "max": 3000.0,
+                "min": 0.0,
+                "unit": "hours",
+                "user": 1000.0,
+            }
+        }
+        return ok_service_result(inputs_data)
+
+    monkeypatch.setattr(FetchInputsRunner, "run", mock_fetch_inputs)
+
+    # Mock Session.load to return a session with updated user_values
+    def mock_session_load(scenario_id, client=None):
+        session = Session(id=123, area_code="nl", end_year=2050)
+        # Mock the inputs to return updated values
+        session._inputs = None  # Will trigger fetch via inputs property
+        return session
+
+    monkeypatch.setattr(Session, "load", staticmethod(mock_session_load))
+
+    # Create scenario with user_values
+    user_values = {"flh_of_energy_power_solar_pv_solar_radiation": 1000.0}
+    saved_scenario = Scenario.create(
+        title="Scenario with User Values",
+        area_code="nl",
+        end_year=2050,
+        user_values=user_values,
         client=mock_client,
-        private=False,
     )
 
-    assert saved_scenario.id == 800
-    assert saved_scenario.scenario_id == 999
-    assert saved_scenario.title == "From Scenario"
-    assert saved_scenario.private is False
+    # Verify the update was called
+    assert len(update_calls) == 1
+    assert update_calls[0][0] == 123  # scenario_id
+    assert update_calls[0][1] == user_values
 
+    # Verify that accessing inputs returns the updated values
+    inputs = saved_scenario.inputs
+    solar_input = inputs["flh_of_energy_power_solar_pv_solar_radiation"]
+    assert solar_input.user == 1000.0
 
-def test_from_scenario_with_kwargs(monkeypatch, ok_service_result, mock_client):
-    """Test from_scenario passes kwargs correctly."""
-    scenario = Mock(spec=Session)
-    scenario.id = 1000
-
-    created_data = {
-        "id": 801,
-        "scenario_id": 1000,
-        "title": "Private Scenario",
-        "private": True,
-    }
-
-    captured_params = {}
-
-    def capture_run(client, params):
-        captured_params.update(params)
-        return ok_service_result(created_data)
-
-    monkeypatch.setattr(CreateSavedScenarioRunner, "run", capture_run)
-
-    Scenario.from_scenario(
-        scenario, title="Private Scenario", client=mock_client, private=True
-    )
-
-    assert captured_params["scenario_id"] == 1000
-    assert captured_params["title"] == "Private Scenario"
-    assert captured_params["private"] is True
+    # Verify user_values() also returns the correct value
+    assert saved_scenario.user_values() == user_values
 
 
 # --- Update Tests --- #
@@ -419,7 +447,7 @@ def test_session_property_fetches_if_no_nested_data(monkeypatch, saved_scenario)
     with patch.object(Session, "load", return_value=fetched_scenario) as mock_load:
         scenario = saved_scenario.session
 
-        mock_load.assert_called_once_with(123)
+        mock_load.assert_called_once_with(123, client=ANY)
         assert scenario is fetched_scenario
 
 
@@ -644,15 +672,20 @@ def test_saved_scenario_interpolate_titles_length_mismatch():
     with pytest.raises(ValueError, match="Length of titles .* must match"):
         Scenario.interpolate(
             [saved_2030, saved_2050],
-            2040, 2060,  # 2 target years
+            2040,
+            2060,  # 2 target years
             titles=["Only One Title"],  # But only 1 title
         )
 
 
 def test_saved_scenario_interpolate_rejects_duplicate_end_years():
     """Test that interpolate raises ValueError when scenarios have duplicate end_years"""
-    saved_2040_a = Scenario(id=1001, scenario_id=12345, title="Saved 2040 A", end_year=2040)
-    saved_2040_b = Scenario(id=1002, scenario_id=67890, title="Saved 2040 B", end_year=2040)
+    saved_2040_a = Scenario(
+        id=1001, scenario_id=12345, title="Saved 2040 A", end_year=2040
+    )
+    saved_2040_b = Scenario(
+        id=1002, scenario_id=67890, title="Saved 2040 B", end_year=2040
+    )
     saved_2050 = Scenario(id=1003, scenario_id=11111, title="Saved 2050", end_year=2050)
 
     # Mock session property with matching end_years
@@ -690,7 +723,11 @@ def test_identifier_prioritizes_saved_title():
     saved = Scenario(id=1001, scenario_id=12345, title="Saved Title")
     # Mock session with short_name, title, and id
     saved._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050, title="Session Title", short_name="short"
+        id=12345,
+        area_code="nl",
+        end_year=2050,
+        title="Session Title",
+        short_name="short",
     )
 
     assert saved.identifier() == "Saved Title"
@@ -701,7 +738,11 @@ def test_identifier_falls_back_to_short_name():
     saved = Scenario(id=1001, scenario_id=12345, title="")
     # Mock session with short_name
     saved._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050, title="Session Title", short_name="short"
+        id=12345,
+        area_code="nl",
+        end_year=2050,
+        title="Session Title",
+        short_name="short",
     )
 
     assert saved.identifier() == "short"
@@ -722,9 +763,7 @@ def test_identifier_falls_back_to_saved_id():
     """Test identifier returns saved scenario id when saved title, short_name, and session title not available."""
     saved = Scenario(id=1001, scenario_id=12345, title="")
     # Mock session with no title or short_name
-    saved._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
 
     assert saved.identifier() == 1001
 
@@ -733,9 +772,7 @@ def test_identifier_falls_back_to_session_id():
     """Test identifier returns session id as final fallback."""
     saved = Scenario(id=None, scenario_id=12345, title="")
     # Mock session with no title or short_name
-    saved._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
 
     assert saved.identifier() == 12345
 
@@ -749,7 +786,7 @@ def test_identifier_resolution_order_complete():
         area_code="nl",
         end_year=2050,
         title="Session Title",
-        short_name="short"
+        short_name="short",
     )
     assert saved1.identifier() == "Saved Title"
 
@@ -760,7 +797,7 @@ def test_identifier_resolution_order_complete():
         area_code="nl",
         end_year=2050,
         title="Session Title",
-        short_name="short"
+        short_name="short",
     )
     assert saved2.identifier() == "short"
 
@@ -773,14 +810,10 @@ def test_identifier_resolution_order_complete():
 
     # Test 4: Without saved title, short_name, and session title, should return saved id
     saved4 = Scenario(id=1001, scenario_id=12345, title="")
-    saved4._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved4._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
     assert saved4.identifier() == 1001
 
     # Test 5: Without any identifier except session id, should return session id
     saved5 = Scenario(id=None, scenario_id=12345, title="")
-    saved5._scenario_session = Session(
-        id=12345, area_code="nl", end_year=2050
-    )
+    saved5._scenario_session = Session(id=12345, area_code="nl", end_year=2050)
     assert saved5.identifier() == 12345

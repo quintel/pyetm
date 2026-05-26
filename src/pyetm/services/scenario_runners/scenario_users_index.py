@@ -1,3 +1,5 @@
+"""Service for scenario users index operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -13,7 +15,7 @@ class ScenarioUsersIndexRunner(BaseRunner[List[Dict[str, Any]]]):
 
     @staticmethod
     def run(
-        client: BaseClient, scenario_id: int, **kwargs
+        client: BaseClient, scenario_id: int, **kwargs: Any
     ) -> ServiceResult[List[Dict[str, Any]]]:
         return ScenarioUsersIndexRunner._make_request(
             client=client,

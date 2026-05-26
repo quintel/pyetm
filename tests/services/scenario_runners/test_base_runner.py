@@ -194,7 +194,9 @@ def test_make_request_permission_error():
 
     assert not result.success
     assert result.data is None
-    assert result.errors == ["Access denied"]
+    assert result.errors == [
+        "Authentication failed: Invalid or missing ETM_API_TOKEN. Please check your .env file and ensure the token is correct. Details: Access denied"
+    ]
 
 
 def test_make_request_value_error():

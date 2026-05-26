@@ -1,5 +1,6 @@
 from pyetm.utils.safe_cast import cast_bool, cast_int
 
+
 def test_cast_bool():
     """Test cast_bool method"""
     na = float("nan")
@@ -13,6 +14,7 @@ def test_cast_bool():
     assert cast_bool("No") is False
     assert cast_bool("1") is True
     assert cast_bool("maybe") is None
+
 
 def test_cast_int():
     """Test cast_int method"""

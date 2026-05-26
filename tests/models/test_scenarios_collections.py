@@ -389,7 +389,7 @@ class TestScenariosGetMethods:
             },
             "residual_load": {
                 "Scenario 1": pd.DataFrame(),
-            }
+            },
         }
         mock_packer.hourly_output_curves.return_value = expected_result
         collection._packer = mock_packer
@@ -408,18 +408,18 @@ class TestScenariosGetMethods:
         scenario1.id = 1
         scenario1.identifier.return_value = "scenario_1"
         scenario1.get_hourly_output_curves.return_value = {
-            'merit_order': pd.DataFrame({'hour': [0, 1], 'value': [100, 200]}),
-            'electricity_price': pd.DataFrame({'hour': [0, 1], 'price': [0.12, 0.13]}),
-            'residual_load': pd.DataFrame({'hour': [0, 1], 'load': [500, 600]})
+            "merit_order": pd.DataFrame({"hour": [0, 1], "value": [100, 200]}),
+            "electricity_price": pd.DataFrame({"hour": [0, 1], "price": [0.12, 0.13]}),
+            "residual_load": pd.DataFrame({"hour": [0, 1], "load": [500, 600]}),
         }
 
         scenario2 = Mock(spec=Scenario)
         scenario2.id = 2
         scenario2.identifier.return_value = "scenario_2"
         scenario2.get_hourly_output_curves.return_value = {
-            'merit_order': pd.DataFrame({'hour': [0, 1], 'value': [150, 250]}),
-            'electricity_price': pd.DataFrame({'hour': [0, 1], 'price': [0.14, 0.15]}),
-            'residual_load': pd.DataFrame({'hour': [0, 1], 'load': [550, 650]})
+            "merit_order": pd.DataFrame({"hour": [0, 1], "value": [150, 250]}),
+            "electricity_price": pd.DataFrame({"hour": [0, 1], "price": [0.14, 0.15]}),
+            "residual_load": pd.DataFrame({"hour": [0, 1], "load": [550, 650]}),
         }
 
         collection = Scenarios(items=[scenario1, scenario2])

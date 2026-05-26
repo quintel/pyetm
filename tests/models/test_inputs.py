@@ -75,9 +75,7 @@ def test_collection_update_method(inputs_json):
     input_collection = Inputs.from_json(inputs_json)
 
     # Get original value
-    original_input = next(
-        inp for inp in input_collection if inp.key == "investment_costs_co2_ccs"
-    )
+    original_input = next(inp for inp in input_collection if inp.key == "investment_costs_co2_ccs")
     original_value = original_input.user
 
     # Update with valid value
@@ -166,10 +164,7 @@ def test_enum_input():
     assert validity_warnings.has_warnings("user")
 
     user_warnings = validity_warnings.get_by_field("user")
-    assert any(
-        "kerosene should be in ['diesel', 'gasoline']" in w.message
-        for w in user_warnings
-    )
+    assert any("kerosene should be in ['diesel', 'gasoline']" in w.message for w in user_warnings)
 
     # Try to update to invalid number - should not change value but add warning
     input_obj.user = 0.5
@@ -201,9 +196,7 @@ def test_float_input():
     assert validity_warnings.has_warnings("user")
 
     user_warnings = validity_warnings.get_by_field("user")
-    assert any(
-        "-1.0 should be between 0.0 and 20.0" in w.message for w in user_warnings
-    )
+    assert any("-1.0 should be between 0.0 and 20.0" in w.message for w in user_warnings)
 
     # Try to update to 30 - should not change value but add warning
     input_obj.user = 30.0
@@ -211,9 +204,7 @@ def test_float_input():
 
     # Check the warning message
     user_warnings = input_obj.warnings.get_by_field("user")
-    assert any(
-        "30.0 should be between 0.0 and 20.0" in w.message for w in user_warnings
-    )
+    assert any("30.0 should be between 0.0 and 20.0" in w.message for w in user_warnings)
     assert input_obj.user == 2.0  # Should not change
 
     # Reset the input
@@ -227,9 +218,7 @@ def test_input_warning_severity_levels():
     input_obj = FloatInput(key="test", unit="float", min=0, max=100)
 
     # Create input with validation error (should be 'error' severity from __init__)
-    bad_input = FloatInput(
-        key="test", unit="float", min=0, max=100, user="not_a_number"
-    )
+    bad_input = FloatInput(key="test", unit="float", min=0, max=100, user="not_a_number")
 
     # Check that initialization warnings exist
     if len(bad_input.warnings) > 0:
@@ -353,9 +342,7 @@ def test_input_reset_functionality():
     assert bool_input.user is None
 
     # Test EnumInput
-    enum_input = EnumInput(
-        key="test_enum", unit="enum", permitted_values=["a", "b"], user="a"
-    )
+    enum_input = EnumInput(key="test_enum", unit="enum", permitted_values=["a", "b"], user="a")
     assert enum_input.user == "a"
     enum_input.user = "reset"
     assert enum_input.user is None

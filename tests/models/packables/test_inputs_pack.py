@@ -55,9 +55,11 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
                 # Handle value field by preferring user over default
                 if field == "value":
                     data[field] = [
-                        inputs_data[key].get("user")
-                        if inputs_data[key].get("user") is not None
-                        else inputs_data[key].get("default")
+                        (
+                            inputs_data[key].get("user")
+                            if inputs_data[key].get("user") is not None
+                            else inputs_data[key].get("default")
+                        )
                         for key in inputs_data.keys()
                     ]
                 else:
@@ -142,22 +144,21 @@ def test_resolve_scenario_by_short_name():
     assert result == s1
 
 
-def test_resolve_scenario_by_numeric_id():
+def test_resolve_scenario_by_numeric_id(monkeypatch):
     s1 = make_scenario(id_val=1, identifier="S1")
     s2 = make_scenario(id_val=2, identifier="S2")
 
     pack = InputsPack()
     pack.add(s1, s2)
     # Mock _find_by_identifier to return None (not found by identifier)
-    with pytest.MonkeyPatch().context() as m:
-        m.setattr(
-            "pyetm.models.packables.packable.Packable._find_by_identifier",
-            Mock(return_value=None),
-        )
+    monkeypatch.setattr(
+        "pyetm.models.packables.packable.Packable._find_by_identifier",
+        Mock(return_value=None),
+    )
 
-        result = pack.resolve_scenario("2")
+    result = pack.resolve_scenario("2")
 
-        assert result == s2
+    assert result == s2
 
 
 def test_resolve_scenario_returns_none_for_invalid():

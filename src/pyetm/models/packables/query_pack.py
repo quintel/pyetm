@@ -1,6 +1,8 @@
+"""Query packing utilities for batch GQL queries."""
+
 import logging
-from typing import ClassVar, Any, Dict, Optional, List, Iterable
-from xlsxwriter import Workbook
+from typing import ClassVar, Any, Dict, Optional, List, Iterable, cast
+from xlsxwriter import Workbook  # type: ignore[import-untyped]
 import pandas as pd
 from pydantic import PrivateAttr
 from pyetm.models.packables.packable import Packable
@@ -21,14 +23,14 @@ class QueryPack(Packable):
     _query_keys: list[str] = PrivateAttr(default=[])
 
     @staticmethod
-    def excel_read_kwargs():
+    def excel_read_kwargs() -> Dict[str, Any]:
         """
         Returns a dict representing the excel read kwargs like the header
         Availabale to overload for users own implementation
         """
         return {"header": None}
 
-    def add(self, *scenarios):
+    def add(self, *scenarios: Any) -> None:
         """Add scenarios and ensure they receive any requested queries."""
         super().add(*scenarios)
 
@@ -42,7 +44,7 @@ class QueryPack(Packable):
         """Get the list of query keys."""
         return self._query_keys.copy()
 
-    def add_queries(self, gquery_keys: Iterable[str]):
+    def add_queries(self, gquery_keys: Iterable[str]) -> None:
         if not gquery_keys:
             return
 
@@ -50,32 +52,29 @@ class QueryPack(Packable):
 
         # Apply to existing scenarios
         for scenario in self.scenarios:
-            scenario.add_queries(gquery_keys)
+            scenario.add_queries(list(gquery_keys))
 
     def queries_requested(self) -> bool:
         """Any gqueries requested?"""
         return len(self._query_keys) > 0
 
-    def _build_dataframe_for_scenario(
-        self, scenario: Any, columns: str = "future", **kwargs
-    ):
+    def _build_dataframe_for_scenario(self, scenario: Any, columns: str = "future", **kwargs: Any) -> pd.DataFrame:
         """Build dataframe for a single scenario - the scenario handles query execution."""
-        return scenario.results(columns=columns)
+        return cast(pd.DataFrame, scenario.results(columns=columns))
 
-    def _to_dataframe(self, columns="future", **kwargs) -> pd.DataFrame:
+    def _to_dataframe(self, columns: str = "future", **kwargs: Any) -> pd.DataFrame:
         """Build dataframe with query results from all scenarios."""
         # TODO: this build one should be private :) why else we have two?
         return self.build_pack_dataframe(columns=columns, **kwargs)
 
-    def add_to_workbook(self, workbook: Workbook, columns: str = "future"):
+    def add_to_workbook(self, workbook: Workbook, sheet_name: Optional[str] = None, **kwargs: Any) -> None:
         """Add gqueries results to workbook."""
+        columns = kwargs.get("columns", "future")
         gqueries_df = self.to_dataframe(columns=columns)
         if not gqueries_df.empty:
-            self._add_dataframe_to_workbook(
-                workbook, self.output_sheet_name, gqueries_df
-            )
+            self._add_dataframe_to_workbook(workbook, self.output_sheet_name, gqueries_df)
 
-    def load_from_dataframe(self, df: pd.DataFrame):
+    def load_from_dataframe(self, df: pd.DataFrame) -> None:
         """Import query definitions from dataframe."""
         if df is None or df.empty:
             return
@@ -84,11 +83,11 @@ class QueryPack(Packable):
         filtered = [q for q in first_col if q and q.lower() != "nan"]
         self.add_queries(list(dict.fromkeys(filtered)))
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all scenarios and query definitions."""
         super().clear()
         self._query_keys.clear()
 
-    def _push_query_keys(self, *keys):
+    def _push_query_keys(self, *keys: str) -> None:
         new_keys = set(keys) - set(self._query_keys)
         self._query_keys.extend(list(new_keys))

@@ -1,3 +1,5 @@
+"""Service for saved scenario users destroy operations."""
+
 from typing import Any, Dict, List
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
@@ -16,7 +18,7 @@ class SavedScenarioUsersDestroyRunner(BaseRunner[List[Dict[str, Any]]]):
         client: BaseClient,
         saved_scenario_id: int,
         users: List[Dict[str, Any]],
-        **kwargs,
+        **kwargs: Any,
     ) -> ServiceResult[List[Dict[str, Any]]]:
         if not users:
             return ServiceResult.fail(["No users provided"])
@@ -24,9 +26,7 @@ class SavedScenarioUsersDestroyRunner(BaseRunner[List[Dict[str, Any]]]):
         errors = []
         for i, user in enumerate(users):
             if "user_id" not in user and "user_email" not in user:
-                errors.append(
-                    f"User {i}: Must provide either 'user_id' or 'user_email'"
-                )
+                errors.append(f"User {i}: Must provide either 'user_id' or 'user_email'")
 
         if errors:
             return ServiceResult.fail(errors)
