@@ -127,6 +127,146 @@ The `annual_exports` field has three modes:
 !!! note "Validation"
     Invalid export type names will be filtered out with a warning. Only valid entries will be exported.
 
+## Input Sheet Structures
+
+This section documents the expected format for optional input sheets. All sheets are optional - include only the ones you need.
+
+### SLIDER_SETTINGS Sheet
+
+**Purpose**: Set input values (slider settings) for your scenarios.
+
+**Structure**:
+```
+input_key                                    | scenario_1 | scenario_2 | scenario_3 |
+---------------------------------------------|------------|------------|------------|
+households_number_of_inhabitants             | 17000000   | 18000000   | 16500000   |
+households_insulation_level                  | 1.5        | 2.0        | 1.2        |
+transport_car_using_electricity_share        | 25         | 40         | 30         |
+```
+
+- **Column 1**: Input keys (learn about available keys in the [Inputs documentation](../api/models/inputs.md))
+- **Remaining columns**: Scenario identifiers (short_name from MAIN sheet)
+- **Values**: User values to set for each slider
+
+**Notes**:
+
+- Column headers must match the `short_name` values from your MAIN sheet
+- Leave cells empty to keep default values
+- See `Scenario.update_user_values()` for programmatic equivalent
+
+### USERS Sheet
+
+**Purpose**: Define user access permissions for scenarios.
+
+**Structure**:
+```
+email                  | scenario_1  | scenario_2  | scenario_3  |
+-----------------------|-------------|-------------|-------------|
+user1@example.com      | owner       | viewer      |             |
+user2@example.com      | collabor.   | owner       | viewer      |
+admin@example.com      | owner       | owner       | owner       |
+```
+
+- **Column 1**: User email addresses
+- **Remaining columns**: Scenario identifiers (short_name from MAIN sheet)
+- **Valid roles**:
+  - `owner` - Full control over the scenario
+  - `collaborator` - Can edit the scenario
+  - `viewer` - Read-only access
+
+**Notes**:
+
+- Empty cells mean the user has no access to that scenario
+- See `Scenario.update_users()` for programmatic equivalent
+
+### GQUERIES Sheet
+
+**Purpose**: Specify GQL queries to execute for all scenarios.
+
+**Structure**:
+```
+dashboard_total_costs
+dashboard_co2_emissions
+dashboard_renewable_percentage
+final_demand_of_electricity
+```
+
+- **Format**: Single column, no header
+- **Content**: One query key per row
+- **Results**: Exported to `GQUERIES_RESULTS` sheet
+
+**Notes**:
+
+- Find available queries in the [GQueries documentation](../api/models/gqueries.md)
+- Whitespace is automatically trimmed
+- See `Scenario.add_queries()` for programmatic equivalent
+
+### SORTABLES Sheet
+
+**Purpose**: Define technology ordering (e.g., merit order for electricity dispatch, heat network priority).
+
+**Structure**:
+```
+electricity_merit_order                    | heat_network                          |
+-------------------------------------------|---------------------------------------|
+energy_power_wind_turbine_inland           | energy_heat_burner_hydrogen           |
+energy_power_solar_pv_solar_radiation      | energy_heat_heatpump_water_water_ts...|
+energy_power_nuclear_gen3_uranium_oxide    | energy_heat_burner_network_gas        |
+energy_power_ultra_supercritical_coal      |                                       |
+```
+
+- **Column headers**: Sortable names (e.g., `electricity_merit_order`, `heat_network`)
+- **Rows**: Technology keys in priority order (top = highest priority)
+- **Multiple sortables**: Add more columns for different sortable types
+
+**Notes**:
+
+- Can be applied to one or multiple scenarios via MAIN sheet's `sortables` column
+- Technologies listed first have highest priority in dispatch/ordering
+- See `Scenario.set_sortables_from_dataframe()` for programmatic equivalent
+
+### CUSTOM_CURVES Sheet
+
+**Purpose**: Upload custom hourly price or demand curves (8760 hours per year).
+
+**Structure**:
+```
+electricity_price | hydrogen_demand | solar_capacity |
+------------------|-----------------|----------------|
+45.2              | 100.5           | 1200.0         |
+46.1              | 105.2           | 1180.5         |
+47.3              | 98.7            | 1250.3         |
+...               | ...             | ...            |
+(8760 rows total)
+```
+
+- **Column headers**: Curve names (define custom names for your curves)
+- **Rows**: Hourly values for the full year (exactly 8760 rows required)
+- **Values**: Numeric data for each hour
+
+**Notes**:
+
+- **Must have exactly 8760 rows** (one per hour of the year)
+- Can be applied to one or multiple scenarios via MAIN sheet's `custom_curves` column
+- Data is validated before upload to ensure correct length
+- See `Scenario.update_custom_curves()` for programmatic equivalent
+
+## Important Notes
+
+**Scenario References**:
+
+- SLIDER_SETTINGS and USERS use `short_name` from MAIN sheet as column headers
+- SORTABLES and CUSTOM_CURVES can be referenced from MAIN sheet's `sortables` and `custom_curves` columns
+- This allows different scenarios to use different configurations
+
+**Update Behavior**:
+
+When using `from_excel()`:
+
+- `update=False` - Load data locally only, don't upload to ETM
+- `update=True` - Upload all changes to ETM (inputs, users, sortables, custom curves)
+- `update=["user_values"]` - Selective upload (only user values)
+
 ### From Excel
 
 ##### Import scenarios from an Excel file without uploading to the API:

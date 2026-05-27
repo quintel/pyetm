@@ -80,7 +80,7 @@ pyetm init
 This will:
 - Ask which environment you want to use (production, beta, or local)
 - Create a `.env` configuration file
-- Copy an example Excel file to `inputs/example_input_excel.xlsx`
+- Copy an input template Excel file to `inputs/input.xlsx`
 
 After initialization, you'll need to manually add your API token to the `.env` file:
 
@@ -101,6 +101,33 @@ Example:
 ```bash
 pyetm init --environment pro --log-level INFO
 ```
+
+### 4. Run Scenarios from Excel
+
+The easiest way to work with scenarios is using Excel files:
+
+```bash
+# Edit inputs/input.xlsx with your scenario data, then run:
+pyetm run inputs/input.xlsx
+```
+
+This will load your scenarios, update them on ETM, and export results to `inputs/input_results.xlsx`.
+
+**Command options**:
+- `--output PATH` or `-o PATH`: Custom output file location
+- `--no-update`: Read-only mode (don't upload changes to ETM)
+- `--log-level`: Logging verbosity
+
+Example:
+```bash
+# Custom output location
+pyetm run inputs/input.xlsx --output results/my_results.xlsx
+
+# Read-only mode (fetch data without updating)
+pyetm run inputs/input.xlsx --no-update
+```
+
+**For detailed Excel workflow instructions**, see the [Quick Start Guide](https://quintel.github.io/pyetm/getting-started/quickstart/#running-scenarios-from-excel) in the docs.
 
 ---
 

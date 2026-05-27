@@ -69,5 +69,4 @@
 * utils
     * [excel_utils](pyetm/utils/excel_utils.md)
     * [safe_cast](pyetm/utils/safe_cast.md)
-    * [singleton](pyetm/utils/singleton.md)
 * [validators](pyetm/validators.md)

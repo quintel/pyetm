@@ -85,15 +85,20 @@ class ScenarioPacker(BaseModel):
         """
         Create main info DataFrame with scenarios as rows.
 
-        Returns DataFrame with scenario_id column (numeric ID for internal tracking)
-        and scenario attributes as columns. The session_id and saved_scenario_id
-        columns from _to_dataframe() provide the export-friendly IDs.
+        Returns DataFrame with scenarios as rows. The scenario_id column contains
+        scenario identifiers, and the DataFrame index is set to match for proper
+        Excel export. The session_id and saved_scenario_id columns from
+        _to_dataframe() provide the export-friendly IDs.
         """
         scenarios = self._scenarios()
         if not scenarios:
             return pd.DataFrame()
         df = pd.concat([scenario._to_dataframe() for scenario in scenarios], axis=1)
+        # Transpose and create scenario_id column from the index
         result = df.T.reset_index(names=["scenario_id"])
+        # Set the index to scenario_id for proper Excel row labels, while keeping the column
+        result.index = result["scenario_id"]
+        result.index.name = None
         return result
 
     def inputs(self, fields: str = "value") -> pd.DataFrame:
@@ -267,7 +272,9 @@ class ScenarioPacker(BaseModel):
             hourly_curves, resolved_flags, global_config
         )
         config = self._build_export_config(resolved_flags, hourly_curve_carriers)
-        collected_data = self._collect_data_by_flags(resolved_flags, hourly_curve_carriers)
+        collected_data = self._collect_data_by_flags(
+            resolved_flags, hourly_curve_carriers
+        )
 
         return ExportDataCollection(
             main_info=self.main_info(),
@@ -326,7 +333,9 @@ class ScenarioPacker(BaseModel):
                 "include_input_min_max"
             ):
                 collected["inputs_detailed"] = self._inputs.to_dataframe(
-                    include_defaults=resolved_flags.get("include_input_defaults", False),
+                    include_defaults=resolved_flags.get(
+                        "include_input_defaults", False
+                    ),
                     include_min_max=resolved_flags.get("include_input_min_max", False),
                 )
         if resolved_flags["include_sortables"]:
@@ -770,7 +779,29 @@ class ScenarioPacker(BaseModel):
             main_df = excel_file.parse("MAIN")
             if main_df is None or getattr(main_df, "empty", False):
                 return None
-            return main_df
+
+            # Filter out completely empty rows
+            main_df = main_df.dropna(how="all")
+
+            # Filter out rows where critical fields are all empty/NaN
+            # A valid row needs at least ONE of: scenario_id, copy_from, parent, OR (area_code AND end_year)
+            def is_valid_row(row: Series) -> bool:
+                # Check for existing scenario references
+                if (
+                    pd.notna(row.get("scenario_id"))
+                    or pd.notna(row.get("copy_from"))
+                    or pd.notna(row.get("parent"))
+                ):
+                    return True
+                # Check for new scenario creation parameters
+                area_code = row.get("area_code")
+                end_year = row.get("end_year")
+                has_valid_area = pd.notna(area_code) and len(str(area_code).strip()) > 0
+                return has_valid_area and pd.notna(end_year)
+
+            main_df = main_df[main_df.apply(is_valid_row, axis=1)]
+
+            return main_df if not main_df.empty else None
         except Exception as e:
             logger.warning("Failed to parse MAIN sheet: %s", e)
             return None
@@ -1013,7 +1044,9 @@ class ScenarioPacker(BaseModel):
                 export_config_df
             )
             if config is None:
-                logger.error("Failed to read export config from EXPORT_CONFIG sheet.")
+                logger.error(
+                    "Failed to read export config from EXPORT_CONFIG sheet - did you the EXPORT_CONFIG sheet?"
+                )
                 return
 
             for scenario in scenarios_by_column.values():

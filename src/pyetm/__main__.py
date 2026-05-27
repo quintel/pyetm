@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from importlib.metadata import version
 import shutil
+import logging
 import click
 
 
@@ -50,26 +51,9 @@ def write_file_safely(path: Path, content: str, force: bool = False) -> bool:
     return True
 
 
-def get_examples_path() -> Path:
-    """Get the path to the examples directory in the package."""
-    # In development: src/pyetm/__main__.py -> go up to project root
-    # In installed package: site-packages/pyetm/__main__.py -> examples in parent
-    package_dir = Path(__file__).parent.parent
-    examples_path = package_dir / "examples"
-
-    # If not found (development mode), check project root
-    if not examples_path.exists():
-        project_root = package_dir.parent
-        examples_path = project_root / "examples"
-
-    return examples_path
-
-
-def copy_example_file(
-    target_dir: Path, force: bool = False
-) -> tuple[bool, bool]:
+def copy_input_template(target_dir: Path, force: bool = False) -> tuple[bool, bool]:
     """
-    Copy example Excel file from the package to the target directory.
+    Copy input template Excel file from templates to the target directory.
 
     Args:
         target_dir: Directory to copy file into
@@ -78,20 +62,17 @@ def copy_example_file(
     Returns:
         Tuple of (created, skipped) booleans
     """
-    examples_path = get_examples_path()
+    # Get template from package templates directory
+    template_path = get_template_path("input_template.xlsx")
 
-    if not examples_path.exists():
+    if not template_path.exists():
         raise FileNotFoundError(
-            f"Examples directory not found: {examples_path}\n"
+            f"Input template not found: {template_path}\n"
             "This may indicate an incomplete package installation."
         )
 
-    source_path = examples_path / "inputs" / "example_input_excel.xlsx"
-    dest_path = target_dir / "inputs" / "example_input_excel.xlsx"
-
-    if not source_path.exists():
-        click.echo(f"  Warning: Example Excel file not found: {source_path.name}")
-        return False, False
+    # Copy to inputs/input.xlsx in target directory
+    dest_path = target_dir / "inputs" / "input.xlsx"
 
     # Create parent directory if needed
     dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +86,7 @@ def copy_example_file(
             return False, True
 
     # Copy the file
-    shutil.copy2(source_path, dest_path)
+    shutil.copy2(template_path, dest_path)
     return True, False
 
 
@@ -141,7 +122,7 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
     """
     Initialize a new pyetm project.
 
-    Creates .env configuration file and copies example Excel file to the current directory.
+    Creates .env configuration file and copies input template Excel file to the current directory.
     """
     click.echo("\nSetting up pyetm...\n")
 
@@ -184,34 +165,131 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
         click.echo(f"✗ Failed to create .env: {e}", err=True)
         sys.exit(1)
 
-    # 2. Copy example Excel file
+    # 2. Copy input template Excel file
     try:
-        example_created, example_skipped = copy_example_file(target_dir, force)
+        template_created, template_skipped = copy_input_template(target_dir, force)
 
-        if example_created:
-            click.echo("✓ Created inputs/example_input_excel.xlsx")
-            created_files.append("inputs/example_input_excel.xlsx")
-        elif example_skipped:
-            click.echo("⊗ Skipped inputs/example_input_excel.xlsx (already exists)")
+        if template_created:
+            click.echo("✓ Created inputs/input.xlsx")
+            created_files.append("inputs/input.xlsx")
+        elif template_skipped:
+            click.echo("⊗ Skipped inputs/input.xlsx (already exists)")
 
     except Exception as e:
-        click.echo(f"✗ Failed to copy example file: {e}", err=True)
+        click.echo(f"✗ Failed to copy input template: {e}", err=True)
         # Don't exit - .env is more important
 
     # Next steps
     click.echo("\nNext steps:")
     click.echo("  1. Edit .env and set your environment variables:")
-    click.echo("     • ETM_API_TOKEN (get from https://docs.energytransitionmodel.com/api/authentication)")
-    click.echo("     • BASE_URL (if using custom ETM instance)")
+    click.echo(
+        "     • ETM_API_TOKEN (see https://docs.energytransitionmodel.com/api/authentication)"
+    )
+    click.echo("     • ENVIRONMENT or BASE_URL (if using stable or other ETM instance)")
     click.echo("")
-    click.echo("  2. Use pyetm in your Python scripts:")
-    click.echo("     • See: https://quintel.github.io/pyetm/examples/")
+    click.echo("  2. Edit inputs/input.xlsx with your scenario data")
+    click.echo("        (Don't forget to save your changes!)")
     click.echo("")
-    click.echo("  3. Check the documentation:")
-    click.echo("     • Getting started: https://quintel.github.io/pyetm/")
-    click.echo("     • API reference: https://quintel.github.io/pyetm/api/")
+    click.echo("  3. Run your scenarios:")
+    click.echo("     • pyetm run inputs/input.xlsx")
+    click.echo("")
+    click.echo("  4. Check the documentation:")
+    click.echo("     • Full docs: https://quintel.github.io/pyetm/")
     click.echo("")
     click.echo("Remember: Never commit your .env file to version control!\n")
+
+
+@cli.command()
+@click.argument(
+    "input_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output Excel file path. Defaults to '{input_stem}_results.xlsx' in the same directory.",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default="INFO",
+    help="Logging level for the command execution.",
+)
+def run(
+    input_path: Path,
+    output: Path | None,
+    log_level: str,
+) -> None:
+    """
+    Run scenarios from an Excel input file and export results.
+
+    Reads scenario definitions from INPUT_PATH, updates them on the ETM platform,
+    and exports computed results to an Excel file.
+
+    Examples:
+
+      \b
+      # Run with default settings (updates scenarios, outputs to input_results.xlsx)
+      pyetm run input.xlsx
+
+      \b
+      # Specify custom output path
+      pyetm run input.xlsx --output results/my_output.xlsx
+
+    The input Excel file should contain sheets for scenario configuration:
+    - MAIN: Scenario identifiers and session information
+    - EXPORT_CONFIG: Configuration for what data to export
+    - Other optional sheets: SLIDER_SETTINGS, CUSTOM_CURVES, SORTABLES, USERS, etc.
+
+    See https://quintel.github.io/pyetm/getting-started/quickstart/#running-scenarios-from-excel for more guidance.
+    """
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    # Import here to avoid slow startup times for --help
+    from pyetm.models.scenario_packer import ScenarioPacker
+
+    click.echo(f"\nLoading scenarios from: {input_path}")
+
+    try:
+        # Load scenarios from Excel (update=True means push changes to ETM)
+        packer = ScenarioPacker.from_excel(input_path, update=True)
+        click.echo("✓ Scenarios loaded and updated on ETM")
+
+    except FileNotFoundError as e:
+        click.echo(f"✗ Error: Input file not found: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"✗ Error loading scenarios: {e}", err=True)
+        logging.exception("Detailed error:")
+        sys.exit(1)
+
+    # Determine output path
+    if output is None:
+        output = input_path.parent / f"{input_path.stem}_results{input_path.suffix}"
+
+    # Ensure output directory exists
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    click.echo(f"\nExporting results to: {output}")
+
+    try:
+        # Export results to Excel
+        packer.to_excel(str(output))
+        click.echo("✓ Results exported successfully")
+
+    except Exception as e:
+        click.echo(f"✗ Error exporting results: {e}", err=True)
+        logging.exception("Detailed error:")
+        sys.exit(1)
+
+    click.echo("\nDone!\n")
 
 
 def main() -> None:

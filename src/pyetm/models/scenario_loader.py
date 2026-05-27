@@ -227,7 +227,7 @@ class SavedScenarioLoader:
         try:
             saved_scenario = scenario.save(title=title)
             logger.info(
-                "Automatically saved new scenario to MyETM with ID %s (session ID: %s)",
+                "Saved new scenario to MyETM with ID %s (session ID: %s)",
                 saved_scenario.id,
                 saved_scenario.scenario_id,
             )
