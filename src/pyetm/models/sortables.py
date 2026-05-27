@@ -178,15 +178,37 @@ class Sortables(Base):
 
     def update(self, updates: Dict[str, list[Any]]) -> None:
         """
-        Update the orders of specified sortables
+        Update the orders of specified sortables with validation and warning display.
 
-        :param updates: Dict mapping sortable names to new orders
+        Invalid orders are rejected (not applied) to maintain data integrity.
+        Warnings are automatically displayed for invalid orders and non-existent sortables.
+        Warnings from previous updates are cleared to show only current operation issues.
+
+        Args:
+            updates: Dictionary mapping sortable names to new orders
         """
+        # Auto-clear stale warnings from previous updates
+        self.warnings.clear()
+
         sortable_by_name = {s.name(): s for s in self.sortables}
 
+        # Check for non-existent sortable names
+        for name in updates.keys():
+            if name not in sortable_by_name:
+                self.add_warning(name, f"Sortable '{name}' does not exist")
+
+        # Apply updates (Base.__setattr__ will validate and add warnings)
         for name, new_order in updates.items():
             if name in sortable_by_name:
                 sortable_by_name[name].order = new_order
+                # Collect warnings from individual sortables
+                if sortable_by_name[name].warnings.has_warnings("order"):
+                    for warning in sortable_by_name[name].warnings.get_by_field("order"):
+                        self.add_warning(name, warning.message)
+
+        # Auto-display warnings if any exist
+        if len(self.warnings) > 0:
+            self.auto_show_warnings()
 
     @field_validator("sortables")
     @classmethod

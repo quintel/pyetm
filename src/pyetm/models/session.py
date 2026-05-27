@@ -772,6 +772,23 @@ class Session(Base):
         else:
             self._queries.add(*query_list)
 
+    def remove_queries(self, *query_keys: str) -> None:
+        """
+        Remove specific queries from the session.
+
+        Args:
+            query_keys: Query keys to remove from the collection
+        """
+        if self._queries is not None:
+            self._queries.remove(*query_keys)
+
+    def clear_queries(self) -> None:
+        """
+        Remove all queries from the session.
+        """
+        if self._queries is not None:
+            self._queries.clear()
+
     def execute_queries(self) -> None:
         """
         Queries are executed explicitly, as we need to know when the user is

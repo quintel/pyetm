@@ -17,7 +17,6 @@ Inputs represent slider settings in the ETM interface. Each input has a key, uni
 | Fetch | `scenario.inputs` | `Inputs` collection |
 | View single | `scenario.inputs[key]` | `Input` object |
 | View all | `scenario.inputs.to_dataframe()` | DataFrame |
-| Validate | `scenario.inputs.is_valid_update(data)` | Dict of warnings |
 | Update | `scenario.update_user_values(data)` | Updated scenario |
 | Remove | `scenario.remove_user_values(keys)` | Updated scenario |
 
@@ -53,23 +52,39 @@ print(df.head())
 
 ### Setting and Altering Inputs
 
+Update locally
 ```python
-# Update locally (not uploaded to API yet)
+# Invalid values are rejected, warnings are shown immediately
 inputs.update({"investment_costs_co2_ccs": 50.0})
+# No warnings (valid update)
+```
 
-# Update and upload to API immediately
+Value not changes with bad input update
+```python
+inputs.update({"investment_costs_co2_ccs": -500.0})
+#  [WARNING] Value error, -500.0 should be between -100.0 and 300.0
+inputs.update({"nonexistent_input": 100.0})
+#  [WARNING] Input 'nonexistent_input' does not exist
+```
+
+Update and upload to API immediately (validates and raises exception if invalid)
+```python
 scenario.update_user_values({
-    "costs_coal": 50.0,
-    "capacity_costs_energy_flexibility_flow_batteries_electricity": 100.0
+    "investment_costs_co2_ccs": 50.0,
+    "capacity_of_energy_hydrogen_steam_methane_reformer": 100.0
 })
+```
 
-# Remove user values (revert to defaults)
+Remove user values (revert to defaults)
+```python
 scenario.remove_user_values([
-    "costs_coal",
-    "capacity_costs_energy_flexibility_flow_batteries_electricity"
+    "investment_costs_co2_ccs",
+    "capacity_of_energy_hydrogen_steam_methane_reformer"
 ])
+```
 
-# Set from DataFrame (input keys as index)
+Set from DataFrame (input keys as index)
+```python
 df = pd.DataFrame({
     "user": [50.0]
 }, index=pd.Index(["investment_costs_co2_ccs"], name="input"))
@@ -88,12 +103,18 @@ scenario.set_user_values_from_dataframe(df)
 
 - **Merged values**: `input.merged_value` returns the user value if set, otherwise the default
 - **Disabled inputs**: Some inputs may be disabled by coupling settings (`disabled=True`)
-- **Validation warnings**: Invalid updates create `WarningCollector` objects instead of raising exceptions
+- **Validation and warnings**:
+    - `inputs.update()` validates locally and auto-displays warnings immediately
+    - Invalid values are **rejected** (not applied) to maintain data integrity
+    - Non-existent input keys trigger warnings
+    - `inputs.is_valid_update()` pre-validates without side effects (returns `WarningCollector` dict)
+    - `scenario.update_user_values()` validates and raises `ScenarioError` before API upload
+    - Warnings auto-clear on each `update()` call to show only current issues
 - **Reset values**: Set a user value to `"reset"` to clear it (reverts to default)
 - **Automatic coercion**:
-  - BoolInput accepts "true", "false", 1, 0, "on", "off"
-  - FloatInput coerces numeric strings to numbers
-  - EnumInput strips whitespace from values
+    - BoolInput accepts "true", "false", 1, 0, "on", "off"
+    - FloatInput coerces numeric strings to numbers
+    - EnumInput strips whitespace from values
 
 ---
 
@@ -109,6 +130,8 @@ Queries (gqueries) are Graph Query Language calculations that extract values fro
 | Execute | `scenario.execute_queries()` | Query results |
 | View results | `scenario.results(columns=...)` | DataFrame |
 | Check status | `gqueries.is_ready()` | Boolean |
+| Remove queries | `scenario.remove_queries("query1", "query2")` | Modified scenario |
+| Clear all queries | `scenario.clear_queries()` | Modified scenario |
 
 ### Adding Queries
 
@@ -129,11 +152,9 @@ scenario.add_queries(["dashboard_renewability"])
 Queries are **not executed** when you add them. You must explicitly execute:
 
 ```python
-# Execute all added queries
 scenario.execute_queries()
-
-# Now results are available
 ```
+Now results are available
 
 ### Viewing Results
 
@@ -144,27 +165,21 @@ df = scenario.results(columns="present")  # Present year only
 df = scenario.results(columns=["present", "future"])  # Both years
 
 print(df)
-#                                      future
-# total_co2_emissions                   123.4
-# total_costs_of_electricity           5678.9
-# dashboard_total_costs               12345.6
 ```
 
-### Query Results Structure
+### Setting and Altering Queries
 
-Each query result is a dictionary:
+**Remove specific queries from the collection:**
 
 ```python
-# Access the internal Gqueries object
-queries = scenario._queries
+# Remove queries you no longer need
+scenario.remove_queries("total_co2_emissions", "dashboard_renewability")
+```
 
-# Get a single query result
-result = queries.get("total_co2_emissions")
-# {
-#     "present": 150.0,
-#     "future": 123.4,
-#     "unit": "MT"
-# }
+**Clear all queries from the collection:**
+
+```python
+scenario.clear_queries()  # Also clears any accumulated warnings
 ```
 
 ### Quirks and Special Behaviors
@@ -179,9 +194,9 @@ scenario.execute_queries()
 ```
 
 **Partial results on errors:**
-- If some queries are invalid, valid queries still return results
-- Invalid queries generate warnings
-- The system automatically retries with valid queries only
+- If some queries are invalid, valid queries still return results with warnings
+- The system automatically retries with valid queries after showing warnings
+- Warnings auto-clear on the next `execute_queries()` call to show only current issues
 
 **Curve vs scalar queries:**
 - Most queries return scalar values (single numbers)
@@ -190,7 +205,13 @@ scenario.execute_queries()
 **Lazy execution:**
 - Queries start with `None` values
 - Only populated after `execute_queries()` is called
-- Use `gqueries.is_ready()` to check if execution is complete
+
+**Warning behavior:**
+- Warnings are not shown or added when calling 'add_queries()'
+- Invalid queries trigger warnings during `execute_queries()` that are **auto-displayed immediately**
+- Warnings auto-clear at the start of each `execute_queries()` call to show only current issues
+- `remove_queries()` validates and auto-displays warnings for non-existent query keys
+- `clear_queries()` also clears accumulated warnings
 
 ---
 
@@ -206,7 +227,9 @@ Custom curves are 8760-hour time series that override default profiles for techn
 | Fetch single | `scenario.custom_curve_series(key)` | pandas Series (8760 values) |
 | Check attached | `curves.is_attached(key)` | Boolean |
 | Iterate all | `scenario.custom_curves_series()` | Generator of Series |
-| Update | `scenario.update_custom_curves(curves)` | Updated scenario |
+| Validate | `curves.is_valid_update(data)` | Dict of warnings |
+| Update locally | `curves.update(data)` | Auto-displays warnings |
+| Update API | `scenario.update_custom_curves(curves)` | Updated scenario |
 
 ### Fetching Custom Curves
 
@@ -245,10 +268,22 @@ curve_data = curves.get_contents(scenario, "weather/solar_pv_profile_1")
 import pandas as pd
 import numpy as np
 
-# Example: flat production profile
-flat_curve = pd.Series(np.ones(8760) * 0.5, name="weather/solar_pv_profile_1")
+# Update curves locally WITH validation and warning display
+curves = scenario.custom_curves
 
-# Create CustomCurves from DataFrame
+solar_curve = pd.Series(np.ones(8760) * 0.5)
+curves.update({"weather/solar_pv_profile_1": solar_curve})
+# No warnings (valid 8760-hour curve)
+
+short_curve = pd.Series(np.ones(100))
+curves.update({"weather/solar_pv_profile_1": short_curve})
+#  weather/solar_pv_profile_1: Curve must have 8760 values, found 100
+# Curve file NOT updated (keeps old data)
+
+curves.update({"nonexistent_curve": solar_curve})
+#  nonexistent_curve: Curve 'nonexistent_curve' is not attached to scenario
+
+# Create CustomCurves from DataFrame for API upload
 df = pd.DataFrame({
     "weather/solar_pv_profile_1": np.ones(8760) * 0.5,
     "weather/wind_offshore_baseline": np.random.random(8760)
@@ -291,6 +326,10 @@ else:
 **Session vs Scenario:**
 - Can work with either `Session` or `SavedScenario` objects
 - Internally normalizes to `Session` to get ETEngine session ID
+
+**Warning behavior:**
+- Warnings auto-clear on each `update()` call to show only current issues
+- Manual `.clear()` available for custom workflows (rarely needed)
 
 ---
 
@@ -347,30 +386,44 @@ print(df.head())
 ### Validating Updates
 
 ```python
+# Pre-validation check (returns WarningCollector dict, doesn't modify state)
 updates = {
     "forecast_storage": ["new_item_1", "new_item_2", "new_item_3"],
     "heat_network_lt": ["dispatchable_a", "dispatchable_b"]
 }
 
-# Validate before updating
 warnings = sortables.is_valid_update(updates)
 
 if len(warnings) == 0:
-    print("All updates valid!")
+    # Safe to update - won't trigger warnings
+    sortables.update(updates)
 else:
     for name, warning in warnings.items():
-        print(f"{name}: {warning}")
+        print(f"Validation error in {name}: {warning}")
 ```
 
 ### Setting and Altering Sortables
 
 ```python
-# Update locally
+# Update locally WITH validation and warning display
+# Invalid orders are rejected, warnings are shown immediately
 sortables.update({
     "forecast_storage": ["item1", "item2", "item3"]
 })
+# No warnings (valid update)
 
-# Update and upload to API
+sortables.update({
+    "nonexistent_sortable": ["item1"]
+})
+#  nonexistent_sortable: Sortable 'nonexistent_sortable' does not exist
+
+sortables.update({
+    "forecast_storage": ["item1", "item1", "item2"]  # Duplicate!
+})
+#  forecast_storage: Order contains duplicate items
+# Value is NOT changed (keeps old value for data integrity)
+
+# Update and upload to API (validates and raises exception if invalid)
 scenario.update_sortables({
     "forecast_storage": ["item1", "item2", "item3"],
     "heat_network_lt": ["dispatchable1", "dispatchable2"]
@@ -423,29 +476,126 @@ scenario.remove_sortables(["forecast_storage"])
 - Imports detect `"heat_network_*"` pattern to recreate subtype structure
 - Shorter lists are padded with `None` to match DataFrame row count
 
+**Warning behavior:**
+- Warnings auto-clear on each `update()` call to show only current issues
+- Manual `.clear()` available for custom workflows (rarely needed)
+
 ---
 
 ## Common Patterns
 
-### Validation Before Updates
+### Validation and Warnings
 
-All submodels use a consistent validation pattern with `WarningCollector`:
+All submodels use a consistent validation pattern:
+
+**Local updates (`.update()` methods):**
+- Automatically validate using internal checks
+- Invalid values are **rejected** (not applied) for data integrity
+- Warnings are **auto-displayed** immediately in console/notebook
+- Non-existent keys/names trigger warnings
 
 ```python
-# For inputs
-warnings = scenario.inputs.is_valid_update({"key": value})
+# Local updates auto-validate and display warnings
+inputs.update({"investment_costs_co2_ccs": -50.0})
+#  investment_costs_co2_ccs: Value -50.0 should be between 0.0 and 500.0
+# Value NOT changed (keeps old value)
 
-# For sortables
-warnings = scenario.sortables.is_valid_update({"type": [items]})
+sortables.update({"nonexistent": ["item1"]})
+#  nonexistent: Sortable 'nonexistent' does not exist
+```
 
-# Check results
+**Pre-validation (`.is_valid_update()` methods):**
+- Check validity **without applying** changes or side effects
+- Returns `Dict[str, WarningCollector]` mapping keys to warnings
+- Use before local updates if you want to handle errors programmatically
+
+```python
+# Pre-validation check
+warnings = inputs.is_valid_update({"key": value})
+
 if len(warnings) == 0:
-    # Safe to proceed
-    pass
+    inputs.update({"key": value})  # Won't trigger warnings
 else:
     for key, warning in warnings.items():
         print(f"Error in {key}: {warning}")
 ```
+
+**API updates (`.update_user_values()`, `.update_sortables()`, etc.):**
+- Validate first, then raise `ScenarioError` if invalid
+- No silent failures - exceptions ensure you know about problems
+
+```python
+# API updates validate and raise exceptions
+scenario.update_user_values({"key": invalid_value})
+# Raises: ScenarioError: Could not update user values: ["key: ['validation error']"]
+```
+
+**Auto-clear behavior:**
+
+Warnings automatically clear at the start of each `update()` call to show only current issues:
+
+```python
+# First update shows its warnings
+inputs.update({"key": -50.0})
+# key: Value -50.0 out of bounds
+
+# Second update clears previous warnings and shows new ones
+inputs.update({"key": 25.0})
+# No warnings - previous warning cleared, value is now valid
+
+# Each update starts fresh
+inputs.update({"another_key": bad_value})
+# Only see warnings from this update, not previous ones
+```
+
+**Manual clearing (rarely needed):**
+
+The auto-clear behavior handles most cases. Manual `.clear()` is only needed for custom workflows:
+
+```python
+# Manually clear if needed (uncommon)
+inputs.warnings.clear()
+```
+
+### Working with Warnings
+
+**Display warnings:**
+```python
+# Automatic display (happens during update() calls)
+inputs.update({"key": bad_value})
+# Warnings auto-displayed immediately
+
+# Manual display
+inputs.show_warnings()  # Print all warnings to console
+```
+
+**Check for warnings programmatically:**
+```python
+# Check if any warnings exist
+if len(inputs.warnings) > 0:
+    print(f"Found {len(inputs.warnings)} warnings")
+
+# Check for warnings on specific field
+if inputs.warnings.has_warnings("key_name"):
+    field_warnings = inputs.warnings.get_by_field("key_name")
+    for warning in field_warnings:
+        print(f"{warning.severity}: {warning.message}")
+```
+
+**Clear warnings:**
+```python
+# Clear all warnings from collection
+inputs.warnings.clear()
+
+# Clear warnings from individual item (if needed)
+input_obj = inputs["investment_costs_co2_ccs"]
+input_obj.warnings.clear()
+```
+
+**Best practices:**
+- Review warnings after batch operations before continuing
+- Clear warnings after addressing issues to avoid confusion
+- Don't rely on warnings for flow control - use `is_valid_update()` for that
 
 ### DataFrame Import/Export
 
