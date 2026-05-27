@@ -291,22 +291,22 @@ class Inputs(Base):
                 input_obj.user = key_vals[input_obj.key]
 
     def _to_dataframe(
-        self, fields: Union[str, list[str]] = "value", **kwargs: Any
+        self, columns: Union[str, list[str]] = "value", **kwargs: Any
     ) -> pd.DataFrame:
         """
         Serialize the Inputs collection to DataFrame.
 
         Args:
-            fields: Field(s) to include. Default is "value" (user value if set, else default).
-                   Can be a string or list of strings. Options include:
-                   - "value": user value if set, otherwise default (RECOMMENDED)
-                   - "user": only user-set values
-                   - "default": only default values
-                   - "min", "max", "permitted_values", etc.: other input attributes
+            columns: Column(s) to include. Default is "value" (user value if set, else default).
+                     Can be a string or list of strings. Options include:
+                     - "value": user value if set, otherwise default (RECOMMENDED)
+                     - "user": only user-set values
+                     - "default": only default values
+                     - "min", "max", "permitted_values", etc.: other input attributes
         """
-        if not isinstance(fields, list):
-            fields = [fields]
-        columns = ["unit"] + fields
+        if not isinstance(columns, list):
+            columns = [columns]
+        cols = ["unit"] + columns
         try:
             df = pd.DataFrame.from_dict(
                 {
@@ -316,12 +316,12 @@ class Inputs(Base):
                             if key == "value"
                             else getattr(input, key, None)
                         )
-                        for key in columns
+                        for key in cols
                     ]
                     for input in self.inputs
                 },
                 orient="index",
-                columns=columns,
+                columns=cols,
             )
             df.index.name = "input"
             return df.set_index("unit", append=True)

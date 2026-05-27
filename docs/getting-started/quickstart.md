@@ -240,7 +240,6 @@ Now that you've created your first scenario, explore more advanced features:
 
 - [Configuration Guide](configuration.md) - Learn about environment setup and SSL configuration
 - [Working with Scenarios](../user-guide/scenarios.md) - Deep dive into scenario management
-- [Scenario Packer Guide](../user-guide/scenario-packer.md) - Advanced Excel workflow details
 - [API Reference](../api/index.md) - Complete API documentation
 
 ## Common Issues

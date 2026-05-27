@@ -29,7 +29,7 @@ class InputsPack(Packable):
 
     def to_dataframe(
         self,
-        fields: str | List[str] = "value",
+        columns: str | List[str] = "value",
         *,
         include_defaults: bool = False,
         include_min_max: bool = False,
@@ -37,23 +37,23 @@ class InputsPack(Packable):
         if not self.scenarios:
             return pd.DataFrame()
 
-        if isinstance(fields, str):
-            fields = [fields] if fields else []
+        if isinstance(columns, str):
+            columns = [columns] if columns else []
         else:
-            fields = [c for c in fields if c]
+            columns = [c for c in columns if c]
 
         if include_defaults:
             for col in ("default", "permitted_values"):
-                if col not in fields:
-                    fields.append(col)
+                if col not in columns:
+                    columns.append(col)
         if include_min_max:
             for col in ("min", "max"):
-                if col not in fields:
-                    fields.append(col)
+                if col not in columns:
+                    columns.append(col)
 
         frames, labels = [], []
         for scenario in self.scenarios:
-            df = scenario.inputs.to_dataframe(fields=fields)
+            df = scenario.inputs.to_dataframe(columns=columns)
             if df is not None and not df.empty:
                 frames.append(df)
                 labels.append(self._get_scenario_display_key(scenario))
@@ -63,13 +63,6 @@ class InputsPack(Packable):
             if frames
             else pd.DataFrame()
         )
-
-    def _to_dataframe(self, columns: Any = "value", **kwargs: Any) -> pd.DataFrame:
-        """Internal dataframe generation matching parent signature."""
-        # Map 'columns' parameter from parent to 'fields' for our implementation
-        # TODO: FIX COLUMNS V FIELDS
-        fields = columns if columns != "value" else "value"
-        return self.to_dataframe(fields=fields)
 
     def add_to_workbook(
         self,

@@ -323,7 +323,7 @@ packer = ScenarioPacker.from_excel("scenarios.xlsx")
 
 # Access structured data
 main_info = packer.main_info()  # DataFrame with scenario metadata
-inputs_df = packer.inputs(fields="user")  # User values as DataFrame
+inputs_df = packer.inputs(columns="user")  # User values as DataFrame
 sortables_df = packer.sortables()  # Sortables as DataFrame
 
 # Access scenarios

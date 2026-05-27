@@ -44,17 +44,17 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
         s.inputs.__iter__ = Mock(return_value=iter(input_objects))
 
         # Set up to_dataframe method
-        def mock_to_dataframe(fields=None):
-            if isinstance(fields, list):
-                fields = fields
+        def mock_to_dataframe(columns=None):
+            if isinstance(columns, list):
+                columns = columns
             else:
-                fields = [fields] if fields else ["value"]
+                columns = [columns] if columns else ["value"]
 
             data = {}
-            for field in fields:
-                # Handle value field by preferring user over default
-                if field == "value":
-                    data[field] = [
+            for col in columns:
+                # Handle value column by preferring user over default
+                if col == "value":
+                    data[col] = [
                         (
                             inputs_data[key].get("user")
                             if inputs_data[key].get("user") is not None
@@ -63,8 +63,8 @@ def make_scenario(id_val=1, identifier="S1", inputs_data=None):
                         for key in inputs_data.keys()
                     ]
                 else:
-                    data[field] = [
-                        inputs_data[key].get(field) for key in inputs_data.keys()
+                    data[col] = [
+                        inputs_data[key].get(col) for key in inputs_data.keys()
                     ]
 
             df = pd.DataFrame(data, index=list(inputs_data.keys()))
