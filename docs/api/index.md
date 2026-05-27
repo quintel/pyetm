@@ -40,7 +40,6 @@ Utility functions and helpers.
 
 - **[Excel Utils](utils/excel_utils.md)** - Excel file operations
 - **[Safe Cast](utils/safe_cast.md)** - Type conversion utilities
-- **[Singleton](utils/singleton.md)** - Singleton pattern implementation
 
 ### [Types](types.md)
 Type definitions and type aliases.

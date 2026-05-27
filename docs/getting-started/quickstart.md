@@ -28,7 +28,7 @@ This command will:
 
 - Ask which environment to use (production, beta, or local)
 - Create a `.env` configuration file
-- Copy an example input excel
+- Copy an input template Excel file to `inputs/input.xlsx`
 
 After initialization, you'll need to manually add your API token to the `.env` file if you want to create or modify scenarios (see [Adding Your API Token](#adding-your-api-token) below).
 
@@ -64,7 +64,62 @@ LOG_LEVEL=INFO
 
 **Note:** API tokens are very long (1000+ characters). Make sure you paste the entire token.
 
-## Your First Scenario
+## Running Scenarios from Excel
+
+The easiest way to work with scenarios is using the `pyetm run` command with Excel files. This is ideal for non-technical users.
+
+### Step 1: Prepare Your Input File
+
+After running `pyetm init`, you'll have an `inputs/input.xlsx` file. Open it in Excel and configure your scenarios (see [the Excel docs](../user-guide/excel.md) for more detail):
+
+### Step 2: Run Your Scenarios
+
+Execute your scenarios and generate results:
+
+```bash
+pyetm run inputs/input.xlsx
+```
+
+This will:
+1. Load scenario definitions from the Excel file
+2. Update scenarios on the ETM platform with your input values
+3. Fetch all results (annual exports, hourly curves, etc.)
+4. Export everything to `inputs/input_results.xlsx`
+
+**Available options:**
+
+- `--output PATH` or `-o PATH` - Custom output file path
+- `--no-update` - Read-only mode (don't upload changes to ETM)
+- `--log-level LEVEL` - Logging verbosity
+
+**Examples:**
+
+```bash
+# Basic usage (updates scenarios, default output)
+pyetm run inputs/input.xlsx
+
+# Custom output location
+pyetm run inputs/input.xlsx --output results/my_results.xlsx
+
+# Read-only mode (fetch data without updating scenarios)
+pyetm run inputs/input.xlsx --no-update
+
+# Verbose logging for debugging
+pyetm run inputs/input.xlsx --log-level DEBUG
+```
+
+### Step 3: Review Your Results
+
+Open the output Excel file to see:
+
+- All your input data (for reference)
+- Annual export results (CO₂ emissions, costs, energy use, etc.)
+- Hourly curve data (electricity demand, solar production, etc.)
+- Any custom queries you configured
+
+Each sheet contains columns for all your scenarios, making it easy to compare results.
+
+## Your First Scenario (Python API)
 
 Let's create and run a simple scenario with pyetm:
 
@@ -128,9 +183,28 @@ You can also export your whole scenario to excel:
 scenario.to_excel("scenario.xlsx")
 ```
 
+## Working with Excel Files Programmatically
+
+You can also work with Excel files in Python using the `ScenarioPacker` class:
+
+```python
+from pyetm import ScenarioPacker
+
+# Load scenarios from Excel (with updates)
+packer = ScenarioPacker.from_excel("inputs/input.xlsx", update=True)
+
+# Export results
+packer.to_excel("inputs/results.xlsx")
+
+# Load in read-only mode (no updates to ETM)
+packer_readonly = ScenarioPacker.from_excel("inputs/input.xlsx", update=False)
+```
+
+This gives you programmatic control over the same workflow the `pyetm run` command uses.
+
 ## Using Jupyter Notebooks
 
-pyetm works great with Jupyter notebooks! After running `pyetm init`, you'll have an example input excel you can fill and use with Jupyter notebooks.
+pyetm works great with Jupyter notebooks! After running `pyetm init`, you'll have an input template you can customize and use in notebooks.
 
 ### Setting Up Jupyter
 
@@ -166,6 +240,7 @@ Now that you've created your first scenario, explore more advanced features:
 
 - [Configuration Guide](configuration.md) - Learn about environment setup and SSL configuration
 - [Working with Scenarios](../user-guide/scenarios.md) - Deep dive into scenario management
+- [Scenario Packer Guide](../user-guide/scenario-packer.md) - Advanced Excel workflow details
 - [API Reference](../api/index.md) - Complete API documentation
 
 ## Common Issues

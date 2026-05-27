@@ -51,8 +51,7 @@ where = ["src"]
 
 [tool.poetry]
 packages = [
-  { include = "pyetm", from = "src" },
-  { include = "examples" }
+  { include = "pyetm", from = "src" }
 ]
 include = [
   "LICENSE",

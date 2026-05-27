@@ -1,1 +1,0 @@
-::: pyetm.utils.singleton
