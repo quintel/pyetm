@@ -41,11 +41,52 @@ Advanced features for power users and automation workflows.
 - Manage scenario users
 
 
-### [Inputs, Queries, Custom Curves and Sortables](submodels.md)
+### [Inputs](inputs.md)
+
+*Topics covered:**
+
+- Fetching
+- Viewing
+- Setting
+- Types and quirks
+
+### [Gqueries](gqueries.md)
+
+*Topics covered:**
+
+- Adding
+- Executing
+- Viewing
+- Removing
+- Quirks
+
+### [Custom Curves](custom-curves.md)
+
+*Topics covered:**
+
+- Fetching
+- Viewing
+- Setting
+- Types and quirks
+
+### [Sortables](sortables.md)
+
+*Topics covered:**
+
+- Fetching
+- Viewing
+- Setting
+- Types and quirks
+
+### [Submodel overview](submodels.md)
 
 **Topics covered:**
 
-- To be completed.
+- Validation and warnings
+- DataFrame import/export
+- Batch updates
+- Lazy loading
+
 
 
 ## Getting Help

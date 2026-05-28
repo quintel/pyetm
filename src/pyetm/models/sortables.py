@@ -1,7 +1,7 @@
 """Sortable items management for scenarios."""
 
 from __future__ import annotations
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import pandas as pd
 from pydantic import field_validator, model_validator
@@ -24,6 +24,7 @@ class Sortable(Base):
     type: str
     order: list[Any]
     subtype: Optional[str] = None
+    valid_items: Optional[Set[Any]] = None
 
     def name(self) -> str:
         """
@@ -38,16 +39,29 @@ class Sortable(Base):
         """
         Returns a WarningCollector with validation warnings without updating the current object
         """
+        warnings = WarningCollector()
+
         new_obj_dict = self.model_dump()
         new_obj_dict["order"] = new_order
 
         try:
             warnings_obj = self.__class__(**new_obj_dict)
             if isinstance(warnings_obj.warnings, WarningCollector):
-                return warnings_obj.warnings
-            return WarningCollector()
+                warnings = warnings_obj.warnings
         except Exception:
-            return WarningCollector()
+            pass
+
+        # Additional validation: check against cached valid items
+        if self.valid_items is not None:
+            unknown_items = set(new_order) - self.valid_items
+            if unknown_items:
+                warnings.add(
+                    "order",
+                    f"Unknown items not in current sortable: {sorted(unknown_items)}. "
+                    "Fetch sortables first to see valid items."
+                )
+
+        return warnings
 
     @field_validator("type")
     @classmethod
@@ -110,12 +124,16 @@ class Sortable(Base):
         sort_type, payload = data
 
         if isinstance(payload, list):
-            sortable = cls(type=sort_type, order=payload)
+            # Extract valid items from the order and cache them
+            valid_items = set(payload) if payload else None
+            sortable = cls(type=sort_type, order=payload, valid_items=valid_items)
             yield sortable
 
         elif isinstance(payload, dict):
             for sub, order in payload.items():
-                sortable = cls(type=sort_type, subtype=sub, order=order)
+                # Extract valid items from the order and cache them
+                valid_items = set(order) if order else None
+                sortable = cls(type=sort_type, subtype=sub, order=order, valid_items=valid_items)
                 yield sortable
 
         else:
@@ -200,11 +218,20 @@ class Sortables(Base):
         # Apply updates (Base.__setattr__ will validate and add warnings)
         for name, new_order in updates.items():
             if name in sortable_by_name:
+                # Validate first (including unknown items)
+                sortable_warnings = sortable_by_name[name].is_valid_update(new_order)
+                if len(sortable_warnings) > 0:
+                    for warning in sortable_warnings:
+                        self.add_warning(name, warning.message)
+
+                # Apply update
                 sortable_by_name[name].order = new_order
-                # Collect warnings from individual sortables
+                # Collect any additional warnings from Pydantic validation
                 if sortable_by_name[name].warnings.has_warnings("order"):
                     for warning in sortable_by_name[name].warnings.get_by_field("order"):
-                        self.add_warning(name, warning.message)
+                        # Avoid duplicating warnings we already added
+                        if not any(w.message == warning.message for w in sortable_warnings):
+                            self.add_warning(name, warning.message)
 
         # Auto-display warnings if any exist
         if len(self.warnings) > 0:
