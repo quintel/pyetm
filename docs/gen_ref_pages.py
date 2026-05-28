@@ -34,9 +34,10 @@ for path in sorted(src_root.rglob("*.py")):
     doc_path = Path(*nav_parts).with_suffix(".md")
     full_doc_path = reference_root / doc_path
 
-    # Add to navigation
+    # Add to navigation (use nav_parts for structure, doc_path for link)
+    # Since SUMMARY.md is in api/, paths should be relative to api/
     if nav_parts:
-        nav[nav_parts] = str(doc_path)
+        nav[nav_parts] = doc_path.as_posix()
 
     # Write the API reference page
     with mkdocs_gen_files.open(full_doc_path, "w") as fd:
@@ -51,4 +52,7 @@ for path in sorted(src_root.rglob("*.py")):
 
 # Write the navigation file
 with mkdocs_gen_files.open(reference_root / "SUMMARY.md", "w") as nav_file:
+    # Add the index page first
+    nav_file.write("* [Overview](index.md)\n")
+    # Then add the generated navigation
     nav_file.writelines(nav.build_literate_nav())

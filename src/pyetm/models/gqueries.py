@@ -47,6 +47,38 @@ class Gqueries(Base):
         """
         self.query_dict.update({q: None for q in query_keys if q not in self.query_dict.keys()})
 
+    def remove(self, *query_keys: str) -> None:
+        """
+        Remove specific query keys from the collection.
+
+        Invalid query keys are rejected with warnings.
+        Warnings are automatically displayed for non-existent keys.
+        Warnings from previous removals are cleared to show only current operation issues.
+
+        Args:
+            query_keys: Query keys to remove from the collection
+        """
+        # Auto-clear stale warnings from previous removals
+        self.warnings.clear()
+
+        for key in query_keys:
+            if key in self.query_dict:
+                del self.query_dict[key]
+            else:
+                self.add_warning(key, f"Query '{key}' not found in collection")
+
+        # Auto-display warnings if any exist
+        if len(self.warnings) > 0:
+            self.auto_show_warnings()
+
+    def clear(self) -> None:
+        """
+        Remove all queries from the collection.
+        Also clears any accumulated warnings.
+        """
+        self.query_dict.clear()
+        self.warnings.clear()
+
     def execute(self, client: Any, scenario: Any) -> None:
         # Clear previous warnings to prevent accumulation across multiple executions
         self._clear_warnings_for_attr("results")
@@ -73,6 +105,10 @@ class Gqueries(Base):
                 retry_result = GetQueryResultsRunner.run(client, scenario, valid_queries)
                 if retry_result.success and retry_result.data is not None:
                     self.update(retry_result.data)
+
+        # Auto-display warnings if any exist
+        if len(self.warnings) > 0:
+            self.auto_show_warnings()
 
     def _extract_invalid_query_names(self, errors: list[str]) -> set[str]:
         """

@@ -23,17 +23,17 @@ def test_to_dataframe(inputs_json):
     assert "user" not in df_standard.columns
     assert "default" not in df_standard.columns
 
-    # Test explicit fields
-    df_with_user = input_collection.to_dataframe(fields="user")
+    # Test explicit columns
+    df_with_user = input_collection.to_dataframe(columns="user")
     assert "user" in df_with_user.columns
     assert "value" not in df_with_user.columns
 
-    df_with_defaults = input_collection.to_dataframe(fields=["user", "default"])
+    df_with_defaults = input_collection.to_dataframe(columns=["user", "default"])
     assert "user" in df_with_defaults.columns
     assert "default" in df_with_defaults.columns
     assert "value" not in df_with_defaults.columns
 
-    df_with_non_existing = input_collection.to_dataframe(fields="foo")
+    df_with_non_existing = input_collection.to_dataframe(columns="foo")
     assert df_with_non_existing["foo"].isnull().all()
 
 
@@ -411,7 +411,7 @@ def test_merged_value_property():
 
 
 def test_to_dataframe_with_merged_values():
-    """Test to_dataframe with fields='value' returns proper merged values."""
+    """Test to_dataframe with columns='value' returns proper merged values."""
     inputs_data = {
         "input_with_user": {
             "unit": "float",
@@ -432,13 +432,13 @@ def test_to_dataframe_with_merged_values():
     collection = Inputs.from_json(inputs_data)
 
     # Test value column (should be default now)
-    df_merged = collection.to_dataframe(fields="value")
+    df_merged = collection.to_dataframe(columns="value")
     assert "value" in df_merged.columns
     assert df_merged.loc[("input_with_user", "float"), "value"] == 75.0
     assert df_merged.loc[("input_with_default_only", "float"), "value"] == 30.0
 
     # Test that we can still get separate user and default columns
-    df_separate = collection.to_dataframe(fields=["user", "default"])
+    df_separate = collection.to_dataframe(columns=["user", "default"])
     assert "user" in df_separate.columns
     assert "default" in df_separate.columns
     assert "value" not in df_separate.columns
@@ -464,7 +464,7 @@ def test_to_dataframe_merged_with_different_input_types():
     }
 
     collection = Inputs.from_json(inputs_data)
-    df = collection.to_dataframe(fields="value")
+    df = collection.to_dataframe(columns="value")
 
     assert df.loc[("float_input", "float"), "value"] == 75.0
     assert df.loc[("enum_input", "enum"), "value"] == "a"

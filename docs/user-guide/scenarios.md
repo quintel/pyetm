@@ -283,7 +283,7 @@ scenarios = Scenarios.load_many([111111, 222222])
 
 # Via ScenarioPacker
 packer = scenarios.combine
-inputs_df = packer.inputs(fields="user")
+inputs_df = packer.inputs(columns="user")
 results_df = packer.gquery_results()
 ```
 

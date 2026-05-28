@@ -101,8 +101,8 @@ class ScenarioPacker(BaseModel):
         result.index.name = None
         return result
 
-    def inputs(self, fields: str = "value") -> pd.DataFrame:
-        return self._inputs.to_dataframe(fields=fields)
+    def inputs(self, columns: str = "value") -> pd.DataFrame:
+        return self._inputs.to_dataframe(columns=columns)
 
     def gquery_results(self, columns: str = "future") -> pd.DataFrame:
         return self._query_pack.to_dataframe(columns=columns)

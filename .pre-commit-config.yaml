@@ -54,3 +54,10 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         args: [-x, --tb=short, --no-cov, -q]
+      - id: mkdocs-build
+        name: Build MkDocs documentation
+        entry: poetry run mkdocs build --strict --clean
+        language: system
+        pass_filenames: false
+        files: ^(docs/.*|mkdocs\.yml)$
+        stages: [pre-commit]

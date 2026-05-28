@@ -397,3 +397,77 @@ class CustomCurves(Base):
                 validation_errors[curve.key] = curve_warnings
 
         return validation_errors
+
+    def is_valid_update(self, updates: dict[str, pd.Series]) -> dict[str, WarningCollector]:
+        """
+        Validate curve updates without applying them.
+
+        Args:
+            updates: Dictionary mapping curve keys to pandas Series with 8760 values
+
+        Returns:
+            Dictionary mapping curve keys to WarningCollector objects for errors
+        """
+        warnings: dict[str, WarningCollector] = {}
+
+        for key, curve_data in updates.items():
+            curve_warnings = WarningCollector()
+
+            # Check if curve exists in collection
+            if not self.is_attached(key):
+                curve_warnings.add(key, f"Curve '{key}' is not attached to scenario")
+
+            # Validate curve data type
+            if not isinstance(curve_data, pd.Series):
+                curve_warnings.add(key, "Curve data must be a pandas Series")
+            elif len(curve_data) != 8760:
+                curve_warnings.add(
+                    key, f"Curve must have 8760 values, found {len(curve_data)}"
+                )
+            else:
+                # Validate all values are numeric
+                try:
+                    pd.to_numeric(curve_data, errors="raise")
+                except (ValueError, TypeError):
+                    curve_warnings.add(key, "Curve contains non-numeric values")
+
+            if len(curve_warnings) > 0:
+                warnings[key] = curve_warnings
+
+        return warnings
+
+    def update(self, updates: dict[str, pd.Series]) -> None:
+        """
+        Update custom curve data with validation and warning display.
+
+        Invalid curves are rejected (not updated) to maintain data integrity.
+        Warnings are automatically displayed for invalid curves and non-existent keys.
+        Warnings from previous updates are cleared to show only current operation issues.
+
+        Args:
+            updates: Dictionary mapping curve keys to pandas Series with 8760 values
+        """
+        # Auto-clear stale warnings from previous updates
+        self.warnings.clear()
+
+        # Pre-validate all updates
+        validation_warnings = self.is_valid_update(updates)
+
+        # Add validation warnings to collection
+        for key, warnings in validation_warnings.items():
+            for warning in warnings:
+                self.add_warning(key, warning.message)
+
+        # Apply valid updates only
+        for key, curve_data in updates.items():
+            if key not in validation_warnings and self.is_attached(key):
+                curve = self._find(key)
+                if curve and curve.file_path:
+                    try:
+                        curve_data.to_csv(curve.file_path, index=False, header=False)
+                    except Exception as e:
+                        self.add_warning(key, f"Failed to save curve: {e}")
+
+        # Auto-display warnings if any exist
+        if len(self.warnings) > 0:
+            self.auto_show_warnings()

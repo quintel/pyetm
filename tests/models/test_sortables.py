@@ -57,17 +57,24 @@ def test_is_valid_update():
     """Test the is_valid_update method"""
     coll = Sortables.from_json({"forecast_storage": ["a", "b"], "heat_network": {"lt": ["c", "d"]}})
 
-    # Valid updates
-    valid_updates = {"forecast_storage": ["x", "y"], "heat_network_lt": ["z"]}
+    # Valid updates - items in the cache
+    valid_updates = {"forecast_storage": ["a", "b"], "heat_network_lt": ["c"]}
     warnings = coll.is_valid_update(valid_updates)
     assert len(warnings) == 0
 
-    # Invalid updates - non-existent sortable
-    invalid_updates = {"nonexistent": ["a", "b"], "forecast_storage": ["valid"]}
+    # Invalid updates - items not in cache (new validation)
+    invalid_updates = {"forecast_storage": ["x", "y"], "heat_network_lt": ["z"]}
     warnings = coll.is_valid_update(invalid_updates)
-    assert "forecast_storage" not in warnings
+    assert "forecast_storage" in warnings
+    assert "heat_network_lt" in warnings
 
-    # Invalid updates - validation errors
+    # Invalid updates - non-existent sortable
+    invalid_updates = {"nonexistent": ["a", "b"], "forecast_storage": ["a"]}
+    warnings = coll.is_valid_update(invalid_updates)
+    assert "forecast_storage" not in warnings  # "a" is valid
+    assert "nonexistent" in warnings
+
+    # Invalid updates - validation errors (duplicates)
     invalid_order_updates = {"forecast_storage": [1, 2, 2]}
     warnings = coll.is_valid_update(invalid_order_updates)
     assert "forecast_storage" in warnings
@@ -274,3 +281,127 @@ def test_name_method():
 
     sortable2 = Sortable(type="heat_network", subtype="lt", order=[3, 4])
     assert sortable2.name() == "heat_network_lt"
+
+
+def test_valid_items_cached_from_api():
+    """Test that valid items are cached when sortables are created from API response"""
+    payload = ("forecast_storage", ["fs1", "fs2", "fs3"])
+    result = list(Sortable.from_json(payload))
+
+    assert len(result) == 1
+    sortable = result[0]
+    assert sortable.valid_items == {"fs1", "fs2", "fs3"}
+
+
+def test_valid_items_cached_for_heat_network():
+    """Test that valid items are cached for heat_network subtypes"""
+    payload = ("heat_network", {"lt": ["hn1", "hn2"], "mt": ["hn3"]})
+    result = list(Sortable.from_json(payload))
+
+    assert len(result) == 2
+
+    # Find the lt and mt sortables
+    sortables_by_subtype = {s.subtype: s for s in result}
+
+    assert sortables_by_subtype["lt"].valid_items == {"hn1", "hn2"}
+    assert sortables_by_subtype["mt"].valid_items == {"hn3"}
+
+
+def test_valid_items_none_for_empty_order():
+    """Test that valid items is None for empty orders"""
+    payload = ("forecast_storage", [])
+    result = list(Sortable.from_json(payload))
+
+    assert len(result) == 1
+    sortable = result[0]
+    assert sortable.valid_items is None
+
+
+def test_is_valid_update_checks_against_cached_items():
+    """Test that is_valid_update validates against cached valid items"""
+    # Create sortable with cached valid items
+    sortable = Sortable(type="forecast_storage", order=["fs1", "fs2"], valid_items={"fs1", "fs2", "fs3"})
+
+    # Valid update - items are in the cache
+    warnings = sortable.is_valid_update(["fs1", "fs3"])
+    assert len(warnings) == 0
+
+    # Invalid update - items NOT in the cache
+    warnings = sortable.is_valid_update(["item1", "item2"])
+    assert len(warnings) > 0
+    all_warnings = [w.message for w in warnings]
+    warning_text = " ".join(all_warnings)
+    assert "Unknown items" in warning_text
+    assert "item1" in warning_text
+    assert "item2" in warning_text
+
+
+def test_is_valid_update_partial_unknown_items():
+    """Test validation when only some items are unknown"""
+    sortable = Sortable(type="forecast_storage", order=["fs1", "fs2"], valid_items={"fs1", "fs2", "fs3"})
+
+    # Mix of valid and invalid items
+    warnings = sortable.is_valid_update(["fs1", "unknown_item"])
+    assert len(warnings) > 0
+    all_warnings = [w.message for w in warnings]
+    warning_text = " ".join(all_warnings)
+    assert "Unknown items" in warning_text
+    assert "unknown_item" in warning_text
+    # fs1 should not be mentioned as unknown
+    assert warning_text.count("fs1") == 0 or "fs1" not in warning_text.split("Unknown items")[1].split("Fetch")[0]
+
+
+def test_is_valid_update_no_cache_skips_validation():
+    """Test that validation is skipped when valid_items is None"""
+    # Create sortable without valid_items cache
+    sortable = Sortable(type="forecast_storage", order=["fs1", "fs2"])
+
+    # Should not validate against items since cache is None
+    warnings = sortable.is_valid_update(["item1", "item2"])
+    # Should have no warnings about unknown items (only structural validation)
+    all_warnings = [w.message for w in warnings]
+    warning_text = " ".join(all_warnings)
+    assert "Unknown items" not in warning_text
+
+
+def test_collection_update_with_cached_items():
+    """Test that collection update uses cached valid items"""
+    coll = Sortables.from_json({
+        "forecast_storage": ["fs1", "fs2"],
+        "heat_network": {"lt": ["hn1", "hn2"]}
+    })
+
+    # Update with unknown items
+    coll.update({"forecast_storage": ["unknown1", "unknown2"]})
+
+    # Should have warnings about unknown items
+    assert len(coll.warnings) > 0
+    all_warnings = [w.message for w in coll.warnings]
+    warning_text = " ".join(all_warnings)
+    assert "Unknown items" in warning_text
+
+
+def test_collection_is_valid_update_with_cached_items():
+    """Test that collection is_valid_update uses cached valid items"""
+    coll = Sortables.from_json({
+        "forecast_storage": ["fs1", "fs2"],
+        "hydrogen_supply": ["hs1", "hs2", "hs3"]
+    })
+
+    # Valid updates
+    warnings = coll.is_valid_update({"forecast_storage": ["fs1", "fs2"]})
+    assert len(warnings) == 0
+
+    # Invalid updates - unknown items
+    warnings = coll.is_valid_update({
+        "forecast_storage": ["item1", "item2"],
+        "hydrogen_supply": ["hs1", "hs2"]  # Valid
+    })
+    assert "forecast_storage" in warnings
+    assert "hydrogen_supply" not in warnings
+
+    # Check warning message
+    fs_warnings = warnings["forecast_storage"]
+    all_warnings = [w.message for w in fs_warnings]
+    warning_text = " ".join(all_warnings)
+    assert "Unknown items" in warning_text

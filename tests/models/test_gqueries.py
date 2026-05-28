@@ -163,3 +163,74 @@ def test_to_dataframe_with_curve_results():
     assert isinstance(curve_value, list)
     assert len(curve_value) == 8760
     assert curve_value == curve_data
+
+
+def test_remove_valid_queries(valid_queries):
+    """Test removing valid query keys from collection"""
+    queries = Gqueries.from_list(valid_queries)
+    queries.update({valid_queries[0]: 20.5, valid_queries[1]: 1.0})
+
+    # Remove one query
+    queries.remove(valid_queries[0])
+
+    assert valid_queries[0] not in queries.query_keys()
+    assert valid_queries[1] in queries.query_keys()
+    assert queries.get(valid_queries[0]) is None
+    assert queries.get(valid_queries[1]) == 1.0
+
+
+def test_remove_multiple_queries(valid_queries):
+    """Test removing multiple query keys at once"""
+    queries = Gqueries.from_list(valid_queries)
+    queries.update({valid_queries[0]: 20.5, valid_queries[1]: 1.0})
+
+    # Remove both queries
+    queries.remove(valid_queries[0], valid_queries[1])
+
+    assert valid_queries[0] not in queries.query_keys()
+    assert valid_queries[1] not in queries.query_keys()
+    assert len(queries.query_keys()) == 0
+
+
+def test_remove_invalid_query_warns(valid_queries):
+    """Test that removing non-existent query key produces warning"""
+    queries = Gqueries.from_list(valid_queries)
+
+    # Remove non-existent query
+    queries.remove("non_existent_query")
+
+    # Should have warning
+    assert len(queries.warnings) > 0
+    assert queries.warnings.has_warnings("non_existent_query")
+    warning_msgs = [w.message for w in queries.warnings.get_by_field("non_existent_query")]
+    assert any("not found in collection" in msg for msg in warning_msgs)
+
+
+def test_remove_clears_stale_warnings(valid_queries):
+    """Test that warnings auto-clear on each remove() call"""
+    queries = Gqueries.from_list(valid_queries)
+
+    # First removal with invalid key
+    queries.remove("invalid_key_1")
+    assert len(queries.warnings) > 0
+
+    # Second removal with valid key should clear previous warnings
+    queries.remove(valid_queries[0])
+    # Warnings should be cleared (no warnings for valid removal)
+    assert len(queries.warnings) == 0
+
+
+def test_clear_removes_all_queries(valid_queries):
+    """Test that clear() removes all queries and warnings"""
+    queries = Gqueries.from_list(valid_queries)
+    queries.update({valid_queries[0]: 20.5, valid_queries[1]: 1.0})
+
+    # Add a warning manually
+    queries.add_warning("test", "test warning")
+    assert len(queries.warnings) > 0
+
+    # Clear all
+    queries.clear()
+
+    assert len(queries.query_keys()) == 0
+    assert len(queries.warnings) == 0

@@ -284,29 +284,54 @@ class Inputs(Base):
 
     def update(self, key_vals: Dict[str, Any]) -> None:
         """
-        Update the values of certain inputs.
+        Update the values of certain inputs with validation and warning display.
+
+        Invalid values are rejected (not applied) to maintain data integrity.
+        Warnings are automatically displayed for invalid values and non-existent keys.
+        Warnings from previous updates are cleared to show only current operation issues.
+
+        Args:
+            key_vals: Dictionary mapping input keys to new values
         """
+        # Auto-clear stale warnings from previous updates
+        self.warnings.clear()
+
+        # Check for non-existent keys
+        valid_keys = {inp.key for inp in self.inputs}
+        for key in key_vals.keys():
+            if key not in valid_keys:
+                self.add_warning(key, f"Input '{key}' does not exist")
+
+        # Apply updates (Base.__setattr__ will validate and add warnings)
         for input_obj in self.inputs:
             if input_obj.key in key_vals:
                 input_obj.user = key_vals[input_obj.key]
+                # Collect warnings from individual inputs
+                if input_obj.warnings.has_warnings("user"):
+                    for warning in input_obj.warnings.get_by_field("user"):
+                        self.add_warning(input_obj.key, warning.message)
+
+        # Auto-display warnings if any exist
+        if len(self.warnings) > 0:
+            self.auto_show_warnings()
 
     def _to_dataframe(
-        self, fields: Union[str, list[str]] = "value", **kwargs: Any
+        self, columns: Union[str, list[str]] = "value", **kwargs: Any
     ) -> pd.DataFrame:
         """
         Serialize the Inputs collection to DataFrame.
 
         Args:
-            fields: Field(s) to include. Default is "value" (user value if set, else default).
-                   Can be a string or list of strings. Options include:
-                   - "value": user value if set, otherwise default (RECOMMENDED)
-                   - "user": only user-set values
-                   - "default": only default values
-                   - "min", "max", "permitted_values", etc.: other input attributes
+            columns: Column(s) to include. Default is "value" (user value if set, else default).
+                     Can be a string or list of strings. Options include:
+                     - "value": user value if set, otherwise default (RECOMMENDED)
+                     - "user": only user-set values
+                     - "default": only default values
+                     - "min", "max", "permitted_values", etc.: other input attributes
         """
-        if not isinstance(fields, list):
-            fields = [fields]
-        columns = ["unit"] + fields
+        if not isinstance(columns, list):
+            columns = [columns]
+        cols = ["unit"] + columns
         try:
             df = pd.DataFrame.from_dict(
                 {
@@ -316,12 +341,12 @@ class Inputs(Base):
                             if key == "value"
                             else getattr(input, key, None)
                         )
-                        for key in columns
+                        for key in cols
                     ]
                     for input in self.inputs
                 },
                 orient="index",
-                columns=columns,
+                columns=cols,
             )
             df.index.name = "input"
             return df.set_index("unit", append=True)
