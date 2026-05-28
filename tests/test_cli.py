@@ -52,10 +52,10 @@ class TestCliInit:
             assert result.exit_code == 0
 
             # Check input template Excel file is copied
-            assert Path("inputs/input.xlsx").exists()
+            assert Path("excel/input.xlsx").exists()
 
             # Check inputs directory was created
-            assert Path("inputs").is_dir()
+            assert Path("excel").is_dir()
 
     def test_init_with_cli_options(self, runner, temp_dir):
         """Test init with command-line options instead of prompts"""
@@ -105,7 +105,7 @@ class TestCliInit:
             env_path = Path(".env")
             env_path.write_text("OLD_CONTENT=true")
 
-            inputs_dir = Path("inputs")
+            inputs_dir = Path("excel")
             inputs_dir.mkdir(exist_ok=True)
             input_path = inputs_dir / "input.xlsx"
             input_path.write_text("Old content")
@@ -137,7 +137,7 @@ class TestCliInit:
         """Test that init prompts before overwriting existing input template"""
         with runner.isolated_filesystem(temp_dir=temp_dir):
             # Create existing input template file
-            inputs_dir = Path("inputs")
+            inputs_dir = Path("excel")
             inputs_dir.mkdir(exist_ok=True)
             input_path = inputs_dir / "input.xlsx"
             input_path.write_text("Old content")
@@ -248,7 +248,9 @@ class TestCliRun:
         # Click will error about the file not existing
 
     @patch("pyetm.models.scenario_packer.ScenarioPacker")
-    def test_run_basic_execution(self, mock_packer_class, runner, mock_packer, tmp_path):
+    def test_run_basic_execution(
+        self, mock_packer_class, runner, mock_packer, tmp_path
+    ):
         """Test basic run command execution"""
         # Setup mock
         mock_packer_class.from_excel.return_value = mock_packer

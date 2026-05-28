@@ -340,12 +340,12 @@ class TestScenariosGetMethods:
         scenario1 = Mock(spec=Scenario)
         scenario1.id = 1
         scenario1.identifier.return_value = "scenario_1"
-        scenario1.get_hourly_output_curves.return_value = {}
+        scenario1.get_hourly_curves.return_value = {}
 
         scenario2 = Mock(spec=Scenario)
         scenario2.id = 2
         scenario2.identifier.return_value = "scenario_2"
-        scenario2.get_hourly_output_curves.return_value = {}
+        scenario2.get_hourly_curves.return_value = {}
 
         collection = Scenarios(items=[scenario1, scenario2])
 
@@ -363,9 +363,9 @@ class TestScenariosGetMethods:
         # Call the method
         result = collection.get_hourly_output_curves("electricity")
 
-        # Verify fetch was called on scenarios
-        scenario1.get_hourly_output_curves.assert_called_once_with("electricity")
-        scenario2.get_hourly_output_curves.assert_called_once_with("electricity")
+        # Verify fetch was called on scenarios with new API (list of identifiers)
+        scenario1.get_hourly_curves.assert_called_once_with(["electricity"])
+        scenario2.get_hourly_curves.assert_called_once_with(["electricity"])
 
         # Verify delegation to packer
         mock_packer.hourly_output_curves.assert_called_once_with("electricity")
@@ -407,7 +407,7 @@ class TestScenariosGetMethods:
         scenario1 = Mock(spec=Scenario)
         scenario1.id = 1
         scenario1.identifier.return_value = "scenario_1"
-        scenario1.get_hourly_output_curves.return_value = {
+        scenario1.get_hourly_curves.return_value = {
             "merit_order": pd.DataFrame({"hour": [0, 1], "value": [100, 200]}),
             "electricity_price": pd.DataFrame({"hour": [0, 1], "price": [0.12, 0.13]}),
             "residual_load": pd.DataFrame({"hour": [0, 1], "load": [500, 600]}),
@@ -416,7 +416,7 @@ class TestScenariosGetMethods:
         scenario2 = Mock(spec=Scenario)
         scenario2.id = 2
         scenario2.identifier.return_value = "scenario_2"
-        scenario2.get_hourly_output_curves.return_value = {
+        scenario2.get_hourly_curves.return_value = {
             "merit_order": pd.DataFrame({"hour": [0, 1], "value": [150, 250]}),
             "electricity_price": pd.DataFrame({"hour": [0, 1], "price": [0.14, 0.15]}),
             "residual_load": pd.DataFrame({"hour": [0, 1], "load": [550, 650]}),
@@ -437,9 +437,9 @@ class TestScenariosGetMethods:
         # Call get_hourly_output_curves
         result = collection.get_hourly_output_curves("electricity")
 
-        # Verify it triggered fetch on each individual scenario
-        scenario1.get_hourly_output_curves.assert_called_once_with("electricity")
-        scenario2.get_hourly_output_curves.assert_called_once_with("electricity")
+        # Verify it triggered fetch on each individual scenario with new API
+        scenario1.get_hourly_curves.assert_called_once_with(["electricity"])
+        scenario2.get_hourly_curves.assert_called_once_with(["electricity"])
 
         # Verify packer was called
         mock_packer.hourly_output_curves.assert_called_once_with("electricity")
@@ -504,7 +504,7 @@ class TestScenariosGetMethods:
         scenario1 = Mock(spec=Scenario)
         scenario1.id = 1
         scenario1.identifier.return_value = "scenario_1"
-        scenario1.get_hourly_output_curves.return_value = {}
+        scenario1.get_hourly_curves.return_value = {}
 
         collection = Scenarios(items=[scenario1])
 
@@ -519,5 +519,5 @@ class TestScenariosGetMethods:
 
             # Packer should have been created and method called
             assert collection._packer is not None
-            # Verify fetch was triggered
-            scenario1.get_hourly_output_curves.assert_called_once_with("electricity")
+            # Verify fetch was triggered with new API
+            scenario1.get_hourly_curves.assert_called_once_with(["electricity"])

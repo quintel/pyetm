@@ -82,7 +82,7 @@ prod_scenario = Scenario.create(title="Prod Test", area_code="nl2023", end_year=
 beta_scenario = Scenario.create(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
 ```
 
-# Managing Your Scenarios
+## Managing Your Scenarios
 
 PyETM provides convenient methods to list and manage all your scenarios and saved scenarios.
 
@@ -167,3 +167,108 @@ sessions_2050 = [s for s in sessions if s.end_year >= 2050]
 # Find specific session
 my_session = next((s for s in sessions if "experiment" in (s.title or "")), None)
 ```
+
+## Managing Users
+
+Control who can access your scenarios by managing user permissions. Both Sessions and Saved Scenarios support user management with role-based access control.
+
+### User Roles
+
+Three roles determine what users can do with a scenario:
+
+| Role | Description | Permissions |
+|------|-------------|-------------|
+| `scenario_owner` | Full control | Can edit, share, and delete the scenario |
+| `scenario_collaborator` | Can modify | Can edit scenario settings and inputs |
+| `scenario_viewer` | Read-only | Can view but not modify the scenario |
+
+!!! note
+    Use `"remove"` as a special role value to revoke a user's access entirely.
+
+### Listing Users
+
+Check who has access to a scenario:
+
+```python
+from pyetm import Scenario
+
+# Load a saved scenario
+scenario = Scenario.load(123456)
+
+# List all users with access
+users = scenario.list_users()
+
+for user in users:
+    print(f"{user['user_email']}: {user['role']}")
+```
+
+For Sessions (temporary scenarios), the API works the same way:
+
+```python
+from pyetm import Scenario
+
+# Create or load a session
+session = Scenario.create(area_code="nl2023", end_year=2050)
+
+# List users
+users = session.list_users()
+```
+
+### Adding or Updating User Access
+
+Grant access or change a user's role:
+
+```python
+from pyetm import Scenario
+
+scenario = Scenario.load(123456)
+
+# Add a new collaborator
+scenario.update_users(
+    email="colleague@example.com",
+    role="scenario_collaborator"
+)
+
+# Promote a viewer to owner
+scenario.update_users(
+    email="colleague@example.com",
+    role="scenario_owner"
+)
+```
+
+### Removing User Access
+
+Revoke a user's access by setting their role to `"remove"`:
+
+```python
+from pyetm import Scenario
+
+scenario = Scenario.load(123456)
+
+# Remove a user's access
+scenario.update_users(
+    email="former-colleague@example.com",
+    role="remove"
+)
+```
+
+### Batch User Updates
+
+For multiple user changes, use `skip_upload=True` to defer API calls, then apply all changes at once:
+
+```python
+from pyetm import Scenario
+
+scenario = Scenario.load(123456)
+
+# Queue multiple user updates
+scenario.update_users("user1@example.com", "scenario_viewer", skip_upload=True)
+scenario.update_users("user2@example.com", "scenario_collaborator", skip_upload=True)
+scenario.update_users("user3@example.com", "remove", skip_upload=True)
+
+# Apply all changes in one API call
+scenario.apply_pending_users()
+```
+
+!!! tip "Bulk User Management with Excel"
+    For managing users across multiple scenarios, use the Excel integration. The `USERS` sheet lets you view and update user permissions in a grid format. See [Working with Excel](excel.md#users-sheet) for details.

@@ -80,7 +80,7 @@ pyetm init
 This will:
 - Ask which environment you want to use (production, beta, or local)
 - Create a `.env` configuration file
-- Copy an input template Excel file to `inputs/input.xlsx`
+- Copy an input template Excel file to `excel/input.xlsx`
 
 After initialization, you'll need to manually add your API token to the `.env` file:
 
@@ -107,27 +107,26 @@ pyetm init --environment pro --log-level INFO
 The easiest way to work with scenarios is using Excel files:
 
 ```bash
-# Edit inputs/input.xlsx with your scenario data, then run:
-pyetm run inputs/input.xlsx
+# Edit excel/input.xlsx with your scenario data, then run:
+pyetm run excel/input.xlsx
 ```
 
-This will load your scenarios, update them on ETM, and export results to `inputs/input_results.xlsx`.
+This will load your scenarios, update them on ETM, and export results to `excel/input_results.xlsx`.
 
 **Command options**:
 - `--output PATH` or `-o PATH`: Custom output file location
-- `--no-update`: Read-only mode (don't upload changes to ETM)
 - `--log-level`: Logging verbosity
 
 Example:
 ```bash
 # Custom output location
-pyetm run inputs/input.xlsx --output results/my_results.xlsx
+pyetm run excel/input.xlsx --output results/my_results.xlsx
 
 # Read-only mode (fetch data without updating)
-pyetm run inputs/input.xlsx --no-update
+pyetm run excel/input.xlsx --no-update
 ```
 
-**For detailed Excel workflow instructions**, see the [Quick Start Guide](https://quintel.github.io/pyetm/getting-started/quickstart/#running-scenarios-from-excel) in the docs.
+**For more detailed 'pyetm run' workflow instructions**, see the [Quick Start Guide](https://quintel.github.io/pyetm/getting-started/quickstart/#running-scenarios-from-excel) in the docs.
 
 ---
 
@@ -184,59 +183,7 @@ SSL_CERT_PATH=/path/to/corporate-ca-bundle.pem
 TRUST_ENV=true
 HTTP_PROXY=http://proxy.company.com:8080
 ```
-
-For more advanced options, see [the full documentation](https://docs.energytransitionmodel.com/main/pyetm/introduction).
-
----
-
-## Example Usage
-
-After setup, you can use pyetm in your Python code. The main object you'll work with is the `Scenario`:
-
-```python
-from pyetm.models.scenario import Scenario
-
-# Create a new scenario
-scenario = Scenario.create({
-    "area_code": "nl2023",
-    "end_year": 2050,
-    "title": "My Netherlands Scenario"
-})
-
-# Update inputs (sliders in the ETM)
-scenario.update_user_values({
-    "capacity_of_energy_power_solar_pv_solar_radiation": 15000,
-    "capacity_of_energy_power_wind_turbine_inland": 8000
-})
-
-# Get results via gqueries
-scenario.add_queries(['total_energy_demand', 'dashboard_total_costs'])
-scenario.execute_queries()
-results = scenario.results()
-print(results)
-
-# Load an existing scenario
-existing = Scenario.load(saved_scenario_id=12345)
-print(f"Loaded: {existing.title}")
-```
-
-### Working with Multiple Scenarios
-
-```python
-from pyetm.models.scenarios import Scenarios
-
-# Load from Excel
-scenarios = Scenarios.from_excel("inputs/my_scenarios.xlsx")
-
-# Compare results across scenarios
-comparison = scenarios.combine.gquery_results()
-print(comparison)
-
-# Export to Excel
-scenarios.combine.to_excel("outputs/results.xlsx")
-```
-
-For more examples and tutorials, visit our [documentation](https://quintel.github.io/pyetm/examples/).
+For examples and tutorials, visit our [documentation](https://quintel.github.io/pyetm/user-guide/).
 
 ---
 
@@ -260,6 +207,6 @@ Interested in contributing to pyetm development? See our [Contributing Guide](Co
 
 ## Getting Help
 
-- **Documentation**: [docs.energytransitionmodel.com](https://docs.energytransitionmodel.com/main/pyetm/introduction)
+- **Documentation**: [docs.energytransitionmodel.com](https://quintel.github.io/pyetm/)
 - **Issues**: [GitHub Issues](https://github.com/quintel/pyetm/issues)
 - **Repository**: [github.com/quintel/pyetm](https://github.com/quintel/pyetm)

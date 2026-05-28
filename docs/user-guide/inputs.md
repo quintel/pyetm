@@ -96,6 +96,7 @@ scenario.set_user_values_from_dataframe(df)
 - **Merged values**: `input.merged_value` returns the user value if set, otherwise the default
 - **Disabled inputs**: Some inputs may be disabled by coupling settings (`disabled=True`)
 - **Validation and warnings**:
+
     - `inputs.update()` validates locally and auto-displays warnings immediately
     - Invalid values are **rejected** (not applied) to maintain data integrity
     - Non-existent input keys trigger warnings
@@ -104,6 +105,7 @@ scenario.set_user_values_from_dataframe(df)
     - Warnings auto-clear on each `update()` call to show only current issues
 - **Reset values**: Set a user value to `"reset"` to clear it (reverts to default)
 - **Automatic coercion**:
+
     - BoolInput accepts "true", "false", 1, 0, "on", "off"
     - FloatInput coerces numeric strings to numbers
     - EnumInput strips whitespace from values

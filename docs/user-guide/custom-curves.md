@@ -122,10 +122,12 @@ else:
 
 **Cache invalidation:**
 - Cache files are **not automatically invalidated** when:
+
   - Uploading curves via `update_custom_curves()`
   - Reloading scenarios with `Scenario.load()`
   - Session updates or API changes
 - Cache persists indefinitely until:
+
   - Manual deletion via `curve.remove()`
   - System `/tmp` cleanup (OS-dependent)
 - **Warning**: Cache files can become stale if curves are modified via the ETM web interface or other clients

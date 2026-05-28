@@ -111,14 +111,20 @@ class Scenarios(Base):
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
         Get hourly output curves for all scenarios by carrier type.
+
+        Args:
+            carrier_type: Carrier type alias (electricity, heat, hydrogen, methane)
+
+        Returns:
+            Dictionary mapping curve names to scenario data
         """
-        # Pre-fetch curves for all scenarios
+        # Pre-fetch curves for all scenarios using new API
         self._ensure_hourly_curves_fetched(carrier_type)
 
         # Now delegate to packer for organization
         return self.combine.hourly_output_curves(carrier_type)
 
-    def _ensure_hourly_curves_fetched(self, carrier_type: CarrierType) -> None:
+    def _ensure_hourly_curves_fetched(self, carrier_type: str) -> None:
         """
         Ensure all scenarios have fetched their hourly output curves.
         Args:
@@ -126,7 +132,8 @@ class Scenarios(Base):
         """
         for item in self.items:
             try:
-                item.get_hourly_output_curves(carrier_type)
+                # Use new API: get_hourly_curves with list containing carrier alias
+                item.get_hourly_curves([carrier_type])
             except Exception as e:
                 # Log warning but continue with other scenarios
                 logger.warning(

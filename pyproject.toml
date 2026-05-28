@@ -13,7 +13,7 @@ authors = [
   { name = "Nora Schinkel", email = "nora.schinkel@quintel.com" },
   { name = "Louis Parkes-Talbot", email = "louis.parkestalbot@quintel.com" }
 ]
-keywords = ["energy", "transition", "modeling", "api", "ETM"]
+keywords = ["energy", "transition", "modelling", "api", "ETM"]
 requires-python = ">=3.12,<4.0"
 
 dependencies = [
@@ -43,7 +43,7 @@ pyetm = "pyetm.__main__:main"
 
 [project.urls]
 "Repository"    = "https://github.com/quintel/pyetm"
-"Documentation" = "https://docs.energytransitionmodel.com/main/pyetm/introduction"
+"Documentation" = "https://quintel.github.io/pyetm/"
 "Issue tracker" = "https://github.com/quintel/pyetm/issues"
 
 [tool.setuptools.packages.find]

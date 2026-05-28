@@ -65,12 +65,12 @@ def _attach_hourly_output_curves(scenario, curve_dict: dict):
 
 def _attach_hourly_output_curves_by_carrier(scenario, carrier_dict: dict):
     """
-    Wire up scenario.hourly_output_curves.get_curves_by_carrier_type()
+    Wire up scenario.hourly_output_curves.get_curves()
     to return data from carrier_dict, keyed by carrier type.
     """
     scenario.hourly_output_curves = Mock()
-    scenario.hourly_output_curves.get_curves_by_carrier_type = Mock(
-        side_effect=lambda scenario_arg, carrier: carrier_dict.get(carrier, {})
+    scenario.hourly_output_curves.get_curves = Mock(
+        side_effect=lambda identifiers, scenario_arg: carrier_dict.get(identifiers[0], {})
     )
 
 
@@ -420,9 +420,9 @@ def test_to_excel_scenario_identifier_exception(mock_workbook, carrier_mappings)
     s = make_scenario()
     s.identifier.side_effect = Exception("identifier failed")
 
-    # Mock the new method chain: scenario.hourly_output_curves.get_curves_by_carrier_type()
+    # Mock the new method chain: scenario.hourly_output_curves.get_curves()
     s.hourly_output_curves = Mock()
-    s.hourly_output_curves.get_curves_by_carrier_type = Mock(
+    s.hourly_output_curves.get_curves = Mock(
         return_value={"demand": pd.Series([1, 2, 3])}
     )
 

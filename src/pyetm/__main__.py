@@ -71,8 +71,8 @@ def copy_input_template(target_dir: Path, force: bool = False) -> tuple[bool, bo
             "This may indicate an incomplete package installation."
         )
 
-    # Copy to inputs/input.xlsx in target directory
-    dest_path = target_dir / "inputs" / "input.xlsx"
+    # Copy to excel/input.xlsx in target directory
+    dest_path = target_dir / "excel" / "input.xlsx"
 
     # Create parent directory if needed
     dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -170,10 +170,10 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
         template_created, template_skipped = copy_input_template(target_dir, force)
 
         if template_created:
-            click.echo("✓ Created inputs/input.xlsx")
-            created_files.append("inputs/input.xlsx")
+            click.echo("✓ Created excel/input.xlsx")
+            created_files.append("excel/input.xlsx")
         elif template_skipped:
-            click.echo("⊗ Skipped inputs/input.xlsx (already exists)")
+            click.echo("⊗ Skipped excel/input.xlsx (already exists)")
 
     except Exception as e:
         click.echo(f"✗ Failed to copy input template: {e}", err=True)
@@ -187,11 +187,11 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
     )
     click.echo("     • ENVIRONMENT or BASE_URL (if using stable or other ETM instance)")
     click.echo("")
-    click.echo("  2. Edit inputs/input.xlsx with your scenario data")
+    click.echo("  2. Edit excel/input.xlsx with your scenario data")
     click.echo("        (Don't forget to save your changes!)")
     click.echo("")
     click.echo("  3. Run your scenarios:")
-    click.echo("     • pyetm run inputs/input.xlsx")
+    click.echo("     • pyetm run excel/input.xlsx")
     click.echo("")
     click.echo("  4. Check the documentation:")
     click.echo("     • Full docs: https://quintel.github.io/pyetm/")

@@ -1,5 +1,6 @@
 from unittest.mock import Mock
 import pytest
+import pandas as pd
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.session import Session, ScenarioError
@@ -1333,14 +1334,29 @@ def test_interpolate_rejects_different_area_codes(dummy_scenario):
 # ------ Validation tests ------ #
 
 
-def test_get_hourly_output_curves_invalid_carrier_type(scenario):
-    """Test that get_hourly_output_curves raises ValueError for invalid carrier type"""
-    with pytest.raises(ValueError) as exc_info:
-        scenario.get_hourly_output_curves("invalid_carrier")
+def test_get_hourly_curve_by_carrier_alias(scenario):
+    """Test that get_hourly_curve works with carrier type aliases"""
+    # Mock the hourly_output_curves collection
+    scenario.hourly_output_curves.get_curve = Mock(return_value=pd.DataFrame())
 
-    assert "Invalid carrier type 'invalid_carrier'" in str(exc_info.value)
-    assert "electricity" in str(exc_info.value)
-    assert "heat" in str(exc_info.value)
+    # Test carrier aliases
+    scenario.get_hourly_curve("electricity")
+    scenario.hourly_output_curves.get_curve.assert_called_with("electricity", scenario)
+
+    scenario.get_hourly_curve("heat")
+    scenario.hourly_output_curves.get_curve.assert_called_with("heat", scenario)
+
+
+def test_get_hourly_curves_multiple(scenario):
+    """Test that get_hourly_curves works with multiple identifiers"""
+    # Mock the hourly_output_curves collection
+    scenario.hourly_output_curves.get_curves = Mock(return_value={})
+
+    # Test with list of identifiers
+    scenario.get_hourly_curves(["electricity", "heat", "merit_order"])
+    scenario.hourly_output_curves.get_curves.assert_called_with(
+        ["electricity", "heat", "merit_order"], scenario
+    )
 
 
 def test_get_annual_exports_invalid_export_name(scenario):
@@ -1388,3 +1404,61 @@ def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, o
 
     # Verify it was converted to a list
     assert calls[-1] == ["energy_flow"]
+
+
+# ============================================================================
+# Cache Clearing Tests
+# ============================================================================
+
+
+def test_clear_hourly_curves_cache(scenario):
+    """Test clearing hourly output curves cache."""
+    # Create mock collection - scenario fixture is already a Session
+    mock_collection = Mock()
+    mock_collection.clear_cache = Mock(return_value=5)
+    scenario._hourly_output_curves = mock_collection
+
+    removed_count = scenario.clear_hourly_curves_cache()
+
+    assert removed_count == 5
+    mock_collection.clear_cache.assert_called_once()
+
+
+def test_clear_custom_curves_cache(scenario):
+    """Test clearing custom curves cache."""
+    # Create mock collection - scenario fixture is already a Session
+    mock_collection = Mock()
+    mock_collection.clear_cache = Mock(return_value=3)
+    scenario._custom_curves = mock_collection
+
+    removed_count = scenario.clear_custom_curves_cache()
+
+    assert removed_count == 3
+    mock_collection.clear_cache.assert_called_once()
+
+
+def test_clear_all_curve_caches(scenario):
+    """Test clearing all curve caches at once."""
+    # Create mock collections - scenario fixture is already a Session
+    mock_hourly = Mock()
+    mock_hourly.clear_cache = Mock(return_value=5)
+    scenario._hourly_output_curves = mock_hourly
+
+    mock_custom = Mock()
+    mock_custom.clear_cache = Mock(return_value=3)
+    scenario._custom_curves = mock_custom
+
+    hourly, custom = scenario.clear_all_curve_caches()
+
+    assert hourly == 5
+    assert custom == 3
+    mock_hourly.clear_cache.assert_called_once()
+    mock_custom.clear_cache.assert_called_once()
+
+
+# Note: Session.clear_session_cache() tests are omitted because they require
+# complex mocking of the settings system. The underlying collection cache clearing
+# methods (clear_cache() on HourlyOutputCurves and CustomCurves) are thoroughly
+# tested in their respective test files, and the session-level delegation methods
+# (clear_hourly_curves_cache, clear_custom_curves_cache, clear_all_curve_caches)
+# are tested above.

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING, cast
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient, get_client
-from pyetm.types import AnnualExportType, CarrierType
+from pyetm.types import AnnualExportType
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
@@ -347,93 +347,6 @@ class Scenario(Base):
 
         return saved_scenario
 
-    @classmethod
-    def new(
-        cls,
-        scenario_id: int,
-        title: str,
-        client: Optional[BaseClient] = None,
-        **kwargs: Any,
-    ) -> "Scenario":
-        """
-        DEPRECATED: Use Scenario.create(title=..., session_id=...) instead.
-
-        Create a new SavedScenario from an ETEngine session ID.
-
-        Args:
-            scenario_id: The ETEngine session ID to save
-            title: Title for the saved scenario
-            client: Optional BaseClient instance
-            **kwargs: Optional params (private)
-
-        Returns:
-            SavedScenario instance
-
-        Raises:
-            SavedScenarioError: If creation fails
-        """
-        import warnings
-
-        warnings.warn(
-            "Scenario.new() is deprecated. "
-            "Use Scenario.create(title=..., session_id=...) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return cls.create(title=title, session_id=scenario_id, client=client, **kwargs)
-
-    @classmethod
-    def create_new(
-        cls,
-        title: str,
-        area_code: str = "nl2023",
-        end_year: int = 2050,
-        client: Optional[BaseClient] = None,
-        user_values: Optional[Dict[str, Any]] = None,
-        custom_curves: Optional[Dict[str, Any]] = None,
-        sortables: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> "Scenario":
-        """
-        DEPRECATED: Use Scenario.create(title=..., area_code=..., end_year=...) instead.
-
-        Create a new ETEngine session and save it to MyETM in one step.
-
-        Args:
-            title: Title for the saved scenario
-            area_code: Region code (e.g., "nl2023", "de", "uk2050"). Default: "nl2023"
-            end_year: Target end year for the scenario. Default: 2050
-            client: Optional BaseClient instance
-            user_values: Optional dict of user input values to apply
-            custom_curves: Optional dict of custom curves to upload
-            sortables: Optional dict of sortables to apply
-            **kwargs: Additional parameters for scenario creation (e.g., private=True)
-
-        Returns:
-            SavedScenario instance
-
-        Raises:
-            SavedScenarioError: If creation fails
-        """
-        import warnings
-
-        warnings.warn(
-            "Scenario.create_new() is deprecated. "
-            "Use Scenario.create(title=..., area_code=..., end_year=...) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return cls.create(
-            title=title,
-            area_code=area_code,
-            end_year=end_year,
-            client=client,
-            user_values=user_values,
-            custom_curves=custom_curves,
-            sortables=sortables,
-            **kwargs,
-        )
-
     @property
     def session(self) -> "Session":
         """
@@ -592,19 +505,70 @@ class Scenario(Base):
         """Yield all custom curve series from the underlying session."""
         return self.session.custom_curves_series()
 
-    def get_output_curve(self, curve_name: str) -> Optional[pd.DataFrame]:
-        """Get a single hourly output curve by name from the underlying session."""
-        return self.session.get_output_curve(curve_name)
+    def get_hourly_curve(self, identifier: str) -> Optional[pd.DataFrame]:
+        """
+        Get a single hourly output curve by name or carrier type alias.
+
+        Carrier types ('electricity', 'heat', 'hydrogen', 'methane') are treated
+        as convenient aliases for their primary curves.
+
+        Args:
+            identifier: Curve name (e.g., 'merit_order') or carrier type alias
+
+        Returns:
+            DataFrame with hourly data, or None if not found
+        """
+        return self.session.get_hourly_curve(identifier)
+
+    def get_hourly_curves(
+        self, identifiers: list[str]
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Get multiple hourly output curves by names or carrier type aliases.
+
+        Args:
+            identifiers: List of curve names and/or carrier type aliases
+
+        Returns:
+            Dictionary mapping curve names to DataFrames
+        """
+        return self.session.get_hourly_curves(identifiers)
 
     def all_hourly_output_curves(self) -> Any:  # Returns generator
         """Yield all output curves from the underlying session."""
         return self.session.all_hourly_output_curves()
 
-    def get_hourly_output_curves(
-        self, carrier_type: CarrierType
-    ) -> dict[str, pd.DataFrame]:
-        """Get output curves by carrier type from the underlying session."""
-        return self.session.get_hourly_output_curves(carrier_type)
+    def clear_hourly_curves_cache(self) -> int:
+        """Clear all hourly output curves cache files and LRU cache.
+
+        Returns:
+            Number of files successfully removed
+        """
+        return self.session.clear_hourly_curves_cache()
+
+    def clear_custom_curves_cache(self) -> int:
+        """Clear all custom curves cache files.
+
+        Returns:
+            Number of files successfully removed
+        """
+        return self.session.clear_custom_curves_cache()
+
+    def clear_all_curve_caches(self) -> tuple[int, int]:
+        """Clear all curve caches (hourly output curves and custom curves).
+
+        Returns:
+            Tuple of (hourly_curves_removed, custom_curves_removed)
+        """
+        return self.session.clear_all_curve_caches()
+
+    def clear_session_cache(self) -> None:
+        """Clear entire session temp directory (all cached files).
+
+        This removes all cached files for this session and clears
+        all associated in-memory caches.
+        """
+        self.session.clear_session_cache()
 
     def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
         """Get a single annual export by name from the underlying session."""

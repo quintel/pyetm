@@ -160,6 +160,7 @@ class HourlyOutputCurve(Base):
         try:
             self.file_path.unlink(missing_ok=True)
             self.file_path = None
+            _read_csv_cached_impl.cache_clear()
             return True
         except Exception as e:
             self.add_warning(
@@ -283,34 +284,84 @@ class HourlyOutputCurves(Base):
             }
             return result
 
-    def get_curves_by_carrier_type(
-        self, scenario: Any, carrier_type: str
-    ) -> dict[str, pd.DataFrame]:
+    def get_curve(self, identifier: str, scenario: Any) -> Optional[pd.DataFrame]:
         """
-        Get all curves for a specific carrier type.
+        Get a single hourly output curve by name or carrier type alias.
+
+        Carrier types ('electricity', 'heat', 'hydrogen', 'methane') are treated
+        as convenient aliases for their primary curves.
 
         Args:
-            scenario: The scenario object
-            carrier_type: One of 'electricity', 'heat', 'hydrogen', 'methane'
+            identifier: Curve name (e.g., 'merit_order') or carrier type alias
+            scenario: The scenario or session object
 
         Returns:
-            Dictionary mapping curve names to DataFrames
+            DataFrame with hourly data, or None if not found
+
+        Examples:
+            >>> curves.get_curve("merit_order", scenario)  # by name
+            >>> curves.get_curve("electricity", scenario)  # by carrier alias → merit_order
         """
         carrier_mapping = self._load_carrier_mappings()
 
-        if carrier_type not in carrier_mapping:
-            valid_types = ", ".join(carrier_mapping.keys())
-            self.add_warning(
-                "carrier_type",
-                f"Invalid carrier type '{carrier_type}'. Valid types: {valid_types}",
-            )
-            return {}
+        # Check if identifier is a carrier type (alias)
+        if identifier in carrier_mapping:
+            curve_names = carrier_mapping[identifier]
+            if len(curve_names) == 1:
+                return self.get_contents(scenario, curve_names[0])
+            elif len(curve_names) > 1:
+                # Future-proof: if carriers ever map to multiple curves
+                self.add_warning(
+                    "identifier",
+                    f"Carrier '{identifier}' maps to multiple curves: {curve_names}. "
+                    f"Use get_curves(['{identifier}']) instead.",
+                )
+                return None
+            else:
+                self.add_warning(
+                    "identifier",
+                    f"Carrier '{identifier}' has no associated curves.",
+                )
+                return None
 
+        # Otherwise treat as curve name
+        return self.get_contents(scenario, identifier)
+
+    def get_curves(
+        self, identifiers: list[str], scenario: Any
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Get multiple hourly output curves by names or carrier type aliases.
+
+        Args:
+            identifiers: List of curve names and/or carrier type aliases
+            scenario: The scenario or session object
+
+        Returns:
+            Dictionary mapping curve names to DataFrames
+
+        Examples:
+            >>> curves.get_curves(["electricity", "heat"], scenario)
+            {'merit_order': DataFrame, 'heat_network': DataFrame}
+
+            >>> curves.get_curves(["merit_order", "electricity_price"], scenario)
+            {'merit_order': DataFrame, 'electricity_price': DataFrame}
+        """
         results = {}
-        for curve_name in carrier_mapping[carrier_type]:
-            curve_data = self.get_contents(scenario, curve_name)
-            if curve_data is not None:
-                results[curve_name] = curve_data
+        carrier_mapping = self._load_carrier_mappings()
+
+        for identifier in identifiers:
+            # If it's a carrier type, expand to curve names
+            if identifier in carrier_mapping:
+                for curve_name in carrier_mapping[identifier]:
+                    curve_data = self.get_contents(scenario, curve_name)
+                    if curve_data is not None:
+                        results[curve_name] = curve_data
+            else:
+                # Otherwise treat as curve name
+                curve_data = self.get_contents(scenario, identifier)
+                if curve_data is not None:
+                    results[identifier] = curve_data
 
         return results
 
@@ -494,3 +545,36 @@ class HourlyOutputCurves(Base):
             curves_list.append(curve)
 
         return cls(curves=curves_list)
+
+    def remove_curve(self, curve_name: str) -> bool:
+        """Remove a specific hourly output curve's cache file and clear LRU cache.
+
+        Args:
+            curve_name: Name of the curve to remove
+
+        Returns:
+            True if successfully removed, False otherwise
+        """
+        curve = self._find(curve_name)
+        if curve is None:
+            return False
+
+        success = curve.remove()
+        if success:
+            _read_csv_cached_impl.cache_clear()
+        return success
+
+    def clear_cache(self) -> int:
+        """Clear all hourly output curve cache files and LRU cache.
+
+        Returns:
+            Number of files successfully removed
+        """
+        removed_count = 0
+        for curve in self.curves:
+            if curve.remove():
+                removed_count += 1
+
+        _read_csv_cached_impl.cache_clear()
+        self.warnings.clear()
+        return removed_count

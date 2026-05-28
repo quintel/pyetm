@@ -13,14 +13,15 @@ from pyetm.models.inputs import Inputs
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 from pyetm.models.annual_exports import AnnualExports
 from pyetm.clients import BaseClient, get_client
+from pyetm.config.settings import get_settings
 from pyetm.models.base import Base
 from pyetm.models.custom_curves import CustomCurves
 from pyetm.models.gqueries import Gqueries
 from pyetm.models.sortables import Sortables
 from pyetm.models.export_config import ExportConfig
 from pyetm.models.export_data_collection import ExportDataCollection
-from pyetm.types import AnnualExportType, CarrierType
-from pyetm.validators import validate_carrier_type, validate_export_names
+from pyetm.types import AnnualExportType
+from pyetm.validators import validate_export_names
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
 from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
@@ -720,20 +721,99 @@ class Session(Base):
         self._hourly_output_curves = HourlyOutputCurves.create_empty_collection()
         return self._hourly_output_curves
 
-    def get_output_curve(self, curve_name: str) -> Optional[pd.DataFrame]:
-        """Get a single hourly output curve by name."""
-        return self.hourly_output_curves.get_contents(self, curve_name)
+    def get_hourly_curve(self, identifier: str) -> Optional[pd.DataFrame]:
+        """
+        Get a single hourly output curve by name or carrier type alias.
+
+        Carrier types ('electricity', 'heat', 'hydrogen', 'methane') are treated
+        as convenient aliases for their primary curves.
+
+        Args:
+            identifier: Curve name (e.g., 'merit_order') or carrier type alias
+
+        Returns:
+            DataFrame with hourly data, or None if not found
+
+        Examples:
+            >>> session.get_hourly_curve("merit_order")      # by name
+            >>> session.get_hourly_curve("electricity")      # by carrier alias
+        """
+        return self.hourly_output_curves.get_curve(identifier, self)
+
+    def get_hourly_curves(
+        self, identifiers: list[str]
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Get multiple hourly output curves by names or carrier type aliases.
+
+        Args:
+            identifiers: List of curve names and/or carrier type aliases
+
+        Returns:
+            Dictionary mapping curve names to DataFrames
+
+        Examples:
+            >>> session.get_hourly_curves(["electricity", "heat"])
+            {'merit_order': DataFrame, 'heat_network': DataFrame}
+
+            >>> session.get_hourly_curves(["merit_order", "electricity_price"])
+            {'merit_order': DataFrame, 'electricity_price': DataFrame}
+        """
+        return self.hourly_output_curves.get_curves(identifiers, self)
 
     def all_hourly_output_curves(self) -> Any:
+        """Generator yielding all hourly output curves."""
         for key in self.hourly_output_curves.attached_keys():
-            yield self.get_output_curve(key)
+            yield self.get_hourly_curve(key)
 
-    def get_hourly_output_curves(
-        self, carrier_type: CarrierType
-    ) -> dict[str, pd.DataFrame]:
-        """Get hourly output curves for a specific carrier type."""
-        validate_carrier_type(carrier_type)
-        return self.hourly_output_curves.get_curves_by_carrier_type(self, carrier_type)
+    def clear_hourly_curves_cache(self) -> int:
+        """Clear all hourly output curves cache files and LRU cache.
+
+        Returns:
+            Number of files successfully removed
+        """
+        return self.hourly_output_curves.clear_cache()
+
+    def clear_custom_curves_cache(self) -> int:
+        """Clear all custom curves cache files.
+
+        Returns:
+            Number of files successfully removed
+        """
+        return self.custom_curves.clear_cache()
+
+    def clear_all_curve_caches(self) -> tuple[int, int]:
+        """Clear all curve caches (hourly output curves and custom curves).
+
+        Returns:
+            Tuple of (hourly_curves_removed, custom_curves_removed)
+        """
+        hourly = self.clear_hourly_curves_cache()
+        custom = self.clear_custom_curves_cache()
+        return (hourly, custom)
+
+    def clear_session_cache(self) -> None:
+        """Clear entire session temp directory (all cached files).
+
+        This removes all cached files for this session and clears
+        all associated in-memory caches.
+        """
+        import shutil
+
+        session_dir = get_settings().path_to_tmp(str(self.id))
+        if session_dir.exists():
+            shutil.rmtree(session_dir)
+            # Recreate empty directory
+            session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clear LRU cache
+        from pyetm.models.hourly_output_curves import _read_csv_cached_impl
+
+        _read_csv_cached_impl.cache_clear()
+
+        # Clear collection warnings
+        self.hourly_output_curves.warnings.clear()
+        self.custom_curves.warnings.clear()
 
     @property
     def annual_exports(self) -> AnnualExports:

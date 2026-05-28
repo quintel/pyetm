@@ -102,12 +102,13 @@ nav:
     - Overview: user-guide/index.md
     - Working with Excel: user-guide/excel.md
     - Working with Scenarios: user-guide/scenarios.md
-    - Sessions and Authentication: user-guide/management.md
+    - Authentication & User Management: user-guide/management.md
     - Inputs: user-guide/inputs.md
     - Gqueries: user-guide/gqueries.md
     - Custom Curves: user-guide/custom-curves.md
     - Sortables: user-guide/sortables.md
     - Submodels: user-guide/submodels.md
+    - Exports: user-guide/exports.md
   - API Reference: api/
   - Contributing:
     - Guide: contributing/guide.md
