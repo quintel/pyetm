@@ -230,6 +230,88 @@ preset_copy = original.copy_with_preset()
 print(f"Template ID: {preset_copy.template_id}")  # Points to original
 ```
 
+## Interpolating Scenarios
+
+Create intermediate-year scenarios by interpolating between 2 or more scenarios with different end years. Useful for generating multi-year pathway scenarios or filling gaps between existing scenarios.
+
+### Basic Interpolation (Sessions)
+
+Create interpolated sessions without saving to MyETM:
+
+```python
+from pyetm import Session, Sessions
+
+# Create or load scenarios with different end years
+session_2030 = Session.new(area_code="nl2023", end_year=2030)
+session_2050 = Session.new(area_code="nl2023", end_year=2050)
+
+# Interpolate to create intermediate years
+interpolated = Sessions.interpolate(
+    sessions=[session_2030, session_2050],
+    target_years=[2035, 2040, 2045]
+)
+
+# Returns list of Session objects
+print([s.end_year for s in interpolated])  # [2035, 2040, 2045]
+```
+
+### Interpolating Saved Scenarios
+
+Create and save interpolated scenarios to MyETM:
+
+```python
+from pyetm import Scenario, Scenarios
+
+# Load saved scenarios
+scenario_2030 = Scenario.load(111111)
+scenario_2050 = Scenario.load(222222)
+
+# Interpolate and save to MyETM
+interpolated = Scenarios.interpolate(
+    scenarios=[scenario_2030, scenario_2050],
+    target_years=[2035, 2040]
+)
+
+# Returns list of Scenario objects (saved to MyETM)
+print([(s.title, s.end_year) for s in interpolated])
+```
+
+### Custom Titles
+
+Specify custom titles for each interpolated scenario:
+
+```python
+interpolated = Scenarios.interpolate(
+    scenarios=[scenario_2030, scenario_2050],
+    target_years=[2035, 2040, 2045],
+    titles=["Pathway 2035", "Pathway 2040", "Pathway 2045"]
+)
+```
+
+### Multi-Scenario Interpolation
+
+Interpolate between 3 or more scenarios:
+
+```python
+# Load multiple scenarios spanning different years
+s_2030 = Scenario.load(111111)
+s_2040 = Scenario.load(222222)
+s_2050 = Scenario.load(333333)
+
+# Interpolate between all of them
+interpolated = Scenarios.interpolate(
+    scenarios=[s_2030, s_2040, s_2050],
+    target_years=[2035, 2045]
+)
+```
+
+!!! info "Requirements"
+    - All scenarios must have the **same area_code**
+    - All scenarios must have **unique end_year** values
+    - Target years must be **between** the earliest and latest scenario end years
+    - Cannot interpolate **scaled scenarios**
+    - For `Scenario.interpolate()`, scenarios must be saved (have an ID)
+
 
 ## Collections and Bulk Operations
 
