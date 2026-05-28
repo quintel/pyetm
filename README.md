@@ -10,22 +10,6 @@ More documentation is available [via the docs](https://quintel.github.io/pyetm/)
 
 ---
 
-> [!WARNING]
-> pyetm 2.0 is currently in beta and introduces major breaking API changes.
->
-> If you are using pyetm 1.x:
-> - do not upgrade automatically
-> - pin your dependency version
-> - read the docs before upgrading
->
-> If you are using pyetm 2.xb:
-> - the API is not yet stable, these are still pre-releases
-> - read the docs before upgrading
->
-> The latest docs are available at: https://quintel.github.io/pyetm/
-
----
-
 ## Installation
 
 **Note: If you are not familiar working with python packages, please refer to the quick start guide first.**
@@ -96,7 +80,7 @@ pyetm init
 This will:
 - Ask which environment you want to use (production, beta, or local)
 - Create a `.env` configuration file
-- Copy an input template Excel file to `inputs/input.xlsx`
+- Copy an input template Excel file to `excel/input.xlsx`
 
 After initialization, you'll need to manually add your API token to the `.env` file:
 
@@ -123,11 +107,11 @@ pyetm init --environment pro --log-level INFO
 The easiest way to work with scenarios is using Excel files:
 
 ```bash
-# Edit inputs/input.xlsx with your scenario data, then run:
-pyetm run inputs/input.xlsx
+# Edit excel/input.xlsx with your scenario data, then run:
+pyetm run excel/input.xlsx
 ```
 
-This will load your scenarios, update them on ETM, and export results to `inputs/input_results.xlsx`.
+This will load your scenarios, update them on ETM, and export results to `excel/input_results.xlsx`.
 
 **Command options**:
 - `--output PATH` or `-o PATH`: Custom output file location
@@ -136,10 +120,10 @@ This will load your scenarios, update them on ETM, and export results to `inputs
 Example:
 ```bash
 # Custom output location
-pyetm run inputs/input.xlsx --output results/my_results.xlsx
+pyetm run excel/input.xlsx --output results/my_results.xlsx
 
 # Read-only mode (fetch data without updating)
-pyetm run inputs/input.xlsx --no-update
+pyetm run excel/input.xlsx --no-update
 ```
 
 **For more detailed 'pyetm run' workflow instructions**, see the [Quick Start Guide](https://quintel.github.io/pyetm/getting-started/quickstart/#running-scenarios-from-excel) in the docs.

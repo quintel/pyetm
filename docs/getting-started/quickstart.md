@@ -49,7 +49,7 @@ This command will:
 
 - Ask which environment to use (production, beta, or local - [learn more](https://docs.energytransitionmodel.com/api/intro#environments))
 - Create a `.env` configuration file in your project folder
-- Create an `inputs/` folder with a template Excel file (`input.xlsx`)
+- Create an `excel/` folder with a template Excel file (`input.xlsx`)
 
 After initialization, you'll need to manually add your API token to the `.env` file if you want to create or modify scenarios (see [Adding Your API Token](#adding-your-api-token) below).
 
@@ -59,7 +59,7 @@ After initialization, you'll need to manually add your API token to the `.env` f
 - `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
 
-**Advanced example:**
+**Comprehensive example:**
 
 ```bash
 pyetm init --environment pro --log-level INFO
@@ -94,21 +94,21 @@ The easiest way to work with scenarios is using the `pyetm run` command with Exc
 
 ### Step 1: Prepare Your Input File
 
-After running `pyetm init`, you'll have an `inputs/input.xlsx` file. Open it in Excel and configure your scenarios (see [the Excel docs](../user-guide/excel.md) for more detail):
+After running `pyetm init`, you'll have an `excel/input.xlsx` file. Open it in Excel and configure your scenarios (see [the Excel docs](../user-guide/excel.md) for more detail):
 
 ### Step 2: Run Your Scenarios
 
 In your terminal (from your project folder), execute your scenarios and generate results:
 
 ```bash
-pyetm run inputs/input.xlsx
+pyetm run excel/input.xlsx
 ```
 
 This will:
 1. Load scenario definitions from the Excel file
 2. Update scenarios on the ETM platform with your input values
 3. Fetch all results (annual exports, hourly curves, etc.)
-4. Export everything to `inputs/input_results.xlsx` **(in the same folder as your input file)**
+4. Export everything to `excel/input_results.xlsx` **(in the same folder as your input file)**
 
 **Available options:**
 
@@ -119,17 +119,17 @@ This will:
 **Examples:**
 
 ```bash
-# Basic usage (updates scenarios, output goes to inputs/input_results.xlsx)
-pyetm run inputs/input.xlsx
+# Basic usage (updates scenarios, output goes to excel/input_results.xlsx)
+pyetm run excel/input.xlsx
 
 # Custom output location (creates results folder if needed)
-pyetm run inputs/input.xlsx --output results/my_results.xlsx
+pyetm run excel/input.xlsx --output results/my_results.xlsx
 
 # Read-only mode (fetch data without updating scenarios)
-pyetm run inputs/input.xlsx --no-update
+pyetm run excel/input.xlsx --no-update
 
 # Verbose logging for debugging
-pyetm run inputs/input.xlsx --log-level DEBUG
+pyetm run excel/input.xlsx --log-level DEBUG
 ```
 
 ### Step 3: Review Your Results
@@ -225,13 +225,13 @@ You can also work with Excel files in Python using the `ScenarioPacker` class (t
 from pyetm import ScenarioPacker
 
 # Load scenarios from Excel (with updates)
-packer = ScenarioPacker.from_excel("inputs/input.xlsx", update=True)
+packer = ScenarioPacker.from_excel("excel/input.xlsx", update=True)
 
 # Export results
-packer.to_excel("inputs/results.xlsx")
+packer.to_excel("excel/results.xlsx")
 
 # Load in read-only mode (no updates to ETM)
-packer_readonly = ScenarioPacker.from_excel("inputs/input.xlsx", update=False)
+packer_readonly = ScenarioPacker.from_excel("excel/input.xlsx", update=False)
 ```
 
 This gives you programmatic control over the same workflow the `pyetm run` command uses.

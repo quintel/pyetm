@@ -278,7 +278,7 @@ When using `from_excel()`:
 from pyetm import Scenarios
 
 # Load/create scenarios locally (default: update=False)
-scenarios = Scenarios.from_excel("../examples/inputs/my_scenarios.xlsx")
+scenarios = Scenarios.from_excel("../examples/excel/my_scenarios.xlsx")
 ```
 
 !!! warning "Update Default is False"
