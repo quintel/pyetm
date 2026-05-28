@@ -4,9 +4,12 @@ This guide will walk you through creating your first ETM scenario with pyetm in 
 
 ## Prerequisites
 
-- Python 3.12+ installed
-- pyetm package installed (see [Installation](installation.md))
-- An ETM API token (optional, but required for saving scenarios)
+Before starting, ensure you have:
+
+- **Python 3.12+** installed on your system
+- **pyetm package** installed (see [Installation](installation.md))
+- **An ETM API token** (optional, but required for creating or modifying scenarios - see below)
+- A dedicated folder for your pyetm project (you'll create this in the next step)
 
 ## Getting an API Token
 
@@ -18,7 +21,25 @@ To interact with saved scenarios or create scenarios under your account, you'll 
 
 ## Initialize Your Project
 
-The easiest way to get started is using the interactive initialization:
+First, create a project folder and set up your Python environment:
+
+```bash
+# Create and navigate to your project folder
+mkdir pyetm_project
+cd pyetm_project
+
+# Create a virtual environment
+python3 -m venv .venv
+
+# Activate the virtual environment
+source .venv/bin/activate  # On macOS/Linux
+# .venv\Scripts\activate   # On Windows
+
+# Install pyetm
+pip install pyetm
+```
+
+Then run the initialization command from inside your project folder:
 
 ```bash
 pyetm init
@@ -26,9 +47,9 @@ pyetm init
 
 This command will:
 
-- Ask which environment to use (production, beta, or local)
-- Create a `.env` configuration file
-- Copy an input template Excel file to `inputs/input.xlsx`
+- Ask which environment to use (production, beta, or local - [learn more](https://docs.energytransitionmodel.com/api/intro#environments))
+- Create a `.env` configuration file in your project folder
+- Create an `inputs/` folder with a template Excel file (`input.xlsx`)
 
 After initialization, you'll need to manually add your API token to the `.env` file if you want to create or modify scenarios (see [Adding Your API Token](#adding-your-api-token) below).
 
@@ -38,7 +59,7 @@ After initialization, you'll need to manually add your API token to the `.env` f
 - `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
 
-Example:
+**Advanced example:**
 
 ```bash
 pyetm init --environment pro --log-level INFO
@@ -46,13 +67,14 @@ pyetm init --environment pro --log-level INFO
 
 ### Adding Your API Token
 
-After running `pyetm init`, open the generated `.env` file and add your token:
+After running `pyetm init`, you'll find a `.env` file in your project folder. Open this file in any text editor and add your token:
 
-1. Open `.env` in your text editor
-2. Find the commented `# ETM_API_TOKEN=` line
-3. Uncomment it by removing the `#`
-4. Paste your full token after the `=` sign
-5. Save the file
+1. Locate the `.env` file in your project folder (same location where you ran `pyetm init`)
+2. Open `.env` in your text editor
+3. Find the commented `# ETM_API_TOKEN=` line
+4. Uncomment it by removing the `#`
+5. Paste your full token after the `=` sign
+6. Save the file
 
 Your `.env` should look like this:
 
@@ -66,6 +88,8 @@ LOG_LEVEL=INFO
 
 ## Running Scenarios from Excel
 
+**This section shows how to run scenarios using the terminal/command-line.** For Python scripting and Jupyter notebooks, see [Your First Scenario (Python API)](#your-first-scenario-python-api) below.
+
 The easiest way to work with scenarios is using the `pyetm run` command with Excel files. This is ideal for non-technical users.
 
 ### Step 1: Prepare Your Input File
@@ -74,7 +98,7 @@ After running `pyetm init`, you'll have an `inputs/input.xlsx` file. Open it in 
 
 ### Step 2: Run Your Scenarios
 
-Execute your scenarios and generate results:
+In your terminal (from your project folder), execute your scenarios and generate results:
 
 ```bash
 pyetm run inputs/input.xlsx
@@ -84,7 +108,7 @@ This will:
 1. Load scenario definitions from the Excel file
 2. Update scenarios on the ETM platform with your input values
 3. Fetch all results (annual exports, hourly curves, etc.)
-4. Export everything to `inputs/input_results.xlsx`
+4. Export everything to `inputs/input_results.xlsx` **(in the same folder as your input file)**
 
 **Available options:**
 
@@ -95,10 +119,10 @@ This will:
 **Examples:**
 
 ```bash
-# Basic usage (updates scenarios, default output)
+# Basic usage (updates scenarios, output goes to inputs/input_results.xlsx)
 pyetm run inputs/input.xlsx
 
-# Custom output location
+# Custom output location (creates results folder if needed)
 pyetm run inputs/input.xlsx --output results/my_results.xlsx
 
 # Read-only mode (fetch data without updating scenarios)
@@ -121,6 +145,16 @@ Each sheet contains columns for all your scenarios, making it easy to compare re
 
 ## Your First Scenario (Python API)
 
+**This section is for Python scripting and Jupyter notebooks.** If you prefer working from the terminal with Excel files, see [Running Scenarios from Excel](#running-scenarios-from-excel) above.
+
+The Python API gives you programmatic control over scenarios, making it ideal for:
+- Automating scenario creation and analysis
+- Running batch experiments
+- Building custom analysis workflows
+- Interactive exploration in Jupyter notebooks
+
+To use this approach, create a Python script (`.py` file) or Jupyter notebook (`.ipynb` file) in your project folder. For Jupyter setup instructions, see [Using Jupyter Notebooks](#using-jupyter-notebooks) below.
+
 Let's create and run a simple scenario with pyetm:
 
 ```python
@@ -137,7 +171,7 @@ print(f"Created scenario {scenario.id}")
 print(f"URL: {scenario.session.url}")
 ```
 
-## Modifying Inputs
+### Modifying Inputs
 
 Now let's change some inputs:
 
@@ -151,7 +185,7 @@ scenario.update_user_values({
 scenario.inputs.to_dataframe()
 ```
 
-## Querying Results
+### Querying Results
 
 You can query any output value from your scenario:
 
@@ -165,7 +199,7 @@ results = scenario.results()
 results
 ```
 
-## Exporting Data
+### Exporting Data
 
 Export your scenario's hourly electricity curves (a dictionary). Access the keys and grab just the `merit_order.csv`:
 
@@ -183,9 +217,9 @@ You can also export your whole scenario to excel:
 scenario.to_excel("scenario.xlsx")
 ```
 
-## Working with Excel Files Programmatically
+### Working with Excel Files Programmatically
 
-You can also work with Excel files in Python using the `ScenarioPacker` class:
+You can also work with Excel files in Python using the `ScenarioPacker` class (this is what the `pyetm run` command uses internally):
 
 ```python
 from pyetm import ScenarioPacker

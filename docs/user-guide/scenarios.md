@@ -343,7 +343,7 @@ scenario.combine.main_info()
 | Length | `len()` | `len(scenarios)` |
 | Bulk export | `to_excel()` | `scenarios.to_excel("file.xlsx")` |
 | Combined data | `.combine` | `packer = scenarios.combine` |
-| Hourly curves | `get_hourly_output_curves()` | `scenarios.get_hourly_output_curves("electricity")` |
+| Hourly curves | `get_hourly_curves()` | `scenarios.get_hourly_curves(["electricity"])` |
 | Annual exports | `get_annual_exports()` | `scenarios.get_annual_exports(["energy_flow"])` |
 
 ### Bulk Export
