@@ -78,6 +78,7 @@ The `hourly_curves` field has three modes:
    ```
 
 **Available carrier types**:
+
 - `electricity` - Maps to ETM: `merit_order``
 - `heat` - Maps to ETM: `heat_network`
 - `hydrogen` - Maps to ETM: `hydrogen`,
@@ -116,6 +117,7 @@ The `annual_exports` field has three modes:
    ```
 
 **Available export types**:
+
 - `production_parameters` - Production parameters for technologies
 - `energy_flow` - Energy flow data between nodes
 - `energy_flow_present` - Present-year energy flow data
@@ -170,6 +172,7 @@ admin@example.com      | owner       | owner       | owner       |
 - **Column 1**: User email addresses
 - **Remaining columns**: Scenario identifiers (short_name from MAIN sheet)
 - **Valid roles**:
+
   - `owner` - Full control over the scenario
   - `collaborator` - Can edit the scenario
   - `viewer` - Read-only access

@@ -471,3 +471,31 @@ class CustomCurves(Base):
         # Auto-display warnings if any exist
         if len(self.warnings) > 0:
             self.auto_show_warnings()
+
+    def remove_curve(self, curve_name: str) -> bool:
+        """Remove a specific custom curve's cache file.
+
+        Args:
+            curve_name: Name of the curve to remove
+
+        Returns:
+            True if successfully removed, False otherwise
+        """
+        curve = self._find(curve_name)
+        if curve is None:
+            return False
+        return curve.remove()
+
+    def clear_cache(self) -> int:
+        """Clear all custom curve cache files.
+
+        Returns:
+            Number of files successfully removed
+        """
+        removed_count = 0
+        for curve in self.curves:
+            if curve.remove():
+                removed_count += 1
+
+        self.warnings.clear()
+        return removed_count

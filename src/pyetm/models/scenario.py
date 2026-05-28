@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING, cast
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient, get_client
-from pyetm.types import AnnualExportType, CarrierType
+from pyetm.types import AnnualExportType
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
@@ -592,19 +592,70 @@ class Scenario(Base):
         """Yield all custom curve series from the underlying session."""
         return self.session.custom_curves_series()
 
-    def get_output_curve(self, curve_name: str) -> Optional[pd.DataFrame]:
-        """Get a single hourly output curve by name from the underlying session."""
-        return self.session.get_output_curve(curve_name)
+    def get_hourly_curve(self, identifier: str) -> Optional[pd.DataFrame]:
+        """
+        Get a single hourly output curve by name or carrier type alias.
+
+        Carrier types ('electricity', 'heat', 'hydrogen', 'methane') are treated
+        as convenient aliases for their primary curves.
+
+        Args:
+            identifier: Curve name (e.g., 'merit_order') or carrier type alias
+
+        Returns:
+            DataFrame with hourly data, or None if not found
+        """
+        return self.session.get_hourly_curve(identifier)
+
+    def get_hourly_curves(
+        self, identifiers: list[str]
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Get multiple hourly output curves by names or carrier type aliases.
+
+        Args:
+            identifiers: List of curve names and/or carrier type aliases
+
+        Returns:
+            Dictionary mapping curve names to DataFrames
+        """
+        return self.session.get_hourly_curves(identifiers)
 
     def all_hourly_output_curves(self) -> Any:  # Returns generator
         """Yield all output curves from the underlying session."""
         return self.session.all_hourly_output_curves()
 
-    def get_hourly_output_curves(
-        self, carrier_type: CarrierType
-    ) -> dict[str, pd.DataFrame]:
-        """Get output curves by carrier type from the underlying session."""
-        return self.session.get_hourly_output_curves(carrier_type)
+    def clear_hourly_curves_cache(self) -> int:
+        """Clear all hourly output curves cache files and LRU cache.
+
+        Returns:
+            Number of files successfully removed
+        """
+        return self.session.clear_hourly_curves_cache()
+
+    def clear_custom_curves_cache(self) -> int:
+        """Clear all custom curves cache files.
+
+        Returns:
+            Number of files successfully removed
+        """
+        return self.session.clear_custom_curves_cache()
+
+    def clear_all_curve_caches(self) -> tuple[int, int]:
+        """Clear all curve caches (hourly output curves and custom curves).
+
+        Returns:
+            Tuple of (hourly_curves_removed, custom_curves_removed)
+        """
+        return self.session.clear_all_curve_caches()
+
+    def clear_session_cache(self) -> None:
+        """Clear entire session temp directory (all cached files).
+
+        This removes all cached files for this session and clears
+        all associated in-memory caches.
+        """
+        self.session.clear_session_cache()
 
     def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
         """Get a single annual export by name from the underlying session."""

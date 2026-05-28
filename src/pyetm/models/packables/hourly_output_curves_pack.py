@@ -108,11 +108,11 @@ class HourlyOutputCurvesPack(Packable):
                     curves_to_fetch = []
 
             # Fetch each curve (will cache for later use by to_dataframe)
-            if hasattr(scenario, "get_output_curve") and curves_to_fetch:
+            if hasattr(scenario, "get_hourly_curve") and curves_to_fetch:
                 try:
                     for curve_name in curves_to_fetch:
                         try:
-                            scenario.get_output_curve(curve_name)
+                            scenario.get_hourly_curve(curve_name)
                         except Exception as e:
                             logger.warning(
                                 "Failed to fetch curve %s for scenario %s: %s",
@@ -265,11 +265,11 @@ class HourlyOutputCurvesPack(Packable):
                         curves_to_fetch = []
 
                 # Fetch each curve (will cache for later use by to_dataframe)
-                if hasattr(scenario, "get_output_curve") and curves_to_fetch:
+                if hasattr(scenario, "get_hourly_curve") and curves_to_fetch:
                     try:
                         for curve_name in curves_to_fetch:
                             try:
-                                scenario.get_output_curve(curve_name)
+                                scenario.get_hourly_curve(curve_name)
                             except Exception as e:
                                 logger.warning(
                                     "Failed to fetch curve %s for scenario %s: %s",
@@ -344,8 +344,8 @@ class HourlyOutputCurvesPack(Packable):
                     # Fetch curves by carrier type using the model's method
                     curves = None
                     try:
-                        curves = scenario.hourly_output_curves.get_curves_by_carrier_type(
-                            scenario, carrier
+                        curves = scenario.hourly_output_curves.get_curves(
+                            [carrier], scenario
                         )
                     except Exception as e:
                         logger.warning(

@@ -171,7 +171,7 @@ Export your scenario's hourly electricity curves (a dictionary). Access the keys
 
 ```python
 # Export hourly curves to CSV via the session
-curves = scenario.get_hourly_output_curves('electricity')
+curves = scenario.get_hourly_curves(['electricity'])
 curves.keys()
 merit_order = curves['merit_order']
 # Save to file
