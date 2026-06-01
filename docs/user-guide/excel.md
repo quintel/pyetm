@@ -342,7 +342,7 @@ from pyetm import Scenario
 from pyetm.models import ExportConfig
 
 # Create a scenario
-scenario = Scenario.create(
+scenario = Scenario.new(
     title="Export Example",
     area_code="nl",
     end_year=2050

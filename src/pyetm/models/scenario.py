@@ -80,7 +80,7 @@ class Scenario(Base):
         return hash((self.id, self.area_code, self.end_year))
 
     @classmethod
-    def create(
+    def new(
         cls,
         title: str,
         session_id: Optional[int] = None,
@@ -119,18 +119,28 @@ class Scenario(Base):
 
         Example:
             >>> # Create new scenario (creates new session + saves it)
-            >>> scenario = Scenario.create(
+            >>> scenario = Scenario.new(
             ...     title="High Solar 2050",
             ...     area_code="nl2023",
             ...     end_year=2050
             ... )
 
             >>> # Save existing session
-            >>> scenario = Scenario.create(
+            >>> scenario = Scenario.new(
             ...     title="My Scenario",
             ...     session_id=existing_session.id
             ... )
         """
+        # Validate authentication
+        from pyetm.config.settings import get_settings
+
+        if not get_settings().etm_api_token:
+            raise PermissionError(
+                "Creating SavedScenarios requires authentication. "
+                "Set ETM_API_TOKEN or create a Session instead. "
+                "Get your token at https://energytransitionmodel.com/api_access"
+            )
+
         # Validation
         if session_id is not None and (area_code is not None or end_year is not None):
             raise ValueError(

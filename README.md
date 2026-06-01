@@ -139,7 +139,7 @@ The `pyetm init` command creates a `.env` file with your settings. You can also 
 Create a `.env` file in your project directory:
 
 ```bash
-# Your ETM API token (required)
+# Your ETM API token (optional for public scenarios)
 ETM_API_TOKEN=etm_your_token_here
 
 # Environment (default: pro)
@@ -153,6 +153,11 @@ LOG_LEVEL=INFO
 CSV_SEPARATOR=,
 DECIMAL_SEPARATOR=.
 ```
+
+**Note on API Token:**
+- **Without a token**: You can create and work with public scenarios (read and write operations)
+- **With a token**: Required to access your saved scenarios, list your scenarios, and work with private scenarios
+- Get your token [here](https://docs.energytransitionmodel.com/api/authentication)
 
 **Environment Options:**
 - `pro` (default): Production environment

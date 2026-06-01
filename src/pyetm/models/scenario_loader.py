@@ -128,6 +128,24 @@ class SavedScenarioLoader:
         """
         self._helper = packer_helper
 
+    def _require_authentication(self) -> None:
+        """
+        Validate that authentication token is available for SavedScenario operations.
+
+        Raises:
+            PermissionError: If no ETM_API_TOKEN is configured
+        """
+        from pyetm.config.settings import get_settings
+
+        if not get_settings().etm_api_token:
+            raise PermissionError(
+                "SavedScenario operations require authentication. "
+                "Either:\n"
+                "  1. Set ETM_API_TOKEN environment variable, or\n"
+                "  2. Use session=True in your Excel file for unauthenticated operations.\n"
+                "Get your token at https://energytransitionmodel.com/api_access"
+            )
+
     def load(
         self,
         scenario_id: int,
@@ -168,6 +186,9 @@ class SavedScenarioLoader:
         """Copy a SavedScenario and save the copy to MyETM."""
         from pyetm.models.scenario import Scenario
 
+        # Validate authentication before attempting to save
+        self._require_authentication()
+
         try:
             saved_scenario = Scenario.load(scenario_id)
             copied_session = saved_scenario.session.copy(**metadata_updates)
@@ -175,12 +196,20 @@ class SavedScenarioLoader:
             title = metadata_updates.get("title") or f"Copy of {saved_scenario.title}"
             try:
                 saved_copy = copied_session.save(title=title)
-                logger.info(
-                    "Automatically saved copy to MyETM with ID %s (session ID: %s)",
-                    saved_copy.id,
-                    saved_copy.scenario_id,
-                )
-                return cast(Session, saved_copy)
+                # Validate that we got a proper SavedScenario back with required attributes
+                if hasattr(saved_copy, 'id') and hasattr(saved_copy, 'scenario_id'):
+                    logger.info(
+                        "Automatically saved copy to MyETM with ID %s (session ID: %s)",
+                        saved_copy.id,
+                        saved_copy.scenario_id,
+                    )
+                    return cast(Session, saved_copy)
+                else:
+                    logger.warning(
+                        "Save operation for row '%s' returned unexpected object type. Returning session instead.",
+                        row_label,
+                    )
+                    return copied_session
             except Exception as save_error:
                 logger.warning(
                     "Failed to save copy to MyETM for row '%s': %s. Returning session instead.",
@@ -215,6 +244,9 @@ class SavedScenarioLoader:
         """Create a new scenario and save it to MyETM."""
         from pyetm.models.scenario import Scenario
 
+        # Validate authentication before attempting to save
+        self._require_authentication()
+
         scenario = self._helper._load_or_create_scenario(
             None, area_code, end_year, row_label, **metadata_updates
         )
@@ -226,12 +258,20 @@ class SavedScenarioLoader:
 
         try:
             saved_scenario = scenario.save(title=title)
-            logger.info(
-                "Saved new scenario to MyETM with ID %s (session ID: %s)",
-                saved_scenario.id,
-                saved_scenario.scenario_id,
-            )
-            return cast(Session, saved_scenario)
+            # Validate that we got a proper SavedScenario back with required attributes
+            if hasattr(saved_scenario, 'id') and hasattr(saved_scenario, 'scenario_id'):
+                logger.info(
+                    "Saved new scenario to MyETM with ID %s (session ID: %s)",
+                    saved_scenario.id,
+                    saved_scenario.scenario_id,
+                )
+                return cast(Session, saved_scenario)
+            else:
+                logger.warning(
+                    "Save operation for row '%s' returned unexpected object type. Returning session instead.",
+                    row_label,
+                )
+                return cast(Session, scenario)
         except Exception as e:
             logger.warning(
                 "Failed to save new scenario to MyETM for row '%s': %s. Returning session instead.",

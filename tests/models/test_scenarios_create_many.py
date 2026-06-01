@@ -15,10 +15,10 @@ class TestCreateManyWithUserValues:
     """Test create_many() with user_values parameter."""
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     def test_create_many_with_inputs(self, mock_create, mock_apply_data):
         """Test that user_values are passed to concurrent data application."""
-        # Mock Scenario.create to return mock saved scenarios
+        # Mock Scenario.new to return mock saved scenarios
         mock_saved_1 = Mock(spec=Scenario)
         mock_saved_1.id = 10
         mock_saved_1.session = Mock(id=1)
@@ -70,7 +70,7 @@ class TestCreateManyWithUserValues:
         assert data_to_apply[1][1]["user_values"] == {"capacity_of_solar_pv": 2000}
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_mixed_inputs(
         self, mock_session_new, mock_create, mock_apply_data
@@ -139,7 +139,7 @@ class TestCreateManyWithCustomCurves:
     """Test create_many() with custom_curves parameter."""
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_custom_curves(
         self, mock_session_new, mock_create, mock_apply_data
@@ -194,7 +194,7 @@ class TestCreateManyWithCustomCurves:
         assert "custom_curves" in data_to_apply[1][1]
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_multiple_curves_per_scenario(
         self, mock_session_new, mock_create, mock_apply_data
@@ -242,7 +242,7 @@ class TestCreateManyWithSortables:
     """Test create_many() with sortables parameter."""
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_sortables(
         self, mock_session_new, mock_create, mock_apply_data
@@ -304,7 +304,7 @@ class TestCreateManyCombined:
     """Test create_many() with multiple parameter types combined."""
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_all_parameters(
         self, mock_session_new, mock_create, mock_apply_data
@@ -353,7 +353,7 @@ class TestCreateManyErrorHandling:
     """Test error handling in create_many()."""
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_data_warnings_populated(
         self, mock_session_new, mock_create, mock_apply_data
@@ -407,7 +407,7 @@ class TestCreateManyErrorHandling:
         assert "Invalid curve" in result.data_warnings[1]
 
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_raise_on_data_errors(
         self, mock_session_new, mock_create, mock_apply_data
@@ -443,7 +443,7 @@ class TestCreateManyErrorHandling:
         # Check that the error message mentions the failure
         assert "failed to apply data" in str(exc_info.value).lower()
 
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_partial_scenario_creation_failure(
         self, mock_session_new, mock_create
@@ -488,7 +488,7 @@ class TestCreateManyErrorHandling:
 class TestCreateManyWithTemplateId:
     """Test create_many() with template_id parameter."""
 
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_template_id_only(self, mock_session_new, mock_create):
         """Test that template_id allows creating scenarios without area_code and end_year."""
@@ -523,7 +523,7 @@ class TestCreateManyWithTemplateId:
         # and template_id parameter passed through
         mock_session_new.assert_called_once_with(None, None, client=ANY, template_id=100000)
 
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_template_id_and_explicit_area_year(
         self, mock_session_new, mock_create
@@ -557,7 +557,7 @@ class TestCreateManyWithTemplateId:
         # Verify Session.new was called with explicit values
         mock_session_new.assert_called_once_with("de", 2040, client=ANY, template_id=100000)
 
-    @patch("pyetm.models.scenario.Scenario.create")
+    @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_with_default_area_year_and_template(
         self, mock_session_new, mock_create

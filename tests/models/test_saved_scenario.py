@@ -77,7 +77,7 @@ def test_create_saved_scenario_success(monkeypatch, ok_service_result, mock_clie
         lambda client, params: ok_service_result(created_data),
     )
 
-    saved_scenario = Scenario.create(
+    saved_scenario = Scenario.new(
         title="New Saved Scenario",
         session_id=123,
         private=True,
@@ -107,7 +107,7 @@ def test_create_saved_scenario_with_warnings(
         lambda client, params: ok_service_result(created_data, warnings),
     )
 
-    saved_scenario = Scenario.create(
+    saved_scenario = Scenario.new(
         title="Saved Scenario",
         session_id=123,
         client=mock_client,
@@ -129,7 +129,7 @@ def test_create_saved_scenario_failure(monkeypatch, fail_service_result, mock_cl
     # Missing title - should trigger SavedScenarioError when API call fails
     with pytest.raises(SavedScenarioError, match="Could not create saved scenario"):
         # This creates with empty title which will fail at API level
-        Scenario.create(title="", session_id=123, client=mock_client)
+        Scenario.new(title="", session_id=123, client=mock_client)
 
 
 def test_create_saved_scenario_preserves_params_not_in_response(
@@ -149,7 +149,7 @@ def test_create_saved_scenario_preserves_params_not_in_response(
         lambda client, params: ok_service_result(created_data),
     )
 
-    saved_scenario = Scenario.create(
+    saved_scenario = Scenario.new(
         title="Saved Scenario",
         session_id=123,
         private=True,
@@ -233,7 +233,7 @@ def test_create_saved_scenario_with_user_values(
 
     # Create scenario with user_values
     user_values = {"flh_of_energy_power_solar_pv_solar_radiation": 1000.0}
-    saved_scenario = Scenario.create(
+    saved_scenario = Scenario.new(
         title="Scenario with User Values",
         area_code="nl",
         end_year=2050,

@@ -341,8 +341,21 @@ class Session(Base):
         """
         Save this scenario to MyETM as a SavedScenario.
 
+        Note:
+            Requires authentication via ETM_API_TOKEN environment variable.
+            SavedScenarios are persisted in MyETM and associated with your user account.
+
+        Args:
+            client: Optional BaseClient instance (defaults to global client)
+            title: Title for the saved scenario (defaults to self.title)
+            **kwargs: Additional parameters (e.g., private, description)
+
         Returns:
             SavedScenario instance
+
+        Raises:
+            PermissionError: If ETM_API_TOKEN is not configured
+            ScenarioError: If title is not provided
         """
         from pyetm.models.scenario import Scenario
 
@@ -358,7 +371,7 @@ class Session(Base):
             "private", self.private if self.private is not None else False
         )
 
-        return Scenario.create(
+        return Scenario.new(
             title=save_title,
             session_id=self.id,
             client=client,

@@ -147,11 +147,8 @@ class BaseRunner(ABC, Generic[T]):
             if "404" in error_msg:
                 return ServiceResult.fail([f"Resource not found: {error_msg}"])
             # Make authentication errors more explicit and actionable
-            if "ETM_API_TOKEN" in error_msg or "401" in error_msg or isinstance(e, PermissionError):
-                return ServiceResult.fail([
-                    "Authentication failed: Invalid or missing ETM_API_TOKEN. "
-                    f"Please check your .env file and ensure the token is correct. Details: {error_msg}"
-                ])
+            if isinstance(e, PermissionError):
+                return ServiceResult.fail([error_msg])
             return ServiceResult.fail([error_msg])
         except Exception as e:
             # Any other unexpected exception is treated as breaking
@@ -183,7 +180,9 @@ class BaseRunner(ABC, Generic[T]):
         return make_batch_requests(client, formatted_requests)
 
     @classmethod
-    def _validate_required_fields(cls, data: Dict[str, Any], required_keys: List[str]) -> List[str]:
+    def _validate_required_fields(
+        cls, data: Dict[str, Any], required_keys: List[str]
+    ) -> List[str]:
         """
         Check for missing required fields.
         """
@@ -211,7 +210,9 @@ class BaseRunner(ABC, Generic[T]):
         """
         filtered = {k: v for k, v in data.items() if k in allowed_keys}
         ignored_keys = set(data.keys()) - set(filtered.keys())
-        warnings = [f"Ignoring invalid field for {context}: {key!r}" for key in ignored_keys]
+        warnings = [
+            f"Ignoring invalid field for {context}: {key!r}" for key in ignored_keys
+        ]
         return filtered, warnings
 
     @classmethod

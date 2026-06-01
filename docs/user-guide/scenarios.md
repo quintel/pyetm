@@ -24,7 +24,7 @@ Users are encouraged to use scenarios for most purposes/
 ```python
 from pyetm import Scenario
 
-scenario = Scenario.create(
+scenario = Scenario.new(
     title="Renewable Energy Transition",
     area_code="nl2023",
     end_year=2050
@@ -46,7 +46,7 @@ session = Session.new(area_code="nl2023", end_year=2050)
 ```python
 from pyetm import Scenario
 
-scenario = Scenario.create(
+scenario = Scenario.new(
     title="High Solar Scenario",
     area_code="nl2023",
     end_year=2050,

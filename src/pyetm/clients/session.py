@@ -88,10 +88,20 @@ class ETMResponse(BaseModel):
         text = self.text.strip()
         return f"{self.status_code}: {text}" if text else f"{self.status_code}"
 
-    def raise_for_status(self) -> None:
+    def raise_for_status(self, token: Optional[str] = None) -> None:
         """Raise appropriate exception for HTTP errors."""
         if self.status_code == 401:
-            raise PermissionError("Invalid or missing ETM_API_TOKEN")
+            if not token:
+                raise PermissionError(
+                    "Authentication required: This operation requires an ETM_API_TOKEN. "
+                    "Set the ETM_API_TOKEN environment variable or pass a client with a token. "
+                    "Get your token at https://energytransitionmodel.com/api_access"
+                )
+            else:
+                raise PermissionError(
+                    "Invalid ETM_API_TOKEN. Please check your token is correct and has not expired. "
+                    "Get a new token at https://energytransitionmodel.com/api_access"
+                )
 
         if 400 <= self.status_code < 500:
             raise ValueError(self._format_error_message())
@@ -114,10 +124,9 @@ class ETMSession:
     ):
         self.base_url = str(base_url or get_settings().base_url).rstrip("/")
         self.token = token or get_settings().etm_api_token
-        self.headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json",
-        }
+        self.headers = {"Accept": "application/json"}
+        if self.token:
+            self.headers["Authorization"] = f"Bearer {self.token}"
 
         # SSL configuration
         settings = get_settings()
@@ -238,7 +247,7 @@ class ETMSession:
                 etm_response._content = await response.read()
 
             # Check for HTTP errors after response is fully constructed
-            etm_response.raise_for_status()
+            etm_response.raise_for_status(token=self.token)
 
             return etm_response
 

@@ -292,7 +292,7 @@ class Scenarios(Base):
                     session_id = params.get("scenario_id")
                     private = bool(params.get("private", False))
                     saved_scenarios.append(
-                        Scenario.create(
+                        Scenario.new(
                             title=title,
                             session_id=session_id,
                             client=client,
@@ -328,7 +328,7 @@ class Scenarios(Base):
                     if "template_id" in extra_params:
                         session = Session.new(area, year, client=client, **extra_params)
                         saved_scenarios.append(
-                            Scenario.create(
+                            Scenario.new(
                                 title=title,
                                 session_id=session.id,
                                 client=client,
@@ -338,7 +338,7 @@ class Scenarios(Base):
                     else:
                         # Use unified create for simple case
                         saved_scenarios.append(
-                            Scenario.create(
+                            Scenario.new(
                                 title=title,
                                 area_code=area,
                                 end_year=year,

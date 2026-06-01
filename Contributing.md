@@ -266,7 +266,7 @@ from pyetm import Scenario
 
 # Create a scenario from a template / region code (example numbers are illustrative)
 # Note: template_id expects Session ID (ETEngine), not SavedScenario ID (MyETM)
-scen = Scenario.create(region=205, end_year=2050, template_id=12345)
+scen = Scenario.new(region=205, end_year=2050, template_id=12345)
 
 # Update some inputs
 scen.update_inputs({
@@ -289,8 +289,8 @@ print(scen.outputs.electricity_demand_total)
 from pyetm.models import Scenario
 from pyetm.models import ScenarioPacker
 
-scen_a = Scenario.create(region=205, end_year=2035)
-scen_b = Scenario.create(region=205, end_year=2050)
+scen_a = Scenario.new(region=205, end_year=2035)
+scen_b = Scenario.new(region=205, end_year=2050)
 
 packer = ScenarioPacker()
 packer.add(scen_a, scen_b)
@@ -356,8 +356,8 @@ beta_client = BaseClient(
 )
 
 # Create scenarios on different environments
-prod_scenario = Scenario.create(title="Prod Test", client=prod_client)
-beta_scenario = Scenario.create(title="Beta Test", client=beta_client)
+prod_scenario = Scenario.new(title="Prod Test", client=prod_client)
+beta_scenario = Scenario.new(title="Beta Test", client=beta_client)
 ```
 
 ### Next Steps

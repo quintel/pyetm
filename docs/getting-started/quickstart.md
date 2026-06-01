@@ -8,12 +8,26 @@ Before starting, ensure you have:
 
 - **Python 3.12+** installed on your system
 - **pyetm package** installed (see [Installation](installation.md))
-- **An ETM API token** (optional, but required for creating or modifying scenarios - see below)
+- **An ETM API token** (optional - see below for what requires authentication)
 - A dedicated folder for your pyetm project (you'll create this in the next step)
 
 ## Getting an API Token
 
-To interact with saved scenarios or create scenarios under your account, you'll need an API token:
+An API token is **optional** depending on what you want to do:
+
+**Without a token, you can:**
+- Create new public sessions
+- Load and modify public sessions
+- Query public scenario data
+- Export results from public sessions
+
+**With a token, you can additionally:**
+- Access your saved scenarios in MyETM
+- List all scenarios you've created
+- Work with private scenarios
+- Manage scenario sharing and permissions
+
+To get a token:
 
 1. Visit [the ETM API authentication docs](https://docs.energytransitionmodel.com/api/authentication)
 2. Follow the instructions to generate your personal token
@@ -51,7 +65,7 @@ This command will:
 - Create a `.env` configuration file in your project folder
 - Create an `excel/` folder with a template Excel file (`input.xlsx`)
 
-After initialization, you'll need to manually add your API token to the `.env` file if you want to create or modify scenarios (see [Adding Your API Token](#adding-your-api-token) below).
+After initialization, you can optionally add your API token to the `.env` file if you need access to saved scenarios or private scenarios (see [Adding Your API Token](#adding-your-api-token) below).
 
 **Available options:**
 
@@ -65,9 +79,9 @@ After initialization, you'll need to manually add your API token to the `.env` f
 pyetm init --environment pro --log-level INFO
 ```
 
-### Adding Your API Token
+### Adding Your API Token (Optional)
 
-After running `pyetm init`, you'll find a `.env` file in your project folder. Open this file in any text editor and add your token:
+After running `pyetm init`, you'll find a `.env` file in your project folder. If you need to access saved scenarios or private scenarios, open this file in any text editor and add your token:
 
 1. Locate the `.env` file in your project folder (same location where you ran `pyetm init`)
 2. Open `.env` in your text editor
@@ -161,7 +175,7 @@ Let's create and run a simple scenario with pyetm:
 from pyetm import Scenario
 
 # Create a new scenario for the Netherlands
-scenario = Scenario.create(
+scenario = Scenario.new(
     title="My First Scenario",
     area_code="nl2023",
     end_year=2050

@@ -39,7 +39,7 @@ from pyetm import Scenario
 
 def test_scenario_creation():
     """Test creating a basic scenario."""
-    scenario = Scenario.create(area_code="nl", end_year=2050)
+    scenario = Scenario.new(area_code="nl", end_year=2050)
 
     assert scenario.area_code == "nl"
     assert scenario.end_year == 2050

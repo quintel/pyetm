@@ -51,7 +51,7 @@ client = Client(config=config)
 
 ```python
 # Create authenticated scenario
-scenario = Scenario.create(
+scenario = Scenario.new(
     area_code="nl",
     end_year=2050,
     client=client,
@@ -78,8 +78,8 @@ beta_client = BaseClient(
 )
 
 # Create scenarios on different environments
-prod_scenario = Scenario.create(title="Prod Test", area_code="nl2023", end_year=2050, client=prod_client)
-beta_scenario = Scenario.create(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
+prod_scenario = Scenario.new(title="Prod Test", area_code="nl2023", end_year=2050, client=prod_client)
+beta_scenario = Scenario.new(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
 ```
 
 ## Managing Your Scenarios
@@ -208,7 +208,7 @@ For Sessions (temporary scenarios), the API works the same way:
 from pyetm import Scenario
 
 # Create or load a session
-session = Scenario.create(area_code="nl2023", end_year=2050)
+session = Scenario.new(area_code="nl2023", end_year=2050)
 
 # List users
 users = session.list_users()
