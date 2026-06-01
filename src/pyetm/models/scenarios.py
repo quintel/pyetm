@@ -584,3 +584,77 @@ class Scenarios(Base):
                     warnings.append(warning_msg)
 
         return warnings
+
+    @classmethod
+    def delete_many(
+        cls,
+        saved_scenario_ids: List[int],
+        client: Optional[BaseClient] = None,
+    ) -> Dict[str, Any]:
+        """
+        Delete multiple saved scenarios in bulk.
+
+        Warning: This action is irreversible. The saved scenarios will be permanently
+        removed from MyETM (soft-deleted).
+
+        Args:
+            saved_scenario_ids: List of SavedScenario IDs to delete
+            client: Optional BaseClient instance
+
+        Returns:
+            Dict with 'successful' and 'failed' keys containing lists of IDs
+
+        Example:
+            result = Scenarios.delete_many([1, 2, 3])
+            print(f"Deleted: {result['successful']}")
+            print(f"Failed: {result['failed']}")
+        """
+        from pyetm.services.scenario_runners.delete_saved_scenario import (
+            DeleteSavedScenarioRunner,
+        )
+
+        if client is None:
+            client = get_client()
+
+        if not saved_scenario_ids:
+            return {"successful": [], "failed": []}
+
+        # Build deletion requests for all scenarios
+        requests = []
+        for scenario_id in saved_scenario_ids:
+            request = DeleteSavedScenarioRunner.build_request(
+                saved_scenario_id=scenario_id
+            )
+            requests.append(request)
+
+        # Format requests for AsyncBatchRunner
+        formatted_requests = []
+        for req in requests:
+            formatted = {
+                "method": req["method"],
+                "url": req["path"],
+                "kwargs": {**req.get("kwargs", {})},
+            }
+            if req.get("payload"):
+                formatted["kwargs"]["json"] = req["payload"]
+            formatted_requests.append(formatted)
+
+        # Execute batch deletion
+        results = AsyncBatchRunner.batch_requests_sync(
+            client.session, formatted_requests, MAX_CONCURRENT
+        )
+
+        # Collect successes and failures
+        successful = []
+        failed = []
+        for scenario_id, result in zip(saved_scenario_ids, results):
+            if result.success:
+                successful.append(scenario_id)
+            else:
+                failed.append(scenario_id)
+                error_msg = "; ".join(result.errors) if result.errors else "Unknown error"
+                logger.warning(
+                    f"Failed to delete saved scenario {scenario_id}: {error_msg}"
+                )
+
+        return {"successful": successful, "failed": failed}

@@ -28,6 +28,9 @@ from pyetm.services.scenario_runners.saved_scenario_users_update import (
 from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
     SavedScenarioUsersDestroyRunner,
 )
+from pyetm.services.scenario_runners.delete_saved_scenario import (
+    DeleteSavedScenarioRunner,
+)
 import pandas as pd
 from os import PathLike
 from typing import Generator
@@ -398,6 +401,33 @@ class Scenario(Base):
         for field, value in kwargs.items():
             if hasattr(self, field) and (not result.data or field not in result.data):
                 setattr(self, field, value)
+
+    def delete(self, client: Optional[BaseClient] = None) -> None:
+        """
+        Delete this SavedScenario from MyETM.
+
+        Warning: This action is irreversible. The saved scenario will be permanently
+        removed from MyETM (soft-deleted).
+
+        Args:
+            client: Optional BaseClient instance
+
+        Raises:
+            SavedScenarioError: If deletion fails
+
+        Example:
+            scenario = Scenario.load(123)
+            scenario.delete()
+        """
+        if client is None:
+            client = get_client()
+
+        result = DeleteSavedScenarioRunner.run(client, self.id)
+
+        if not result.success:
+            raise SavedScenarioError(
+                f"Could not delete saved scenario: {result.errors}"
+            )
 
     @property
     def inputs(self) -> "Inputs":

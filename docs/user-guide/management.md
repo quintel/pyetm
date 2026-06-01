@@ -272,3 +272,102 @@ scenario.apply_pending_users()
 
 !!! tip "Bulk User Management with Excel"
     For managing users across multiple scenarios, use the Excel integration. The `USERS` sheet lets you view and update user permissions in a grid format. See [Working with Excel](excel.md#users-sheet) for details.
+
+## Deleting Saved Scenarios
+
+### Deleting Individual Scenarios
+
+Use the `delete()` method to remove a saved scenario:
+
+```python
+from pyetm import Scenario
+
+# Load and delete a scenario
+scenario = Scenario.load(123456)
+scenario.delete()
+```
+
+### Bulk Deletion
+
+For deleting multiple scenarios at once, use `Scenarios.delete_many()`:
+
+```python
+from pyetm import Scenarios
+
+# Delete multiple saved scenarios by ID
+result = Scenarios.delete_many([123, 456, 789])
+
+# Check results
+print(f"Successfully deleted: {result['successful']}")
+print(f"Failed to delete: {result['failed']}")
+```
+
+The method continues processing even if individual deletions fail, returning a summary of successes and failures.
+
+## Managing Collections
+
+Collections (also called transition paths) allow you to group multiple scenarios together, optionally with interpolation for multi-year projections.
+
+### Loading Collections
+
+```python
+from pyetm import Collection
+
+# Load a single collection
+collection = Collection.load(123)
+print(f"Collection: {collection.title}")
+print(f"Scenarios: {collection.saved_scenario_ids}")
+
+# Load all user collections
+collections = Collection.load_all()
+for collection in collections:
+    print(f"{collection.id}: {collection.title}")
+```
+
+### Creating Collections
+
+```python
+from pyetm import Collection
+
+# Create a simple collection
+collection = Collection.create(
+    title="My Collection",
+    saved_scenario_ids=[1, 2, 3],
+)
+
+# Create an interpolated collection
+collection = Collection.create(
+    title="2030-2050 Pathway",
+    saved_scenario_ids=[1],  # Base scenario
+    area_code="nl",
+    end_year=2050,
+    interpolation=True,
+)
+```
+
+!!! info "Collection Validation"
+    - Collections can include up to 6 scenarios (combined `scenario_ids` and `saved_scenario_ids`)
+    - All scenarios in a collection must use the same ETM version
+
+### Updating Collections
+
+```python
+# Update collection attributes
+collection.update(
+    title="Updated Title",
+    saved_scenario_ids=[1, 2, 3, 4],  # Add more scenarios
+)
+
+# Soft-delete a collection (mark as discarded)
+collection.update(discarded=True)
+```
+
+### Deleting Collections
+
+```python
+# Permanently delete a collection
+collection.delete()
+```
+
+!!! warning "Collection Deletion"
+    Collection deletion is irreversible. The scenarios within the collection are not deleted, only the collection itself.
