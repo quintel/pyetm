@@ -193,6 +193,9 @@ class Collection(Base):
         if not result.success:
             raise CollectionError(f"Could not load collections: {result.errors}")
 
+        if result.data is None:
+            return []
+
         collections = [cls.model_validate(data) for data in result.data]
 
         # Store client for future operations
@@ -239,10 +242,14 @@ class Collection(Base):
 
     def delete(self, client: Optional[BaseClient] = None) -> None:
         """
-        Delete this Collection from MyETM.
+        Permanently delete this Collection from MyETM (hard delete).
 
-        Warning: This action is irreversible. The collection will be permanently
-        removed from MyETM (soft-deleted).
+        WARNING: This is a PERMANENT deletion and CANNOT be undone. The collection
+        will be permanently removed from MyETM.
+
+        NOTE: SavedScenarios within the collection are NOT deleted. Only the
+        collection itself is removed. The scenarios will remain in MyETM and
+        can still be accessed individually.
 
         Args:
             client: Optional BaseClient instance
@@ -252,7 +259,7 @@ class Collection(Base):
 
         Example:
             collection = Collection.load(123)
-            collection.delete()
+            collection.delete()  # PERMANENT deletion - cannot be recovered
         """
         if client is None:
             client = get_client()

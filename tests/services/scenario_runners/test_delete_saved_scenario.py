@@ -4,22 +4,22 @@ from pyetm.services.scenario_runners.delete_saved_scenario import (
 
 
 def test_delete_saved_scenario_success(dummy_client, fake_response):
-    """Test successful deletion of a SavedScenario."""
-    body = {"message": "Saved scenario deleted successfully"}
+    """Test successful discard of a SavedScenario (soft-delete via PUT /discard)."""
+    body = {"message": "Saved scenario discarded successfully"}
     response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="delete")
+    client = dummy_client(response, method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=123)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios/123", None)]
+    assert client.calls == [("/saved_scenarios/123/discard", None)]
 
 
 def test_delete_saved_scenario_http_failure_404(dummy_client, fake_response):
     """Test handling of 404 not found error."""
     response = fake_response(ok=False, status_code=404, text="SavedScenario not found")
-    client = dummy_client(response, method="delete")
+    client = dummy_client(response, method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=99999)
     assert result.success is False
@@ -30,7 +30,7 @@ def test_delete_saved_scenario_http_failure_404(dummy_client, fake_response):
 def test_delete_saved_scenario_http_failure_401(dummy_client, fake_response):
     """Test handling of 401 unauthorized error."""
     response = fake_response(ok=False, status_code=401, text="Unauthorized")
-    client = dummy_client(response, method="delete")
+    client = dummy_client(response, method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=123)
     assert result.success is False
@@ -43,7 +43,7 @@ def test_delete_saved_scenario_http_failure_403(dummy_client, fake_response):
     response = fake_response(
         ok=False, status_code=403, text="Not authorized to delete this scenario"
     )
-    client = dummy_client(response, method="delete")
+    client = dummy_client(response, method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=123)
     assert result.success is False
@@ -53,7 +53,7 @@ def test_delete_saved_scenario_http_failure_403(dummy_client, fake_response):
 
 def test_delete_saved_scenario_invalid_id_negative(dummy_client):
     """Test that negative IDs are rejected."""
-    client = dummy_client({}, method="delete")
+    client = dummy_client({}, method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=-1)
     assert result.success is False
@@ -64,7 +64,7 @@ def test_delete_saved_scenario_invalid_id_negative(dummy_client):
 
 def test_delete_saved_scenario_invalid_id_zero(dummy_client):
     """Test that zero ID is rejected."""
-    client = dummy_client({}, method="delete")
+    client = dummy_client({}, method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=0)
     assert result.success is False
@@ -75,7 +75,7 @@ def test_delete_saved_scenario_invalid_id_zero(dummy_client):
 
 def test_delete_saved_scenario_connection_error(dummy_client):
     """Test handling of connection errors."""
-    client = dummy_client(ConnectionError("Connection failed"), method="delete")
+    client = dummy_client(ConnectionError("Connection failed"), method="put")
 
     result = DeleteSavedScenarioRunner.run(client, saved_scenario_id=123)
     assert result.success is False
@@ -85,9 +85,9 @@ def test_delete_saved_scenario_connection_error(dummy_client):
 
 def test_delete_saved_scenario_with_kwargs(dummy_client, fake_response):
     """Test that kwargs are passed through to the request."""
-    body = {"message": "Deleted"}
+    body = {"message": "Discarded"}
     response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(response, method="delete")
+    client = dummy_client(response, method="put")
 
     result = DeleteSavedScenarioRunner.run(
         client, saved_scenario_id=123, timeout=30
@@ -95,4 +95,4 @@ def test_delete_saved_scenario_with_kwargs(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert len(client.calls) == 1
-    assert client.calls[0][0] == "/saved_scenarios/123"
+    assert client.calls[0][0] == "/saved_scenarios/123/discard"

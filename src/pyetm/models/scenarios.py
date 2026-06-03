@@ -592,10 +592,11 @@ class Scenarios(Base):
         client: Optional[BaseClient] = None,
     ) -> Dict[str, Any]:
         """
-        Delete multiple saved scenarios in bulk.
+        Discard multiple saved scenarios in bulk (soft-delete).
 
-        Warning: This action is irreversible. The saved scenarios will be permanently
-        removed from MyETM (soft-deleted).
+        The scenarios are marked as discarded and hidden from listings, but can be
+        recovered through the MyETM web interface within 60 days. After 60 days,
+        MyETM automatically removes discarded scenarios permanently.
 
         Args:
             saved_scenario_ids: List of SavedScenario IDs to delete
@@ -606,7 +607,7 @@ class Scenarios(Base):
 
         Example:
             result = Scenarios.delete_many([1, 2, 3])
-            print(f"Deleted: {result['successful']}")
+            print(f"Discarded: {result['successful']}")
             print(f"Failed: {result['failed']}")
         """
         from pyetm.services.scenario_runners.delete_saved_scenario import (

@@ -275,31 +275,36 @@ scenario.apply_pending_users()
 
 ## Deleting Saved Scenarios
 
+!!! info "Soft-Delete Behavior"
+    Deleting a scenario performs a **soft-delete** by marking it as "discarded" in MyETM. The scenario is hidden from listings but remains recoverable for 60 days before automatic cleanup.
+
 ### Deleting Individual Scenarios
 
-Use the `delete()` method to remove a saved scenario:
+Use the `delete()` method to discard a saved scenario:
 
 ```python
 from pyetm import Scenario
 
-# Load and delete a scenario
+# Load and discard a scenario
 scenario = Scenario.load(123456)
 scenario.delete()
 ```
 
+The scenario will be marked as discarded and will no longer appear in scenario listings. It can be recovered through the MyETM web interface within 60 days.
+
 ### Bulk Deletion
 
-For deleting multiple scenarios at once, use `Scenarios.delete_many()`:
+For discarding multiple scenarios at once, use `Scenarios.delete_many()`:
 
 ```python
 from pyetm import Scenarios
 
-# Delete multiple saved scenarios by ID
+# Discard multiple saved scenarios by ID
 result = Scenarios.delete_many([123, 456, 789])
 
 # Check results
-print(f"Successfully deleted: {result['successful']}")
-print(f"Failed to delete: {result['failed']}")
+print(f"Successfully discarded: {result['successful']}")
+print(f"Failed to discard: {result['failed']}")
 ```
 
 The method continues processing even if individual deletions fail, returning a summary of successes and failures.

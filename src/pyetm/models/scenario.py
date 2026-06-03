@@ -31,6 +31,9 @@ from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
 from pyetm.services.scenario_runners.delete_saved_scenario import (
     DeleteSavedScenarioRunner,
 )
+from pyetm.services.scenario_runners.destroy_saved_scenario import (
+    DestroySavedScenarioRunner,
+)
 import pandas as pd
 from os import PathLike
 from typing import Generator
@@ -402,12 +405,46 @@ class Scenario(Base):
             if hasattr(self, field) and (not result.data or field not in result.data):
                 setattr(self, field, value)
 
+    def discard(self, client: Optional[BaseClient] = None) -> None:
+        """
+        Discard this SavedScenario from MyETM (soft-delete, recoverable).
+
+        The scenario is marked as discarded and hidden from listings, but can be
+        recovered through the MyETM web interface within 60 days. After 60 days,
+        MyETM automatically removes discarded scenarios permanently.
+
+        This is the safe, recoverable deletion method. Use delete() for permanent deletion.
+
+        Args:
+            client: Optional BaseClient instance
+
+        Raises:
+            SavedScenarioError: If discard fails
+
+        Example:
+            scenario = Scenario.load(123)
+            scenario.discard()  # Soft-delete, recoverable for 60 days
+        """
+        if client is None:
+            client = get_client()
+
+        result = DeleteSavedScenarioRunner.run(client, self.id)
+
+        if not result.success:
+            raise SavedScenarioError(
+                f"Could not discard saved scenario: {result.errors}"
+            )
+
     def delete(self, client: Optional[BaseClient] = None) -> None:
         """
-        Delete this SavedScenario from MyETM.
+        Permanently delete this SavedScenario AND its underlying Session (hard delete with cascade).
 
-        Warning: This action is irreversible. The saved scenario will be permanently
-        removed from MyETM (soft-deleted).
+        WARNING: This is a PERMANENT deletion and CANNOT be undone. This will:
+        1. Permanently delete the SavedScenario from MyETM
+        2. Permanently delete the underlying Session from ETEngine
+
+        All scenario data will be irreversibly lost. For recoverable deletion,
+        use discard() instead.
 
         Args:
             client: Optional BaseClient instance
@@ -417,16 +454,20 @@ class Scenario(Base):
 
         Example:
             scenario = Scenario.load(123)
-            scenario.delete()
+            scenario.delete()  # PERMANENT deletion - cannot be recovered
         """
         if client is None:
             client = get_client()
 
-        result = DeleteSavedScenarioRunner.run(client, self.id)
+        result = DestroySavedScenarioRunner.run(
+            client,
+            saved_scenario_id=self.id,
+            scenario_id=self.scenario_id
+        )
 
         if not result.success:
             raise SavedScenarioError(
-                f"Could not delete saved scenario: {result.errors}"
+                f"Could not permanently delete saved scenario: {result.errors}"
             )
 
     @property
