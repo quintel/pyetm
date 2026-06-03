@@ -6,7 +6,7 @@ from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
 
-class DeleteSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
+class DiscardSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for discarding a SavedScenario from MyETM (soft-delete).
 
@@ -49,7 +49,7 @@ class DeleteSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
             ServiceResult with discard confirmation data
 
         Example usage:
-            result = DeleteSavedScenarioRunner.run(
+            result = DiscardSavedScenarioRunner.run(
                 client=client,
                 saved_scenario_id=123
             )
@@ -59,7 +59,7 @@ class DeleteSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
         if not isinstance(saved_scenario_id, int) or saved_scenario_id <= 0:
             return ServiceResult.fail([f"Invalid saved_scenario_id: {saved_scenario_id}. Must be a positive integer."])
 
-        result = DeleteSavedScenarioRunner._make_request(
+        result = DiscardSavedScenarioRunner._make_request(
             client=client,
             method="put",
             path=f"/saved_scenarios/{saved_scenario_id}/discard",

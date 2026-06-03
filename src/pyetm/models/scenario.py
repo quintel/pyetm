@@ -28,8 +28,8 @@ from pyetm.services.scenario_runners.saved_scenario_users_update import (
 from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
     SavedScenarioUsersDestroyRunner,
 )
-from pyetm.services.scenario_runners.delete_saved_scenario import (
-    DeleteSavedScenarioRunner,
+from pyetm.services.scenario_runners.discard_saved_scenario import (
+    DiscardSavedScenarioRunner,
 )
 from pyetm.services.scenario_runners.destroy_saved_scenario import (
     DestroySavedScenarioRunner,
@@ -428,7 +428,7 @@ class Scenario(Base):
         if client is None:
             client = get_client()
 
-        result = DeleteSavedScenarioRunner.run(client, self.id)
+        result = DiscardSavedScenarioRunner.run(client, self.id)
 
         if not result.success:
             raise SavedScenarioError(

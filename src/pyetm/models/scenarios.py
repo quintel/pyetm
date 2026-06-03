@@ -610,8 +610,8 @@ class Scenarios(Base):
             print(f"Discarded: {result['successful']}")
             print(f"Failed: {result['failed']}")
         """
-        from pyetm.services.scenario_runners.delete_saved_scenario import (
-            DeleteSavedScenarioRunner,
+        from pyetm.services.scenario_runners.discard_saved_scenario import (
+            DiscardSavedScenarioRunner,
         )
 
         if client is None:
@@ -623,7 +623,7 @@ class Scenarios(Base):
         # Build deletion requests for all scenarios
         requests = []
         for scenario_id in saved_scenario_ids:
-            request = DeleteSavedScenarioRunner.build_request(
+            request = DiscardSavedScenarioRunner.build_request(
                 saved_scenario_id=scenario_id
             )
             requests.append(request)

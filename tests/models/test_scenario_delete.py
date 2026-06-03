@@ -3,8 +3,8 @@
 from unittest.mock import Mock
 import pytest
 from pyetm.models.scenario import Scenario, SavedScenarioError
-from pyetm.services.scenario_runners.delete_saved_scenario import (
-    DeleteSavedScenarioRunner,
+from pyetm.services.scenario_runners.discard_saved_scenario import (
+    DiscardSavedScenarioRunner,
 )
 from pyetm.services.scenario_runners.destroy_saved_scenario import (
     DestroySavedScenarioRunner,
@@ -17,7 +17,7 @@ def test_scenario_discard_success(monkeypatch, ok_service_result, saved_scenario
     discard_response = {"message": "Scenario discarded successfully"}
 
     monkeypatch.setattr(
-        DeleteSavedScenarioRunner,
+        DiscardSavedScenarioRunner,
         "run",
         lambda client, saved_scenario_id: ok_service_result(discard_response),
     )
@@ -29,7 +29,7 @@ def test_scenario_discard_success(monkeypatch, ok_service_result, saved_scenario
 def test_scenario_discard_failure(monkeypatch, fail_service_result, saved_scenario):
     """Test discard failure raises SavedScenarioError."""
     monkeypatch.setattr(
-        DeleteSavedScenarioRunner,
+        DiscardSavedScenarioRunner,
         "run",
         lambda client, saved_scenario_id: fail_service_result(
             ["404: SavedScenario not found"]
@@ -52,7 +52,7 @@ def test_scenario_discard_with_explicit_client(monkeypatch, ok_service_result, m
         used_client = client
         return ok_service_result(discard_response)
 
-    monkeypatch.setattr(DeleteSavedScenarioRunner, "run", mock_discard)
+    monkeypatch.setattr(DiscardSavedScenarioRunner, "run", mock_discard)
 
     scenario = Scenario(id=123, scenario_id=456, title="Test")
 

@@ -4,7 +4,7 @@ from .fetch_metadata import FetchMetadataRunner
 from .get_query_results import GetQueryResultsRunner
 from .copy_scenario import CopyScenarioRunner
 from .break_preset_link import BreakPresetLinkRunner
-from .delete_saved_scenario import DeleteSavedScenarioRunner
+from .discard_saved_scenario import DiscardSavedScenarioRunner
 from .fetch_user_collections import FetchUserCollectionsRunner
 from .fetch_collection import FetchCollectionRunner
 from .create_collection import CreateCollectionRunner
@@ -18,7 +18,7 @@ __all__ = [
     "GetQueryResultsRunner",
     "CopyScenarioRunner",
     "BreakPresetLinkRunner",
-    "DeleteSavedScenarioRunner",
+    "DiscardSavedScenarioRunner",
     "FetchUserCollectionsRunner",
     "FetchCollectionRunner",
     "CreateCollectionRunner",
