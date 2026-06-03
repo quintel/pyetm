@@ -218,10 +218,17 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
     default="INFO",
     help="Logging level for the command execution.",
 )
+@click.option(
+    "--no-update",
+    is_flag=True,
+    default=False,
+    help="Read-only mode: fetch data without uploading changes to ETM.",
+)
 def run(
     input_path: Path,
     output: Path | None,
     log_level: str,
+    no_update: bool,
 ) -> None:
     """
     Run scenarios from an Excel input file and export results.
@@ -238,6 +245,10 @@ def run(
       \b
       # Specify custom output path
       pyetm run input.xlsx --output results/my_output.xlsx
+
+      \b
+      # Read-only mode: fetch data without uploading changes
+      pyetm run input.xlsx --no-update
 
     The input Excel file should contain sheets for scenario configuration:
     - MAIN: Scenario identifiers and session information
@@ -258,9 +269,14 @@ def run(
     click.echo(f"\nLoading scenarios from: {input_path}")
 
     try:
-        # Load scenarios from Excel (update=True means push changes to ETM)
-        packer = ScenarioPacker.from_excel(input_path, update=True)
-        click.echo("✓ Scenarios loaded and updated on ETM")
+        # Load scenarios from Excel
+        # update=False means read-only mode (don't push changes to ETM)
+        packer = ScenarioPacker.from_excel(input_path, update=not no_update)
+
+        if no_update:
+            click.echo("✓ Scenarios loaded (read-only mode)")
+        else:
+            click.echo("✓ Scenarios loaded and updated on ETM")
 
     except FileNotFoundError as e:
         click.echo(f"✗ Error: Input file not found: {e}", err=True)

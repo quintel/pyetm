@@ -381,3 +381,53 @@ class TestCliRun:
 
             assert result.exit_code == 0
             # Command should complete successfully with debug logging
+
+    @patch("pyetm.models.scenario_packer.ScenarioPacker")
+    def test_run_with_no_update_flag(
+        self, mock_packer_class, runner, mock_packer, tmp_path
+    ):
+        """Test run command with --no-update flag (read-only mode)"""
+        # Setup mock
+        mock_packer_class.from_excel.return_value = mock_packer
+
+        # Create a dummy input file
+        input_file = tmp_path / "input.xlsx"
+        input_file.write_bytes(b"fake excel content")
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["run", str(input_file), "--no-update"])
+
+            assert result.exit_code == 0
+            assert "Loading scenarios from" in result.output
+            assert "Scenarios loaded (read-only mode)" in result.output
+            assert "Exporting results to" in result.output
+            assert "Results exported successfully" in result.output
+
+            # Verify ScenarioPacker was called with update=False
+            mock_packer_class.from_excel.assert_called_once()
+            call_args = mock_packer_class.from_excel.call_args
+            assert str(call_args[0][0]) == str(input_file)
+            assert call_args[1]["update"] is False
+
+    @patch("pyetm.models.scenario_packer.ScenarioPacker")
+    def test_run_without_no_update_updates_scenarios(
+        self, mock_packer_class, runner, mock_packer, tmp_path
+    ):
+        """Test run command without --no-update flag updates scenarios by default"""
+        # Setup mock
+        mock_packer_class.from_excel.return_value = mock_packer
+
+        # Create a dummy input file
+        input_file = tmp_path / "input.xlsx"
+        input_file.write_bytes(b"fake excel content")
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["run", str(input_file)])
+
+            assert result.exit_code == 0
+            assert "Scenarios loaded and updated on ETM" in result.output
+
+            # Verify ScenarioPacker was called with update=True
+            mock_packer_class.from_excel.assert_called_once()
+            call_args = mock_packer_class.from_excel.call_args
+            assert call_args[1]["update"] is True

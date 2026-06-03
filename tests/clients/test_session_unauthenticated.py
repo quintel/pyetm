@@ -1,12 +1,22 @@
 """Tests for unauthenticated (no token) ETMSession operations."""
 
 import pytest
+from unittest.mock import patch
 from pyetm.clients.session import ETMSession
 
 
 def test_session_headers_without_token(unauthenticated_config):
     """Test that Authorization header is not set when no token is provided."""
-    session = ETMSession()
+    from pyetm.config.settings import get_settings
+
+    # Ensure settings cache is cleared
+    get_settings.cache_clear()
+
+    # Mock get_settings to return config with no token
+    # This prevents the .env file from being loaded
+    with patch('pyetm.clients.session.get_settings') as mock_get_settings:
+        mock_get_settings.return_value = unauthenticated_config
+        session = ETMSession()
 
     # Verify token is None
     assert session.token is None

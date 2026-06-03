@@ -88,7 +88,8 @@ def unauthenticated_config(monkeypatch):
     monkeypatch.delenv("ETM_API_TOKEN", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "pro")
 
-    return AppConfig()
+    # Explicitly set etm_api_token to None to override .env file
+    return AppConfig(etm_api_token=None)
 
 
 @pytest.fixture
