@@ -369,13 +369,14 @@ inputs_df = packer.inputs(columns="user")
 results_df = packer.gquery_results()
 ```
 
-### Bulk Creation and Loading
+### Bulk Creation, Loading, and Management
 
 | Method | Purpose | Example |
 |--------|---------|---------|
 | `create_many()` | Create multiple scenarios | `Scenarios.create_many(configs, area_code="nl2023")` |
 | `load_many()` | Load multiple scenarios | `Scenarios.load_many([111, 222, 333])` |
 | `Sessions.load_many()` | Load multiple sessions | `Sessions.load_many([444, 555])` |
+| `discard_many()` | Discard multiple saved scenarios | `Scenarios.discard_many([111, 222, 333])` |
 
 **Example:**
 ```python
@@ -393,6 +394,26 @@ scenarios = Scenarios.create_many(
     raise_on_data_errors=False
 )
 ```
+
+### Bulk Discard
+
+Discard multiple saved scenarios at once (soft-delete, recoverable):
+
+```python
+from pyetm import Scenarios
+
+# Discard multiple saved scenarios by ID
+result = Scenarios.discard_many([123456, 789012, 345678])
+
+# Check results
+print(f"Successfully discarded: {result['successful']}")
+print(f"Failed to discard: {result['failed']}")
+```
+
+!!! info "Soft-Delete and Recovery"
+    Scenarios are marked as discarded and hidden from listings, but can be recovered through the MyETM web interface within 60 days. After 60 days, MyETM automatically removes discarded scenarios permanently.
+
+The method continues processing even if individual discards fail, returning a summary of successes and failures.
 
 ### Extract Underlying Sessions
 

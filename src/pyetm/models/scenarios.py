@@ -586,7 +586,7 @@ class Scenarios(Base):
         return warnings
 
     @classmethod
-    def delete_many(
+    def discard_many(
         cls,
         saved_scenario_ids: List[int],
         client: Optional[BaseClient] = None,
@@ -599,14 +599,14 @@ class Scenarios(Base):
         MyETM automatically removes discarded scenarios permanently.
 
         Args:
-            saved_scenario_ids: List of SavedScenario IDs to delete
+            saved_scenario_ids: List of SavedScenario IDs to discard
             client: Optional BaseClient instance
 
         Returns:
             Dict with 'successful' and 'failed' keys containing lists of IDs
 
         Example:
-            result = Scenarios.delete_many([1, 2, 3])
+            result = Scenarios.discard_many([1, 2, 3])
             print(f"Discarded: {result['successful']}")
             print(f"Failed: {result['failed']}")
         """
@@ -620,7 +620,7 @@ class Scenarios(Base):
         if not saved_scenario_ids:
             return {"successful": [], "failed": []}
 
-        # Build deletion requests for all scenarios
+        # Build discard requests for all scenarios
         requests = []
         for scenario_id in saved_scenario_ids:
             request = DiscardSavedScenarioRunner.build_request(
@@ -640,7 +640,7 @@ class Scenarios(Base):
                 formatted["kwargs"]["json"] = req["payload"]
             formatted_requests.append(formatted)
 
-        # Execute batch deletion
+        # Execute batch discard
         results = AsyncBatchRunner.batch_requests_sync(
             client.session, formatted_requests, MAX_CONCURRENT
         )
@@ -655,7 +655,7 @@ class Scenarios(Base):
                 failed.append(scenario_id)
                 error_msg = "; ".join(result.errors) if result.errors else "Unknown error"
                 logger.warning(
-                    f"Failed to delete saved scenario {scenario_id}: {error_msg}"
+                    f"Failed to discard saved scenario {scenario_id}: {error_msg}"
                 )
 
         return {"successful": successful, "failed": failed}
