@@ -402,27 +402,3 @@ scenarios = Scenarios(items=[Scenario.load(111), Session.load(222)])
 # Get list of Session objects
 sessions = scenarios.sessions
 ```
-
-### Deleting Saved Scenarios
-
-Deleting a saved scenario performs a **soft-delete**, marking it as "discarded" in MyETM:
-
-```python
-from pyetm import Scenario
-
-# Delete a saved scenario
-scenario = Scenario.load(123456)
-scenario.delete()
-```
-
-!!! info "Soft-Delete and Recovery"
-    Saved scenarios are not permanently removed. They are marked as discarded and hidden from listings, but can be recovered through the MyETM web interface within 60 days. After 60 days, MyETM automatically removes discarded scenarios permanently.
-
-#### Permission Requirements
-
-To delete a saved scenario, you need:
-
-- The `scenarios:delete` OAuth scope (for API token users)
-- Owner permissions on the scenario
-
-Only the scenario owner can delete it. Collaborators and viewers cannot delete scenarios even with the delete scope.

@@ -178,7 +178,7 @@ Three roles determine what users can do with a scenario:
 
 | Role | Description | Permissions |
 |------|-------------|-------------|
-| `scenario_owner` | Full control | Can edit, share, and delete the scenario |
+| `scenario_owner` | Full control | Can edit and share the scenario |
 | `scenario_collaborator` | Can modify | Can edit scenario settings and inputs |
 | `scenario_viewer` | Read-only | Can view but not modify the scenario |
 
@@ -273,42 +273,6 @@ scenario.apply_pending_users()
 !!! tip "Bulk User Management with Excel"
     For managing users across multiple scenarios, use the Excel integration. The `USERS` sheet lets you view and update user permissions in a grid format. See [Working with Excel](excel.md#users-sheet) for details.
 
-## Deleting Saved Scenarios
-
-!!! info "Soft-Delete Behavior"
-    Deleting a scenario performs a **soft-delete** by marking it as "discarded" in MyETM. The scenario is hidden from listings but remains recoverable for 60 days before automatic cleanup.
-
-### Deleting Individual Scenarios
-
-Use the `delete()` method to discard a saved scenario:
-
-```python
-from pyetm import Scenario
-
-# Load and discard a scenario
-scenario = Scenario.load(123456)
-scenario.delete()
-```
-
-The scenario will be marked as discarded and will no longer appear in scenario listings. It can be recovered through the MyETM web interface within 60 days.
-
-### Bulk Deletion
-
-For discarding multiple scenarios at once, use `Scenarios.delete_many()`:
-
-```python
-from pyetm import Scenarios
-
-# Discard multiple saved scenarios by ID
-result = Scenarios.delete_many([123, 456, 789])
-
-# Check results
-print(f"Successfully discarded: {result['successful']}")
-print(f"Failed to discard: {result['failed']}")
-```
-
-The method continues processing even if individual deletions fail, returning a summary of successes and failures.
-
 ## Managing Collections
 
 Collections (also called transition paths) allow you to group multiple scenarios together, optionally with interpolation for multi-year projections.
@@ -366,13 +330,3 @@ collection.update(
 # Soft-delete a collection (mark as discarded)
 collection.update(discarded=True)
 ```
-
-### Deleting Collections
-
-```python
-# Permanently delete a collection
-collection.delete()
-```
-
-!!! warning "Collection Deletion"
-    Collection deletion is irreversible. The scenarios within the collection are not deleted, only the collection itself.
