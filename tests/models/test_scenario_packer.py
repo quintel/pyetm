@@ -22,7 +22,7 @@ class TestScenarioPackerInit:
         """Test that initialization creates empty collections"""
         packer = ScenarioPacker()
 
-        assert isinstance(packer._scenarios(), set)
+        assert isinstance(packer._scenarios(), list)
         assert len(packer._scenarios()) == 0
 
 
@@ -118,6 +118,47 @@ class TestScenarioPackerDataExtraction:
         all_scenarios = packer._scenarios()
         assert len(all_scenarios) == 1
         assert sample_scenario in all_scenarios
+
+    def test_scenarios_preserves_insertion_order(self):
+        """Test that _scenarios() preserves insertion order within packs"""
+        packer = ScenarioPacker()
+
+        # Create scenarios with distinct IDs
+        scenarios = [Mock(spec=Session, id=i) for i in range(10)]
+
+        # Add them in specific order to different packs
+        # Note: _scenarios() iterates packs in this order: inputs, sortables, custom_curves, hourly_output_curves, annual_exports
+        packer.add_inputs(scenarios[0], scenarios[1])
+        packer.add_sortables(scenarios[2], scenarios[3])
+        packer.add_custom_curves(scenarios[4], scenarios[5])
+        packer.add_hourly_output_curves(scenarios[6], scenarios[7])
+        packer.add_annual_exports(scenarios[8], scenarios[9])
+
+        all_scenarios = packer._scenarios()
+
+        # Should maintain insertion order within each pack
+        assert len(all_scenarios) == 10
+        scenario_ids = [s.id for s in all_scenarios]
+        # Expected order follows pack iteration order
+        expected_ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        assert scenario_ids == expected_ids
+
+    def test_scenarios_deduplication_preserves_first_occurrence_order(self):
+        """Test that _scenarios() deduplicates while preserving first occurrence order"""
+        packer = ScenarioPacker()
+
+        scenarios = [Mock(spec=Session, id=i) for i in range(5)]
+
+        # Add scenarios to multiple packs (will deduplicate)
+        packer.add_inputs(scenarios[0], scenarios[1], scenarios[2])
+        packer.add_custom_curves(scenarios[1], scenarios[2], scenarios[3])  # overlapping
+        packer.add_sortables(scenarios[2], scenarios[3], scenarios[4])  # overlapping
+
+        all_scenarios = packer._scenarios()
+
+        # Should have 5 unique scenarios in insertion order
+        assert len(all_scenarios) == 5
+        assert all_scenarios == scenarios
 
 
 class TestMainInfo:
