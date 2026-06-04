@@ -1102,9 +1102,16 @@ class ScenarioPacker(BaseModel):
                         update_set,
                     )
 
-    def _scenarios(self) -> set[Session]:
-        """All scenarios we are packing info for across all packs."""
-        return set().union(*[pack.scenarios for pack in self._packs()])
+    def _scenarios(self) -> list[Session]:
+        """All scenarios we are packing info for across all packs, in insertion order."""
+        seen = set()
+        result = []
+        for pack in self._packs():
+            for scenario in pack.scenarios:
+                if scenario not in seen:
+                    seen.add(scenario)
+                    result.append(scenario)
+        return result
 
     def _packs(self) -> Any:
         """Get all pack instances."""

@@ -263,3 +263,80 @@ def test_should_include_upload_sortables_pack():
     assert pack._should_include_upload({"custom_curves"}) is False
     assert pack._should_include_upload(set()) is False
     assert pack._should_include_upload(None) is False
+
+
+def test_add_scenarios_preserves_order(packable):
+    """Test that adding scenarios preserves insertion order"""
+    scenarios = [MockScenario(f"s{i}") for i in range(10)]
+
+    for s in scenarios:
+        packable.add(s)
+
+    # Check order is preserved
+    assert list(packable.scenarios) == scenarios
+
+    # Verify IDs match expected order
+    scenario_ids = [s.identifier() for s in packable.scenarios]
+    assert scenario_ids == [f"s{i}" for i in range(10)]
+
+
+def test_add_multiple_scenarios_preserves_order(packable):
+    """Test that adding multiple scenarios at once preserves insertion order"""
+    scenarios = [MockScenario(f"s{i}") for i in range(10)]
+
+    packable.add(*scenarios)
+
+    # Check order is preserved
+    assert list(packable.scenarios) == scenarios
+
+    # Verify IDs match expected order
+    scenario_ids = [s.identifier() for s in packable.scenarios]
+    assert scenario_ids == [f"s{i}" for i in range(10)]
+
+
+def test_add_duplicate_scenarios_maintains_uniqueness(packable):
+    """Test that adding duplicate scenarios doesn't add them again"""
+    s1 = MockScenario("s1")
+    s2 = MockScenario("s2")
+    s3 = MockScenario("s3")
+
+    packable.add(s1, s2, s3)
+    assert len(packable.scenarios) == 3
+
+    # Try adding duplicates
+    packable.add(s2, s1)
+    assert len(packable.scenarios) == 3
+
+    # Order should be preserved (original order)
+    assert list(packable.scenarios) == [s1, s2, s3]
+
+
+def test_discard_preserves_order(packable):
+    """Test that removing scenarios preserves order of remaining scenarios"""
+    scenarios = [MockScenario(f"s{i}") for i in range(5)]
+    packable.add(*scenarios)
+
+    # Remove middle scenario
+    packable.discard(scenarios[2])
+
+    # Check remaining scenarios maintain order
+    expected = [scenarios[0], scenarios[1], scenarios[3], scenarios[4]]
+    assert list(packable.scenarios) == expected
+
+
+def test_build_pack_dataframe_preserves_order(monkeypatch, packable):
+    """Test that build_pack_dataframe maintains scenario order"""
+    scenarios = [MockScenario(f"s{i}") for i in range(5)]
+    packable.add(*scenarios)
+
+    # Mock _build_dataframe_for_scenario to return a simple df
+    def fake_build_df(scenario, **kwargs):
+        return pd.DataFrame({f"{scenario.identifier()}_col": [1, 2]})
+
+    monkeypatch.setattr(packable, "_build_dataframe_for_scenario", fake_build_df)
+    monkeypatch.setattr(packable, "_concat_frames", lambda frames, keys: (frames, keys))
+
+    frames, keys = packable.build_pack_dataframe()
+
+    # Keys should match the insertion order
+    assert keys == ["s0", "s1", "s2", "s3", "s4"]

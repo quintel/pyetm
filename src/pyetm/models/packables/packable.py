@@ -28,30 +28,37 @@ class Packable(BaseModel):
         - Any specialized import/export logic
     """
 
-    scenarios: Set[Session] = Field(default_factory=set)
+    scenarios: List[Session] = Field(default_factory=list)
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"
     _scenario_id_cache: Dict[str, Session] | None = PrivateAttr(default=None)
     _scenario_short_names: Dict[str, str] = PrivateAttr(default_factory=dict)
+    _scenario_set: Set[Session] = PrivateAttr(default_factory=set)
 
     def set_scenario_short_names(self, scenario_short_names: Dict[str, str]) -> None:
         """Set mapping of scenario IDs to short names for display purposes."""
         self._scenario_short_names = scenario_short_names or {}
 
     def add(self, *scenarios: Session) -> None:
-        """Add one or more scenarios to the packable."""
+        """Add one or more scenarios to the packable, maintaining insertion order and uniqueness."""
         if not scenarios:
             return
-        self.scenarios.update(scenarios)
+        for scenario in scenarios:
+            if scenario not in self._scenario_set:
+                self.scenarios.append(scenario)
+                self._scenario_set.add(scenario)
         self._scenario_id_cache = None
 
     def discard(self, scenario: Session) -> None:
         "Removes a scenario from the pack"
-        self.scenarios.discard(scenario)
+        if scenario in self._scenario_set:
+            self.scenarios.remove(scenario)
+            self._scenario_set.discard(scenario)
         self._scenario_id_cache = None
 
     def clear(self) -> None:
         self.scenarios.clear()
+        self._scenario_set.clear()
         self._scenario_id_cache = None
 
     def summary(self) -> Dict[str, Any]:
