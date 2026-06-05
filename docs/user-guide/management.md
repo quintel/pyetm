@@ -178,7 +178,7 @@ Three roles determine what users can do with a scenario:
 
 | Role | Description | Permissions |
 |------|-------------|-------------|
-| `scenario_owner` | Full control | Can edit, share, and delete the scenario |
+| `scenario_owner` | Full control | Can edit and share the scenario |
 | `scenario_collaborator` | Can modify | Can edit scenario settings and inputs |
 | `scenario_viewer` | Read-only | Can view but not modify the scenario |
 
@@ -272,3 +272,61 @@ scenario.apply_pending_users()
 
 !!! tip "Bulk User Management with Excel"
     For managing users across multiple scenarios, use the Excel integration. The `USERS` sheet lets you view and update user permissions in a grid format. See [Working with Excel](excel.md#users-sheet) for details.
+
+## Managing Collections
+
+Collections (also called transition paths) allow you to group multiple scenarios together, optionally with interpolation for multi-year projections.
+
+### Loading Collections
+
+```python
+from pyetm import Collection
+
+# Load a single collection
+collection = Collection.load(123)
+print(f"Collection: {collection.title}")
+print(f"Scenarios: {collection.saved_scenario_ids}")
+
+# Load all user collections
+collections = Collection.load_all()
+for collection in collections:
+    print(f"{collection.id}: {collection.title}")
+```
+
+### Creating Collections
+
+```python
+from pyetm import Collection
+
+# Create a simple collection
+collection = Collection.create(
+    title="My Collection",
+    saved_scenario_ids=[1, 2, 3],
+)
+
+# Create an interpolated collection
+collection = Collection.create(
+    title="2030-2050 Pathway",
+    saved_scenario_ids=[1],  # Base scenario
+    area_code="nl",
+    end_year=2050,
+    interpolation=True,
+)
+```
+
+!!! info "Collection Validation"
+    - Collections can include up to 6 scenarios (combined `scenario_ids` and `saved_scenario_ids`)
+    - All scenarios in a collection must use the same ETM version
+
+### Updating Collections
+
+```python
+# Update collection attributes
+collection.update(
+    title="Updated Title",
+    saved_scenario_ids=[1, 2, 3, 4],  # Add more scenarios
+)
+
+# Soft-delete a collection (mark as discarded)
+collection.update(discarded=True)
+```

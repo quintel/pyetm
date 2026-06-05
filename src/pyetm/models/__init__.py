@@ -1,3 +1,4 @@
+from .collection import Collection
 from .custom_curves import CustomCurves
 from .export_config import ExportConfig
 from .export_data_collection import ExportDataCollection
@@ -11,6 +12,7 @@ from .sortables import Sortable, Sortables
 from .scenario_packer import ScenarioPacker
 
 __all__ = [
+    "Collection",
     "CustomCurves",
     "Gqueries",
     "Input",

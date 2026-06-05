@@ -108,7 +108,7 @@ class Session(Base):
         area_code: str | None = None,
         end_year: int | None = None,
         client: Optional[BaseClient] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "Session":
         """
         Create a new scenario with the specified parameters.
@@ -753,9 +753,7 @@ class Session(Base):
         """
         return self.hourly_output_curves.get_curve(identifier, self)
 
-    def get_hourly_curves(
-        self, identifiers: list[str]
-    ) -> dict[str, pd.DataFrame]:
+    def get_hourly_curves(self, identifiers: list[str]) -> dict[str, pd.DataFrame]:
         """
         Get multiple hourly output curves by names or carrier type aliases.
 
@@ -1116,6 +1114,31 @@ class Session(Base):
         )
         if not result.success:
             raise ScenarioError(f"Could not add user: {result.errors}")
+
+    def delete(self) -> None:
+        """
+        Permanently delete this ETEngine scenario/session (hard delete).
+
+        WARNING: This is a permanent deletion and cannot be undone. The scenario
+        and all its data will be permanently removed from ETEngine.
+
+        This method should be used when you want to delete a temporary/ephemeral
+        session that is not saved in MyETM. If this session is associated with a
+        SavedScenario, use Scenario.delete() instead to ensure both are deleted.
+
+        Raises:
+            ScenarioError: If the deletion fails
+
+        Example:
+            >>> session = Session.new(area_code="nl2023", end_year=2050)
+            >>> session.delete()
+        """
+        from pyetm.services.scenario_runners.destroy_session import DestroySessionRunner
+
+        result = DestroySessionRunner.run(get_client(), self.id)
+
+        if not result.success:
+            raise ScenarioError(f"Could not delete session: {result.errors}")
 
     @property
     def preset_scenario_id(self) -> Optional[int]:

@@ -9,6 +9,7 @@ from pyetm.models import (
     Session,
     Sessions,
     ScenarioPacker,
+    Collection,
 )
 
 # Sub-models
@@ -31,6 +32,7 @@ __all__ = [
     "Session",
     "Sessions",
     "ScenarioPacker",
+    "Collection"
     # Sub-models
     "Inputs",
     "CustomCurves",
