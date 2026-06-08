@@ -507,6 +507,12 @@ class Scenario(Base):
         """Update custom curves on the underlying session."""
         self.session.update_custom_curves(custom_curves, skip_upload=skip_upload)
 
+    def remove_custom_curves(
+        self, curve_keys: Union[List[str], Set[str]]
+    ) -> None:
+        """Remove custom curves from the underlying session."""
+        self.session.remove_custom_curves(curve_keys)
+
     def custom_curve_series(self, curve_name: str) -> Optional[pd.Series[Any]]:
         """Get a custom curve series from the underlying session."""
         return self.session.custom_curve_series(curve_name)

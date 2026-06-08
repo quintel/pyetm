@@ -923,6 +923,207 @@ def test_scenario_update_custom_curves_multiple_validation_errors():
     assert "No data available" in error_message
 
 
+def test_scenario_remove_custom_curves_success(monkeypatch, ok_service_result):
+    """Test successful custom curves removal"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.delete_custom_curves import (
+        DeleteCustomCurvesRunner,
+    )
+    from pathlib import Path
+    from unittest.mock import Mock
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    # Set up scenario with existing curves
+    curve1 = CustomCurve(key="curve_to_remove", type="profile", file_path=Path("/tmp/curve1.csv"))
+    curve2 = CustomCurve(key="curve_to_keep", type="availability", file_path=Path("/tmp/curve2.csv"))
+    scenario._custom_curves = CustomCurves(curves=[curve1, curve2])
+
+    # Mock curve.remove() to avoid actual file operations
+    curve1.remove = Mock()
+    curve2.remove = Mock()
+
+    # Mock DeleteCustomCurvesRunner to succeed
+    def mock_runner(client, scenario, curve_keys):
+        return ok_service_result(
+            {
+                "deleted_curves": ["curve_to_remove"],
+                "total_curves": 1,
+                "successful_deletions": 1,
+            }
+        )
+
+    monkeypatch.setattr(DeleteCustomCurvesRunner, "run", mock_runner)
+
+    # Remove one curve
+    scenario.remove_custom_curves(["curve_to_remove"])
+
+    # Verify curve was removed from local collection
+    assert len(scenario._custom_curves.curves) == 1
+    assert scenario._custom_curves.curves[0].key == "curve_to_keep"
+
+    # Verify cache file was cleared
+    curve1.remove.assert_called_once()
+    curve2.remove.assert_not_called()
+
+
+def test_scenario_remove_custom_curves_multiple(monkeypatch, ok_service_result):
+    """Test removing multiple custom curves"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.delete_custom_curves import (
+        DeleteCustomCurvesRunner,
+    )
+    from pathlib import Path
+    from unittest.mock import Mock
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    # Set up scenario with three curves
+    curves = [
+        CustomCurve(key="curve1", type="profile", file_path=Path("/tmp/curve1.csv")),
+        CustomCurve(key="curve2", type="availability", file_path=Path("/tmp/curve2.csv")),
+        CustomCurve(key="curve3", type="profile", file_path=Path("/tmp/curve3.csv")),
+    ]
+    for curve in curves:
+        curve.remove = Mock()
+
+    scenario._custom_curves = CustomCurves(curves=curves)
+
+    # Mock DeleteCustomCurvesRunner to succeed
+    def mock_runner(client, scenario, curve_keys):
+        return ok_service_result(
+            {
+                "deleted_curves": ["curve1", "curve3"],
+                "total_curves": 2,
+                "successful_deletions": 2,
+            }
+        )
+
+    monkeypatch.setattr(DeleteCustomCurvesRunner, "run", mock_runner)
+
+    # Remove two curves
+    scenario.remove_custom_curves(["curve1", "curve3"])
+
+    # Verify only curve2 remains
+    assert len(scenario._custom_curves.curves) == 1
+    assert scenario._custom_curves.curves[0].key == "curve2"
+
+    # Verify cache files were cleared for removed curves
+    curves[0].remove.assert_called_once()
+    curves[1].remove.assert_not_called()
+    curves[2].remove.assert_called_once()
+
+
+def test_scenario_remove_custom_curves_empty_list(monkeypatch):
+    """Test removing custom curves with empty list"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pathlib import Path
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    # Set up scenario with curves
+    curve = CustomCurve(key="existing_curve", type="profile", file_path=Path("/tmp/curve.csv"))
+    scenario._custom_curves = CustomCurves(curves=[curve])
+
+    # Remove empty list (should be no-op)
+    scenario.remove_custom_curves([])
+
+    # Verify curve is still there
+    assert len(scenario._custom_curves.curves) == 1
+    assert scenario._custom_curves.curves[0].key == "existing_curve"
+
+
+def test_scenario_remove_custom_curves_with_set(monkeypatch, ok_service_result):
+    """Test removing custom curves with set instead of list"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.delete_custom_curves import (
+        DeleteCustomCurvesRunner,
+    )
+    from pathlib import Path
+    from unittest.mock import Mock
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    # Set up scenario with curves
+    curve1 = CustomCurve(key="curve1", type="profile", file_path=Path("/tmp/curve1.csv"))
+    curve2 = CustomCurve(key="curve2", type="availability", file_path=Path("/tmp/curve2.csv"))
+    curve1.remove = Mock()
+    curve2.remove = Mock()
+
+    scenario._custom_curves = CustomCurves(curves=[curve1, curve2])
+
+    # Mock DeleteCustomCurvesRunner to succeed
+    def mock_runner(client, scenario, curve_keys):
+        return ok_service_result(
+            {
+                "deleted_curves": list(curve_keys),
+                "total_curves": len(curve_keys),
+                "successful_deletions": len(curve_keys),
+            }
+        )
+
+    monkeypatch.setattr(DeleteCustomCurvesRunner, "run", mock_runner)
+
+    # Remove using a set
+    scenario.remove_custom_curves({"curve1"})
+
+    # Verify only curve2 remains
+    assert len(scenario._custom_curves.curves) == 1
+    assert scenario._custom_curves.curves[0].key == "curve2"
+
+
+def test_scenario_remove_custom_curves_runner_failure(monkeypatch, fail_service_result):
+    """Test custom curves removal with runner failure"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.services.scenario_runners.delete_custom_curves import (
+        DeleteCustomCurvesRunner,
+    )
+    from pathlib import Path
+    from unittest.mock import Mock
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+
+    # Set up scenario with curves
+    curve = CustomCurve(key="test_curve", type="profile", file_path=Path("/tmp/curve.csv"))
+    curve.remove = Mock()
+    scenario._custom_curves = CustomCurves(curves=[curve])
+
+    # Mock DeleteCustomCurvesRunner to fail
+    def mock_runner(client, scenario, curve_keys):
+        return fail_service_result(["HTTP 500: Internal server error"])
+
+    monkeypatch.setattr(DeleteCustomCurvesRunner, "run", mock_runner)
+
+    # Should raise ScenarioError due to runner failure
+    with pytest.raises(ScenarioError) as exc_info:
+        scenario.remove_custom_curves(["test_curve"])
+
+    assert "Could not remove custom curves" in str(exc_info.value)
+    assert "HTTP 500: Internal server error" in str(exc_info.value)
+
+    # Verify curve was NOT removed from local collection
+    assert len(scenario._custom_curves.curves) == 1
+    assert scenario._custom_curves.curves[0].key == "test_curve"
+
+
+def test_scenario_remove_custom_curves_delegates_to_session():
+    """Test that Scenario.remove_custom_curves delegates to Session"""
+    from pyetm.models.scenario import Scenario
+    from unittest.mock import Mock
+
+    # Create a Scenario with a mocked Session
+    mock_session = Mock(spec=Session)
+    scenario = Scenario.__new__(Scenario)
+    object.__setattr__(scenario, "_scenario_session", mock_session)
+
+    # Call remove_custom_curves
+    curve_keys = ["curve1", "curve2"]
+    scenario.remove_custom_curves(curve_keys)
+
+    # Verify it delegated to the session
+    mock_session.remove_custom_curves.assert_called_once_with(curve_keys)
+
+
 # ------ copy ------ #
 
 

@@ -13,6 +13,7 @@ Custom curves are 8760-hour time series that override default profiles for techn
 | Validate | `curves.is_valid_update(data)` | Dict of warnings |
 | Update locally | `curves.update(data)` | Auto-displays warnings |
 | Update API | `scenario.update_custom_curves(curves)` | Updated scenario |
+| Remove from API | `scenario.remove_custom_curves(keys)` | Deletes curves and clears cache |
 
 ### Fetching Custom Curves
 
@@ -102,6 +103,36 @@ else:
     for key, warnings in validation_errors.items():
         print(f"{key}: {warnings}")
 ```
+
+### Removing Custom Curves
+
+Remove custom curves from the ETM API and clear local cache files:
+
+```python
+# Remove a single curve
+scenario.remove_custom_curves(["weather/solar_pv_on_roof_households"])
+
+# Remove multiple curves
+scenario.remove_custom_curves([
+    "weather/solar_pv_on_roof_households",
+    "weather/wind_offshore_baseline"
+])
+
+# Also accepts sets instead of lists
+scenario.remove_custom_curves({"weather/solar_pv_on_roof_households"})
+```
+
+**Behavior:**
+- Deletes curves from the ETM API via DELETE endpoint
+- Automatically clears local cache files for removed curves
+- Removes curves from the scenario's local collection
+- Raises `ScenarioError` if API deletion fails
+- No-op if passed empty list/set
+
+**Use Cases:**
+- Reverting to default slider settings for published scenarios
+- Cleaning up test curves during development
+- Switching between custom and default configurations
 
 ### Quirks and Special Behaviors
 

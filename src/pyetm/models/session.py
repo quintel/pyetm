@@ -725,6 +725,49 @@ class Session(Base):
         except Exception:
             pass
 
+    def remove_custom_curves(
+        self, curve_keys: Union[List[str], Set[str]]
+    ) -> None:
+        """
+        Remove custom curves from this scenario.
+
+        Deletes curves from the ETM API and removes them from the local collection.
+        Local cache files are automatically cleared.
+
+        Args:
+            curve_keys: List or set of curve keys to remove
+
+        Raises:
+            ScenarioError: If API deletion fails
+
+        Example:
+            >>> session.remove_custom_curves(["weather/solar_pv", "weather/wind"])
+        """
+        from pyetm.services.scenario_runners.delete_custom_curves import (
+            DeleteCustomCurvesRunner,
+        )
+
+        curve_keys_list = list(curve_keys) if isinstance(curve_keys, set) else curve_keys
+
+        if not curve_keys_list:
+            return
+
+        # Delete from API
+        result = DeleteCustomCurvesRunner.run(get_client(), self, curve_keys_list)
+        if not result.success:
+            raise ScenarioError(f"Could not remove custom curves: {result.errors}")
+
+        # Remove from local collection and clear cache files
+        keys_set = set(curve_keys_list)
+        for curve in list(self.custom_curves.curves):
+            if curve.key in keys_set:
+                curve.remove()  # Clear cache file
+
+        # Remove from curves list
+        self.custom_curves.curves = [
+            c for c in self.custom_curves.curves if c.key not in keys_set
+        ]
+
     @property
     def hourly_output_curves(self) -> HourlyOutputCurves:
         if self._hourly_output_curves is not None:
