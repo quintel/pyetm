@@ -33,7 +33,6 @@ class Packable(BaseModel):
     sheet_name: ClassVar[str] = "SHEET"
     _scenario_id_cache: Dict[str, Session] | None = PrivateAttr(default=None)
     _scenario_short_names: Dict[str, str] = PrivateAttr(default_factory=dict)
-    _scenario_set: Set[Session] = PrivateAttr(default_factory=set)
 
     def set_scenario_short_names(self, scenario_short_names: Dict[str, str]) -> None:
         """Set mapping of scenario IDs to short names for display purposes."""
@@ -44,21 +43,18 @@ class Packable(BaseModel):
         if not scenarios:
             return
         for scenario in scenarios:
-            if scenario not in self._scenario_set:
+            if scenario not in self.scenarios:
                 self.scenarios.append(scenario)
-                self._scenario_set.add(scenario)
         self._scenario_id_cache = None
 
     def discard(self, scenario: Session) -> None:
         "Removes a scenario from the pack"
-        if scenario in self._scenario_set:
+        if scenario in self.scenarios:
             self.scenarios.remove(scenario)
-            self._scenario_set.discard(scenario)
         self._scenario_id_cache = None
 
     def clear(self) -> None:
         self.scenarios.clear()
-        self._scenario_set.clear()
         self._scenario_id_cache = None
 
     def summary(self) -> Dict[str, Any]:
