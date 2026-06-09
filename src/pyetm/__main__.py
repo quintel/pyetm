@@ -108,17 +108,11 @@ def cli() -> None:
     help="ETM environment to target (e.g., 'pro', 'beta', 'local', 'tyndp2024', '2025-01'). Defaults to 'pro'.",
 )
 @click.option(
-    "--log-level",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-    default="INFO",
-    help="Logging level",
-)
-@click.option(
     "--force",
     is_flag=True,
     help="Overwrite existing files without prompting",
 )
-def init(environment: str | None, log_level: str, force: bool) -> None:
+def init(environment: str | None, force: bool) -> None:
     """
     Initialize a new pyetm project.
 
@@ -150,7 +144,6 @@ def init(environment: str | None, log_level: str, force: bool) -> None:
 
         # Replace placeholders
         env_content = env_template.replace("{{ENVIRONMENT}}", environment)
-        env_content = env_content.replace("{{LOG_LEVEL}}", log_level)
 
         # Handle optional BASE_URL line
         env_content = env_content.replace("{{BASE_URL_LINE}}", "# BASE_URL=")

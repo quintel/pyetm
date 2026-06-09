@@ -1,11 +1,12 @@
 """Base models and shared functionality."""
 
 from __future__ import annotations
-from typing import Any, Type, TypeVar, Union, List, Dict, Optional, Callable, cast
+from typing import Any, Type, TypeVar, Union, List, Dict, Optional, Callable, cast, Literal
 from pydantic import BaseModel, PrivateAttr, ValidationError, ConfigDict
 from pydantic_core import InitErrorDetails, PydanticCustomError
 import pandas as pd
 from pyetm.models.warnings import WarningCollector
+from pyetm.models.error_policy import get_error_policy
 
 T = TypeVar("T", bound="Base")
 
@@ -23,6 +24,7 @@ class Base(BaseModel):
     # Enable assignment validation
     model_config = ConfigDict(validate_assignment=True)
     _warning_collector: WarningCollector = PrivateAttr(default_factory=WarningCollector)
+    _bulk_operation_context: bool = PrivateAttr(default=False)
 
     def __init__(self, **data: Any) -> None:
         """
@@ -123,10 +125,37 @@ class Base(BaseModel):
         self,
         field: str,
         message: Union[str, List[str], Dict[str, Any]],
-        severity: str = "warning",
+        severity: Literal["info", "warning", "error"] = "warning",
     ) -> None:
-        """Add a warning to this model instance."""
+        """Add a warning to this model instance.
+
+        Args:
+            field: Field name where warning occurred
+            message: Warning message (str, list of strings, or dict)
+            severity: Warning severity level (info/warning/error)
+
+        Raises:
+            RuntimeError: If error policy determines warning should raise an exception
+        """
+        # Add warning to collector
         self._warning_collector.add(field, message, severity)
+
+        # Check if we should raise based on error policy
+        policy = get_error_policy()
+        if policy.should_raise(severity, self._bulk_operation_context):
+            # Format message for exception
+            if isinstance(message, str):
+                error_msg = message
+            elif isinstance(message, list):
+                error_msg = "; ".join(str(m) for m in message)
+            elif isinstance(message, dict):
+                error_msg = "; ".join(f"{k}: {v}" for k, v in message.items())
+            else:
+                error_msg = str(message)
+
+            raise RuntimeError(
+                f"{self.__class__.__name__} validation failed on field '{field}': {error_msg}"
+            )
 
     @property
     def warnings(self) -> WarningCollector:
@@ -134,6 +163,19 @@ class Base(BaseModel):
         Return warnings.
         """
         return self._warning_collector
+
+    def set_bulk_context(self, is_bulk: bool = True) -> None:
+        """Set whether this model is being processed in a bulk operation context.
+
+        Args:
+            is_bulk: True if in bulk operation, False for single operation
+
+        Note:
+            This affects error handling behavior. In bulk operations, errors are
+            collected as warnings to allow partial success. In single operations,
+            errors may raise exceptions based on the error_mode setting.
+        """
+        self._bulk_operation_context = is_bulk
 
     def show_warnings(self) -> None:
         """Print all warnings to the console."""

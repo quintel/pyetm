@@ -76,7 +76,7 @@ After initialization, you can optionally add your API token to the `.env` file i
 **Comprehensive example:**
 
 ```bash
-pyetm init --environment pro --log-level INFO
+pyetm init --environment pro
 ```
 
 ### Adding Your API Token (Optional)

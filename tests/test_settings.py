@@ -25,6 +25,7 @@ def clean_settings_env(monkeypatch, tmp_path):
         "SSL_VERIFY",
         "TRUST_ENV",
         "SSL_CERT_PATH",
+        "PYETM_ERROR_MODE",
     ]
     for var in etm_vars:
         monkeypatch.delenv(var, raising=False)

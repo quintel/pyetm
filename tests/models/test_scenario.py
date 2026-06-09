@@ -649,6 +649,9 @@ def test_to_dataframe(scenario):
 
 def test_scenario_warning_system_integration(scenario):
     """Test that the scenario properly integrates with the new warning system"""
+    # Set bulk context to prevent raising on error severity
+    scenario.set_bulk_context(True)
+
     # Add some warnings
     scenario.add_warning("test_field", "Test warning message")
     scenario.add_warning("test_field", "Another warning")

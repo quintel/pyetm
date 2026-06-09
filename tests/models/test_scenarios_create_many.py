@@ -401,18 +401,27 @@ class TestCreateManyErrorHandling:
         # Scenarios should still be created
         assert len(result.items) == 2
 
-        # Warnings should be stored
-        assert len(result.data_warnings) == 2
-        assert "Invalid input" in result.data_warnings[0]
-        assert "Invalid curve" in result.data_warnings[1]
+        # Warnings should be stored in the WarningCollector
+        assert len(result.warnings) >= 2  # At least the 2 data application warnings
+        # Check that data application warnings are present
+        all_warnings_str = " ".join([w.message for w in result.warnings])
+        assert "Invalid input" in all_warnings_str
+        assert "Invalid curve" in all_warnings_str
 
+    @patch("pyetm.models.base.get_error_policy")
     @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
     @patch("pyetm.models.scenario.Scenario.new")
     @patch("pyetm.models.session.Session.new")
     def test_create_many_raise_on_data_errors(
-        self, mock_session_new, mock_create, mock_apply_data
+        self, mock_session_new, mock_create, mock_apply_data, mock_get_policy
     ):
-        """Test that raise_on_data_errors=True raises exception on data failure."""
+        """Test that PYETM_ERROR_MODE=safe raises exception on data failure."""
+        from pyetm.models.error_policy import ErrorMode, ErrorPolicy
+
+        # Set error mode to safe to raise on all errors
+        mock_policy = ErrorPolicy(mode=ErrorMode.SAFE)
+        mock_get_policy.return_value = mock_policy
+
         mock_session = Mock()
         mock_session.id = 1
         mock_session_new.return_value = mock_session
@@ -420,6 +429,7 @@ class TestCreateManyErrorHandling:
         mock_saved = Mock(spec=Scenario)
         mock_saved.session = mock_session
         mock_saved.warnings = Mock(__len__=Mock(return_value=0))
+        mock_saved.set_bulk_context = Mock()  # Add this method
         mock_create.return_value = mock_saved
 
         # Mock data application to return errors
@@ -436,9 +446,9 @@ class TestCreateManyErrorHandling:
             },
         ]
 
-        # Should raise when raise_on_data_errors=True
-        with pytest.raises(Exception) as exc_info:
-            scenarios.create_many(params, raise_on_data_errors=True)
+        # Should raise when in safe mode with data errors
+        with pytest.raises(RuntimeError) as exc_info:
+            scenarios.create_many(params)
 
         # Check that the error message mentions the failure
         assert "failed to apply data" in str(exc_info.value).lower()

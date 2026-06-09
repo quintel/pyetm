@@ -94,12 +94,11 @@ After initialization, you'll need to manually add your API token to the `.env` f
 
 **Command options**:
 - `--environment`: Target environment (`pro`, `beta`, or `local`)
-- `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
 - `--force`: Overwrite existing files without prompting
 
 Example:
 ```bash
-pyetm init --environment pro --log-level INFO
+pyetm init --environment pro
 ```
 
 ### 4. Run Scenarios from Excel
@@ -146,8 +145,9 @@ ETM_API_TOKEN=etm_your_token_here
 # Options: pro, beta, local, or stable tags like 2025-01
 ENVIRONMENT=pro
 
-# Logging level (default: INFO)
-LOG_LEVEL=INFO
+# Error handling (default: default)
+# Options: safe, default, dangerous
+PYETM_ERROR_MODE=default
 
 # CSV export settings (optional)
 CSV_SEPARATOR=,
@@ -164,6 +164,11 @@ DECIMAL_SEPARATOR=.
 - `beta`: Staging environment
 - `local`: Local development environment
 - `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
+
+**Error Handling Modes:**
+- `default` (recommended): Errors raise in single operations, warnings collected in bulk operations
+- `safe`: All warnings raise exceptions (use in CI/production for maximum safety)
+- `dangerous`: No warnings raise (use only for exploratory data analysis)
 
 ### Advanced Configuration
 

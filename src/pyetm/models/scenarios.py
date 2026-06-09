@@ -56,10 +56,11 @@ class Scenarios(Base):
 
     Can hold both Scenario and Session objects to support
     mixed collections loaded from Excel or other sources.
+
+    Warnings from bulk operations are collected in the inherited _warning_collector.
     """
 
     items: List[Union[Scenario, Session]] = Field(default_factory=list)
-    data_warnings: List[str] = Field(default_factory=list)
     _packer: Optional["ScenarioPacker"] = PrivateAttr(default=None)
 
     def __iter__(self) -> Iterator[Union[Scenario, Session]]:  # type: ignore[override]
@@ -200,20 +201,37 @@ class Scenarios(Base):
         """
         Load multiple SavedScenario objects by their MyETM saved scenario IDs.
 
+        This is a bulk operation - individual failures are collected as warnings
+        to allow partial success. Use PYETM_ERROR_MODE=safe to raise on first error.
+
         Args:
             saved_scenario_ids: Iterable of MyETM saved scenario IDs to load
             client: Optional BaseClient instance for API communication
 
         Returns:
-            SavedScenarios collection containing the loaded SavedScenario objects
+            SavedScenarios collection containing the loaded SavedScenario objects.
+            Warnings from failures are collected in the warnings property.
         """
-        saved_scenarios = []
+        scenarios = cls(items=[])
+        scenarios.set_bulk_context(True)
+
         for ssid in saved_scenario_ids:
             try:
-                saved_scenarios.append(Scenario.load(ssid, client=client))
+                scenario = Scenario.load(ssid, client=client)
+                scenario.set_bulk_context(True)
+                scenarios.items.append(scenario)
             except SavedScenarioError as e:
-                print(f"Could not load saved scenario {ssid}: {e}")
-        return cls(items=cast(List[Union[Scenario, Session]], saved_scenarios))
+                scenarios.add_warning(
+                    "load_many",
+                    f"Could not load saved scenario {ssid}: {e}",
+                    severity="error",
+                )
+
+        # Show warnings if any
+        if len(scenarios.warnings) > 0:
+            scenarios.show_warnings()
+
+        return scenarios
 
     @classmethod
     def create_many(
@@ -222,12 +240,14 @@ class Scenarios(Base):
         area_code: str | None = None,
         end_year: int | None = None,
         client: BaseClient | None = None,
-        raise_on_data_errors: bool = False,
     ) -> "Scenarios":
         """
         Create multiple SavedScenario objects from parameter dicts.
 
         If scenario_id is not provided in params, creates a new Session first.
+
+        This is a bulk operation - individual failures are collected as warnings
+        to allow partial success. Use PYETM_ERROR_MODE=safe to raise on first error.
 
         Args:
             scenario_params: Iterable of ScenarioCreationParams dicts, each containing:
@@ -244,15 +264,18 @@ class Scenarios(Base):
             area_code: Default area_code for all scenarios (if not in params)
             end_year: Default end_year for all scenarios (if not in params)
             client: Optional BaseClient instance (shared across all creates)
-            raise_on_data_errors: If True, raise exception when data application fails.
-                                  If False (default), store failures in data_warnings list.
 
         Returns:
-            Scenarios: Collection of created scenarios with data_warnings attribute containing
-                      any errors from applying user_values, custom_curves, or sortables.
+            Scenarios: Collection of created scenarios. Warnings from individual
+                      failures are collected in the warnings property.
         """
         if client is None:
             client = get_client()
+
+        # Create the collection with bulk context enabled
+        scenarios_list: List[Union[Scenario, Session]] = []
+        scenarios = cls(items=scenarios_list)
+        scenarios.set_bulk_context(True)
 
         # Separate data parameters from creation parameters
         DATA_PARAMS = ["user_values", "custom_curves", "sortables"]
@@ -281,8 +304,10 @@ class Scenarios(Base):
             title = params.get("title")
 
             if title is None:
-                print(
-                    f"Could not create saved scenario with {params}: Missing required 'title'"
+                scenarios.add_warning(
+                    "create_many",
+                    f"Could not create saved scenario with {params}: Missing required 'title'",
+                    severity="warning",
                 )
                 continue
 
@@ -308,9 +333,11 @@ class Scenarios(Base):
                     has_template = "template_id" in params
 
                     if not has_template and (area is None or year is None):
-                        print(
+                        scenarios.add_warning(
+                            "create_many",
                             f"Could not create saved scenario with {params}: "
-                            "Missing area_code or end_year. Provide them in each dict or as defaults."
+                            "Missing area_code or end_year. Provide them in each dict or as defaults.",
+                            severity="warning",
                         )
                         continue
 
@@ -348,47 +375,41 @@ class Scenarios(Base):
                         )
 
             except (SavedScenarioError, Exception) as e:
-                print(f"Could not create saved scenario with {params}: {e}")
+                scenarios.add_warning(
+                    "create_many",
+                    f"Could not create saved scenario with {params}: {e}",
+                    severity="error",
+                )
+
+        # Set bulk context on all created scenarios and add to collection
+        for scenario in saved_scenarios:
+            scenario.set_bulk_context(True)
+            scenarios.items.append(scenario)
 
         # Apply data parameters concurrently after all scenarios are created
-        scenarios_list: List[Union[Scenario, Session]] = saved_scenarios  # type: ignore[assignment]
-        scenarios = cls(items=scenarios_list)
         if data_to_apply and saved_scenarios:
             failure_warnings = cls._apply_data_concurrently(
                 saved_scenarios, data_to_apply, client
             )
 
-            # Store failures as warnings or raise exception based on parameter
-            if failure_warnings:
-                if raise_on_data_errors:
-                    error_summary = "\n".join(failure_warnings)
-                    raise RuntimeError(
-                        f"Failed to apply data to scenarios:\n{error_summary}"
-                    )
-                else:
-                    for warning in failure_warnings:
-                        logger.warning(f"Batch data application: {warning}")
-                    scenarios.data_warnings.extend(failure_warnings)
+            # Add data application failures as warnings to the collection
+            for warning in failure_warnings:
+                scenarios.add_warning(
+                    "data_application",
+                    warning,
+                    severity="error",
+                )
 
-        # Auto-display warnings for all created scenarios
-        if saved_scenarios:
-            has_warnings = False
-            for scenario in saved_scenarios:
-                if len(scenario.warnings) > 0:
-                    if not has_warnings:
-                        print("\n=== Batch Creation Summary ===")
-                        has_warnings = True
-                    scenario.auto_show_warnings(
-                        f"SavedScenario #{scenario.id} (title='{scenario.title}')"
-                    )
+        # Merge warnings from individual scenarios into collection warnings
+        for scenario in saved_scenarios:
+            scenarios._merge_submodel_warnings(scenario)
 
-            # Also show data application warnings if any
-            if scenarios.data_warnings:
-                if not has_warnings:
-                    print("\n=== Batch Creation Summary ===")
-                print("\n=== Data Application Warnings ===")
-                for warning in scenarios.data_warnings:
-                    print(f"  {warning}")
+        # Display summary if there were any warnings
+        if len(scenarios.warnings) > 0 or any(
+            len(s.warnings) > 0 for s in saved_scenarios
+        ):
+            print("\n=== Batch Creation Summary ===")
+            scenarios.show_warnings()
 
         return scenarios
 
@@ -430,14 +451,24 @@ class Scenarios(Base):
         packer = ScenarioPacker.from_excel(str(resolved_path), update=update)
         all_scenarios = list(packer._scenarios())
 
+        scenarios = cls(items=[])
         if not all_scenarios:
-            print(f"No scenarios found in Excel file: {resolved_path}")
+            scenarios.add_warning(
+                "from_excel",
+                f"No scenarios found in Excel file: {resolved_path}",
+                severity="warning",
+            )
+        else:
+            all_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
+            scenarios_list: List[Union[Scenario, Session]] = all_scenarios  # type: ignore[assignment]
+            scenarios.items = scenarios_list
 
-        all_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
-
-        scenarios_list: List[Union[Scenario, Session]] = all_scenarios  # type: ignore[assignment]
-        scenarios = cls(items=scenarios_list)
         scenarios._packer = packer
+
+        # Auto-display warnings if any
+        if len(scenarios.warnings) > 0:
+            scenarios.show_warnings()
+
         return scenarios
 
     @staticmethod
@@ -519,7 +550,6 @@ class Scenarios(Base):
                     )
                 except Exception as e:
                     warning_msg = f"Failed to build user_values request for scenario '{scenario.title}': {e}"
-                    logger.warning(warning_msg)
                     warnings.append(warning_msg)
 
             # Use UpdateCustomCurvesRunner to build curve requests
@@ -540,7 +570,6 @@ class Scenarios(Base):
                         )
                 except Exception as e:
                     warning_msg = f"Failed to build curve requests for scenario '{scenario.title}': {e}"
-                    logger.warning(warning_msg)
                     warnings.append(warning_msg)
 
             # Use UpdateSortablesRunner to build sortables requests
@@ -556,7 +585,6 @@ class Scenarios(Base):
                         )
                     except Exception as e:
                         warning_msg = f"Failed to build sortables request for scenario '{scenario.title}': {e}"
-                        logger.warning(warning_msg)
                         warnings.append(warning_msg)
 
         if requests:
@@ -580,7 +608,6 @@ class Scenarios(Base):
             for metadata, result in zip(request_metadata, results):
                 if not result.success:
                     warning_msg = Scenarios._format_data_error(metadata, result)
-                    logger.warning(warning_msg)
                     warnings.append(warning_msg)
 
         return warnings

@@ -51,10 +51,10 @@ def clear_client_caches():
     yield  # Run the test
     # Clear caches after test completes
     from pyetm.clients.base_client import get_client
-    from pyetm.config.settings import get_settings
+    from pyetm.config.settings import reload_configuration
 
     get_client.cache_clear()
-    get_settings.cache_clear()
+    reload_configuration()
 
 
 # Lazy‐import BaseClient
@@ -75,6 +75,39 @@ def scenario():
 
 
 # --- Config Fixtures for Testing Optional Token and Custom Environments --- #
+
+
+@pytest.fixture
+def clean_settings_env(monkeypatch, tmp_path):
+    """Create a completely clean environment for settings tests"""
+    from pyetm.config.settings import reload_configuration
+
+    # Clear caches to ensure each test gets a fresh config
+    reload_configuration()
+
+    # Clear all PYETM environment variables (with PYETM_ prefix)
+    etm_vars = [
+        "PYETM_ETM_API_TOKEN",
+        "PYETM_BASE_URL",
+        "PYETM_LOG_LEVEL",
+        "PYETM_ENVIRONMENT",
+        "PYETM_CSV_SEPARATOR",
+        "PYETM_DECIMAL_SEPARATOR",
+        "PYETM_SSL_VERIFY",
+        "PYETM_TRUST_ENV",
+        "PYETM_SSL_CERT_PATH",
+        "PYETM_ERROR_MODE",
+    ]
+    for var in etm_vars:
+        monkeypatch.delenv(var, raising=False)
+
+    # Create isolated .env file in temp directory
+    test_env_file = tmp_path / ".env"
+
+    # Change to the temp directory so AppConfig finds our test .env file
+    monkeypatch.chdir(tmp_path)
+
+    return test_env_file
 
 
 @pytest.fixture
