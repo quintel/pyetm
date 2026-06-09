@@ -92,17 +92,37 @@ class Sessions(Base):
     ) -> "Sessions":
         """Load multiple Session objects by their ETEngine session IDs.
 
+        This is a bulk operation - individual failures are collected as warnings
+        to allow partial success. Use PYETM_ERROR_MODE=safe to raise on first error.
+
         Args:
             scenario_ids: Iterable of ETEngine session IDs to load
             client: Optional BaseClient instance for API communication
+
+        Returns:
+            Sessions collection containing the loaded Session objects.
+            Warnings from failures are displayed automatically.
         """
-        scenarios = []
+        sessions = cls(items=[])
+        sessions.set_bulk_context(True)
+
         for sid in scenario_ids:
             try:
-                scenarios.append(Session.load(sid, client=client))
+                session = Session.load(sid, client=client)
+                session.set_bulk_context(True)
+                sessions.items.append(session)
             except ScenarioError as e:
-                print(f"Could not load scenario {sid}: {e}")
-        return cls(items=scenarios)
+                sessions.add_warning(
+                    "load_many",
+                    f"Could not load scenario {sid}: {e}",
+                    severity="error",
+                )
+
+        # Auto-display warnings if any
+        if len(sessions.warnings) > 0:
+            sessions.show_warnings()
+
+        return sessions
 
     @classmethod
     def create_many(
@@ -111,14 +131,32 @@ class Sessions(Base):
         area_code: str | None = None,
         end_year: int | None = None,
     ) -> "Sessions":
-        """Create multiple Scenario objects from parameter dicts."""
-        scenarios = []
+        """Create multiple Session objects from parameter dicts.
+
+        This is a bulk operation - individual failures are collected as warnings
+        to allow partial success. Use PYETM_ERROR_MODE=safe to raise on first error.
+
+        Args:
+            scenario_params: Iterable of parameter dicts containing area_code, end_year, etc.
+            area_code: Default area_code for all sessions (if not in params)
+            end_year: Default end_year for all sessions (if not in params)
+
+        Returns:
+            Sessions collection containing created Session objects.
+            Warnings from failures are displayed automatically.
+        """
+        sessions = cls(items=[])
+        sessions.set_bulk_context(True)
+
+        created_sessions = []
         for params in scenario_params:
             area = params.get("area_code") or area_code
             year = params.get("end_year") or end_year
             if area is None or year is None:
-                print(
-                    f"Could not create scenario with {params}: Missing area_code or end_year. Provide them in each dict or as defaults."
+                sessions.add_warning(
+                    "create_many",
+                    f"Could not create scenario with {params}: Missing area_code or end_year. Provide them in each dict or as defaults.",
+                    severity="warning",
                 )
                 continue
             try:
@@ -127,26 +165,29 @@ class Sessions(Base):
                     for k, v in params.items()
                     if k not in ("area_code", "end_year")
                 }
-                scenarios.append(Session.new(area, year, **extra))
+                session = Session.new(area, year, **extra)
+                session.set_bulk_context(True)
+                created_sessions.append(session)
             except (ScenarioError, ValueError) as e:
-                print(f"Could not create scenario with {params}: {e}")
+                sessions.add_warning(
+                    "create_many",
+                    f"Could not create scenario with {params}: {e}",
+                    severity="error",
+                )
 
-        # Auto-display warnings for all created sessions
-        if scenarios:
-            has_warnings = False
-            for session in scenarios:
-                if len(session.warnings) > 0:
-                    if not has_warnings:
-                        print("\n=== Batch Creation Summary ===")
-                        has_warnings = True
-                    area_code = getattr(session, "area_code", None)
-                    end_year = getattr(session, "end_year", None)
-                    context = f"Session #{session.id}"
-                    if area_code or end_year:
-                        context += f" (area_code={area_code}, end_year={end_year})"
-                    session.auto_show_warnings(context)
+        # Add created sessions to collection
+        sessions.items = created_sessions
 
-        return cls(items=scenarios)
+        # Merge warnings from individual sessions
+        for session in created_sessions:
+            sessions._merge_submodel_warnings(session)
+
+        # Auto-display warnings if any
+        if len(sessions.warnings) > 0 or any(len(s.warnings) > 0 for s in created_sessions):
+            print("\n=== Batch Creation Summary ===")
+            sessions.show_warnings()
+
+        return sessions
 
     def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
         """Export all scenarios to Excel."""

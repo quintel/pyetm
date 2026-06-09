@@ -5,7 +5,7 @@ import functools
 import logging
 import re
 import tempfile
-from typing import Optional, ClassVar, List, Annotated, Any
+from typing import Optional, ClassVar, List, Annotated, Any, Literal
 from pydantic import Field, ValidationError, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,6 +41,15 @@ class AppConfig(BaseSettings):
     log_level: Optional[str] = Field(
         "INFO",
         description="App logging level",
+    )
+    error_mode: Literal["safe", "default", "dangerous"] = Field(
+        "default",
+        description=(
+            "Error handling mode: 'safe' (all warnings raise exceptions), "
+            "'default' (smart behavior: raise on errors in single operations, log in bulk), "
+            "'dangerous' (nothing raises, all warnings logged only)"
+        ),
+        validation_alias="PYETM_ERROR_MODE",
     )
 
     ssl_verify: bool = Field(
@@ -147,6 +156,7 @@ def get_settings() -> AppConfig:
     Load AppConfig from .env file and environment variables.
 
     Cached to ensure only one AppConfig instance is created per session.
+    To reload configuration after changing environment variables, use reload_configuration().
     """
     try:
         return AppConfig()  # type: ignore[call-arg]
@@ -163,6 +173,30 @@ def get_settings() -> AppConfig:
             f"{detail}\n\n"
             f"Please set them via environment variables (e.g., ETM_API_TOKEN=...) or in a .env file in your working directory."
         ) from exc
+
+
+def reload_configuration() -> None:
+    """
+    Clear cached configuration and error policy to reload from environment.
+
+    This function clears both the settings cache (get_settings) and the error policy
+    cache (get_error_policy), ensuring that the next call to either function will
+    reload configuration from environment variables.
+
+    Use this when you need to change configuration at runtime, for example:
+
+        import os
+        os.environ["PYETM_ERROR_MODE"] = "safe"
+        reload_configuration()
+        # Next call to get_settings() or get_error_policy() will see the new value
+
+    Note: In production code, configuration should typically be set once at startup.
+    This function is primarily useful for testing or interactive environments.
+    """
+    get_settings.cache_clear()
+    # Import here to avoid circular dependency
+    from pyetm.models.error_policy import get_error_policy
+    get_error_policy.cache_clear()
 
 
 def _infer_base_url_from_env(environment: str) -> str:

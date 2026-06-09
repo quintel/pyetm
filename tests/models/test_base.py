@@ -1,5 +1,7 @@
 from pyetm.models.base import Base
 import pandas as pd
+from unittest.mock import patch
+from pyetm.models.error_policy import ErrorMode
 
 
 def test_valid_initialization_has_no_warnings(dummy_base_model):
@@ -159,6 +161,9 @@ def test_add_warning_with_severity(dummy_base_model):
     d = dummy_base_model(a=1, b="string")
     d.warnings.clear()
 
+    # Set bulk context to prevent raising on error severity
+    d.set_bulk_context(True)
+
     d.add_warning("error_field", "Critical error", "error")
     d.add_warning("info_field", "Information", "info")
 
@@ -257,6 +262,9 @@ def test_show_warnings_different_severities(capsys, dummy_base_model):
     """Test show_warnings output with different severity levels."""
     d = dummy_base_model(a=1, b="string")
     d.warnings.clear()
+
+    # Set bulk context to prevent raising on error severity
+    d.set_bulk_context(True)
 
     # Add warnings with different severities
     d.add_warning("field1", "Information message", "info")

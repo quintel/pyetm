@@ -27,8 +27,8 @@ ETM_API_TOKEN=etm_your.token.here
 # Environment Selection
 ENVIRONMENT=pro
 
-# Logging
-LOG_LEVEL=INFO
+# Error Handling (optional)
+PYETM_ERROR_MODE=default
 
 # SSL Configuration (optional)
 SSL_VERIFY=true
@@ -83,9 +83,64 @@ Custom API base URL (advanced users only).
 BASE_URL=https://custom-etm.example.com/api/v3
 ```
 
+### PYETM_ERROR_MODE
+
+Controls how pyetm handles errors and warnings during operations.
+
+**Options:**
+
+- `safe` - All warnings raise exceptions (maximum safety)
+- `default` (default) - Smart behavior: errors raise in single operations, collected in bulk
+- `dangerous` - No warnings raise, all logged only
+
+**When to use each mode:**
+
+**`default` mode (recommended for most users):**
+
+Single operations raise on errors immediately:
+```python
+scenario.update(inputs={"invalid_key": 123})  # Raises RuntimeError
+```
+
+Bulk operations collect warnings and continue:
+```python
+scenarios = Scenarios.create_many([...])  # Continues processing
+scenarios.show_warnings()  # Display collected warnings
+```
+
+**`safe` mode (recommended for CI/production):**
+
+All warnings raise exceptions, even in bulk operations. Use this when you want maximum safety and can't tolerate any partial failures.
+
+```env
+PYETM_ERROR_MODE=safe
+```
+
+**`dangerous` mode (for exploratory data analysis):**
+
+Nothing raises exceptions - all warnings are logged. Useful when you want to process as much data as possible and handle errors afterwards.
+
+```env
+PYETM_ERROR_MODE=dangerous
+```
+
+!!! note "Relationship with LOG_LEVEL"
+    `PYETM_ERROR_MODE` and `LOG_LEVEL` are independent:
+
+    - `PYETM_ERROR_MODE` controls **operational flow** (raise exceptions vs. collect warnings)
+    - `LOG_LEVEL` controls **system logging verbosity** (what gets logged by Python's logger)
+
+    User-facing warnings from `show_warnings()` are always displayed regardless of `LOG_LEVEL`.
+
+**Example:**
+
+```env
+PYETM_ERROR_MODE=default
+```
+
 ### LOG_LEVEL
 
-Controls logging verbosity.
+Controls logging verbosity for system/debug messages. This is an advanced option for debugging.
 
 **Options:** `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL`
 
@@ -94,6 +149,9 @@ Controls logging verbosity.
 ```env
 LOG_LEVEL=INFO
 ```
+
+!!! tip "Advanced Users Only"
+    Most users don't need to change `LOG_LEVEL`. It controls internal logging, not user-facing warnings. Use `PYETM_ERROR_MODE` to control error handling behavior instead.
 
 ### SSL Configuration
 
@@ -176,12 +234,68 @@ from pyetm.config import AppConfig
 config = AppConfig(
     etm_api_token="etm_your.token.here",
     environment="pro",
+    error_mode="default",  # or "safe" or "dangerous"
     log_level="DEBUG",
     ssl_verify=True,
 )
 
 # Initialize client with custom config
 client = Client(config=config)
+```
+
+## Runtime Configuration Changes
+
+For testing or interactive workflows, you may need to reload configuration from environment variables after they've been modified at runtime.
+
+### reload_configuration()
+
+Use the `reload_configuration()` function to reload all settings from environment variables:
+
+```python
+import os
+from pyetm.config import reload_configuration
+
+# Modify environment variable
+os.environ["PYETM_ERROR_MODE"] = "dangerous"
+
+# Reload configuration to pick up changes
+reload_configuration()
+
+# Settings now reflect the new environment
+```
+
+This function clears both the settings cache and the error policy cache, ensuring that the next operation will use the updated configuration.
+
+**When to use:**
+
+- **Testing**: Switch between error modes or environments during test runs
+- **Interactive notebooks**: Dynamically adjust configuration based on analysis needs
+- **Runtime adjustments**: Change settings without restarting your Python session
+
+**Important notes:**
+
+!!! warning "Production Use"
+    In production code, configuration should typically be set once at startup via environment variables or `.env` files. Runtime configuration changes modify global state and should be used cautiously.
+
+!!! tip "Alternative: Programmatic Configuration"
+    For most use cases, prefer programmatic configuration (see above) over runtime reloading. This provides better control and avoids global state modifications.
+
+**Example: Testing with different error modes**
+
+```python
+import os
+from pyetm.config import reload_configuration
+from pyetm import Scenarios
+
+# Test with default mode
+scenarios = Scenarios.create_many([...])  # Collects warnings
+
+# Switch to safe mode for next test
+os.environ["PYETM_ERROR_MODE"] = "safe"
+reload_configuration()
+
+# Now warnings will raise exceptions
+scenarios = Scenarios.create_many([...])  # Raises on first warning
 ```
 
 ## Environment-Specific Setup
@@ -191,6 +305,7 @@ client = Client(config=config)
 ```env
 ETM_API_TOKEN=etm_dev.token.here
 ENVIRONMENT=beta
+PYETM_ERROR_MODE=default
 LOG_LEVEL=DEBUG
 SSL_VERIFY=true
 ```
@@ -200,9 +315,19 @@ SSL_VERIFY=true
 ```env
 ETM_API_TOKEN=etm_prod.token.here
 ENVIRONMENT=pro
+PYETM_ERROR_MODE=safe
 LOG_LEVEL=WARNING
 SSL_VERIFY=true
 TRUST_ENV=true
+```
+
+### Data Analysis / Exploratory
+
+```env
+ETM_API_TOKEN=etm_your.token.here
+ENVIRONMENT=pro
+PYETM_ERROR_MODE=dangerous
+LOG_LEVEL=INFO
 ```
 
 ### Local Testing
@@ -210,6 +335,7 @@ TRUST_ENV=true
 ```env
 ETM_API_TOKEN=etm_local.token.here
 ENVIRONMENT=local
+PYETM_ERROR_MODE=default
 LOG_LEVEL=DEBUG
 SSL_VERIFY=false
 BASE_URL=http://localhost:3000/api/v3
@@ -291,7 +417,9 @@ When multiple configuration sources exist, pyetm uses this priority order:
 3. **Never commit tokens or `.env` files to version control**
 4. **Use different tokens for different environments**
 5. **Keep SSL verification enabled in production**
-6. **Use `INFO` or `WARNING` log level in production**
+6. **Use `safe` error mode in CI/production environments**
+7. **Use `default` error mode for most development work**
+8. **Use `dangerous` mode only for exploratory data analysis**
 
 ## Next Steps
 

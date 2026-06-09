@@ -38,7 +38,7 @@ class TestCliInit:
             env_content = Path(".env").read_text()
             assert "# ETM_API_TOKEN=" in env_content  # Should be commented out
             assert "ENVIRONMENT=pro" in env_content
-            assert "LOG_LEVEL=INFO" in env_content
+            assert "# PYETM_ERROR_MODE=default" in env_content
 
     def test_init_copies_template_file(self, runner, temp_dir):
         """Test that init copies input template Excel file"""
@@ -66,8 +66,6 @@ class TestCliInit:
                     "init",
                     "--environment",
                     "beta",
-                    "--log-level",
-                    "DEBUG",
                 ],
             )
 
@@ -75,7 +73,7 @@ class TestCliInit:
             env_content = Path(".env").read_text()
             assert "# ETM_API_TOKEN=" in env_content  # Should be commented out
             assert "ENVIRONMENT=beta" in env_content
-            assert "LOG_LEVEL=DEBUG" in env_content
+            assert "# PYETM_ERROR_MODE=default" in env_content
 
     def test_init_prompts_overwrite(self, runner, temp_dir):
         """Test that init prompts before overwriting existing files"""
