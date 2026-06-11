@@ -138,7 +138,7 @@ class CustomCurvesPack(Packable):
             # Validation errors are not critical, continue processing
             pass
 
-    def from_dataframe(self, df: pd.DataFrame) -> None:
+    def from_dataframe(self, df: pd.DataFrame, update_set: Optional[Set[str]] = None) -> None:
         if df is None or getattr(df, "empty", False):
             return
         try:

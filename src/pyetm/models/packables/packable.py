@@ -142,7 +142,7 @@ class Packable(BaseModel):
             return pd.DataFrame()
         return self._to_dataframe(columns=columns)
 
-    def from_dataframe(self, df: pd.DataFrame) -> None:
+    def from_dataframe(self, df: pd.DataFrame, update_set: Optional[Set[str]] = None) -> None:
         """Should parse the df and call correct setters on identified scenarios"""
         raise NotImplementedError
 
@@ -424,7 +424,7 @@ class Packable(BaseModel):
         Subclasses should override this to implement specific import logic."""
         df = excel_utils.parse_excel_sheet(excel_file, self.sheet_name, header=None)
         if df is not None and not df.empty:
-            self.from_dataframe(df)
+            self.from_dataframe(df, update_set=update_set)
 
     def log_scenario_warnings(
         self, scenario: Session, attribute_name: str, context: str

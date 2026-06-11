@@ -1,7 +1,7 @@
 """Sortable items packing utilities."""
 
 import logging
-from typing import ClassVar, Any, Optional
+from typing import ClassVar, Any, Optional, Set
 import pandas as pd
 from pyetm.models.packables.packable import Packable
 from pyetm.utils import excel_utils
@@ -72,7 +72,7 @@ class SortablePack(Packable):
         except Exception as e:
             logger.warning("Failed processing sortables for '%s': %s", scenario.identifier(), e)
 
-    def from_dataframe(self, df: pd.DataFrame) -> None:
+    def from_dataframe(self, df: pd.DataFrame, update_set: Optional[Set[str]] = None) -> None:
         """Unpack and update sortables for each scenario from the sheet."""
         if df is None or getattr(df, "empty", False):
             return
