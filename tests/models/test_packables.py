@@ -44,7 +44,7 @@ class TestHourlyCurvesPackValidation:
 
     def test_validate_curve_config_with_valid_curve_names(self):
         """Valid curve names should pass through unchanged."""
-        config = ["merit_order", "electricity_price", "heat_network"]
+        config = ["electricity_profiles", "electricity_price", "heat_network_profiles"]
         valid_values, warnings = HourlyOutputCurvesPack.validate_curve_config(config)
 
         assert set(valid_values) == set(config)
@@ -52,20 +52,20 @@ class TestHourlyCurvesPackValidation:
 
     def test_validate_curve_config_with_invalid_curve_names(self):
         """Invalid curve names should be filtered with warnings."""
-        config = ["merit_order", "merit_orderzzz", "invalid_curve"]
+        config = ["electricity_profiles", "electricity_profileszzz", "invalid_curve"]
         valid_values, warnings = HourlyOutputCurvesPack.validate_curve_config(config)
 
-        assert valid_values == ["merit_order"]
+        assert valid_values == ["electricity_profiles"]
         assert len(warnings) == 2
-        assert any("merit_orderzzz" in w for w in warnings)
+        assert any("electricity_profileszzz" in w for w in warnings)
         assert any("invalid_curve" in w for w in warnings)
 
     def test_validate_curve_config_with_mix_of_carriers_and_curve_names(self):
         """Mix of valid carriers and curve names should all be validated."""
-        config = ["electricity", "merit_order", "heat", "invalid_entry"]
+        config = ["electricity", "electricity_profiles", "heat", "invalid_entry"]
         valid_values, warnings = HourlyOutputCurvesPack.validate_curve_config(config)
 
-        assert set(valid_values) == {"electricity", "merit_order", "heat"}
+        assert set(valid_values) == {"electricity", "electricity_profiles", "heat"}
         assert len(warnings) == 1
         assert "invalid_entry" in warnings[0]
 

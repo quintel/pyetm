@@ -124,28 +124,32 @@ class TestValidateCurveNames:
 
     def test_single_string_auto_conversion(self):
         """Test that single string is converted to list."""
-        result = validate_hourly_curve_names("merit_order")
-        assert result == ["merit_order"]
+        result = validate_hourly_curve_names("electricity_profiles")
+        assert result == ["electricity_profiles"]
 
     def test_list_of_valid_curves(self):
         """Test that list of valid curves is accepted."""
-        curves = ["merit_order", "electricity_price", "heat_network"]
+        curves = ["electricity_profiles", "electricity_price", "heat_network_profiles"]
         result = validate_hourly_curve_names(curves)
         assert result == curves
 
     def test_all_valid_curve_types(self):
         """Test that all valid curve types are accepted."""
         all_curves = [
-            "merit_order",
+            "electricity_profiles",
             "electricity_price",
-            "heat_network",
+            "heat_network_profiles",
             "agriculture_heat",
             "household_heat",
             "buildings_heat",
-            "hydrogen",
-            "network_gas",
+            "hydrogen_profiles",
+            "network_gas_profiles",
             "residual_load",
             "hydrogen_integral_cost",
+            "electricity_capacities",
+            "heat_network_capacities",
+            "hydrogen_capacities",
+            "network_gas_capacities",
         ]
         result = validate_hourly_curve_names(all_curves)
         assert result == all_curves
@@ -157,14 +161,14 @@ class TestValidateCurveNames:
 
         error_message = str(exc_info.value)
         assert "Invalid curve names: ['invalid_curve']" in error_message
-        assert "merit_order" in error_message
+        assert "electricity_profiles" in error_message
         assert "electricity_price" in error_message
 
     def test_mixed_valid_and_invalid_curves(self):
         """Test that mixed valid/invalid curves raises ValueError."""
         with pytest.raises(ValueError) as exc_info:
             validate_hourly_curve_names(
-                ["merit_order", "bad_curve", "electricity_price", "another_bad"]
+                ["electricity_profiles", "bad_curve", "electricity_price", "another_bad"]
             )
 
         error_message = str(exc_info.value)

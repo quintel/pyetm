@@ -18,14 +18,18 @@ AnnualExportType = Literal[
 
 # Hourly curve types
 HourlyCurveType = Literal[
-    "merit_order",
+    "electricity_profiles",
     "electricity_price",
-    "heat_network",
+    "heat_network_profiles",
     "agriculture_heat",
     "household_heat",
     "buildings_heat",
-    "hydrogen",
-    "network_gas",
+    "hydrogen_profiles",
+    "network_gas_profiles",
     "residual_load",
     "hydrogen_integral_cost",
+    "electricity_capacities",
+    "heat_network_capacities",
+    "hydrogen_capacities",
+    "network_gas_capacities",
 ]

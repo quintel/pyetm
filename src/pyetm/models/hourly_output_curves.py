@@ -215,6 +215,35 @@ class HourlyOutputCurves(Base):
         # Otherwise assume it's already a Session
         return scenario
 
+    @staticmethod
+    def _handle_deprecated_curve_name(curve_name: str) -> str:
+        """
+        Check if a curve name is deprecated and return the new name.
+        Issues a deprecation warning if the old name is used.
+
+        Args:
+            curve_name: The curve name to check
+
+        Returns:
+            The new curve name (or original if not deprecated)
+        """
+        # Mapping of deprecated curve names to new names
+        deprecated_names = {
+            "merit_order": "electricity_profiles",
+            "heat_network": "heat_network_profiles",
+            "hydrogen": "hydrogen_profiles",
+            "network_gas": "network_gas_profiles",
+        }
+
+        if curve_name in deprecated_names:
+            new_name = deprecated_names[curve_name]
+            logger.warning(
+                f"Curve name '{curve_name}' is deprecated and will be removed in a future version. "
+                f"Please use '{new_name}' instead."
+            )
+            return new_name
+        return curve_name
+
     def __len__(self) -> int:
         return len(self.curves)
 
@@ -230,6 +259,9 @@ class HourlyOutputCurves(Base):
         return [curve.key for curve in self.curves]
 
     def get_contents(self, scenario: Any, curve_name: str) -> Optional[pd.DataFrame]:
+        # Handle deprecated curve names
+        curve_name = self._handle_deprecated_curve_name(curve_name)
+
         # Normalize to Session to get ETEngine session ID
         session = self._normalize_to_session(scenario)
 
@@ -277,10 +309,10 @@ class HourlyOutputCurves(Base):
         except (FileNotFoundError, yaml.YAMLError):
             # Fallback to hardcoded mappings
             result: dict[str, list[str]] = {
-                "electricity": ["merit_order"],
-                "heat": ["heat_network"],
-                "hydrogen": ["hydrogen"],
-                "methane": ["network_gas"],
+                "electricity": ["electricity_profiles"],
+                "heat": ["heat_network_profiles"],
+                "hydrogen": ["hydrogen_profiles"],
+                "methane": ["network_gas_profiles"],
             }
             return result
 
@@ -450,17 +482,24 @@ class HourlyOutputCurves(Base):
     @staticmethod
     def _infer_curve_type(curve_name: str) -> str:
         """Infer curve type from curve name."""
+        # Handle deprecated curve names
+        curve_name = HourlyOutputCurves._handle_deprecated_curve_name(curve_name)
+
         type_mapping = {
             "electricity_price": "price_curve",
-            "merit_order": "merit_curve",
-            "heat_network": "load_curve",
+            "electricity_profiles": "merit_curve",
+            "heat_network_profiles": "load_curve",
             "agriculture_heat": "merit_curve",
             "household_heat": "fever_curve",
             "buildings_heat": "fever_curve",
-            "hydrogen": "reconciliation_curve",
-            "network_gas": "reconciliation_curve",
+            "hydrogen_profiles": "reconciliation_curve",
+            "network_gas_profiles": "reconciliation_curve",
             "residual_load": "query_curve",
             "hydrogen_integral_cost": "query_curve",
+            "electricity_capacities": "capacity_curve",
+            "heat_network_capacities": "capacity_curve",
+            "hydrogen_capacities": "capacity_curve",
+            "network_gas_capacities": "capacity_curve",
         }
         return type_mapping.get(curve_name, "output_curve")
 

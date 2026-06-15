@@ -233,8 +233,11 @@ def test_hourly_output_curves_from_service_result_no_caching():
 def test_hourly_output_curves_infer_curve_type():
     """Test _infer_curve_type method"""
     assert HourlyOutputCurves._infer_curve_type("electricity_price") == "price_curve"
-    assert HourlyOutputCurves._infer_curve_type("merit_order") == "merit_curve"
+    assert HourlyOutputCurves._infer_curve_type("electricity_profiles") == "merit_curve"
+    assert HourlyOutputCurves._infer_curve_type("electricity_capacities") == "capacity_curve"
     assert HourlyOutputCurves._infer_curve_type("unknown_curve") == "output_curve"
+    # Test deprecated curve names (should still work with warning)
+    assert HourlyOutputCurves._infer_curve_type("merit_order") == "merit_curve"
 
 
 def test_hourly_output_curves_fetch_all():

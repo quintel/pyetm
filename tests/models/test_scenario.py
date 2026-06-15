@@ -1557,9 +1557,9 @@ def test_get_hourly_curves_multiple(scenario):
     scenario.hourly_output_curves.get_curves = Mock(return_value={})
 
     # Test with list of identifiers
-    scenario.get_hourly_curves(["electricity", "heat", "merit_order"])
+    scenario.get_hourly_curves(["electricity", "heat", "electricity_profiles"])
     scenario.hourly_output_curves.get_curves.assert_called_with(
-        ["electricity", "heat", "merit_order"], scenario
+        ["electricity", "heat", "electricity_profiles"], scenario
     )
 
 

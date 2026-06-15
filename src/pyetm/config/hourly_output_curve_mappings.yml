@@ -1,12 +1,12 @@
 carrier_mappings:
   electricity:
-    - merit_order
+    - electricity_profiles
 
   heat:
-    - heat_network
+    - heat_network_profiles
 
   hydrogen:
-    - hydrogen
+    - hydrogen_profiles
 
   methane:
-    - network_gas
+    - network_gas_profiles

@@ -19,20 +19,27 @@ Hourly output curves provide time-series data at hourly resolution (8760 hours p
 
 ### Available Curve Types
 
-The following curves are available. **Carrier Type Alias** provides a convenient shorthand for accessing the primary curve for that energy carrier.
+The following curves are available. **Carrier Type Alias** provides a convenient shorthand for accessing curves for that energy carrier.
 
 | Curve Name | Description | Carrier Alias |
 |------------|-------------|---------------|
-| `merit_order` | The load on each participant in the electricity merit order | `electricity` |
-| `electricity_price` |  The hourly price of electricity according to the merit order | — |
-| `heat_network` | The load on each participant in the heat merit order | `heat` |
-| `agriculture_heat` | The load on each participant in the agriculture heat merit order  | — |
-| `household_heat` | The supply and demand of heat in households, including deficits and surpluses due to buffering and time-shifting | — |
-| `buildings_heat` | The supply and demand of heat in buildings, including deficits and surpluses due to buffering and time-shifting | — |
-| `hydrogen` | The total demand and supply for hydrogen, with additional columns for the storage demand and supply | `hydrogen` |
-| `network_gas` | The total demand and supply for network gas, with additional columns for the storage demand and supply. | `methane` |
-| `residual_load` | The residual loads of various carriers | — |
-| `hydrogen_integral_cost` | The levelised costs, production costs per MWh and hourly production curve per hydrogen production technology | — |
+| `electricity_profiles` | The load on each participant in the electricity merit order | `electricity` |
+| `electricity_price` |  The hourly price of electricity according to the merit order | - |
+| `electricity_capacities` | The installed/peak capacity per participant in the electricity merit order | - |
+| `heat_network_profiles` | The load on each participant in the heat merit order | `heat` |
+| `heat_network_capacities` | The installed/peak capacity per participant in the heat merit order | - |
+| `agriculture_heat` | The load on each participant in the agriculture heat merit order  | - |
+| `household_heat` | The supply and demand of heat in households, including deficits and surpluses due to buffering and time-shifting | - |
+| `buildings_heat` | The supply and demand of heat in buildings, including deficits and surpluses due to buffering and time-shifting | - |
+| `hydrogen_profiles` | The total demand and supply for hydrogen, with additional columns for the storage demand and supply | `hydrogen` |
+| `hydrogen_capacities` | The installed/peak capacity for hydrogen participants | - |
+| `network_gas_profiles` | The total demand and supply for network gas, with additional columns for the storage demand and supply. | `methane` |
+| `network_gas_capacities` | The installed/peak capacity for network gas participants | - |
+| `residual_load` | The residual loads of various carriers | - |
+| `hydrogen_integral_cost` | The levelised costs, production costs per MWh and hourly production curve per hydrogen production technology | - |
+
+!!! note "Deprecated curve names"
+    The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `heat_network_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
 
 ### Accessing Single Curves
 
@@ -44,16 +51,17 @@ from pyetm import Scenario
 scenario = Scenario.load(123456)
 
 # By curve name
-merit_curve = scenario.get_hourly_curve("merit_order")
+electricity_curve = scenario.get_hourly_curve("electricity_profiles")
 price_curve = scenario.get_hourly_curve("electricity_price")
+capacity_curve = scenario.get_hourly_curve("electricity_capacities")
 
 # By carrier (convenience aliases)
-merit_curve = scenario.get_hourly_curve("electricity")  # Returns merit_order
-heat_curve = scenario.get_hourly_curve("heat")          # Returns heat_network
-h2_curve = scenario.get_hourly_curve("hydrogen")        # Returns hydrogen
-gas_curve = scenario.get_hourly_curve("methane")        # Returns network_gas
+electricity_curve = scenario.get_hourly_curve("electricity")  # Returns electricity_profiles
+heat_curve = scenario.get_hourly_curve("heat")                # Returns heat_network_profiles
+h2_curve = scenario.get_hourly_curve("hydrogen")              # Returns hydrogen_profiles
+gas_curve = scenario.get_hourly_curve("methane")              # Returns network_gas_profiles
 
-print(merit_curve)  # pandas DataFrame with 8760 rows
+print(electricity_curve)  # pandas DataFrame with 8760 rows
 ```
 
 ### Accessing Multiple Curves
@@ -63,20 +71,20 @@ Get multiple curves at once by passing a list of names or carrier aliases:
 ```python
 # Mix of curve names and carrier aliases
 curves = scenario.get_hourly_curves([
-    "electricity",        # Alias for merit_order
+    "electricity",        # Alias for electricity_profiles
     "electricity_price",  # Curve name
-    "heat",              # Alias for heat_network
-    "hydrogen"           # Alias for hydrogen
+    "heat",              # Alias for heat_network_profiles
+    "hydrogen"           # Alias for hydrogen_profiles
 ])
 # Returns: {
-#   "merit_order": DataFrame,
+#   "electricity_profiles": DataFrame,
 #   "electricity_price": DataFrame,
-#   "heat_network": DataFrame,
-#   "hydrogen": DataFrame
+#   "heat_network_profiles": DataFrame,
+#   "hydrogen_profiles": DataFrame
 # }
 
 # Access individual curves from the result
-merit = curves["merit_order"]
+electricity_profiles = curves["electricity_profiles"]
 price = curves["electricity_price"]
 ```
 
@@ -100,12 +108,12 @@ For advanced use cases, access the underlying collection:
 curves = scenario.hourly_output_curves
 
 # Check if a curve exists
-if curves.is_attached("merit_order"):
-    merit = scenario.get_hourly_curve("merit_order")
+if curves.is_attached("electricity_profiles"):
+    electricity = scenario.get_hourly_curve("electricity_profiles")
 
 # List all available curve names
 available = curves.attached_keys()
-print(available)  # ['merit_order', 'electricity_price', ...]
+print(available)  # ['electricity_profiles', 'electricity_price', ...]
 ```
 
 ### Data Structure

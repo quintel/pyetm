@@ -215,16 +215,19 @@ results
 
 ### Exporting Data
 
-Export your scenario's hourly electricity curves (a dictionary). Access the keys and grab just the `merit_order.csv`:
+Export your scenario's hourly electricity curves (a dictionary). Access the keys and grab just the `electricity_profiles.csv`:
 
 ```python
 # Export hourly curves to CSV via the session
 curves = scenario.get_hourly_curves(['electricity'])
 curves.keys()
-merit_order = curves['merit_order']
+electricity_profiles = curves['electricity_profiles']
 # Save to file
-merit_order.to_csv("hourly_electricity.csv")
+electricity_profiles.to_csv("hourly_electricity.csv")
 ```
+
+!!! note "Deprecated curve names"
+    The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `heat_network_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
 
 You can also export your whole scenario to excel:
 ```python
