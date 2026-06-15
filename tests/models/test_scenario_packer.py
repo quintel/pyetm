@@ -840,30 +840,57 @@ class TestScenarioPackerHelpers:
         """Test metadata extraction and application"""
         packer = ScenarioPacker()
 
-        # Test extraction
-        series = pd.Series({"private": True, "source": " src ", "title": "  title  "})
+        # Test extraction with all fields
+        series = pd.Series({
+            "private": True,
+            "keep_compatible": False,
+            "source": " src ",
+            "title": "  title  "
+        })
 
         meta = packer._extract_metadata_updates(series)
         assert meta == {
             "private": True,
+            "keep_compatible": False,
             "source": "src",
             "title": "title",
         }
 
-        # empty strings trimmed out
-        series_empty = pd.Series({"private": None, "source": " ", "title": ""})
+        # Test with various boolean values
+        series_bools = pd.Series({
+            "private": "yes",
+            "keep_compatible": 1,
+        })
+        meta_bools = packer._extract_metadata_updates(series_bools)
+        assert meta_bools == {
+            "private": True,
+            "keep_compatible": True,
+        }
+
+        # empty/None values trimmed out
+        series_empty = pd.Series({
+            "private": None,
+            "keep_compatible": None,
+            "source": " ",
+            "title": ""
+        })
         meta_empty = packer._extract_metadata_updates(series_empty)
         assert meta_empty == {}
 
         # apply updates
         scenario = Mock(spec=Session)
-        packer._apply_metadata_to_scenario(scenario, {"private": False})
-        scenario.update_metadata.assert_called_once_with(private=False)
+        packer._apply_metadata_to_scenario(
+            scenario, {"private": False, "keep_compatible": True}
+        )
+        scenario.update_metadata.assert_called_once_with(
+            private=False, keep_compatible=True
+        )
 
         # swallow exceptions
+        scenario.update_metadata.reset_mock()
         scenario.update_metadata.side_effect = RuntimeError("boom")
         packer._apply_metadata_to_scenario(
-            scenario, {"private": True}
+            scenario, {"private": True, "keep_compatible": False}
         )  # should not raise
 
         # no updates does nothing

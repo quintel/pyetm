@@ -1001,10 +1001,13 @@ class ScenarioPacker(BaseModel):
         """Extract metadata updates from column data."""
         metadata: Dict[str, Any] = {}
 
-        private = cast_bool(column_data.get("private"))
-        if private is not None:
-            metadata["private"] = private
+        # Extract boolean fields
+        for bool_field in ["private", "keep_compatible"]:
+            value = cast_bool(column_data.get(bool_field))
+            if value is not None:
+                metadata[bool_field] = value
 
+        # Extract string fields
         for field in ["source", "title"]:
             value = column_data.get(field)
             if isinstance(value, str) and value.strip():

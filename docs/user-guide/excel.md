@@ -28,6 +28,7 @@ The `MAIN` sheet contains scenario metadata with the following fields:
 | `title` | String | Scenario name | `My Scenario` |
 | `area_code` | String | Dataset area code (also indicates start year) | `nl2023` |
 | `end_year` | Integer | Future year for the scenario | `2050` |
+| `keep_compatible` | Boolean | Keep scenario compatible with dataset updates | `true`, `false` |
 | `private` | Boolean | Whether scenario is private | `true`, `false` |
 | `custom_curves` | String | Name of custom curves sheet | `CUSTOM_CURVES` |
 | `sortables` | String | Name of sortables sheet | `SORTABLES` |
