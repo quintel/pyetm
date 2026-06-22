@@ -22,6 +22,18 @@ pyetm follows these conventions:
 - **Type hints** for all functions and methods
 - **100 characters** maximum line length
 
+### Engineering principles
+
+Alongside style, contributions should follow the ETM engineering principles:
+
+- **Contributability** — avoid niche tech without a documented reason
+- **Simplicity & modularity** — prefer simple, replaceable components and well-supported libraries over bespoke code
+- **Rigour** — cover new code with unit and integration tests
+- **Traceability** — code should record *why*, not just *how*
+- **Perceived speed** — keep interactive workflows responsive
+
+The full set, including engine-specific principles, is in the [main ETM docs](https://docs.energytransitionmodel.com/contrib/intro).
+
 ## Pull Request Process
 
 1. Fork the repository
