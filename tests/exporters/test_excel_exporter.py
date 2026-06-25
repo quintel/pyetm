@@ -406,7 +406,7 @@ class TestAnnualExportsWriter:
 
         output_path = tmp_path / "exports.xlsx"
         exports_data = {
-            "production_parameters": {
+            "storage_parameters": {
                 "scenario1": pd.DataFrame({
                     "technology": ["solar_pv"],
                     "capacity": [100.0]
@@ -424,7 +424,7 @@ class TestAnnualExportsWriter:
 
         # Verify file was created successfully
         assert output_path.exists()
-        df = pd.read_excel(str(output_path), sheet_name="PRODUCTION_PARAMETERS", header=[0, 1])
+        df = pd.read_excel(str(output_path), sheet_name="STORAGE_PARAMETERS", header=[0, 1])
 
         # Verify scenarios appear as top-level columns
         assert "scenario1" in df.columns.get_level_values(0)

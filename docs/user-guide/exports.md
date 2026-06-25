@@ -9,7 +9,7 @@ For detailed API signatures and parameters, see the [API Reference](../api/index
 The ETM provides two main types of output data:
 
 - **Hourly Output Curves** — 8760-hour resolution data from Merit (electricity) and Fever (heat) calculations
-- **Annual Exports** — Aggregated yearly data including energy flows, production parameters, costs, and sankey diagrams as csvs
+- **Annual Exports** — Aggregated yearly data including energy flows, capacities, costs, storage parameters, and sankey diagrams as csvs
 
 Both types use lazy loading and disk caching for performance.
 
@@ -36,6 +36,9 @@ The following curves are available. **Carrier Type Alias** provides a convenient
 
 !!! note "Deprecated curve names"
     The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `district_heating_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
+
+!!! note "Capacities are annual exports"
+    Installed/peak capacity outputs (`electricity_capacities`, `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities`) are tables rather than 8760-hour series, so they are [annual exports](#annual-exports), not hourly curves. Fetch them with `scenario.get_annual_export("electricity_capacities")`.
 
 ### Accessing Single Curves
 
@@ -128,7 +131,6 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 
 | Export Name | Description |
 |-------------|-------------|
-| `production_parameters` | Production capacity and utilization |
 | `energy_flow` | Energy flows by carrier (future year) |
 | `energy_flow_present` | Energy flows by carrier (present year) |
 | `molecule_flow` | Molecule/hydrogen flows |
@@ -139,9 +141,6 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 | `district_heating_capacities` | Installed/peak capacity per participant in the heat merit order |
 | `hydrogen_capacities` | Installed/peak capacity for hydrogen participants |
 | `network_gas_capacities` | Installed/peak capacity for network gas participants |
-
-!!! note "Capacity tables and engine version"
-    The four capacity exports are only available on modern engines (`pro`). On the stable `2025-01` tag they do not exist; `get_annual_export()` returns `None` in that case.
 
 ### Basic Access
 
@@ -164,7 +163,7 @@ Retrieve several exports in one call:
 # Get multiple exports
 exports = scenario.get_annual_exports([
     "energy_flow",
-    "production_parameters",
+    "storage_parameters",
     "costs_parameters"
 ])
 
@@ -190,7 +189,7 @@ exports = scenario.annual_exports
 
 # List all available export types
 print(exports.names)
-# ['production_parameters', 'energy_flow', 'energy_flow_present', ...]
+# ['energy_flow', 'energy_flow_present', 'molecule_flow', ...]
 
 # Get cached export (returns None if not yet fetched)
 cached = exports.get("energy_flow")

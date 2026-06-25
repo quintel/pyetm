@@ -72,6 +72,17 @@ class AppConfig(BaseSettings):
         ".",
         description="Decimal separator character",
     )
+    metadata_timeout: float = Field(
+        5.0,
+        description="Timeout (in seconds) for curve/export metadata requests to ETEngine.",
+    )
+    metadata_cache_ttl: float = Field(
+        3600.0,
+        description=(
+            "Seconds before in-memory curve/export metadata is refetched. "
+            "Set to 0 to cache for the whole process lifetime."
+        ),
+    )
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         case_sensitive=False,
@@ -197,6 +208,19 @@ def reload_configuration() -> None:
     # Import here to avoid circular dependency
     from pyetm.models.error_policy import get_error_policy
     get_error_policy.cache_clear()
+
+    # Rebuild the shared client so a changed base_url/SSL/token takes effect, and
+    # drop cached metadata so a new environment is not served stale curve names.
+    from pyetm.clients.base_client import get_client
+    if get_client.cache_info().currsize:
+        try:
+            get_client().close()
+        except Exception:
+            logger.debug("Failed to close cached client during reload", exc_info=True)
+    get_client.cache_clear()
+
+    from pyetm.services.curve_metadata_service import CurveMetadataService
+    CurveMetadataService.clear_cache()
 
 
 def _infer_base_url_from_env(environment: str) -> str:

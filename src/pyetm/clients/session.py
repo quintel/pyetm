@@ -283,6 +283,15 @@ class ETMSession:
             headers.update(kwargs["headers"])
             request_kwargs["headers"] = headers
 
+        if "timeout" in kwargs:
+            timeout = kwargs["timeout"]
+            # Accept a plain number of seconds as well as an aiohttp.ClientTimeout.
+            request_kwargs["timeout"] = (
+                aiohttp.ClientTimeout(total=timeout)
+                if isinstance(timeout, (int, float))
+                else timeout
+            )
+
         return request_kwargs
 
     def close(self) -> None:

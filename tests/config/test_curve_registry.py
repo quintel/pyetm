@@ -51,15 +51,24 @@ class TestBuildPath:
     def test_curves_endpoint(self, name, expected):
         assert registry.build_path(42, name) == expected
 
+    def test_capacities_are_not_curves(self):
+        # Capacities are annual exports, not hourly curves; they are not in the registry.
+        assert "electricity_capacities" not in registry.canonical_names()
+
+
 class TestMetadata:
     def test_canonical_names_complete(self):
         names = registry.canonical_names()
         assert "electricity_profiles" in names
+        assert "district_heating_profiles" in names
         assert "heat_network_profiles" not in names  # the wrong guessed name is not canonical
-        assert "electricity_capacities" not in names  # capacity tables are annual exports
+        # Capacities moved to the annual-export cluster.
+        assert "district_heating_capacities" not in names
 
     def test_curve_type_for(self):
         assert registry.curve_type_for("merit_order") == "merit_curve"
+        # Capacities are not curves, so they fall through to the generic type.
+        assert registry.curve_type_for("electricity_capacities") == "output_curve"
         assert registry.curve_type_for("unknown") == "output_curve"
 
     def test_carrier_to_canonical(self):

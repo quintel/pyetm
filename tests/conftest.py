@@ -57,6 +57,61 @@ def clear_client_caches():
     reload_configuration()
 
 
+# Mock CurveMetadataService to prevent API calls during tests
+@pytest.fixture(autouse=True)
+def mock_curve_metadata_service(request, monkeypatch):
+    """Mock CurveMetadataService to return test data without making API calls."""
+    # Skip mocking for tests that specifically test the CurveMetadataService
+    if "test_curve_metadata_service" in str(request.fspath):
+        return
+
+    from pyetm.config import curve_registry
+    from pyetm.services.curve_metadata_service import CurveMetadataService
+
+    # Derive curves from the registry so the mock can never drift from the canonical names.
+    test_curves = curve_registry.default_curve_metadata()
+
+    test_exports = [
+        {"name": "energy_flow", "description": "Test export"},
+        {"name": "energy_flow_present", "description": "Test export"},
+        {"name": "molecule_flow", "description": "Test export"},
+        {"name": "sankey", "description": "Test export"},
+        {"name": "storage_parameters", "description": "Test export"},
+        {"name": "costs_parameters", "description": "Test export"},
+        {"name": "electricity_capacities", "description": "Test export"},
+        {"name": "district_heating_capacities", "description": "Test export"},
+        {"name": "hydrogen_capacities", "description": "Test export"},
+        {"name": "network_gas_capacities", "description": "Test export"},
+    ]
+
+    # Mock the methods to return test data
+    monkeypatch.setattr(
+        CurveMetadataService,
+        "get_curve_metadata",
+        lambda: test_curves
+    )
+    monkeypatch.setattr(
+        CurveMetadataService,
+        "get_export_metadata",
+        lambda: test_exports
+    )
+    monkeypatch.setattr(
+        CurveMetadataService,
+        "get_curve_names",
+        lambda: [c["name"] for c in test_curves]
+    )
+    monkeypatch.setattr(
+        CurveMetadataService,
+        "get_export_names",
+        lambda: [e["name"] for e in test_exports]
+    )
+    monkeypatch.setattr(
+        CurveMetadataService,
+        "get_curve_type",
+        lambda curve_name: next((c["type"] for c in test_curves if c["name"] == curve_name), None)
+    )
+
+
 # Lazy‐import BaseClient
 @pytest.fixture
 def client():

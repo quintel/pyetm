@@ -117,7 +117,7 @@ class ExportConfigResolver:
 
             # Annual exports parsing
             from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
-            from pyetm.models.annual_exports import ANNUAL_EXPORT_TYPES
+            from pyetm.services.curve_metadata_service import CurveMetadataService
 
             annual_exports_val = get("annual_exports")
             include_annual_exports = None
@@ -125,8 +125,8 @@ class ExportConfigResolver:
             # First check if it's a boolean (True/False from Excel)
             exports_bool = parse_boolean_field(annual_exports_val)
             if exports_bool is True:
-                # "true" means export all available annual export types (all 7 types)
-                include_annual_exports = list(ANNUAL_EXPORT_TYPES)
+                # "true" means export all annual export types the engine offers
+                include_annual_exports = CurveMetadataService.get_export_names()
                 logger.info("EXPORT_CONFIG: annual_exports set to 'true', exporting all types: %s", include_annual_exports)
             elif exports_bool is False:
                 include_annual_exports = None
@@ -239,22 +239,26 @@ class ExportConfigResolver:
         else:
             output_carriers = parse_carriers(carriers_val) or parse_carriers(exports_val)
 
-        # Annual exports parsing
-        VALID_ANNUAL_EXPORT_TYPES = {"energy_flow", "sankey", "production_parameters"}
+        # Annual exports parsing. Valid names are discovered from ETEngine (see
+        # CurveMetadataService) so this path stays in sync with the API rather
+        # than hard-coding a list.
+        from pyetm.services.curve_metadata_service import CurveMetadataService
+
+        valid_annual_export_types = set(CurveMetadataService.get_export_names())
         annual_exports_val = get_cell_value("annual_exports")
         include_annual_exports = None
 
         # First check if it's a boolean (True/False from Excel)
         exports_bool = parse_bool(annual_exports_val)
         if exports_bool is True:
-            include_annual_exports = ["energy_flow", "sankey", "production_parameters"]
+            include_annual_exports = CurveMetadataService.get_export_names()
         elif exports_bool is False:
             include_annual_exports = None
         elif isinstance(annual_exports_val, str):
             # Parse as comma-separated list
             parsed = parse_carriers(annual_exports_val)
             if parsed:
-                valid_exports = [e for e in parsed if e in VALID_ANNUAL_EXPORT_TYPES]
+                valid_exports = [e for e in parsed if e in valid_annual_export_types]
                 include_annual_exports = valid_exports if valid_exports else None
 
         config = ExportConfig(

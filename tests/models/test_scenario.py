@@ -1569,7 +1569,7 @@ def test_get_annual_exports_invalid_export_name(scenario):
         scenario.get_annual_exports("invalid_export")
 
     assert "Invalid export names: ['invalid_export']" in str(exc_info.value)
-    assert "production_parameters" in str(exc_info.value)
+    assert "storage_parameters" in str(exc_info.value)
 
 
 def test_get_annual_exports_mixed_valid_and_invalid(scenario):

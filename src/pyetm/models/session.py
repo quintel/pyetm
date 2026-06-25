@@ -886,7 +886,7 @@ class Session(Base):
         self, export_names: AnnualExportType | list[AnnualExportType]
     ) -> dict[str, pd.DataFrame]:
         """Get multiple annual exports by name."""
-        validated_names = validate_export_names(cast("str | list[str]", export_names))
+        validated_names = validate_export_names(export_names)
         return self.annual_exports.retrieve_multiple(
             get_client(), self, validated_names
         )
