@@ -122,7 +122,6 @@ The `annual_exports` field has three modes:
 
 **Available export types**:
 
-- `production_parameters` - Production parameters for technologies
 - `energy_flow` - Energy flow data between nodes
 - `energy_flow_present` - Present-year energy flow data
 - `molecule_flow` - Molecule flow data
@@ -384,7 +383,7 @@ current_config = scenario.get_export_config()
 | `include_input_defaults` | `bool` | Include default input values (not just user-set) |
 | `include_input_min_max` | `bool` | Include min/max bounds for inputs |
 | `hourly_curves` | `List[str]` | Hourly curves for carriers: `"electricity"`, `"heat"`, `"hydrogen"`, `"methane"` |
-| `include_annual_exports` | `List[str]` | Annual exports: `"energy_flow"`, `"sankey"`, `"production_parameters"`, etc. |
+| `include_annual_exports` | `List[str]` | Annual exports: `"energy_flow"`, `"sankey"`, etc. |
 
 ## To Excel
 

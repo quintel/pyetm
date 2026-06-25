@@ -133,7 +133,6 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 
 | Export Name | Description |
 |-------------|-------------|
-| `production_parameters` | Production capacity and utilization |
 | `energy_flow` | Energy flows by carrier (future year) |
 | `energy_flow_present` | Energy flows by carrier (present year) |
 | `molecule_flow` | Molecule/hydrogen flows |
@@ -162,7 +161,6 @@ Retrieve several exports in one call:
 # Get multiple exports
 exports = scenario.get_annual_exports([
     "energy_flow",
-    "production_parameters",
     "costs_parameters"
 ])
 
@@ -188,7 +186,7 @@ exports = scenario.annual_exports
 
 # List all available export types
 print(exports.names)
-# ['production_parameters', 'energy_flow', 'energy_flow_present', ...]
+# ['energy_flow', 'energy_flow_present', ...]
 
 # Get cached export (returns None if not yet fetched)
 cached = exports.get("energy_flow")

@@ -155,11 +155,11 @@ Before pushing changes, verify that your documentation looks correct:
 Documentation is automatically built and deployed via GitHub Actions:
 
 **Workflow** (`.github/workflows/docs.yml`):
-1. **On every push/PR** to `main` or `version-2`:
+1. **On every push/PR** to `main`:
    - Docs are built with `mkdocs build --strict`
    - Build artifacts are uploaded for review
 
-2. **On push to `main` or `version-2`** (not PRs):
+2. **On push to `main`** (not PRs):
    - Docs are deployed to GitHub Pages
    - Published to docs.energytransitionmodel.com
 
