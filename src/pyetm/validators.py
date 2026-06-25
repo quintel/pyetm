@@ -63,7 +63,14 @@ def validate_export_names(export_names: str | list[str]) -> list[str]:
 
 
 def validate_hourly_curve_names(curve_names: str | list[str]) -> list[str]:
-    """Validate and normalize hourly curve names."""
+    """Validate and normalize hourly curve names.
+
+    Legacy engine names (e.g. ``merit_order``, ``heat_network``) are accepted and normalized.
+    """
+    from pyetm.config import curve_registry as registry
+
+    names = [curve_names] if isinstance(curve_names, str) else curve_names
+    canonical = [registry.accept_alias(name) for name in names]
     return cast(
-        list[str], _validate_literal_type(curve_names, HourlyCurveType, "curve names")
+        list[str], _validate_literal_type(canonical, HourlyCurveType, "curve names")
     )

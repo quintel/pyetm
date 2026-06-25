@@ -129,7 +129,7 @@ class TestValidateCurveNames:
 
     def test_list_of_valid_curves(self):
         """Test that list of valid curves is accepted."""
-        curves = ["electricity_profiles", "electricity_price", "heat_network_profiles"]
+        curves = ["electricity_profiles", "electricity_price", "district_heating_profiles"]
         result = validate_hourly_curve_names(curves)
         assert result == curves
 
@@ -138,7 +138,7 @@ class TestValidateCurveNames:
         all_curves = [
             "electricity_profiles",
             "electricity_price",
-            "heat_network_profiles",
+            "district_heating_profiles",
             "agriculture_heat",
             "household_heat",
             "buildings_heat",
@@ -147,12 +147,24 @@ class TestValidateCurveNames:
             "residual_load",
             "hydrogen_integral_cost",
             "electricity_capacities",
-            "heat_network_capacities",
+            "district_heating_capacities",
             "hydrogen_capacities",
             "network_gas_capacities",
         ]
         result = validate_hourly_curve_names(all_curves)
         assert result == all_curves
+
+    def test_legacy_and_old_names_normalized(self):
+        """Legacy/old engine names are accepted and normalized to canonical keys."""
+        result = validate_hourly_curve_names(
+            ["merit_order", "heat_network", "network_gas", "hydrogen"]
+        )
+        assert result == [
+            "electricity_profiles",
+            "district_heating_profiles",
+            "network_gas_profiles",
+            "hydrogen_profiles",
+        ]
 
     def test_invalid_curve_name(self):
         """Test that invalid curve name raises ValueError."""

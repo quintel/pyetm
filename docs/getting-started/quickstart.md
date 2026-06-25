@@ -227,7 +227,7 @@ electricity_profiles.to_csv("hourly_electricity.csv")
 ```
 
 !!! note "Deprecated curve names"
-    The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `heat_network_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
+    The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `district_heating_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
 
 You can also export your whole scenario to excel:
 ```python

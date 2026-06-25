@@ -5,6 +5,29 @@ from typing import Any, Dict, Literal, List, Optional
 from pyetm.services.scenario_runners.base_runner import BaseRunner
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
+from pyetm.config import curve_registry as registry
+
+
+def _session_id(scenario: Any) -> Any:
+    from pyetm.models.scenario import Scenario
+    return scenario.session.id if isinstance(scenario, Scenario) else scenario.id
+
+
+def _output_path(session_id: Any, name: str) -> str:
+    return registry.build_path(session_id, name)
+
+
+def _custom_path(session_id: Any, name: str) -> str:
+    return f"/scenarios/{session_id}/custom_curves/{name}.csv"
+
+
+def _request(path: str) -> Dict[str, Any]:
+    return {
+        "method": "get",
+        "path": path,
+        "payload": None,
+        "kwargs": {"headers": {"Accept": "text/csv"}},
+    }
 
 
 class GenericCurveDownloadRunner(BaseRunner[Any]):
@@ -27,25 +50,15 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
             ServiceResult[io.StringIO]: Success case contains StringIO with CSV data;
                 failure case contains error messages.
         """
-        # Normalize to Session to get ETEngine session ID
-        from pyetm.models.scenario import Scenario
-        session = scenario.session if isinstance(scenario, Scenario) else scenario
-
+        session_id = _session_id(scenario)
         path = (
-            f"/scenarios/{session.id}/custom_curves/{curve_name}.csv"
+            _custom_path(session_id, curve_name)
             if curve_type == "custom"
-            else f"/scenarios/{session.id}/curves/{curve_name}.csv"
+            else _output_path(session_id, curve_name)
         )
-        req = [
-            {
-                "method": "get",
-                "path": path,
-                "payload": None,
-                "kwargs": {"headers": {"Accept": "text/csv"}},
-            }
-        ]
+
         try:
-            result = GenericCurveDownloadRunner._make_batch_requests(client, req)[0]
+            result = GenericCurveDownloadRunner._make_batch_requests(client, [_request(path)])[0]
         except Exception as e:
             return ServiceResult.fail([str(e)])
 
@@ -53,8 +66,6 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
             return ServiceResult.fail(result.errors)
         try:
             resp = result.data
-            # TODO: is this ok to return a io object??
-            # Is this what causes IO pressure?
             return ServiceResult.ok(data=io.StringIO(resp.content.decode("utf-8")))  # type: ignore[union-attr]
         except Exception as e:
             return ServiceResult.fail([f"Failed to parse curve data: {e}"])
@@ -73,31 +84,21 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
 
     @staticmethod
     def _build_requests(
-        scenario: Any, curve_names: List[str], curve_type: Literal["custom", "output"]
+        session_id: Any, curve_names: List[str], curve_type: Literal["custom", "output"]
     ) -> List[Dict[str, Any]]:
-        # Normalize to Session to get ETEngine session ID
-        from pyetm.models.scenario import Scenario
-        session = scenario.session if isinstance(scenario, Scenario) else scenario
-
+        """Build (canonical_name, request) per curve. Results are keyed by canonical name so
+        cache files and curve keys stay independent of the on-the-wire (old) name."""
         requests: List[Dict[str, Any]] = []
         for name in curve_names:
-            path = (
-                f"/scenarios/{session.id}/custom_curves/{name}.csv"
-                if curve_type == "custom"
-                else f"/scenarios/{session.id}/curves/{name}.csv"
-            )
-            requests.append(
-                {
-                    "method": "get",
-                    "path": path,
-                    "payload": None,
-                    "kwargs": {"headers": {"Accept": "text/csv"}},
-                }
-            )
+            if curve_type == "custom":
+                requests.append({"name": name, **_request(_custom_path(session_id, name))})
+            else:
+                canonical = registry.accept_alias(name)
+                requests.append(
+                    {"name": canonical, **_request(_output_path(session_id, canonical))}
+                )
         return requests
 
-    # TODO: convert into generators that can return each item when its done
-    # this will save more memory in the end!
     @staticmethod
     def run(
         client: BaseClient,
@@ -113,22 +114,23 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
             else GenericCurveBulkRunner.DEFAULT_BATCH_SIZE_CUSTOM
         )
 
+        session_id = _session_id(scenario)
+        all_requests = GenericCurveBulkRunner._build_requests(session_id, curve_names, curve_type)
+
         curves_data: Dict[str, io.StringIO] = {}
         errors: List[str] = []
 
-        all_requests = GenericCurveBulkRunner._build_requests(scenario, curve_names, curve_type)
         for start in range(0, len(all_requests), batch_size):
             chunk = all_requests[start : start + batch_size]
             try:
                 results = GenericCurveBulkRunner._make_batch_requests(client, chunk)
             except Exception as e:
                 for req in chunk:
-                    name = req["path"].split("/")[-1].replace(".csv", "")
-                    errors.append(f"{name}: batch error {e}")
+                    errors.append(f"{req['name']}: batch error {e}")
                 continue
 
             for req, result in zip(chunk, results):
-                name = req["path"].split("/")[-1].replace(".csv", "")
+                name = req["name"]
                 if result.success:
                     try:
                         resp = result.data

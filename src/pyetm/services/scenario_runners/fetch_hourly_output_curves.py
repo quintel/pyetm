@@ -11,6 +11,7 @@ from pyetm.services.scenario_runners.fetch_curves_generic import (
 )
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
+from pyetm.config import curve_registry as registry
 
 
 class DownloadHourlyOutputCurveRunner(BaseRunner[io.StringIO]):
@@ -26,23 +27,9 @@ class DownloadHourlyOutputCurveRunner(BaseRunner[io.StringIO]):
 class FetchAllHourlyOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
     """Download all known hourly output curves."""
 
-    # Known curve types from the Rails controller
-    CURVE_TYPES = [
-        "electricity_profiles",
-        "electricity_price",
-        "heat_network_profiles",
-        "agriculture_heat",
-        "household_heat",
-        "buildings_heat",
-        "hydrogen_profiles",
-        "network_gas_profiles",
-        "residual_load",
-        "hydrogen_integral_cost",
-        "electricity_capacities",
-        "heat_network_capacities",
-        "hydrogen_capacities",
-        "network_gas_capacities",
-    ]
+    # Canonical curve keys, single-sourced from the registry. The fetch layer drops any that
+    # do not exist on the target engine dialect (e.g. capacities on a legacy engine).
+    CURVE_TYPES = registry.canonical_names()
 
     @staticmethod
     def run(

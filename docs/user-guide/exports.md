@@ -26,8 +26,8 @@ The following curves are available. **Carrier Type Alias** provides a convenient
 | `electricity_profiles` | The load on each participant in the electricity merit order | `electricity` |
 | `electricity_price` |  The hourly price of electricity according to the merit order | - |
 | `electricity_capacities` | The installed/peak capacity per participant in the electricity merit order | - |
-| `heat_network_profiles` | The load on each participant in the heat merit order | `heat` |
-| `heat_network_capacities` | The installed/peak capacity per participant in the heat merit order | - |
+| `district_heating_profiles` | The load on each participant in the heat merit order | `heat` |
+| `district_heating_capacities` | The installed/peak capacity per participant in the heat merit order | - |
 | `agriculture_heat` | The load on each participant in the agriculture heat merit order  | - |
 | `household_heat` | The supply and demand of heat in households, including deficits and surpluses due to buffering and time-shifting | - |
 | `buildings_heat` | The supply and demand of heat in buildings, including deficits and surpluses due to buffering and time-shifting | - |
@@ -39,7 +39,7 @@ The following curves are available. **Carrier Type Alias** provides a convenient
 | `hydrogen_integral_cost` | The levelised costs, production costs per MWh and hourly production curve per hydrogen production technology | - |
 
 !!! note "Deprecated curve names"
-    The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `heat_network_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
+    The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `district_heating_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
 
 ### Accessing Single Curves
 
@@ -57,7 +57,7 @@ capacity_curve = scenario.get_hourly_curve("electricity_capacities")
 
 # By carrier (convenience aliases)
 electricity_curve = scenario.get_hourly_curve("electricity")  # Returns electricity_profiles
-heat_curve = scenario.get_hourly_curve("heat")                # Returns heat_network_profiles
+heat_curve = scenario.get_hourly_curve("heat")                # Returns district_heating_profiles
 h2_curve = scenario.get_hourly_curve("hydrogen")              # Returns hydrogen_profiles
 gas_curve = scenario.get_hourly_curve("methane")              # Returns network_gas_profiles
 
@@ -73,13 +73,13 @@ Get multiple curves at once by passing a list of names or carrier aliases:
 curves = scenario.get_hourly_curves([
     "electricity",        # Alias for electricity_profiles
     "electricity_price",  # Curve name
-    "heat",              # Alias for heat_network_profiles
+    "heat",              # Alias for district_heating_profiles
     "hydrogen"           # Alias for hydrogen_profiles
 ])
 # Returns: {
 #   "electricity_profiles": DataFrame,
 #   "electricity_price": DataFrame,
-#   "heat_network_profiles": DataFrame,
+#   "district_heating_profiles": DataFrame,
 #   "hydrogen_profiles": DataFrame
 # }
 

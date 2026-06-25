@@ -75,18 +75,18 @@ The `hourly_curves` field has three modes:
    ```
    | hourly_curves                                                          |
    |------------------------------------------------------------------------|
-   | electricity_profiles, heat_network_profiles, hydrogen_profiles         |
+   | electricity_profiles, district_heating_profiles, hydrogen_profiles         |
    ```
 
 **Available carrier types**:
 
 - `electricity` - Maps to ETM: `electricity_profiles`
-- `heat` - Maps to ETM: `heat_network_profiles`
+- `heat` - Maps to ETM: `district_heating_profiles`
 - `hydrogen` - Maps to ETM: `hydrogen_profiles`
 - `methane` - Maps to ETM: `network_gas_profiles`
 
 **Available curve names** (can be specified individually):
-`electricity_profiles`, `electricity_capacities`, `electricity_price`, `heat_network_profiles`, `heat_network_capacities`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `hydrogen_capacities`, `network_gas_profiles`, `network_gas_capacities`, `residual_load`, `hydrogen_integral_cost`
+`electricity_profiles`, `electricity_capacities`, `electricity_price`, `district_heating_profiles`, `district_heating_capacities`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `hydrogen_capacities`, `network_gas_profiles`, `network_gas_capacities`, `residual_load`, `hydrogen_integral_cost`
 
 !!! note "Deprecated curve names"
     The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update to use the new names.

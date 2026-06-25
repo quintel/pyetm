@@ -60,14 +60,18 @@ class HourlyOutputCurvesPack(Packable):
         valid_values = []
         warnings = []
 
+        from pyetm.config import curve_registry as registry
+
         for value in config_values:
             value_str = str(value).strip()
             if not value_str:
                 continue
 
             # Check if it's a valid carrier OR a valid curve name
-            if value_str in valid_carriers or value_str in valid_curve_names:
+            if value_str in valid_carriers:
                 valid_values.append(value_str)
+            elif (canonical := registry.accept_alias(value_str)) in valid_curve_names:
+                valid_values.append(canonical)
             else:
                 # Invalid entry - create helpful warning message
                 warning = (

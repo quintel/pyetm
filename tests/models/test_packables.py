@@ -44,7 +44,7 @@ class TestHourlyCurvesPackValidation:
 
     def test_validate_curve_config_with_valid_curve_names(self):
         """Valid curve names should pass through unchanged."""
-        config = ["electricity_profiles", "electricity_price", "heat_network_profiles"]
+        config = ["electricity_profiles", "electricity_price", "district_heating_profiles"]
         valid_values, warnings = HourlyOutputCurvesPack.validate_curve_config(config)
 
         assert set(valid_values) == set(config)
