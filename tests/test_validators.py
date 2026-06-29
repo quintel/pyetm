@@ -146,10 +146,6 @@ class TestValidateCurveNames:
             "network_gas_profiles",
             "residual_load",
             "hydrogen_integral_cost",
-            "electricity_capacities",
-            "district_heating_capacities",
-            "hydrogen_capacities",
-            "network_gas_capacities",
         ]
         result = validate_hourly_curve_names(all_curves)
         assert result == all_curves

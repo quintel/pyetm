@@ -25,16 +25,12 @@ The following curves are available. **Carrier Type Alias** provides a convenient
 |------------|-------------|---------------|
 | `electricity_profiles` | The load on each participant in the electricity merit order | `electricity` |
 | `electricity_price` |  The hourly price of electricity according to the merit order | - |
-| `electricity_capacities` | The installed/peak capacity per participant in the electricity merit order | - |
 | `district_heating_profiles` | The load on each participant in the heat merit order | `heat` |
-| `district_heating_capacities` | The installed/peak capacity per participant in the heat merit order | - |
 | `agriculture_heat` | The load on each participant in the agriculture heat merit order  | - |
 | `household_heat` | The supply and demand of heat in households, including deficits and surpluses due to buffering and time-shifting | - |
 | `buildings_heat` | The supply and demand of heat in buildings, including deficits and surpluses due to buffering and time-shifting | - |
 | `hydrogen_profiles` | The total demand and supply for hydrogen, with additional columns for the storage demand and supply | `hydrogen` |
-| `hydrogen_capacities` | The installed/peak capacity for hydrogen participants | - |
 | `network_gas_profiles` | The total demand and supply for network gas, with additional columns for the storage demand and supply. | `methane` |
-| `network_gas_capacities` | The installed/peak capacity for network gas participants | - |
 | `residual_load` | The residual loads of various carriers | - |
 | `hydrogen_integral_cost` | The levelised costs, production costs per MWh and hourly production curve per hydrogen production technology | - |
 
@@ -53,7 +49,6 @@ scenario = Scenario.load(123456)
 # By curve name
 electricity_curve = scenario.get_hourly_curve("electricity_profiles")
 price_curve = scenario.get_hourly_curve("electricity_price")
-capacity_curve = scenario.get_hourly_curve("electricity_capacities")
 
 # By carrier (convenience aliases)
 electricity_curve = scenario.get_hourly_curve("electricity")  # Returns electricity_profiles
@@ -140,6 +135,13 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 | `sankey` | Sankey diagram data |
 | `storage_parameters` | Storage capacity and parameters |
 | `costs_parameters` | Cost breakdown by technology |
+| `electricity_capacities` | Installed/peak capacity per participant in the electricity merit order |
+| `district_heating_capacities` | Installed/peak capacity per participant in the heat merit order |
+| `hydrogen_capacities` | Installed/peak capacity for hydrogen participants |
+| `network_gas_capacities` | Installed/peak capacity for network gas participants |
+
+!!! note "Capacity tables and engine version"
+    The four capacity exports are only available on modern engines (`pro`). On the stable `2025-01` tag they do not exist; `get_annual_export()` returns `None` in that case.
 
 ### Basic Access
 

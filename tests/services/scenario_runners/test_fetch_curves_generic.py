@@ -68,17 +68,6 @@ def test_renamed_curve_uses_old_wire_name():
     assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/heat_network.csv"
 
 
-def test_capacity_uses_export_endpoint():
-    mock_client, mock_scenario = _client_scenario()
-
-    with patch.object(
-        GenericCurveDownloadRunner,
-        "_make_batch_requests",
-        return_value=[ServiceResult.ok(data=_ok_csv_response("a,b"))],
-    ) as patched:
-        GenericCurveDownloadRunner.run(mock_client, mock_scenario, "electricity_capacities")
-    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/electricity_capacities"
-
 
 def test_generic_curve_download_runner_http_error():
     mock_client, mock_scenario = _client_scenario()

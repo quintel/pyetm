@@ -1,4 +1,4 @@
-"""Single source of truth for hourly output curve / capacity export names.
+"""Single source of truth for hourly output curve names.
 
 etengine renamed the hourly curve endpoints (``merit_order`` -> ``electricity_profiles``,
 ``heat_network`` -> ``district_heating_profiles``, ``hydrogen`` -> ``hydrogen_profiles``,
@@ -11,9 +11,7 @@ Each logical curve maps to:
 - ``canonical``: the stable, public key used inside pyetm (cache files, ``curve.key``); the
   modern name.
 - ``wire``: the name sent in the request URL (the universal old name where one exists).
-- ``endpoint``: ``curves`` -> /scenarios/{id}/curves/{name}.csv;
-  ``export`` -> /scenarios/{id}/{name} (scenario-member, like annual exports). Capacity exports
-  are modern-only and simply 404 (and are skipped) on stable engines.
+- ``endpoint``: ``curves`` -> /scenarios/{id}/curves/{name}.csv
 """
 
 from __future__ import annotations
@@ -51,11 +49,6 @@ _SPECS: tuple[CurveSpec, ...] = (
     CurveSpec("buildings_heat", "buildings_heat", "curves", "fever_curve"),
     CurveSpec("residual_load", "residual_load", "curves", "query_curve"),
     CurveSpec("hydrogen_integral_cost", "hydrogen_integral_cost", "curves", "query_curve"),
-    # Capacity exports (modern-only, scenario-member export routes; 404 -> skipped on 2025-01)
-    CurveSpec("electricity_capacities", "electricity_capacities", "export", "capacity_curve"),
-    CurveSpec("district_heating_capacities", "district_heating_capacities", "export", "capacity_curve"),
-    CurveSpec("hydrogen_capacities", "hydrogen_capacities", "export", "capacity_curve"),
-    CurveSpec("network_gas_capacities", "network_gas_capacities", "export", "capacity_curve"),
 )
 
 _BY_CANONICAL: dict[str, CurveSpec] = {s.canonical: s for s in _SPECS}

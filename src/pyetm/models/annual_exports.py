@@ -20,6 +20,10 @@ ANNUAL_EXPORT_TYPES = [
     "sankey",
     "storage_parameters",
     "costs_parameters",
+    "electricity_capacities",
+    "district_heating_capacities",
+    "hydrogen_capacities",
+    "network_gas_capacities",
 ]
 
 

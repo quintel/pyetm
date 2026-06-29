@@ -51,29 +51,15 @@ class TestBuildPath:
     def test_curves_endpoint(self, name, expected):
         assert registry.build_path(42, name) == expected
 
-    @pytest.mark.parametrize(
-        "name,expected",
-        [
-            ("electricity_capacities", "/scenarios/42/electricity_capacities"),
-            ("district_heating_capacities", "/scenarios/42/district_heating_capacities"),
-            ("hydrogen_capacities", "/scenarios/42/hydrogen_capacities"),
-            ("network_gas_capacities", "/scenarios/42/network_gas_capacities"),
-        ],
-    )
-    def test_capacities_use_export_endpoint(self, name, expected):
-        assert registry.build_path(42, name) == expected
-
-
 class TestMetadata:
     def test_canonical_names_complete(self):
         names = registry.canonical_names()
         assert "electricity_profiles" in names
-        assert "district_heating_capacities" in names
         assert "heat_network_profiles" not in names  # the wrong guessed name is not canonical
+        assert "electricity_capacities" not in names  # capacity tables are annual exports
 
     def test_curve_type_for(self):
         assert registry.curve_type_for("merit_order") == "merit_curve"
-        assert registry.curve_type_for("electricity_capacities") == "capacity_curve"
         assert registry.curve_type_for("unknown") == "output_curve"
 
     def test_carrier_to_canonical(self):

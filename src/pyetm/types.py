@@ -14,6 +14,10 @@ AnnualExportType = Literal[
     "sankey",
     "storage_parameters",
     "costs_parameters",
+    "electricity_capacities",
+    "district_heating_capacities",
+    "hydrogen_capacities",
+    "network_gas_capacities",
 ]
 
 # Hourly curve types
@@ -28,8 +32,4 @@ HourlyCurveType = Literal[
     "network_gas_profiles",
     "residual_load",
     "hydrogen_integral_cost",
-    "electricity_capacities",
-    "district_heating_capacities",
-    "hydrogen_capacities",
-    "network_gas_capacities",
 ]

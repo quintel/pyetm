@@ -114,6 +114,7 @@ nav:
     - Guide: contributing/guide.md
     - Development: contributing/development.md
     - Testing: contributing/testing.md
+  - Changelog: changelog.md
 
 extra:
   social:
