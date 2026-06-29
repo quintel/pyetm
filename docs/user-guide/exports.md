@@ -37,9 +37,6 @@ The following curves are available. **Carrier Type Alias** provides a convenient
 !!! note "Deprecated curve names"
     The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update your code to use the new names (`electricity_profiles`, `district_heating_profiles`, `hydrogen_profiles`, `network_gas_profiles`).
 
-!!! note "Capacities are annual exports"
-    Installed/peak capacity outputs (`electricity_capacities`, `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities`) are tables rather than 8760-hour series, so they are [annual exports](#annual-exports), not hourly curves. Fetch them with `scenario.get_annual_export("electricity_capacities")`.
-
 ### Accessing Single Curves
 
 Get a single curve by name or carrier type alias:

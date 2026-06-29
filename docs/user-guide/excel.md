@@ -88,14 +88,8 @@ The `hourly_curves` field has three modes:
 **Available curve names** (can be specified individually):
 `electricity_profiles`, `electricity_price`, `district_heating_profiles`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `network_gas_profiles`, `residual_load`, `hydrogen_integral_cost`
 
-!!! note "Capacities are annual exports"
-    Capacity outputs (`electricity_capacities`, `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities`) are annual exports, not hourly curves — select them via the `annual_exports` field below.
-
 !!! note "Deprecated curve names"
     The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update to use the new names.
-
-!!! note "Validation"
-    Invalid carrier or curve names will be filtered out with a warning. Only valid entries will be exported.
 
 #### Annual Exports Options
 
