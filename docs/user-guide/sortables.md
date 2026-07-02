@@ -70,7 +70,7 @@ sortables.update({
 #  [WARNING] Unknown items not in current sortable: ['unknown_tech']. Fetch sortables first to see valid items.
 ```
 
-Update and upload to API (validates and raises exception if invalid)
+Update and upload to API (invalid sortables are excluded and warned about; valid ones are still applied)
 ```python
 scenario.update_sortables({
     "forecast_storage": ["households_flexibility_p2p_electricity", "transport_car_flexibility_p2p_electricity", "transport_bus_flexibility_p2p_electricity"],

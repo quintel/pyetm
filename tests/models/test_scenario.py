@@ -389,8 +389,46 @@ def test_update_inputs_with_warnings(monkeypatch, scenario, inputs_json, ok_serv
     assert scenario._inputs
 
 
+def test_update_inputs_excludes_invalid(monkeypatch, scenario, inputs_json, ok_service_result):
+    """Invalid inputs are excluded from the upload; valid inputs still go through"""
+    scenario._inputs = Inputs.from_json(inputs_json)
+
+    sent_payloads = []
+
+    def mock_runner_run(client, scen, inputs):
+        sent_payloads.append(inputs)
+        return ok_service_result({"scenario": {"id": scen.id}})
+
+    monkeypatch.setattr(UpdateInputsRunner, "run", mock_runner_run)
+
+    scenario.update_user_values(
+        {"investment_costs_co2_ccs": 42.5, "invalid_input": "bad_value"}
+    )
+
+    # Only the valid input is sent to the API
+    assert sent_payloads == [{"investment_costs_co2_ccs": 42.5}]
+    # The valid input is still applied locally
+    assert scenario.inputs["investment_costs_co2_ccs"].user == 42.5
+    # The user is made aware the other input was excluded
+    assert scenario.inputs.warnings.has_warnings("invalid_input")
+
+
+def test_update_inputs_all_invalid_skips_api_call(monkeypatch, scenario, inputs_json):
+    """When every input is invalid, no API call is made and no exception is raised"""
+    scenario._inputs = Inputs.from_json(inputs_json)
+
+    def mock_runner_run(client, scen, inputs):
+        raise AssertionError("API should not be called when there are no valid updates")
+
+    monkeypatch.setattr(UpdateInputsRunner, "run", mock_runner_run)
+
+    scenario.update_user_values({"invalid_input": "bad_value"})
+
+    assert scenario.inputs.warnings.has_warnings("invalid_input")
+
+
 def test_update_inputs_failure(monkeypatch, scenario, inputs_json, fail_service_result):
-    """Test inputs update failure"""
+    """A genuine API/server-side rejection of a valid payload still raises ScenarioError"""
     scenario._inputs = Inputs.from_json(inputs_json)
 
     monkeypatch.setattr(
@@ -400,7 +438,7 @@ def test_update_inputs_failure(monkeypatch, scenario, inputs_json, fail_service_
     )
 
     with pytest.raises(ScenarioError, match="Could not update user values"):
-        scenario.update_user_values({"invalid_input": "bad_value"})
+        scenario.update_user_values({"investment_costs_co2_ccs": 42.5})
 
 
 def test_update_inputs_empty_dict(monkeypatch, scenario, ok_service_result, inputs_json):
@@ -547,7 +585,7 @@ def test_update_sortables(monkeypatch, scenario, ok_service_result):
     mock_sortables.update.assert_called_once_with(updates)
 
 
-def test_update_sortables_validation_error(scenario):
+def test_update_sortables_validation_error(monkeypatch, scenario):
     from pyetm.models.warnings import WarningCollector
 
     updates = {"nonexistent": [1, 2, 3]}
@@ -555,10 +593,46 @@ def test_update_sortables_validation_error(scenario):
     mock_sortables = Mock()
     error_collector = WarningCollector.with_warning("nonexistent", "Sortable does not exist")
     mock_sortables.is_valid_update.return_value = {"nonexistent": error_collector}
+    mock_sortables.update = Mock()
     scenario._sortables = mock_sortables
 
-    with pytest.raises(ScenarioError):
-        scenario.update_sortables(updates)
+    def mock_runner_run(*args, **kwargs):
+        raise AssertionError("API should not be called when there are no valid updates")
+
+    monkeypatch.setattr(UpdateSortablesRunner, "run", mock_runner_run)
+
+    # Invalid sortable is excluded; no exception is raised
+    scenario.update_sortables(updates)
+
+    # Local cache is still synced with the full (unfiltered) dict, which warns
+    # about the excluded sortable without applying it
+    mock_sortables.update.assert_called_once_with(updates)
+
+
+def test_update_sortables_excludes_invalid(monkeypatch, scenario, ok_service_result):
+    from pyetm.models.warnings import WarningCollector
+
+    updates = {"forecast_storage": [1, 2, 3], "nonexistent": [4, 5, 6]}
+
+    mock_sortables = Mock()
+    error_collector = WarningCollector.with_warning("nonexistent", "Sortable does not exist")
+    mock_sortables.is_valid_update.return_value = {"nonexistent": error_collector}
+    mock_sortables.update = Mock()
+    scenario._sortables = mock_sortables
+
+    calls = []
+
+    def mock_runner_run(client, scen, name, order, subtype=None):
+        calls.append((name, order))
+        return ok_service_result({})
+
+    monkeypatch.setattr(UpdateSortablesRunner, "run", mock_runner_run)
+
+    scenario.update_sortables(updates)
+
+    # Only the valid sortable is sent to the API
+    assert calls == [("forecast_storage", [1, 2, 3])]
+    mock_sortables.update.assert_called_once_with(updates)
 
 
 def test_remove_sortables(monkeypatch, scenario, ok_service_result):
@@ -727,12 +801,16 @@ def test_scenario_update_custom_curves_success(monkeypatch, ok_service_result):
     assert scenario.custom_curves.curves[0].key == "test_curve"
 
 
-def test_scenario_update_custom_curves_validation_error():
-    """Test custom curves update with validation errors"""
+def test_scenario_update_custom_curves_validation_error(monkeypatch):
+    """Invalid curves are excluded from the upload; no exception is raised"""
     from pyetm.models.custom_curves import CustomCurve, CustomCurves
     from pyetm.models.warnings import WarningCollector
+    from pyetm.services.scenario_runners.update_custom_curves import (
+        UpdateCustomCurvesRunner,
+    )
 
     scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario._custom_curves = CustomCurves(curves=[])
 
     # Create custom curves
     curve = CustomCurve(key="invalid_curve", type="profile")
@@ -746,13 +824,59 @@ def test_scenario_update_custom_curves_validation_error():
 
     custom_curves.validate_for_upload = mock_validate
 
-    # Should raise ScenarioError due to validation failure
-    with pytest.raises(ScenarioError) as exc_info:
-        scenario.update_custom_curves(custom_curves)
+    def mock_runner_run(*args, **kwargs):
+        raise AssertionError("API should not be called when there are no valid curves")
 
-    assert "Could not update custom curves" in str(exc_info.value)
-    assert "invalid_curve" in str(exc_info.value)
-    assert "Curve contains non-numeric values" in str(exc_info.value)
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner_run)
+
+    # Should not raise; the invalid curve is excluded from the upload
+    scenario.update_custom_curves(custom_curves)
+
+    warning_messages = [w.message for w in scenario.warnings.get_by_field("custom_curves")]
+    assert any("invalid_curve" in m for m in warning_messages)
+    assert any("Curve contains non-numeric values" in m for m in warning_messages)
+    # The excluded curve is not merged into the local collection
+    assert len(scenario.custom_curves.curves) == 0
+
+
+def test_scenario_update_custom_curves_excludes_invalid(monkeypatch, ok_service_result):
+    """A mix of valid and invalid curves: only the valid one is uploaded and merged"""
+    from pyetm.models.custom_curves import CustomCurve, CustomCurves
+    from pyetm.models.warnings import WarningCollector
+    from pyetm.services.scenario_runners.update_custom_curves import (
+        UpdateCustomCurvesRunner,
+    )
+
+    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario._custom_curves = CustomCurves(curves=[])
+
+    valid_curve = CustomCurve(key="valid_curve", type="profile")
+    invalid_curve = CustomCurve(key="invalid_curve", type="profile")
+    custom_curves = CustomCurves(curves=[valid_curve, invalid_curve])
+
+    def mock_validate():
+        warning_collector = WarningCollector()
+        warning_collector.add("invalid_curve", "Curve has no data available")
+        return {"invalid_curve": warning_collector}
+
+    custom_curves.validate_for_upload = mock_validate
+
+    uploaded_keys = []
+
+    def mock_runner_run(client, scen, curves):
+        uploaded_keys.extend(curve.key for curve in curves.curves)
+        return ok_service_result({"uploaded_curves": uploaded_keys})
+
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner_run)
+
+    scenario.update_custom_curves(custom_curves)
+
+    # Only the valid curve is sent to the API
+    assert uploaded_keys == ["valid_curve"]
+    # Only the valid curve is merged locally
+    assert [c.key for c in scenario.custom_curves.curves] == ["valid_curve"]
+    warning_messages = [w.message for w in scenario.warnings.get_by_field("custom_curves")]
+    assert any("invalid_curve" in m for m in warning_messages)
 
 
 def test_scenario_update_custom_curves_runner_failure(monkeypatch, fail_service_result):
@@ -880,12 +1004,16 @@ def test_scenario_update_custom_curves_adds_new_curve(monkeypatch, ok_service_re
     assert curve_keys == {"existing_curve", "new_curve"}
 
 
-def test_scenario_update_custom_curves_multiple_validation_errors():
-    """Test custom curves update with multiple validation errors"""
+def test_scenario_update_custom_curves_multiple_validation_errors(monkeypatch):
+    """All curves invalid: none are uploaded, no exception is raised, warnings cover both"""
     from pyetm.models.custom_curves import CustomCurve, CustomCurves
     from pyetm.models.warnings import WarningCollector
+    from pyetm.services.scenario_runners.update_custom_curves import (
+        UpdateCustomCurvesRunner,
+    )
 
     scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario._custom_curves = CustomCurves(curves=[])
 
     # Create custom curves
     curves = [
@@ -913,17 +1041,23 @@ def test_scenario_update_custom_curves_multiple_validation_errors():
 
     custom_curves.validate_for_upload = mock_validate
 
-    # Should raise ScenarioError with all validation errors
-    with pytest.raises(ScenarioError) as exc_info:
-        scenario.update_custom_curves(custom_curves)
+    def mock_runner_run(*args, **kwargs):
+        raise AssertionError("API should not be called when there are no valid curves")
 
-    error_message = str(exc_info.value)
-    assert "Could not update custom curves" in error_message
-    assert "curve1" in error_message
-    assert "curve2" in error_message
-    assert "Wrong length" in error_message
-    assert "Non-numeric values" in error_message
-    assert "No data available" in error_message
+    monkeypatch.setattr(UpdateCustomCurvesRunner, "run", mock_runner_run)
+
+    # Should not raise; both curves are excluded from the upload
+    scenario.update_custom_curves(custom_curves)
+
+    warning_messages = " ".join(
+        w.message for w in scenario.warnings.get_by_field("custom_curves")
+    )
+    assert "curve1" in warning_messages
+    assert "curve2" in warning_messages
+    assert "Wrong length" in warning_messages
+    assert "Non-numeric values" in warning_messages
+    assert "No data available" in warning_messages
+    assert len(scenario.custom_curves.curves) == 0
 
 
 def test_scenario_remove_custom_curves_success(monkeypatch, ok_service_result):

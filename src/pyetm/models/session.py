@@ -533,14 +533,19 @@ class Session(Base):
             skip_upload: If True, skip API call and validation, only update local cache
         """
         if not skip_upload:
-            # Update them in the Inputs object, and check validation
+            # Exclude invalid inputs from the payload; valid ones are still sent.
             validity_errors = self.inputs.is_valid_update(update_inputs)
-            self._handle_validity_errors(validity_errors, "user values")
+            valid_inputs = {
+                key: value
+                for key, value in update_inputs.items()
+                if key not in validity_errors
+            }
 
-            result = UpdateInputsRunner.run(get_client(), self, update_inputs)
+            if valid_inputs:
+                result = UpdateInputsRunner.run(get_client(), self, valid_inputs)
 
-            if not result.success:
-                raise ScenarioError(f"Could not update user values: {result.errors}")
+                if not result.success:
+                    raise ScenarioError(f"Could not update user values: {result.errors}")
 
         self.inputs.update(update_inputs)
 
@@ -608,12 +613,16 @@ class Session(Base):
             skip_upload: If True, skip API calls and validation, only update local cache
         """
         if not skip_upload:
-            # Validate the updates first
+            # Exclude invalid sortables from the updates; valid ones are still sent.
             validity_errors = self.sortables.is_valid_update(update_sortables)
-            self._handle_validity_errors(validity_errors, "sortables")
+            valid_updates = {
+                name: order
+                for name, order in update_sortables.items()
+                if name not in validity_errors
+            }
 
             # Make individual API calls for each sortable as there is no bulk endpoint
-            for name, order in update_sortables.items():
+            for name, order in valid_updates.items():
                 if name.startswith("heat_network_"):
                     subtype = name.replace("heat_network_", "")
                     result = UpdateSortablesRunner.run(
@@ -702,19 +711,36 @@ class Session(Base):
             custom_curves: CustomCurves object containing curves to upload
             skip_upload: If True, skip API call and validation, only update local cache
         """
-        if not skip_upload:
-            # Validate curves before uploading
-            validity_errors = custom_curves.validate_for_upload()
-            self._handle_validity_errors(validity_errors, "custom curves")
+        curves_to_merge = custom_curves.curves
 
-            # Upload curves
-            result = UpdateCustomCurvesRunner.run(get_client(), self, custom_curves)
-            if not result.success:
-                raise ScenarioError(f"Could not update custom curves: {result.errors}")
+        if not skip_upload:
+            # Exclude invalid curves from the upload; valid ones are still sent.
+            validity_errors = custom_curves.validate_for_upload()
+            valid_curves = [
+                curve for curve in custom_curves.curves if curve.key not in validity_errors
+            ]
+
+            for key, warning_collector in validity_errors.items():
+                self.add_warning(
+                    "custom_curves",
+                    f"Excluded curve '{key}' from upload: "
+                    f"{[w.message for w in warning_collector]}",
+                )
+            if validity_errors:
+                self.auto_show_warnings()
+
+            curves_to_merge = valid_curves
+
+            if valid_curves:
+                result = UpdateCustomCurvesRunner.run(
+                    get_client(), self, CustomCurves(curves=valid_curves)
+                )
+                if not result.success:
+                    raise ScenarioError(f"Could not update custom curves: {result.errors}")
 
         # TODO: this should be done in custom curves
         # Update the scenario's custom curves object
-        for new_curve in custom_curves.curves:
+        for new_curve in curves_to_merge:
             existing_curve = self.custom_curves._find(new_curve.key)
             if existing_curve:
                 existing_curve.file_path = new_curve.file_path
@@ -1000,22 +1026,6 @@ class Session(Base):
             if submodel is not None and len(submodel.warnings) > 0:
                 print(f"\n{name} warnings:")
                 submodel.show_warnings()
-
-    def _handle_validity_errors(
-        self, validity_errors: Dict[str, Any], context: str
-    ) -> None:
-        """
-        Helper method to format and raise ScenarioError for validity errors.
-        """
-        if not validity_errors:
-            return
-
-        error_summary = []
-        for key, warning_collector in validity_errors.items():
-            warnings_list = [w.message for w in warning_collector]
-            error_summary.append(f"{key}: {warnings_list}")
-
-        raise ScenarioError(f"Could not update {context}: {error_summary}")
 
     @property
     def couplings(self) -> Couplings:
