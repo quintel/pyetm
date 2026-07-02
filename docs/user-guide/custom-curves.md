@@ -94,7 +94,10 @@ df = pd.DataFrame({
 
 new_curves = CustomCurves._from_dataframe(df, scenario_id=scenario.session.id)
 
-# Validate before upload
+# scenario.update_custom_curves() validates internally: invalid curves are
+# excluded from the upload and a warning is shown for each, while valid
+# curves are still uploaded and applied. The manual pre-check below remains
+# useful if you want to inspect errors before attempting the upload at all.
 validation_errors = new_curves.validate_for_upload()
 if not validation_errors:
     # Upload to API immediately (default behavior)

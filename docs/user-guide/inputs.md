@@ -59,7 +59,7 @@ inputs.update({"nonexistent_input": 100.0})
 #  [WARNING] Input 'nonexistent_input' does not exist
 ```
 
-Update and upload to API immediately (validates and raises exception if invalid)
+Update and upload to API immediately (invalid inputs are excluded and warned about; valid inputs are still applied)
 ```python
 scenario.update_user_values({
     "investment_costs_co2_ccs": 50.0,
@@ -101,7 +101,7 @@ scenario.set_user_values_from_dataframe(df)
     - Invalid values are **rejected** (not applied) to maintain data integrity
     - Non-existent input keys trigger warnings
     - `inputs.is_valid_update()` pre-validates without side effects (returns `WarningCollector` dict)
-    - `scenario.update_user_values()` validates and raises `ScenarioError` before API upload
+    - `scenario.update_user_values()` excludes invalid inputs from the API payload (warnings are shown for excluded keys); valid inputs are still sent and applied. `ScenarioError` is only raised if the API itself rejects the request
     - Warnings auto-clear on each `update()` call to show only current issues
 - **Reset values**: Set a user value to `"reset"` to clear it (reverts to default)
 - **Automatic coercion**:
