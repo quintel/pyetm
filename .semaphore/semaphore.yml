@@ -25,3 +25,6 @@ blocks:
         - name: Test
           commands:
             - poetry run pytest
+        - name: Lint
+          commands:
+            - SKIP=pytest,mkdocs-build poetry run pre-commit run --all-files --show-diff-on-failure
