@@ -53,6 +53,8 @@ def clear_client_caches():
     from pyetm.clients.base_client import get_client
     from pyetm.config.settings import reload_configuration
 
+    if get_client.cache_info().currsize:
+        get_client().close()
     get_client.cache_clear()
     reload_configuration()
 
@@ -63,7 +65,9 @@ def client():
     from pyetm.clients.base_client import BaseClient
 
     # Create a new client instance for each test (not using get_client())
-    return BaseClient()
+    client = BaseClient()
+    yield client
+    client.close()
 
 
 # Lazy‐import Scenario

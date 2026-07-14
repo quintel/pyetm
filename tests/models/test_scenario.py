@@ -1628,8 +1628,6 @@ def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_sc
 
     interpolated_data = [{"id": 88884, "area_code": "nl", "end_year": 2040, "start_year": 2023}]
 
-    mock_client = BaseClient()
-
     calls = []
 
     def mock_run(client, scenario_ids, end_years):
@@ -1641,13 +1639,16 @@ def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_sc
     scenario_2030 = dummy_scenario(12345, end_year=2030)
     scenario_2050 = dummy_scenario(67890, end_year=2050)
 
-    interpolated = Session.interpolate([scenario_2030, scenario_2050], 2040, client=mock_client)
+    with BaseClient() as mock_client:
+        interpolated = Session.interpolate(
+            [scenario_2030, scenario_2050], 2040, client=mock_client
+        )
 
-    assert len(interpolated) == 1
-    assert interpolated[0].id == 88884
-    # Verify custom client was used
-    assert len(calls) == 1
-    assert calls[0][0] is mock_client
+        assert len(interpolated) == 1
+        assert interpolated[0].id == 88884
+        # Verify custom client was used
+        assert len(calls) == 1
+        assert calls[0][0] is mock_client
 
 
 def test_interpolate_rejects_duplicate_end_years(dummy_scenario):

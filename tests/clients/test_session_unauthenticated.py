@@ -18,14 +18,17 @@ def test_session_headers_without_token(unauthenticated_config):
         mock_get_settings.return_value = unauthenticated_config
         session = ETMSession()
 
-    # Verify token is None
-    assert session.token is None
+    try:
+        # Verify token is None
+        assert session.token is None
 
-    # Verify Authorization header is not present
-    assert "Authorization" not in session.headers
+        # Verify Authorization header is not present
+        assert "Authorization" not in session.headers
 
-    # Verify Accept header is still present
-    assert session.headers["Accept"] == "application/json"
+        # Verify Accept header is still present
+        assert session.headers["Accept"] == "application/json"
+    finally:
+        session.close()
 
 
 def test_session_headers_with_token(monkeypatch):
@@ -38,15 +41,18 @@ def test_session_headers_with_token(monkeypatch):
 
     session = ETMSession()
 
-    # Verify token is set
-    assert session.token == "etm_test_token_123"
+    try:
+        # Verify token is set
+        assert session.token == "etm_test_token_123"
 
-    # Verify Authorization header is present
-    assert "Authorization" in session.headers
-    assert session.headers["Authorization"] == "Bearer etm_test_token_123"
+        # Verify Authorization header is present
+        assert "Authorization" in session.headers
+        assert session.headers["Authorization"] == "Bearer etm_test_token_123"
 
-    # Verify Accept header is still present
-    assert session.headers["Accept"] == "application/json"
+        # Verify Accept header is still present
+        assert session.headers["Accept"] == "application/json"
+    finally:
+        session.close()
 
 
 def test_response_401_error_without_token():

@@ -6,37 +6,38 @@ import asyncio
 import ssl
 import threading
 from pathlib import Path
-from typing import Optional, Dict, Any, cast
-from pydantic import BaseModel
+from types import TracebackType
+from typing import Any, cast
 
 import aiohttp
+from pydantic import BaseModel
+
 from pyetm.config.settings import get_settings
 
 
 class ETMResponse(BaseModel):
-    """
-    Response object that works with both sync and async operations.
+    """Response object that works with both sync and async operations.
     """
 
-    headers: Dict[str, str]
+    headers: dict[str, str]
     url: str
     text: str = ""
     status_code: int
     _content: bytes = b""
-    _json_data: Optional[Dict[str, Any]] = None
+    _json_data: dict[str, Any] | None = None
 
     @property
     def ok(self) -> bool:
         return 200 <= self.status_code < 300
 
-    def json(self) -> Dict[str, Any]:  # type: ignore[override]
+    def json(self) -> dict[str, Any]:  # type: ignore[override]
         """Parse response body as JSON."""
         if self._json_data is not None:
             return self._json_data
 
         import json
 
-        return cast(Dict[str, Any], json.loads(self.text))
+        return cast(dict[str, Any], json.loads(self.text))
 
     # TODO: why encode again? I understand that curves are creating IO streams
     # but why so generic? Also, curves seem to be the only ones accessing this prop
@@ -88,7 +89,7 @@ class ETMResponse(BaseModel):
         text = self.text.strip()
         return f"{self.status_code}: {text}" if text else f"{self.status_code}"
 
-    def raise_for_status(self, token: Optional[str] = None) -> None:
+    def raise_for_status(self, token: str | None = None) -> None:
         """Raise appropriate exception for HTTP errors."""
         if self.status_code == 401:
             if not token:
@@ -116,11 +117,11 @@ class ETMSession:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        token: Optional[str] = None,
-        ssl_verify: Optional[bool] = None,
-        trust_env: Optional[bool] = None,
-        ssl_cert_path: Optional[Path] = None,
+        base_url: str | None = None,
+        token: str | None = None,
+        ssl_verify: bool | None = None,
+        trust_env: bool | None = None,
+        ssl_cert_path: Path | None = None,
     ):
         self.base_url = str(base_url or get_settings().base_url).rstrip("/")
         self.token = token or get_settings().etm_api_token
@@ -134,9 +135,9 @@ class ETMSession:
         self.trust_env = trust_env if trust_env is not None else settings.trust_env
         self.ssl_cert_path = ssl_cert_path or settings.ssl_cert_path
 
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._loop_thread: Optional[threading.Thread] = None
+        self._session: aiohttp.ClientSession | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop_thread: threading.Thread | None = None
         self._loop_started = threading.Event()
 
         self._start_loop_thread()
@@ -172,7 +173,7 @@ class ETMSession:
         }
 
         # Configure SSL verification
-        ssl_context: Optional[ssl.SSLContext] | bool = None
+        ssl_context: ssl.SSLContext | None | bool = None
         if not self.ssl_verify:
             # Disable SSL verification (for testing with self-signed certs)
             ssl_context = False
@@ -251,9 +252,9 @@ class ETMSession:
 
             return etm_response
 
-    def _build_request_kwargs(self, **kwargs: Any) -> Dict[str, Any]:
+    def _build_request_kwargs(self, **kwargs: Any) -> dict[str, Any]:
         """Build request kwargs for aiohttp."""
-        request_kwargs: Dict[str, Any] = {}
+        request_kwargs: dict[str, Any] = {}
 
         if "files" in kwargs:
             form_data = aiohttp.FormData()
@@ -279,7 +280,7 @@ class ETMSession:
             request_kwargs["data"] = kwargs["data"]
 
         if "headers" in kwargs:
-            headers: Dict[str, str] = dict(self.headers)
+            headers: dict[str, str] = dict(self.headers)
             headers.update(kwargs["headers"])
             request_kwargs["headers"] = headers
 
@@ -290,6 +291,28 @@ class ETMSession:
         if self._session and self._loop:
             future = asyncio.run_coroutine_threadsafe(self._session.close(), self._loop)
             future.result()
+            self._session = None
 
         if self._loop:
             self._loop.call_soon_threadsafe(self._loop.stop)
+
+        if self._loop_thread:
+            self._loop_thread.join(timeout=5)
+            self._loop_thread = None
+
+        if self._loop and not self._loop.is_closed():
+            self._loop.close()
+            self._loop = None
+
+    def __enter__(self) -> ETMSession:
+        """Enter the runtime context, returning this session."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Exit the runtime context, closing the session."""
+        self.close()
