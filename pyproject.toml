@@ -8,13 +8,17 @@ name = "pyetm"
 version = "2.0.1"
 description = "Python-ETM Connector"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "Nora Schinkel", email = "nora.schinkel@quintel.com" },
   { name = "Louis Parkes-Talbot", email = "louis.parkestalbot@quintel.com" }
 ]
 keywords = ["energy", "transition", "modelling", "api", "ETM"]
 requires-python = ">=3.12,<4.0"
+# Declared dynamic so Poetry merges auto-generated Python/licence classifiers
+# with the ones under [tool.poetry].
+dynamic = ["classifiers"]
 
 dependencies = [
   # Pydantic ecosystem - pinned to v2 for API stability
@@ -50,11 +54,15 @@ pyetm = "pyetm.__main__:main"
 where = ["src"]
 
 [tool.poetry]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+]
 packages = [
   { include = "pyetm", from = "src" }
 ]
 include = [
   "LICENSE",
+  "src/pyetm/py.typed",
   "src/pyetm/config/*.yml",
   "src/pyetm/config/*.yaml",
   "src/pyetm/templates/*",

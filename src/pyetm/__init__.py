@@ -2,42 +2,36 @@
 
 from importlib.metadata import version
 
+# Client
+from pyetm.clients import BaseClient, get_client
+
 # Core models
+# Sub-models
 from pyetm.models import (
+    Collection,
+    CustomCurves,
+    Gqueries,
+    Inputs,
     Scenario,
+    ScenarioPacker,
     Scenarios,
     Session,
     Sessions,
-    ScenarioPacker,
-    Collection,
 )
-
-# Sub-models
-from pyetm.models import (
-    Inputs,
-    CustomCurves,
-    Gqueries,
-)
-
-# Client
-from pyetm.clients import BaseClient, get_client
 
 __version__ = version("pyetm")
 
 __all__ = [
-    "__version__",
-    # Core models
+    "BaseClient",
+    "Collection",
+    "CustomCurves",
+    "Gqueries",
+    "Inputs",
     "Scenario",
+    "ScenarioPacker",
     "Scenarios",
     "Session",
     "Sessions",
-    "ScenarioPacker",
-    "Collection"
-    # Sub-models
-    "Inputs",
-    "CustomCurves",
-    "Gqueries",
-    # Client
-    "BaseClient",
+    "__version__",
     "get_client",
 ]

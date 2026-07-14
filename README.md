@@ -1,5 +1,10 @@
 <img style="max-width:100%;height:auto;" alt="PyETM Logo (16xRes)" src="https://github.com/user-attachments/assets/3570d78f-681f-4360-935e-906a95807f15" />
 
+[![CI](https://github.com/quintel/pyetm/actions/workflows/ci.yml/badge.svg)](https://github.com/quintel/pyetm/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/quintel/pyetm/graph/badge.svg)](https://codecov.io/gh/quintel/pyetm)
+[![PyPI](https://img.shields.io/pypi/v/pyetm)](https://pypi.org/project/pyetm/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyetm)](https://pypi.org/project/pyetm/)
+
 ---
 
 This package provides a set of tools for interaction with the Energy Transition Model's API.

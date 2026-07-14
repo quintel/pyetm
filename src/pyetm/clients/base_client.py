@@ -22,7 +22,7 @@ class BaseClient:
     tokens and base URLs, allowing multiple clients in the same script.
     """
 
-    def __init__(self, token: str | None = None, base_url: str | None = None):
+    def __init__(self, token: str | None = None, base_url: str | None = None) -> None:
         """Initialize the BaseClient with authentication and connection details.
 
         Args:
