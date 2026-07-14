@@ -4,26 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import functools
-from typing import Optional, Any, List, Dict
+from types import TracebackType
+from typing import Any
 
-from pyetm.services.service_result import ServiceResult
-from .session import ETMSession
 from pyetm.config.settings import get_settings
+from pyetm.services.service_result import ServiceResult
+
+from .session import ETMSession
 
 MAX_CONCURRENT = 2
 
 
 class BaseClient:
-    """
-    HTTP client with async capabilities for ETM API communication.
+    """HTTP client with async capabilities for ETM API communication.
 
     Each instance is independent and can be configured with different
     tokens and base URLs, allowing multiple clients in the same script.
     """
 
-    def __init__(self, token: Optional[str] = None, base_url: Optional[str] = None):
-        """
-        Initialize the BaseClient with authentication and connection details.
+    def __init__(self, token: str | None = None, base_url: str | None = None):
+        """Initialize the BaseClient with authentication and connection details.
 
         Args:
             token (Optional[str]): API authentication token. If None, uses the token
@@ -45,19 +45,30 @@ class BaseClient:
         )
 
     def close(self) -> None:
-        """
-        Clean up resources and close the session.
+        """Clean up resources and close the session.
 
         This method should be called when the client is no longer needed to properly
         release network connections and other resources.
         """
         self.session.close()
 
+    def __enter__(self) -> BaseClient:
+        """Enter the runtime context, returning this client."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Exit the runtime context, closing the client."""
+        self.close()
+
 
 @functools.lru_cache(maxsize=1)
 def get_client() -> BaseClient:
-    """
-    Get the default BaseClient instance.
+    """Get the default BaseClient instance.
 
     This function returns a cached client instance configured with settings
     from environment variables or .env file. For simple use cases, this provides
@@ -78,8 +89,7 @@ def get_client() -> BaseClient:
 
 
 class AsyncBatchRunner:
-    """
-    Utility class for executing multiple HTTP requests concurrently.
+    """Utility class for executing multiple HTTP requests concurrently.
 
     This class provides both asynchronous and synchronous methods for batch
     processing of HTTP requests with proper error handling and result wrapping.
@@ -89,10 +99,9 @@ class AsyncBatchRunner:
     # Can't we yield what is done somehow?
     @staticmethod
     async def batch_requests(
-        session: ETMSession, requests: List[Dict[str, Any]], max_concurrent: int = 10
-    ) -> List[ServiceResult[Any]]:
-        """
-        Execute multiple requests concurrently using asyncio.
+        session: ETMSession, requests: list[dict[str, Any]], max_concurrent: int = 10
+    ) -> list[ServiceResult[Any]]:
+        """Execute multiple requests concurrently using asyncio.
 
         This method processes all requests in parallel and returns results in the
         same order as the input requests. Each result is wrapped in a ServiceResult
@@ -103,10 +112,9 @@ class AsyncBatchRunner:
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def make_single_request(
-            req: Dict[str, Any],
+            req: dict[str, Any],
         ) -> ServiceResult[Any]:
-            """
-            Execute a single request and wrap the result in ServiceResult.
+            """Execute a single request and wrap the result in ServiceResult.
 
             Args:
                 req (dict): Request specification containing method, url, and kwargs.
@@ -137,13 +145,13 @@ class AsyncBatchRunner:
                         )
 
                 except PermissionError as e:
-                    return ServiceResult.fail(errors=[f"Authentication error: {str(e)}"])
+                    return ServiceResult.fail(errors=[f"Authentication error: {e!s}"])
                 except ValueError as e:
-                    return ServiceResult.fail(errors=[f"Client error: {str(e)}"])
+                    return ServiceResult.fail(errors=[f"Client error: {e!s}"])
                 except ConnectionError as e:
-                    return ServiceResult.fail(errors=[f"Server error: {str(e)}"])
+                    return ServiceResult.fail(errors=[f"Server error: {e!s}"])
                 except Exception as e:
-                    return ServiceResult.fail(errors=[f"Unexpected error: {str(e)}"])
+                    return ServiceResult.fail(errors=[f"Unexpected error: {e!s}"])
 
         # Execute all requests concurrently
         # TODO: yes, but they are still in a list, which is a predetermined structure
@@ -153,10 +161,9 @@ class AsyncBatchRunner:
 
     @staticmethod
     def batch_requests_sync(
-        session: ETMSession, requests: List[Dict[str, Any]], max_concurrent: int = 10
-    ) -> List[ServiceResult[Optional[Dict[str, Any]]]]:
-        """
-        Synchronous wrapper for batch_requests method.
+        session: ETMSession, requests: list[dict[str, Any]], max_concurrent: int = 10
+    ) -> list[ServiceResult[dict[str, Any] | None]]:
+        """Synchronous wrapper for batch_requests method.
 
         This method provides a synchronous interface to the async batch_requests
         functionality by running it in the session's event loop using
@@ -185,10 +192,9 @@ class AsyncBatchRunner:
 # TODO: why is he just here?
 # Helper function for runners that need batch operations
 def make_batch_requests(
-    client: BaseClient, requests: List[Dict[str, Any]]
-) -> List[ServiceResult[Optional[Dict[str, Any]]]]:
-    """
-    Convenience function for making batch requests using a BaseClient instance.
+    client: BaseClient, requests: list[dict[str, Any]]
+) -> list[ServiceResult[dict[str, Any] | None]]:
+    """Convenience function for making batch requests using a BaseClient instance.
 
     This helper function extracts the session from a BaseClient and delegates
     to AsyncBatchRunner.batch_requests_sync for execution.
