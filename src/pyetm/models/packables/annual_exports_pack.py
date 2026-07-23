@@ -36,10 +36,10 @@ class AnnualExportsPack(Packable):
         if not export_types:
             return [], []
 
-        # Import the valid export types from the annual_exports model
-        from pyetm.models.annual_exports import ANNUAL_EXPORT_TYPES
+        # Get valid export types from metadata service
+        from pyetm.services.curve_metadata_service import CurveMetadataService
 
-        valid_export_types = set(ANNUAL_EXPORT_TYPES)
+        valid_export_types = set(CurveMetadataService.get_export_names())
 
         # Validate each entry
         valid_types = []

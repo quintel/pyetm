@@ -10,21 +10,7 @@ from pyetm.models.base import Base
 from pyetm.services.scenario_runners.fetch_annual_exports import (
     DownloadAnnualExportRunner,
 )
-
-# Available annual export types - see https://docs.energytransitionmodel.com/api/exports
-ANNUAL_EXPORT_TYPES = [
-    "production_parameters",
-    "energy_flow",
-    "energy_flow_present",
-    "molecule_flow",
-    "sankey",
-    "storage_parameters",
-    "costs_parameters",
-    "electricity_capacities",
-    "district_heating_capacities",
-    "hydrogen_capacities",
-    "network_gas_capacities",
-]
+from pyetm.services.curve_metadata_service import CurveMetadataService
 
 
 class AnnualExportError(Exception):
@@ -98,9 +84,10 @@ class AnnualExport(Base):
     @classmethod
     def from_name(cls, name: str) -> "AnnualExport":
         """Create an AnnualExport instance for a given export type"""
-        if name not in ANNUAL_EXPORT_TYPES:
+        valid_export_names = CurveMetadataService.get_export_names()
+        if name not in valid_export_names:
             export = cls(name=name)
-            valid_types = ", ".join(ANNUAL_EXPORT_TYPES)
+            valid_types = ", ".join(valid_export_names)
             export.add_warning(
                 "name",
                 f"Unknown export type '{name}'. Valid types: {valid_types}",
@@ -238,5 +225,6 @@ class AnnualExports(Base):
 
     @classmethod
     def create_empty_collection(cls) -> "AnnualExports":
-        exports = {name: AnnualExport.from_name(name) for name in ANNUAL_EXPORT_TYPES}
+        export_names = CurveMetadataService.get_export_names()
+        exports = {name: AnnualExport.from_name(name) for name in export_names}
         return cls(exports=exports)

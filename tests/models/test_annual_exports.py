@@ -123,3 +123,30 @@ heat,200,180""")
     # Verify we can access rows by index
     assert df.loc["electricity", "output"] == 1000
     assert df.loc["gas", "demand"] == 450
+
+
+def test_capacity_is_a_valid_annual_export_and_parses_as_a_table():
+    """Capacities are annual exports: discovered as exports and parsed as a table."""
+    from io import StringIO
+    from pyetm.models.annual_exports import AnnualExport
+
+    # from_name accepts it without an 'unknown export' warning (capacities are exports).
+    export = AnnualExport.from_name("electricity_capacities")
+    assert not export.warnings
+
+    csv_data = StringIO(
+        "key,installed_capacity,peak_capacity\n"
+        "wind_turbine.output (MW),200.0,8.0\n"
+        "electrolyser.input (MW),150.0,4.5\n"
+    )
+    result = Mock(success=True, data=csv_data, errors=None)
+
+    with patch(
+        "pyetm.models.annual_exports.DownloadAnnualExportRunner.run", return_value=result
+    ):
+        df = export.retrieve(client=Mock(), scenario=Mock())
+
+    assert df is not None
+    assert list(df.index) == ["wind_turbine.output (MW)", "electrolyser.input (MW)"]
+    assert list(df.columns) == ["installed_capacity", "peak_capacity"]
+    assert df.loc["wind_turbine.output (MW)", "peak_capacity"] == 8.0

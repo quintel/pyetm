@@ -2,34 +2,15 @@
 
 from typing import Literal
 
-# Carrier types for hourly output curves
+# Carrier types for hourly output curves (remains static)
 CarrierType = Literal["electricity", "heat", "hydrogen", "methane"]
 
-# Annual export types
-AnnualExportType = Literal[
-    "production_parameters",
-    "energy_flow",
-    "energy_flow_present",
-    "molecule_flow",
-    "sankey",
-    "storage_parameters",
-    "costs_parameters",
-    "electricity_capacities",
-    "district_heating_capacities",
-    "hydrogen_capacities",
-    "network_gas_capacities",
-]
-
-# Hourly curve types
-HourlyCurveType = Literal[
-    "electricity_profiles",
-    "electricity_price",
-    "district_heating_profiles",
-    "agriculture_heat",
-    "household_heat",
-    "buildings_heat",
-    "hydrogen_profiles",
-    "network_gas_profiles",
-    "residual_load",
-    "hydrogen_integral_cost",
-]
+# Export and curve names are server-driven: the set of valid names lives in
+# ETEngine (see services.curve_metadata_service) and can change without a pyetm
+# release. They are therefore plain ``str`` aliases rather than ``Literal`` — we
+# trade static autocomplete for not having to ship a new pyetm version whenever a
+# curve is added. The names are validated at runtime instead; the aliases are
+# kept for readable signatures and to mark intent.
+# Validate with validators.validate_export_names() / validate_hourly_curve_names().
+AnnualExportType = str
+HourlyCurveType = str

@@ -11,7 +11,7 @@ from pyetm.services.scenario_runners.fetch_curves_generic import (
 )
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
-from pyetm.config import curve_registry as registry
+from pyetm.services.curve_metadata_service import CurveMetadataService
 
 
 class DownloadHourlyOutputCurveRunner(BaseRunner[io.StringIO]):
@@ -27,18 +27,17 @@ class DownloadHourlyOutputCurveRunner(BaseRunner[io.StringIO]):
 class FetchAllHourlyOutputCurvesRunner(BaseRunner[Dict[str, io.StringIO]]):
     """Download all known hourly output curves."""
 
-    # Canonical curve keys, single-sourced from the registry. The fetch layer drops any that
-    # do not exist on the target engine dialect (e.g. capacities on a legacy engine).
-    CURVE_TYPES = registry.canonical_names()
-
     @staticmethod
     def run(
         client: BaseClient, scenario: Any, batch_size: int | None = None, **kwargs: Any
     ) -> ServiceResult[Dict[str, Any]]:
+        # Fetch curve types dynamically from metadata service
+        curve_types = CurveMetadataService.get_curve_names()
+
         return GenericCurveBulkRunner.run(
             client,
             scenario,
-            FetchAllHourlyOutputCurvesRunner.CURVE_TYPES,
+            curve_types,
             curve_type="output",
             batch_size=batch_size,
         )

@@ -92,9 +92,8 @@ class TestAnnualExportsPackValidation:
     """Test validation of annual exports configuration."""
 
     def test_validate_export_types_with_all_valid_types(self):
-        """All 7 valid export types should pass through."""
+        """All valid export types should pass through."""
         config = [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -109,7 +108,7 @@ class TestAnnualExportsPackValidation:
 
     def test_validate_export_types_with_subset_of_valid_types(self):
         """Subset of valid types should pass through."""
-        config = ["energy_flow", "sankey", "production_parameters"]
+        config = ["energy_flow", "sankey", "storage_parameters"]
         valid_values, warnings = AnnualExportsPack.validate_export_types(config)
 
         assert set(valid_values) == set(config)
@@ -117,10 +116,10 @@ class TestAnnualExportsPackValidation:
 
     def test_validate_export_types_with_invalid_type(self):
         """Invalid export types should be filtered with warnings."""
-        config = ["energy_flow", "sankeyyy", "production_parameters"]
+        config = ["energy_flow", "sankeyyy", "storage_parameters"]
         valid_values, warnings = AnnualExportsPack.validate_export_types(config)
 
-        assert set(valid_values) == {"energy_flow", "production_parameters"}
+        assert set(valid_values) == {"energy_flow", "storage_parameters"}
         assert len(warnings) == 1
         assert "sankeyyy" in warnings[0]
         assert "Invalid" in warnings[0]
