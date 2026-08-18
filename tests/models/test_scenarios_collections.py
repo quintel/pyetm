@@ -1,13 +1,12 @@
-import pytest
+from unittest.mock import Mock, patch
+
 import pandas as pd
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from pyetm.models.sessions import Sessions
-from pyetm.models.scenarios import Scenarios
-from pyetm.models.session import Session
+
 from pyetm.models.scenario import Scenario
 from pyetm.models.scenario_packer import ScenarioPacker
+from pyetm.models.scenarios import Scenarios
+from pyetm.models.session import Session
+from pyetm.models.sessions import Sessions
 
 
 class TestScenariosFromExcel:
@@ -521,3 +520,31 @@ class TestScenariosGetMethods:
             assert collection._packer is not None
             # Verify fetch was triggered with new API
             scenario1.get_hourly_curves.assert_called_once_with(["electricity"])
+
+
+class TestScenariosFromExcelWarnings:
+    """Per-row failures recorded by the loaders must reach the caller."""
+
+    def test_from_excel_lifts_warnings_off_the_scenarios(self):
+        session = Session(id=100, area_code="nl2023", end_year=2050)
+        session.add_warning("save", "Row 'SESSION_A' was not saved to MyETM: 422")
+
+        mock_packer = Mock(spec=ScenarioPacker)
+        mock_packer._scenarios.return_value = [session]
+
+        with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
+            result = Scenarios.from_excel("test.xlsx")
+
+        assert len(result.warnings) == 1
+        assert "not saved to MyETM" in str(list(result.warnings)[0])
+
+    def test_from_excel_stays_quiet_when_every_row_succeeded(self):
+        session = Session(id=100, area_code="nl2023", end_year=2050)
+
+        mock_packer = Mock(spec=ScenarioPacker)
+        mock_packer._scenarios.return_value = [session]
+
+        with patch.object(ScenarioPacker, "from_excel", return_value=mock_packer):
+            result = Scenarios.from_excel("test.xlsx")
+
+        assert len(result.warnings) == 0

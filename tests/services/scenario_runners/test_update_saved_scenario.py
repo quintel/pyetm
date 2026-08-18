@@ -1,3 +1,4 @@
+from pyetm.config.api_compat import saved_scenario_payload
 from pyetm.services.scenario_runners.update_saved_scenario import (
     UpdateSavedScenarioRunner,
 )
@@ -20,7 +21,7 @@ def test_update_saved_scenario_success_single_field(dummy_client, fake_response)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
+    assert client.calls == [("/saved_scenarios/456", {"json": saved_scenario_payload(update_data)})]
 
 
 def test_update_saved_scenario_success_multiple_fields(dummy_client, fake_response):
@@ -43,7 +44,7 @@ def test_update_saved_scenario_success_multiple_fields(dummy_client, fake_respon
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
+    assert client.calls == [("/saved_scenarios/456", {"json": saved_scenario_payload(update_data)})]
 
 
 def test_update_saved_scenario_success_all_allowed_fields(dummy_client, fake_response):
@@ -68,7 +69,7 @@ def test_update_saved_scenario_success_all_allowed_fields(dummy_client, fake_res
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
+    assert client.calls == [("/saved_scenarios/456", {"json": saved_scenario_payload(update_data)})]
 
 
 def test_update_saved_scenario_empty_update_data(dummy_client, fake_response):
@@ -115,7 +116,7 @@ def test_update_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         assert warning in result.errors
 
     # Should only send valid fields
-    expected_payload = {"saved_scenario": {"title": "Updated Title", "scenario_id": 123}}
+    expected_payload = saved_scenario_payload({"title": "Updated Title", "scenario_id": 123})
     assert client.calls == [("/saved_scenarios/456", {"json": expected_payload})]
 
 
@@ -218,7 +219,7 @@ def test_update_saved_scenario_with_kwargs(dummy_client, fake_response):
     # Verify basic structure
     assert len(client.calls) == 1
     assert client.calls[0][0] == "/saved_scenarios/456"
-    assert client.calls[0][1]["json"] == {"saved_scenario": update_data}
+    assert client.calls[0][1]["json"] == saved_scenario_payload(update_data)
 
 
 def test_update_saved_scenario_payload_structure(dummy_client, fake_response):
@@ -236,7 +237,7 @@ def test_update_saved_scenario_payload_structure(dummy_client, fake_response):
     # Verify the exact payload structure
     expected_call = (
         "/saved_scenarios/456",
-        {"json": {"saved_scenario": update_data}},
+        {"json": saved_scenario_payload(update_data)},
     )
     assert client.calls == [expected_call]
 
@@ -256,7 +257,7 @@ def test_update_saved_scenario_discard(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
+    assert client.calls == [("/saved_scenarios/456", {"json": saved_scenario_payload(update_data)})]
 
 
 def test_update_saved_scenario_change_privacy(dummy_client, fake_response):
@@ -274,4 +275,22 @@ def test_update_saved_scenario_change_privacy(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios/456", {"json": {"saved_scenario": update_data}})]
+    assert client.calls == [("/saved_scenarios/456", {"json": saved_scenario_payload(update_data)})]
+
+
+def test_update_saved_scenario_flat_payload_for_stable_engine(dummy_client, fake_response):
+    """2025-01 reads the attributes from the top level of the request."""
+    body = {"id": 456, "title": "Stable"}
+    response = fake_response(ok=True, status_code=200, json_data=body)
+    client = dummy_client(
+        response,
+        method="put",
+        base_url="https://2025-01.engine.energytransitionmodel.com/api/v3",
+    )
+
+    update_data = {"title": "Stable"}
+
+    result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
+
+    assert result.success is True
+    assert client.calls == [("/saved_scenarios/456", {"json": update_data})]

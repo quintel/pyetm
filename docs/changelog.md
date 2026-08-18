@@ -2,6 +2,19 @@
 
 All notable changes to pyetm are documented here.
 
+## [2.0.3] - 26-08-2026
+
+### Fixed
+
+- Saving scenarios to MyETM works again on the stable `2025-01` version. pyetm now
+  sends the request shape its target expects: `2025-01` reads the saved scenario
+  attributes from the top level, newer engines from a `saved_scenario` root key.
+  Affected `Scenario.new()`, `Session.save()` and any `Scenarios.from_excel()`
+  run whose MAIN rows are not marked `session=TRUE`, which previously failed with
+  `422: title: is missing, scenario_id: is missing`.
+- A scenario that cannot be saved to MyETM no longer passes silently. The failure is
+  recorded on the scenario and reported by `Scenarios.from_excel()`.
+
 ## [2.0.2] - 23-07-2026
 
 ### Added

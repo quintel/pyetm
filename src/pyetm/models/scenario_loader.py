@@ -1,15 +1,23 @@
 """Utilities for loading scenarios from various sources."""
 
 import logging
-from typing import Protocol, Optional, Dict, Any, cast
+from typing import Any, Protocol, cast
+
 from pyetm.models.session import Session
 
 logger = logging.getLogger(__name__)
 
 
+def _warn_save_failed(session: Session, row_label: str, error: Exception) -> Session:
+    """Record a failed MyETM save on the session itself."""
+    message = f"Row '{row_label}' was not saved to MyETM: {error}"
+    logger.warning("%s Returning session instead.", message)
+    session.add_warning("save", message)
+    return session
+
+
 class ScenarioLoader(Protocol):
-    """
-    Protocol for loading, copying, and creating scenarios.
+    """Protocol for loading, copying, and creating scenarios.
 
     Different implementations interpret scenario IDs differently:
     - SessionLoader: IDs refer to ETEngine Sessions
@@ -20,10 +28,10 @@ class ScenarioLoader(Protocol):
         self,
         scenario_id: int,
         area_code: Any,
-        end_year: Optional[int],
+        end_year: int | None,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Load an existing scenario by ID and apply metadata updates."""
         ...
 
@@ -31,33 +39,31 @@ class ScenarioLoader(Protocol):
         self,
         scenario_id: int,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Create a deep copy of a scenario (no template link)."""
         ...
 
     def create_new(
         self,
         area_code: Any,
-        end_year: Optional[int],
+        end_year: int | None,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Create a brand new scenario."""
         ...
 
 
 class SessionLoader:
-    """
-    Loader for ETEngine Sessions.
+    """Loader for ETEngine Sessions.
 
     Interprets IDs as ETEngine scenario/session IDs.
     """
 
     def __init__(self, packer_helper: Any) -> None:
-        """
-        Args:
-            packer_helper: Reference to ScenarioPacker instance for helper methods
+        """Args:
+        packer_helper: Reference to ScenarioPacker instance for helper methods
         """
         self._helper = packer_helper
 
@@ -65,10 +71,10 @@ class SessionLoader:
         self,
         scenario_id: int,
         area_code: Any,
-        end_year: Optional[int],
+        end_year: int | None,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Load an ETEngine Session by ID."""
         scenario = self._helper._load_or_create_scenario(
             scenario_id, area_code, end_year, row_label, **metadata_updates
@@ -82,8 +88,8 @@ class SessionLoader:
         self,
         scenario_id: int,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Deep copy an ETEngine Session."""
         try:
             source_scenario = Session.load(scenario_id)
@@ -100,10 +106,10 @@ class SessionLoader:
     def create_new(
         self,
         area_code: Any,
-        end_year: Optional[int],
+        end_year: int | None,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Create a new ETEngine Session."""
         scenario = self._helper._load_or_create_scenario(
             None, area_code, end_year, row_label, **metadata_updates
@@ -115,22 +121,19 @@ class SessionLoader:
 
 
 class SavedScenarioLoader:
-    """
-    Loader for MyETM SavedScenarios.
+    """Loader for MyETM SavedScenarios.
 
     Interprets IDs as MyETM SavedScenario IDs and automatically saves new scenarios.
     """
 
     def __init__(self, packer_helper: Any) -> None:
-        """
-        Args:
-            packer_helper: Reference to ScenarioPacker instance for helper methods
+        """Args:
+        packer_helper: Reference to ScenarioPacker instance for helper methods
         """
         self._helper = packer_helper
 
     def _require_authentication(self) -> None:
-        """
-        Validate that authentication token is available for SavedScenario operations.
+        """Validate that authentication token is available for SavedScenario operations.
 
         Raises:
             PermissionError: If no ETM_API_TOKEN is configured
@@ -150,10 +153,10 @@ class SavedScenarioLoader:
         self,
         scenario_id: int,
         area_code: Any,
-        end_year: Optional[int],
+        end_year: int | None,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Load a SavedScenario from MyETM."""
         from pyetm.models.scenario import Scenario
 
@@ -181,8 +184,8 @@ class SavedScenarioLoader:
         self,
         scenario_id: int,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Copy a SavedScenario and save the copy to MyETM."""
         from pyetm.models.scenario import Scenario
 
@@ -197,7 +200,7 @@ class SavedScenarioLoader:
             try:
                 saved_copy = copied_session.save(title=title)
                 # Validate that we got a proper SavedScenario back with required attributes
-                if hasattr(saved_copy, 'id') and hasattr(saved_copy, 'scenario_id'):
+                if hasattr(saved_copy, "id") and hasattr(saved_copy, "scenario_id"):
                     logger.info(
                         "Automatically saved copy to MyETM with ID %s (session ID: %s)",
                         saved_copy.id,
@@ -211,12 +214,7 @@ class SavedScenarioLoader:
                     )
                     return copied_session
             except Exception as save_error:
-                logger.warning(
-                    "Failed to save copy to MyETM for row '%s': %s. Returning session instead.",
-                    row_label,
-                    save_error,
-                )
-                return copied_session
+                return _warn_save_failed(copied_session, row_label, save_error)
         except Exception as e:
             error_msg = str(e)
             if "does not exist" in error_msg or "not found" in error_msg.lower():
@@ -237,13 +235,11 @@ class SavedScenarioLoader:
     def create_new(
         self,
         area_code: Any,
-        end_year: Optional[int],
+        end_year: int | None,
         row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
+        metadata_updates: dict[str, Any],
+    ) -> Session | None:
         """Create a new scenario and save it to MyETM."""
-        from pyetm.models.scenario import Scenario
-
         # Validate authentication before attempting to save
         self._require_authentication()
 
@@ -259,7 +255,7 @@ class SavedScenarioLoader:
         try:
             saved_scenario = scenario.save(title=title)
             # Validate that we got a proper SavedScenario back with required attributes
-            if hasattr(saved_scenario, 'id') and hasattr(saved_scenario, 'scenario_id'):
+            if hasattr(saved_scenario, "id") and hasattr(saved_scenario, "scenario_id"):
                 logger.info(
                     "Saved new scenario to MyETM with ID %s (session ID: %s)",
                     saved_scenario.id,
@@ -273,9 +269,4 @@ class SavedScenarioLoader:
                 )
                 return cast(Session, scenario)
         except Exception as e:
-            logger.warning(
-                "Failed to save new scenario to MyETM for row '%s': %s. Returning session instead.",
-                row_label,
-                e,
-            )
-            return cast(Session, scenario)
+            return _warn_save_failed(cast(Session, scenario), row_label, e)

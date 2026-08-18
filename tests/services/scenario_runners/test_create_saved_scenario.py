@@ -1,3 +1,4 @@
+from pyetm.config.api_compat import saved_scenario_payload
 from pyetm.services.scenario_runners.create_saved_scenario import (
     CreateSavedScenarioRunner,
 )
@@ -20,7 +21,9 @@ def test_create_saved_scenario_success_minimal(dummy_client, fake_response):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios", {"json": {"saved_scenario": saved_scenario_data}})]
+    assert client.calls == [
+        ("/saved_scenarios", {"json": saved_scenario_payload(saved_scenario_data)})
+    ]
 
 
 def test_create_saved_scenario_success_with_optional_fields(dummy_client, fake_response):
@@ -44,7 +47,9 @@ def test_create_saved_scenario_success_with_optional_fields(dummy_client, fake_r
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/saved_scenarios", {"json": {"saved_scenario": saved_scenario_data}})]
+    assert client.calls == [
+        ("/saved_scenarios", {"json": saved_scenario_payload(saved_scenario_data)})
+    ]
 
 
 def test_create_saved_scenario_missing_required_field_scenario_id(dummy_client, fake_response):
@@ -122,13 +127,9 @@ def test_create_saved_scenario_filters_invalid_fields(dummy_client, fake_respons
         assert warning in result.errors
 
     # Should only send valid fields
-    expected_payload = {
-        "saved_scenario": {
-            "scenario_id": 123,
-            "title": "My Saved Scenario",
-            "private": True,
-        }
-    }
+    expected_payload = saved_scenario_payload(
+        {"scenario_id": 123, "title": "My Saved Scenario", "private": True}
+    )
     assert client.calls == [("/saved_scenarios", {"json": expected_payload})]
 
 
@@ -198,7 +199,7 @@ def test_create_saved_scenario_with_kwargs(dummy_client, fake_response):
     # Verify basic structure
     assert len(client.calls) == 1
     assert client.calls[0][0] == "/saved_scenarios"
-    assert client.calls[0][1]["json"] == {"saved_scenario": saved_scenario_data}
+    assert client.calls[0][1]["json"] == saved_scenario_payload(saved_scenario_data)
 
 
 def test_create_saved_scenario_payload_structure(dummy_client, fake_response):
@@ -218,7 +219,7 @@ def test_create_saved_scenario_payload_structure(dummy_client, fake_response):
     # Verify the exact payload structure
     expected_call = (
         "/saved_scenarios",
-        {"json": {"saved_scenario": saved_scenario_data}},
+        {"json": saved_scenario_payload(saved_scenario_data)},
     )
     assert client.calls == [expected_call]
 
@@ -233,3 +234,21 @@ def test_create_saved_scenario_empty_data(dummy_client, fake_response):
     assert result.success is False
     assert result.data is None
     assert len(client.calls) == 0  # Should not make API call
+
+
+def test_create_saved_scenario_flat_payload_for_stable_engine(dummy_client, fake_response):
+    """2025-01 reads the attributes from the top level of the request."""
+    body = {"id": 461, "scenario_id": 123, "title": "Stable"}
+    response = fake_response(ok=True, status_code=201, json_data=body)
+    client = dummy_client(
+        response,
+        method="post",
+        base_url="https://2025-01.engine.energytransitionmodel.com/api/v3",
+    )
+
+    saved_scenario_data = {"scenario_id": 123, "title": "Stable"}
+
+    result = CreateSavedScenarioRunner.run(client, saved_scenario_data)
+
+    assert result.success is True
+    assert client.calls == [("/saved_scenarios", {"json": saved_scenario_data})]

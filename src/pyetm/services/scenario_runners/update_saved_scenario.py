@@ -1,14 +1,16 @@
 """Service for updating an existing saved scenario."""
 
-from typing import Any, Dict
-from pyetm.services.scenario_runners.base_runner import BaseRunner
-from ..service_result import ServiceResult
+from typing import Any
+
 from pyetm.clients.base_client import BaseClient
+from pyetm.config.api_compat import saved_scenario_payload
+from pyetm.services.scenario_runners.base_runner import BaseRunner
+
+from ..service_result import ServiceResult
 
 
-class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
-    """
-    Runner for updating a SavedScenario in MyETM.
+class UpdateSavedScenarioRunner(BaseRunner[dict[str, Any]]):
+    """Runner for updating a SavedScenario in MyETM.
 
     PUT /api/v3/saved_scenarios/:id
     """
@@ -19,11 +21,10 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
     def run(
         client: BaseClient,
         saved_scenario_id: int,
-        update_data: Dict[str, Any],
+        update_data: dict[str, Any],
         **kwargs: Any,
-    ) -> ServiceResult[Dict[str, Any]]:
-        """
-        Update an existing SavedScenario in MyETM.
+    ) -> ServiceResult[dict[str, Any]]:
+        """Update an existing SavedScenario in MyETM.
 
         Args:
             client: The HTTP client to use
@@ -51,11 +52,9 @@ class UpdateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
         )
 
         if not filtered_data:
-            return ServiceResult.fail(
-                ["No valid fields provided for update"] + warnings
-            )
+            return ServiceResult.fail(["No valid fields provided for update"] + warnings)
 
-        payload = {"saved_scenario": filtered_data}
+        payload = saved_scenario_payload(filtered_data, client.session.base_url)
 
         result = UpdateSavedScenarioRunner._make_request(
             client=client,
