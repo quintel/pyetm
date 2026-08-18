@@ -30,15 +30,16 @@ def dummy_client(fake_response):
     from types import SimpleNamespace
 
     class DummyClient:
-        def __init__(self, response, supported_methods=None):
+        def __init__(self, response, supported_methods=None, base_url=None):
             self._response = response
             self.calls = []
             self.supported_methods = supported_methods or ["get"]
+            self.base_url = base_url or "https://engine.energytransitionmodel.com/api/v3"
 
         @property
         def session(self):
             # Create a session with all supported HTTP methods
-            session_methods = {}
+            session_methods = {"base_url": self.base_url}
             for method in self.supported_methods:
                 session_methods[method] = self._create_mock_method(method)
             return SimpleNamespace(**session_methods)
@@ -63,14 +64,15 @@ def dummy_client(fake_response):
 
             return mock_method
 
-    def _make_client(response, method="get"):
+    def _make_client(response, method="get", base_url=None):
         if isinstance(response, dict):
             # If dict is provided, create a successful response
             return DummyClient(
                 fake_response(ok=True, status_code=200, json_data=response),
                 supported_methods=[method],
+                base_url=base_url,
             )
-        return DummyClient(response, supported_methods=[method])
+        return DummyClient(response, supported_methods=[method], base_url=base_url)
 
     return _make_client
 

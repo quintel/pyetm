@@ -1,14 +1,16 @@
 """Service for creating saved scenarios."""
 
-from typing import Any, Dict
-from pyetm.services.scenario_runners.base_runner import BaseRunner
-from ..service_result import ServiceResult
+from typing import Any
+
 from pyetm.clients.base_client import BaseClient
+from pyetm.config.api_compat import saved_scenario_payload
+from pyetm.services.scenario_runners.base_runner import BaseRunner
+
+from ..service_result import ServiceResult
 
 
-class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
-    """
-    Runner for creating a SavedScenario in MyETM from a SessionID scenario.
+class CreateSavedScenarioRunner(BaseRunner[dict[str, Any]]):
+    """Runner for creating a SavedScenario in MyETM from a SessionID scenario.
 
     POST /api/v3/saved_scenarios
     """
@@ -18,10 +20,9 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
 
     @staticmethod
     def run(
-        client: BaseClient, saved_scenario_data: Dict[str, Any], **kwargs: Any
-    ) -> ServiceResult[Dict[str, Any]]:
-        """
-        Create a new SavedScenario in MyETM.
+        client: BaseClient, saved_scenario_data: dict[str, Any], **kwargs: Any
+    ) -> ServiceResult[dict[str, Any]]:
+        """Create a new SavedScenario in MyETM.
 
         Args:
             client: The HTTP client to use
@@ -46,8 +47,7 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
             return ServiceResult.fail(errors)
 
         all_allowed = (
-            CreateSavedScenarioRunner.REQUIRED_KEYS
-            + CreateSavedScenarioRunner.OPTIONAL_KEYS
+            CreateSavedScenarioRunner.REQUIRED_KEYS + CreateSavedScenarioRunner.OPTIONAL_KEYS
         )
         filtered_data, warnings = CreateSavedScenarioRunner._filter_allowed_fields(
             saved_scenario_data,
@@ -55,7 +55,7 @@ class CreateSavedScenarioRunner(BaseRunner[Dict[str, Any]]):
             "create saved scenario",
         )
 
-        payload = {"saved_scenario": filtered_data}
+        payload = saved_scenario_payload(filtered_data, client.session.base_url)
 
         result = CreateSavedScenarioRunner._make_request(
             client=client,
