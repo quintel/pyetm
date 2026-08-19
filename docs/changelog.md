@@ -14,6 +14,8 @@ All notable changes to pyetm are documented here.
   `422: title: is missing, scenario_id: is missing`.
 - A scenario that cannot be saved to MyETM no longer passes silently. The failure is
   recorded on the scenario and reported by `Scenarios.from_excel()`.
+- Saving a scenario on any non-production environment (a stable tag such as `2025-01`,
+  `beta`, or a custom deployment) now tells MyETM which one.
 
 ## [2.0.2] - 23-07-2026
 

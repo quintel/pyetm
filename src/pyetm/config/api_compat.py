@@ -20,17 +20,36 @@ def _targets_stable_2025_01(base_url: str | None) -> bool:
     return host.split(".")[0] == STABLE_2025_01_LABEL
 
 
+def _environment_label(base_url: str | None) -> str | None:
+    """Environment label used to build this host, or None for production/local."""
+    if not base_url:
+        return None
+
+    host = urlparse(base_url).hostname or ""
+    label = host.split(".")[0]
+
+    if label in ("", "engine", "localhost"):
+        return None
+
+    return label
+
+
 def saved_scenario_payload(
     attributes: dict[str, Any], base_url: str | None = None
 ) -> dict[str, Any]:
     """Build a saved scenario body the target engine can read.
 
-    Stable 2025-01 reads the attributes from the top level of the request; every
-    engine from 2026-01 onwards reads them from a ``saved_scenario`` root key. The
-    root key doubles as the signal that keeps Rails' ParamsWrapper from choosing the
-    shape for us, so it is what anything other than 2025-01 gets.
+    2025-01 reads attributes from the top level; later engines from a
+    ``saved_scenario`` root key. Also stamps ``version`` with the environment
+    label, since MyETM defaults an unlabelled scenario to production.
     """
-    if _targets_stable_2025_01(base_url):
-        return dict(attributes)
+    body = dict(attributes)
 
-    return {"saved_scenario": attributes}
+    label = _environment_label(base_url)
+    if label is not None:
+        body.setdefault("version", label)
+
+    if _targets_stable_2025_01(base_url):
+        return body
+
+    return {"saved_scenario": body}

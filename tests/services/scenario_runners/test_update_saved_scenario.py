@@ -282,15 +282,28 @@ def test_update_saved_scenario_flat_payload_for_stable_engine(dummy_client, fake
     """2025-01 reads the attributes from the top level of the request."""
     body = {"id": 456, "title": "Stable"}
     response = fake_response(ok=True, status_code=200, json_data=body)
-    client = dummy_client(
-        response,
-        method="put",
-        base_url="https://2025-01.engine.energytransitionmodel.com/api/v3",
-    )
+    base_url = "https://2025-01.engine.energytransitionmodel.com/api/v3"
+    client = dummy_client(response, method="put", base_url=base_url)
 
     update_data = {"title": "Stable"}
 
     result = UpdateSavedScenarioRunner.run(client, saved_scenario_id=456, update_data=update_data)
 
     assert result.success is True
-    assert client.calls == [("/saved_scenarios/456", {"json": update_data})]
+    assert client.calls == [
+        ("/saved_scenarios/456", {"json": saved_scenario_payload(update_data, base_url)})
+    ]
+
+
+def test_update_saved_scenario_stamps_version_from_the_environment(dummy_client, fake_response):
+    body = {"id": 456, "title": "Stable"}
+    response = fake_response(ok=True, status_code=200, json_data=body)
+    base_url = "https://2025-01.engine.energytransitionmodel.com/api/v3"
+    client = dummy_client(response, method="put", base_url=base_url)
+
+    result = UpdateSavedScenarioRunner.run(
+        client, saved_scenario_id=456, update_data={"title": "Stable"}
+    )
+
+    assert result.success is True
+    assert client.calls[0][1]["json"]["version"] == "2025-01"
