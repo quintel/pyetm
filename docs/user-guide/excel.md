@@ -86,13 +86,10 @@ The `hourly_curves` field has three modes:
 - `methane` - Maps to ETM: `network_gas_profiles`
 
 **Available curve names** (can be specified individually):
-`electricity_profiles`, `electricity_capacities`, `electricity_price`, `district_heating_profiles`, `district_heating_capacities`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `hydrogen_capacities`, `network_gas_profiles`, `network_gas_capacities`, `residual_load`, `hydrogen_integral_cost`
+`electricity_profiles`, `electricity_price`, `district_heating_profiles`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `network_gas_profiles`, `residual_load`, `hydrogen_integral_cost`
 
 !!! note "Deprecated curve names"
     The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update to use the new names.
-
-!!! note "Validation"
-    Invalid carrier or curve names will be filtered out with a warning. Only valid entries will be exported.
 
 #### Annual Exports Options
 
@@ -122,7 +119,6 @@ The `annual_exports` field has three modes:
 
 **Available export types**:
 
-- `production_parameters` - Production parameters for technologies
 - `energy_flow` - Energy flow data between nodes
 - `energy_flow_present` - Present-year energy flow data
 - `molecule_flow` - Molecule flow data
@@ -384,7 +380,7 @@ current_config = scenario.get_export_config()
 | `include_input_defaults` | `bool` | Include default input values (not just user-set) |
 | `include_input_min_max` | `bool` | Include min/max bounds for inputs |
 | `hourly_curves` | `List[str]` | Hourly curves for carriers: `"electricity"`, `"heat"`, `"hydrogen"`, `"methane"` |
-| `include_annual_exports` | `List[str]` | Annual exports: `"energy_flow"`, `"sankey"`, `"production_parameters"`, etc. |
+| `include_annual_exports` | `List[str]` | Annual exports: `"energy_flow"`, `"sankey"`, `"storage_parameters"`, `"electricity_capacities"`, etc. |
 
 ## To Excel
 

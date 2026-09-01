@@ -50,11 +50,10 @@ class HourlyOutputCurvesPack(Packable):
         carrier_map = HourlyOutputCurves._load_carrier_mappings()
         valid_carriers = set(carrier_map.keys())
 
-        # Get valid curve names from the runner
-        from pyetm.services.scenario_runners.fetch_hourly_output_curves import (
-            FetchAllHourlyOutputCurvesRunner,
-        )
-        valid_curve_names = set(FetchAllHourlyOutputCurvesRunner.CURVE_TYPES)
+        # Get valid curve names from metadata service
+        from pyetm.services.curve_metadata_service import CurveMetadataService
+
+        valid_curve_names = set(CurveMetadataService.get_curve_names())
 
         # Validate each entry
         valid_values = []

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Optional
 import os
 
+import yaml
+
 logger = logging.getLogger(__name__)
 from pyetm.clients import BaseClient, get_client
 from pyetm.models.base import Base
@@ -18,6 +20,7 @@ from pyetm.services.scenario_runners.fetch_hourly_output_curves import (
     DownloadHourlyOutputCurveRunner,
     FetchAllHourlyOutputCurvesRunner,
 )
+from pyetm.services.curve_metadata_service import CurveMetadataService
 
 
 # Small LRU cache for reading CSVs from disk. Uses mtime to invalidate when file changes.
@@ -435,8 +438,17 @@ class HourlyOutputCurves(Base):
 
     @staticmethod
     def _infer_curve_type(curve_name: str) -> str:
-        """Infer curve type from curve name (accepts legacy/old names)."""
-        return registry.curve_type_for(curve_name)
+        """Infer curve type from curve name using metadata service."""
+        # Resolve any legacy/old name to its canonical key first
+        curve_name = registry.accept_alias(curve_name)
+
+        # Try to get type from metadata service
+        curve_type = CurveMetadataService.get_curve_type(curve_name)
+        if curve_type:
+            return curve_type
+
+        # Fallback to generic type if not found
+        return "output_curve"
 
     @classmethod
     def fetch_all(
@@ -507,12 +519,8 @@ class HourlyOutputCurves(Base):
         Create a collection with all known hourly output curve types but no data.
         This allows is_attached() to work before data is retrieved.
         """
-        from pyetm.services.scenario_runners.fetch_hourly_output_curves import (
-            FetchAllHourlyOutputCurvesRunner,
-        )
-
         curves_list = []
-        for curve_name in FetchAllHourlyOutputCurvesRunner.CURVE_TYPES:
+        for curve_name in CurveMetadataService.get_curve_names():
             curve = HourlyOutputCurve.model_validate(
                 {"key": curve_name, "type": cls._infer_curve_type(curve_name)}
             )

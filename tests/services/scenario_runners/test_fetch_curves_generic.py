@@ -68,7 +68,6 @@ def test_renamed_curve_uses_old_wire_name():
     assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/heat_network.csv"
 
 
-
 def test_generic_curve_download_runner_http_error():
     mock_client, mock_scenario = _client_scenario()
 

@@ -244,7 +244,7 @@ class ScenarioPacker(BaseModel):
             include_input_min_max: Include min/max bounds for inputs. Defaults to False.
             include_users: Include user permissions. Defaults to False.
             include_annual_exports: List of annual export names to include.
-                                   Examples: ["energy_flow", "sankey", "production_parameters"]
+                                   Examples: ["energy_flow", "sankey", "storage_parameters"]
                                    Defaults to None (no annual exports).
 
         Returns:

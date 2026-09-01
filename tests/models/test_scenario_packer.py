@@ -697,8 +697,15 @@ class TestExportConfigResolver:
 
         assert config.include_annual_exports == [
             "energy_flow",
+            "energy_flow_present",
+            "molecule_flow",
             "sankey",
-            "production_parameters",
+            "storage_parameters",
+            "costs_parameters",
+            "electricity_capacities",
+            "district_heating_capacities",
+            "hydrogen_capacities",
+            "network_gas_capacities",
         ]
 
     def test_parse_config_from_series_annual_exports_false(self):
@@ -740,7 +747,6 @@ class TestExportConfigResolver:
 
         assert config is not None
         assert config.include_annual_exports == [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -765,7 +771,6 @@ class TestExportConfigResolver:
 
         assert config is not None
         assert config.include_annual_exports == [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -1436,7 +1441,7 @@ class TestPackerValidation:
             packer.annual_exports(exports="invalid_export")
 
         assert "Invalid export names: ['invalid_export']" in str(exc_info.value)
-        assert "production_parameters" in str(exc_info.value)
+        assert "storage_parameters" in str(exc_info.value)
 
     def test_annual_exports_mixed_valid_invalid(self):
         """Test that annual_exports raises ValueError for mixed valid/invalid"""

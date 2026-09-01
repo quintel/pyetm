@@ -234,6 +234,8 @@ def test_hourly_output_curves_infer_curve_type():
     """Test _infer_curve_type method"""
     assert HourlyOutputCurves._infer_curve_type("electricity_price") == "price_curve"
     assert HourlyOutputCurves._infer_curve_type("electricity_profiles") == "merit_curve"
+    # Capacities are annual exports, not hourly curves -> generic fallback type.
+    assert HourlyOutputCurves._infer_curve_type("electricity_capacities") == "output_curve"
     assert HourlyOutputCurves._infer_curve_type("unknown_curve") == "output_curve"
     # Test deprecated curve names (should still work with warning)
     assert HourlyOutputCurves._infer_curve_type("merit_order") == "merit_curve"
@@ -269,18 +271,10 @@ def test_hourly_output_curves_fetch_all():
 
 def test_hourly_output_curves_create_empty_collection():
     """Test create_empty_collection class method"""
-    # Create a mock for the FetchAllHourlyOutputCurvesRunner class
-    mock_runner_class = Mock()
-    mock_runner_class.CURVE_TYPES = ["curve1", "curve2"]
-
-    # Mock the import that happens inside create_empty_collection
-    with patch.dict(
-        "sys.modules",
-        {
-            "pyetm.services.scenario_runners.fetch_hourly_output_curves": Mock(
-                FetchAllHourlyOutputCurvesRunner=mock_runner_class
-            )
-        },
+    # Mock CurveMetadataService.get_curve_names() to return test curves
+    with patch(
+        "pyetm.models.hourly_output_curves.CurveMetadataService.get_curve_names",
+        return_value=["curve1", "curve2"]
     ):
         curves = HourlyOutputCurves.create_empty_collection()
 

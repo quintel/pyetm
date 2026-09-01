@@ -69,14 +69,13 @@ class TestValidateExportNames:
 
     def test_list_of_valid_exports(self):
         """Test that list of valid exports is accepted."""
-        exports = ["energy_flow", "sankey", "production_parameters"]
+        exports = ["energy_flow", "sankey", "storage_parameters"]
         result = validate_export_names(exports)
         assert result == exports
 
     def test_all_valid_export_types(self):
         """Test that all valid export types are accepted."""
         all_exports = [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -94,7 +93,7 @@ class TestValidateExportNames:
 
         error_message = str(exc_info.value)
         assert "Invalid export names: ['invalid_export']" in error_message
-        assert "production_parameters" in error_message
+        assert "storage_parameters" in error_message
         assert "energy_flow" in error_message
 
     def test_mixed_valid_and_invalid_exports(self):
@@ -134,7 +133,7 @@ class TestValidateCurveNames:
         assert result == curves
 
     def test_all_valid_curve_types(self):
-        """Test that all valid curve types are accepted."""
+        """Test that all valid (hourly) curve types are accepted."""
         all_curves = [
             "electricity_profiles",
             "electricity_price",
@@ -149,6 +148,18 @@ class TestValidateCurveNames:
         ]
         result = validate_hourly_curve_names(all_curves)
         assert result == all_curves
+
+    def test_capacities_are_exports_not_hourly_curves(self):
+        """Capacities are annual exports: rejected as hourly curves, valid as exports."""
+        capacities = [
+            "electricity_capacities",
+            "district_heating_capacities",
+            "hydrogen_capacities",
+            "network_gas_capacities",
+        ]
+        with pytest.raises(ValueError):
+            validate_hourly_curve_names(capacities)
+        assert validate_export_names(capacities) == capacities
 
     def test_legacy_and_old_names_normalized(self):
         """Legacy/old engine names are accepted and normalized to canonical keys."""
