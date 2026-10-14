@@ -393,6 +393,84 @@ def test_update_saved_scenario_change_privacy(
     assert saved_scenario.private is True
 
 
+def test_update_ignores_response_keys_backed_by_read_only_properties(
+    monkeypatch, ok_service_result, saved_scenario, mock_client
+):
+    """MyETM returns a version tag, which Scenario exposes as a read-only property."""
+    monkeypatch.setattr(
+        UpdateSavedScenarioRunner,
+        "run",
+        lambda client, id, kwargs: ok_service_result(
+            {"id": 456, "title": "New", "version": "latest"}
+        ),
+    )
+
+    saved_scenario.update(mock_client, title="New")
+
+    assert saved_scenario.title == "New"
+
+
+def test_update_scenario_id_uses_returned_scenario(
+    monkeypatch, ok_service_result, saved_scenario, mock_client
+):
+    """A new scenario_id replaces the cached session with the returned one."""
+    saved_scenario._scenario_session = Mock()
+    new_scenario = {"id": 999, "area_code": "nl", "end_year": 2050}
+
+    monkeypatch.setattr(
+        UpdateSavedScenarioRunner,
+        "run",
+        lambda client, id, kwargs: ok_service_result(
+            {"id": 456, "scenario_id": 999, "scenario": new_scenario}
+        ),
+    )
+
+    saved_scenario.update(mock_client, scenario_id=999)
+
+    assert saved_scenario.scenario_id == 999
+    assert saved_scenario.session.id == 999
+
+
+def test_update_scenario_id_without_returned_scenario_reloads(
+    monkeypatch, ok_service_result, saved_scenario, mock_client
+):
+    """Without a nested scenario in the response, the new session is fetched."""
+    saved_scenario.scenario = {"id": 123, "area_code": "nl", "end_year": 2050}
+    saved_scenario._scenario_session = Mock()
+    reloaded = Mock()
+    load = Mock(return_value=reloaded)
+
+    monkeypatch.setattr(
+        UpdateSavedScenarioRunner,
+        "run",
+        lambda client, id, kwargs: ok_service_result({"id": 456}),
+    )
+    monkeypatch.setattr(Session, "load", load)
+
+    saved_scenario.update(mock_client, scenario_id=999)
+
+    assert saved_scenario.session is reloaded
+    load.assert_called_once_with(999, client=mock_client)
+
+
+def test_update_without_scenario_id_change_keeps_session(
+    monkeypatch, ok_service_result, saved_scenario, mock_client
+):
+    """Updating other fields leaves the cached session in place."""
+    cached = Mock()
+    saved_scenario._scenario_session = cached
+
+    monkeypatch.setattr(
+        UpdateSavedScenarioRunner,
+        "run",
+        lambda client, id, kwargs: ok_service_result({"id": 456, "title": "New"}),
+    )
+
+    saved_scenario.update(mock_client, title="New")
+
+    assert saved_scenario.session is cached
+
+
 # --- session Property Tests --- #
 
 
