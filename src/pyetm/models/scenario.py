@@ -403,7 +403,7 @@ class Scenario(Base):
 
         Example:
             ```python
-            snapshot = scenario.session.copy()
+            snapshot = scenario.session.copy_with_preset()
             scenario.update(scenario_id=snapshot.id)
             ```
         """

@@ -185,7 +185,7 @@ Pointing a scenario at a new session saves a version. MyETM moves the current
 session into the scenario's history, where it can be viewed and restored.
 
 ```python
-snapshot = scenario.session.copy()
+snapshot = scenario.session.copy_with_preset()
 scenario.update(scenario_id=snapshot.id)
 
 # Later changes apply to the new session
