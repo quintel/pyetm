@@ -29,7 +29,7 @@ class UpdateSavedScenarioRunner(BaseRunner[dict[str, Any]]):
         Args:
             client: The HTTP client to use
             saved_scenario_id: ID of the SavedScenario to update
-            update_data: Dictionary with fields to update (title, private, discarded)
+            update_data: Dictionary with fields to update (title, private, discarded, scenario_id)
             **kwargs: Additional arguments passed to the request
 
         Example usage:

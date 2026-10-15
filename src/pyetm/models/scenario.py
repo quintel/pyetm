@@ -388,14 +388,28 @@ class Scenario(Base):
 
     def update(self, client: Optional[BaseClient] = None, **kwargs: Any) -> None:
         """
-        Update this SavedScenario
+        Update this SavedScenario.
+
+        Passing a new ``scenario_id`` saves a version: MyETM moves the current
+        session into the scenario's history and points the SavedScenario at the
+        new session. Passing an ID already in the history restores that version.
 
         Args:
             client: Optional BaseClient instance
-            **kwargs: Fields to update (title, private, discarded)
+            **kwargs: Fields to update (title, private, discarded, scenario_id)
+
+        Raises:
+            SavedScenarioError: If the update fails
+
+        Example:
+            ```python
+            snapshot = scenario.session.copy_with_preset()
+            scenario.update(scenario_id=snapshot.id)
+            ```
         """
         if client is None:
             client = get_client()
+        previous_scenario_id = self.scenario_id
         result = UpdateSavedScenarioRunner.run(client, self.id, kwargs)
 
         if not result.success:
@@ -408,12 +422,21 @@ class Scenario(Base):
 
         if result.data:
             for field, value in result.data.items():
-                if hasattr(self, field):
+                if field in Scenario.model_fields:
                     setattr(self, field, value)
 
         for field, value in kwargs.items():
-            if hasattr(self, field) and (not result.data or field not in result.data):
+            if field in Scenario.model_fields and (not result.data or field not in result.data):
                 setattr(self, field, value)
+
+        if self.scenario_id != previous_scenario_id:
+            self._forget_session(result.data)
+
+    def _forget_session(self, response: Optional[Dict[str, Any]]) -> None:
+        """Drop the cached session so the next access loads the new scenario_id."""
+        self._scenario_session = None
+        if not response or "scenario" not in response:
+            self.scenario = None
 
     def discard(self, client: Optional[BaseClient] = None) -> None:
         """

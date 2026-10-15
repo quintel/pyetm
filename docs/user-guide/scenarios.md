@@ -179,6 +179,21 @@ scenario.update_metadata(
 )
 ```
 
+### Save a session to history
+
+Pointing a scenario at a new session saves a version. MyETM moves the current
+session into the scenario's history, where it can be viewed and restored.
+
+```python
+snapshot = scenario.session.copy_with_preset()
+scenario.update(scenario_id=snapshot.id)
+
+# Later changes apply to the new session
+scenario.update_user_values({"investment_costs_co2_ccs": 50.0})
+```
+
+Passing an ID that is already in the history restores that version.
+
 ### Set Identifier
 
 ```python

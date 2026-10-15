@@ -2,6 +2,17 @@
 
 All notable changes to pyetm are documented here.
 
+## [2.0.4] - 14-10-2026
+
+### Fixed
+
+- `Scenario.update(scenario_id=...)` now switches `scenario.session` to the new
+  session. Previously it kept returning the old one until the scenario was reloaded.
+  Pointing a scenario at a new session saves a version in MyETM, as now documented.
+- `Scenario.update()` no longer fails with `AttributeError: property 'version' of
+  'Scenario' object has no setter` when MyETM includes the version tag in its
+  response. Only fields declared on the model are applied from the response.
+
 ## [2.0.3] - 26-08-2026
 
 ### Fixed
