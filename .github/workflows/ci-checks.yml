@@ -1,4 +1,4 @@
-name: CI
+name: CI checks
 
 on:
   push:
@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   test:
+    # Skip on the major-updates dashboard branches — never merged, so don't waste CI.
+    if: ${{ !contains(github.head_ref, '/major-updates-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
