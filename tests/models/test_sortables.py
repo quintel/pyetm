@@ -201,22 +201,13 @@ def test_validation_duplicate_order_items():
     assert "duplicate" in warning_text.lower()
 
 
-def test_validation_order_too_long():
-    """Test that orders with too many items generate warnings"""
-    long_order = list(range(20))  # More than 17 items
-    payload = ("forecast_storage", long_order)
-    result = list(Sortable.from_json(payload))
+def test_long_order_is_valid():
+    """The engine's own space_heating order has 19 items."""
+    long_order = list(range(19))
+    sortable = next(Sortable.from_json(("space_heating", long_order)))
 
-    assert len(result) == 1
-    sortable = result[0]
-    assert sortable.type == "forecast_storage"
     assert sortable.order == long_order
-
-    # Should have validation warning about length
-    assert len(sortable.warnings) > 0
-    all_warnings = [w.message for w in sortable.warnings]
-    warning_text = " ".join(all_warnings)
-    assert "more than 17 items" in warning_text
+    assert sortable.warnings.has_warnings() is False
 
 
 @pytest.mark.parametrize(
@@ -267,12 +258,8 @@ def test_sortable_is_valid_update():
     warning_text = " ".join(all_warnings)
     assert "duplicate" in warning_text.lower()
 
-    # Invalid update - too long
-    warnings = sortable.is_valid_update(list(range(18)))
-    assert len(warnings) > 0
-    all_warnings = [w.message for w in warnings]
-    warning_text = " ".join(all_warnings)
-    assert "more than 17 items" in warning_text
+    # Valid update - long order
+    assert len(sortable.is_valid_update(list(range(19)))) == 0
 
 
 def test_name_method():

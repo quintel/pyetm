@@ -780,14 +780,10 @@ class ScenarioPacker(BaseModel):
             main_df = main_df.dropna(how="all")
 
             # Filter out rows where critical fields are all empty/NaN
-            # A valid row needs at least ONE of: scenario_id, copy_from, parent, OR (area_code AND end_year)
+            # A valid row needs at least ONE of: scenario_id, copy_from, OR (area_code AND end_year)
             def is_valid_row(row: Series) -> bool:
                 # Check for existing scenario references
-                if (
-                    pd.notna(row.get("scenario_id"))
-                    or pd.notna(row.get("copy_from"))
-                    or pd.notna(row.get("parent"))
-                ):
+                if pd.notna(row.get("scenario_id")) or pd.notna(row.get("copy_from")):
                     return True
                 # Check for new scenario creation parameters
                 area_code = row.get("area_code")
@@ -806,6 +802,7 @@ class ScenarioPacker(BaseModel):
         self, main_df: pd.DataFrame, update_set: Optional[set[str]] = None
     ) -> Dict[Any, Session]:
         """Create scenarios from main sheet rows."""
+        self._warn_duplicate_short_names(main_df)
         scenarios_by_row: Dict[Any, Session] = {}
         for idx, row in main_df.iterrows():
             try:
@@ -821,6 +818,18 @@ class ScenarioPacker(BaseModel):
             except Exception as e:
                 logger.warning("Failed to set up scenario for row '%s': %s", idx, e)
         return scenarios_by_row
+
+    @staticmethod
+    def _warn_duplicate_short_names(main_df: pd.DataFrame) -> None:
+        if "short_name" not in main_df:
+            return
+        names = main_df["short_name"].dropna()
+        for name in names[names.duplicated()].unique():
+            logger.warning(
+                "MAIN: more than one row has short_name '%s'. Other sheets find "
+                "scenarios by short_name, so give each row its own.",
+                name,
+            )
 
     def _create_scenario_from_row(
         self,
@@ -860,11 +869,6 @@ class ScenarioPacker(BaseModel):
                 row_params["metadata"],
                 loader,
             )
-        if row_params["parent"]:
-            return self._copy_with_roles(
-                row_params["parent"], row_params["row_label"], row_params["metadata"]
-            )
-
         return self._create_new_scenario(
             row_params["area_code"],
             row_params["end_year"],
@@ -880,7 +884,6 @@ class ScenarioPacker(BaseModel):
         """Extract scenario parameters from row data."""
         return {
             "scenario_id": cast_int(row_data.get("scenario_id")),
-            "parent": cast_int(row_data.get("parent")),
             "copy_from": cast_int(row_data.get("copy_from")),
             "area_code": row_data.get("area_code"),
             "end_year": cast_int(row_data.get("end_year")),
@@ -911,27 +914,6 @@ class ScenarioPacker(BaseModel):
     ) -> Optional[Session]:
         """Create a deep copy of a scenario (no template link)."""
         return loader.copy(scenario_id, row_label, metadata_updates)
-
-    def _copy_with_roles(
-        self,
-        scenario_id: int,
-        row_label: str,
-        metadata_updates: Dict[str, Any],
-    ) -> Optional[Session]:
-        """Copy a scenario with roles preserved (maintains template link)."""
-        try:
-            source_scenario = Session.load(scenario_id)
-            copy_metadata = metadata_updates.copy()
-            copy_metadata["copy_roles"] = True
-            return source_scenario.copy(**copy_metadata)
-        except Exception as e:
-            logger.warning(
-                "Failed to copy from parent '%s' for row '%s': %s",
-                scenario_id,
-                row_label,
-                e,
-            )
-            return None
 
     def _create_new_scenario(
         self,
@@ -1062,22 +1044,16 @@ class ScenarioPacker(BaseModel):
         update_set = update_set or set()
 
         for column_name, scenario in scenarios_by_column.items():
-            key = str(column_name)
-            info = sheet_info.get(key, {}) if isinstance(sheet_info, dict) else {}
+            info = sheet_info.get(str(column_name), {})
 
-            # Import sortables
-            sortables_sheet = info.get("sortables") if isinstance(info, dict) else None
-            if (
-                isinstance(sortables_sheet, str)
-                and sortables_sheet in excel_file.sheet_names
-            ):
+            sortables_sheet = self._named_sheet(excel_file, info, "sortables")
+            if sortables_sheet:
                 self._sortables.import_scenario_specific_sheet(
                     excel_file, sortables_sheet, scenario, update_set
                 )
 
-            # Import custom curves
-            curves_sheet = info.get("custom_curves") if isinstance(info, dict) else None
-            if isinstance(curves_sheet, str) and curves_sheet in excel_file.sheet_names:
+            curves_sheet = self._named_sheet(excel_file, info, "custom_curves")
+            if curves_sheet:
                 curves_df = excel_utils.parse_excel_sheet(
                     excel_file,
                     curves_sheet,
@@ -1089,6 +1065,24 @@ class ScenarioPacker(BaseModel):
                         scenario,
                         update_set,
                     )
+
+    @staticmethod
+    def _named_sheet(
+        excel_file: pd.ExcelFile, info: Dict[str, Optional[str]], column: str
+    ) -> Optional[str]:
+        """The sheet a MAIN row names in this column, or None with a warning if it is missing."""
+        name = info.get(column)
+        if not isinstance(name, str):
+            return None
+        if name not in excel_file.sheet_names:
+            logger.warning(
+                "MAIN row '%s': %s sheet '%s' not found in the workbook",
+                info.get("short_name"),
+                column,
+                name,
+            )
+            return None
+        return name
 
     def _scenarios(self) -> list[Session]:
         """All scenarios we are packing info for across all packs, in insertion order."""
