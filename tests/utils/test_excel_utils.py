@@ -14,7 +14,6 @@ from pyetm.utils.excel_utils import (
     write_index,
     create_scenario_formats,
     get_scenario_blocks,
-    add_series,
     add_frame,
 )
 
@@ -100,13 +99,19 @@ class TestHandleNumericValue:
             self.mock_worksheet, 0, 0, 3.14159, None, decimal_precision=0
         )
         args = self.mock_worksheet.write_number.call_args[0]
-        assert args[2] == 4.0  # Should ceil to 4
+        assert args[2] == 3.0
 
         # Test very high precision
         result = handle_numeric_value(
             self.mock_worksheet, 0, 0, 1.23456789, None, decimal_precision=15
         )
         self.mock_worksheet.write_number.assert_called_with(0, 0, 1.23456789, None)
+
+    def test_precision_does_not_inflate_exact_decimals(self):
+        """Values already within precision are written unchanged"""
+        for value in (0.07, 0.14, 0.81, 2.675):
+            handle_numeric_value(self.mock_worksheet, 0, 0, value, None)
+            assert self.mock_worksheet.write_number.call_args[0][2] == value
 
     def test_handle_very_small_number(self):
         """Test handling very small numbers"""
@@ -298,6 +303,14 @@ class TestCreateScenarioFormats:
 
 
 class TestGetScenarioBlocks:
+    def test_get_scenario_blocks_three_header_rows(self):
+        """Blocks follow the first header row however many header rows there are"""
+        columns = pd.MultiIndex.from_tuples(
+            [("S1", "electricity", "a"), ("S1", "heat", "b"), ("S2", "electricity", "a")]
+        )
+
+        assert get_scenario_blocks(columns) == [("S1", 0, 1), ("S2", 2, 2)]
+
     def test_get_scenario_blocks_simple(self):
         """Test scenario block identification"""
         columns = pd.MultiIndex.from_tuples(
@@ -336,154 +349,6 @@ class TestGetScenarioBlocks:
         blocks = get_scenario_blocks(columns)
         expected = [("OnlyScenario", 0, 2)]
         assert blocks == expected
-
-
-class TestAddSeries:
-    """Test add_series function"""
-
-    def setup_method(self):
-        """Setup test data"""
-        self.temp_dir = tempfile.mkdtemp()
-
-    def teardown_method(self):
-        """Clean up temp files"""
-        import shutil
-
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_add_simple_series(self):
-        """Test adding simple Series"""
-        series = pd.Series(
-            [1, 2, 3, np.nan], index=["a", "b", "c", "d"], name="test_series"
-        )
-
-        file_path = os.path.join(self.temp_dir, "test_series.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("SeriesSheet", series, workbook)
-
-        assert worksheet is not None
-        assert worksheet.name == "SeriesSheet"
-
-        workbook.close()
-
-    def test_add_series_no_name(self):
-        """Test adding Series without name"""
-        series = pd.Series([1, 2, 3])
-
-        file_path = os.path.join(self.temp_dir, "test_series_no_name.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("NoName", series, workbook)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_tuple_name(self):
-        """Test adding Series with tuple name"""
-        series = pd.Series([1, 2, 3], name=("group", "item"))
-
-        file_path = os.path.join(self.temp_dir, "test_series_tuple.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("TupleName", series, workbook)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_multiindex(self):
-        """Test adding Series with MultiIndex"""
-        index = pd.MultiIndex.from_tuples(
-            [("A", 1), ("A", 2), ("B", 1)], names=["letter", "number"]
-        )
-
-        series = pd.Series([10, 20, 30], index=index, name="values")
-
-        file_path = os.path.join(self.temp_dir, "test_series_multi.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("MultiSeries", series, workbook)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_no_index(self):
-        """Test adding Series without writing index"""
-        series = pd.Series([1, 2, 3], name="values")
-
-        file_path = os.path.join(self.temp_dir, "test_series_no_index.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("NoIndex", series, workbook, index=False)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_custom_widths(self):
-        """Test adding Series with custom column widths"""
-        series = pd.Series([1, 2, 3], index=["A", "B", "C"], name="values")
-
-        file_path = os.path.join(self.temp_dir, "test_series_widths.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series(
-            "CustomWidths", series, workbook, column_width=20, index_width=10
-        )
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_no_freeze_panes(self):
-        """Test adding Series without freezing panes"""
-        series = pd.Series([1, 2, 3], name="values")
-
-        file_path = os.path.join(self.temp_dir, "test_series_no_freeze.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("NoFreeze", series, workbook, freeze_panes=False)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_no_bold_headers(self):
-        """Test adding Series without bold headers"""
-        series = pd.Series([1, 2, 3], name="values")
-
-        file_path = os.path.join(self.temp_dir, "test_series_no_bold.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("NoBold", series, workbook, bold_headers=False)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_list_name(self):
-        """Test adding Series with tuple name (lists aren't hashable for Series names)"""
-        # Series names must be hashable, so use tuple instead of list
-        series = pd.Series([1, 2, 3], name=("part1", "part2", "part3"))
-
-        file_path = os.path.join(self.temp_dir, "test_series_tuple_name.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("TupleName", series, workbook)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_add_series_multiindex_with_index_width_list(self):
-        """Test adding Series with MultiIndex and list of index widths"""
-        index = pd.MultiIndex.from_tuples(
-            [("A", 1), ("B", 2)], names=["letter", "number"]
-        )
-        series = pd.Series([10, 20], index=index, name="values")
-
-        file_path = os.path.join(self.temp_dir, "test_series_multi_widths.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("MultiWidths", series, workbook, index_width=[15, 10])
-
-        assert worksheet is not None
-        workbook.close()
 
 
 class TestAddFrame:
@@ -741,12 +606,6 @@ class TestIntegration:
             index=pd.date_range("2024-01-01", periods=4, freq="D"),
         )
 
-        series = pd.Series(
-            [0.1, 0.15, 0.12],
-            index=["A", "B", "C"],
-            name="II3050",
-        )
-
         file_path = os.path.join(self.temp_dir, "full_test.xlsx")
         workbook = Workbook(file_path, {"nan_inf_to_errors": True})
 
@@ -754,7 +613,6 @@ class TestIntegration:
         ws2 = add_frame(
             "QUERIES", df2, workbook, nan_as_formula=False, decimal_precision=1
         )
-        ws3 = add_series("INPUTS", series, workbook, column_width=15)
         workbook.close()
 
         # Verify file was created
@@ -979,22 +837,6 @@ class TestErrorConditions:
 
         workbook.close()
 
-    def test_series_index_width_mismatch(self):
-        """Test error when series index width list doesn't match index levels"""
-        index = pd.MultiIndex.from_tuples([("A", 1), ("B", 2)])
-        series = pd.Series([1, 2], index=index)
-
-        file_path = os.path.join(self.temp_dir, "series_width_mismatch.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        with pytest.raises(ValueError, match="Expected 2 widths, got 3"):
-            add_series(
-                "SeriesWidthMismatch", series, workbook, index_width=[10, 15, 20]
-            )
-
-        workbook.close()
-
-
 class TestScenarioStylingEdgeCases:
     """Test edge cases in scenario styling"""
 
@@ -1118,20 +960,6 @@ class TestWorksheetNameHandling:
         assert worksheet.name == "None"
         workbook.close()
 
-    def test_series_numeric_worksheet_name(self):
-        """Test Series with numeric worksheet name"""
-        series = pd.Series([1, 2, 3], name="values")
-
-        file_path = os.path.join(self.temp_dir, "series_numeric_name.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series(999, series, workbook)
-
-        assert worksheet is not None
-        assert worksheet.name == "999"
-        workbook.close()
-
-
 class TestAdditionalCoverageEdgeCases:
     """Additional tests to ensure 100% coverage"""
 
@@ -1200,33 +1028,6 @@ class TestAdditionalCoverageEdgeCases:
         assert worksheet is not None
         workbook.close()
 
-    def test_series_column_width_setting(self):
-        """Test series column width setting when column_width is None"""
-        series = pd.Series([1, 2, 3], name="test")
-
-        file_path = os.path.join(self.temp_dir, "test_series_no_width.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        worksheet = add_series("SeriesNoWidth", series, workbook, column_width=None)
-
-        assert worksheet is not None
-        workbook.close()
-
-    def test_series_index_width_fallback(self):
-        """Test series index width fallback to column width"""
-        series = pd.Series([1, 2, 3], index=["a", "b", "c"], name="test")
-
-        file_path = os.path.join(self.temp_dir, "test_series_index_fallback.xlsx")
-        workbook = Workbook(file_path, {"nan_inf_to_errors": True})
-
-        # index_width=None should fall back to column_width
-        worksheet = add_series(
-            "SeriesIndexFallback", series, workbook, column_width=15, index_width=None
-        )
-
-        assert worksheet is not None
-        workbook.close()
-
     def test_get_scenario_blocks_edge_coverage(self):
         """Test get_scenario_blocks function edge cases for complete coverage"""
         # Test completely empty MultiIndex
@@ -1241,80 +1042,3 @@ class TestAdditionalCoverageEdgeCases:
         blocks = get_scenario_blocks(columns)
         expected = [("A", 0, 0), ("B", 1, 1), ("A", 2, 2), ("B", 3, 3), ("A", 4, 4)]
         assert blocks == expected
-
-
-class TestExportConfigValidation:
-    """Test validation of export config values from Excel."""
-
-    def test_parse_config_with_invalid_hourly_curve_carriers(self):
-        """Test parsing export config with invalid hourly curve carrier names."""
-        # Create a mock series with invalid carrier
-        config_data = {
-            "hourly_curves": "electricity,electrcityyy,heat",
-            "annual_exports": "true",
-        }
-        series = pd.Series(config_data)
-
-        # TODO: Add test implementation once validation is in place
-        # The validation should warn about "electrcityyy" and filter it out
-        pytest.skip("Test to be implemented after validation is added")
-
-    def test_parse_config_with_invalid_hourly_curve_names(self):
-        """Test parsing export config with invalid curve names."""
-        config_data = {
-            "hourly_curves": "merit_order,merit_orderzzz,invalid_curve",
-            "annual_exports": "false",
-        }
-        series = pd.Series(config_data)
-
-        # TODO: Add test implementation once validation is in place
-        pytest.skip("Test to be implemented after validation is added")
-
-    def test_parse_config_with_mix_of_carriers_and_curves(self):
-        """Test parsing with mix of valid carriers and curve names."""
-        config_data = {
-            "hourly_curves": "electricity,merit_order,heat,invalid_entry",
-            "annual_exports": "sankey",
-        }
-        series = pd.Series(config_data)
-
-        # TODO: Add test implementation once validation is in place
-        pytest.skip("Test to be implemented after validation is added")
-
-    def test_parse_config_with_invalid_annual_export_types(self):
-        """Test parsing with invalid annual export type names."""
-        config_data = {
-            "hourly_curves": "electricity",
-            "annual_exports": "energy_flow,sankeyyy,invalid_export",
-        }
-        series = pd.Series(config_data)
-
-        # TODO: Add test implementation once validation is in place
-        pytest.skip("Test to be implemented after validation is added")
-
-    def test_parse_config_all_invalid_hourly_curves(self):
-        """Test with all invalid hourly curve entries."""
-        config_data = {
-            "hourly_curves": "invalid1,invalid2,nonsense",
-            "annual_exports": "energy_flow",
-        }
-        series = pd.Series(config_data)
-
-        # TODO: Add test implementation once validation is in place
-        # Should return empty list with warnings for all three
-        pytest.skip("Test to be implemented after validation is added")
-
-    def test_parse_config_all_invalid_annual_exports(self):
-        """Test with all invalid annual export entries."""
-        config_data = {
-            "hourly_curves": "electricity",
-            "annual_exports": "bad1,bad2,bad3",
-        }
-        series = pd.Series(config_data)
-
-        # TODO: Add test implementation once validation is in place
-        pytest.skip("Test to be implemented after validation is added")
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short"])

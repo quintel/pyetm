@@ -13,7 +13,7 @@ class StubPackerHelper:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def _load_or_create_scenario(self, *args, **kwargs) -> Session:
+    def _create_session(self, *args, **kwargs) -> Session:
         return self.session
 
     def _apply_metadata_to_scenario(self, *args, **kwargs) -> None:

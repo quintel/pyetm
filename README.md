@@ -147,7 +147,7 @@ Create a `.env` file in your project directory:
 ETM_API_TOKEN=etm_your_token_here
 
 # Environment (default: pro)
-# Options: pro, beta, local, or stable tags like 2025-01
+# Options: pro, beta, local, or a stable tag YYYY-MM
 ENVIRONMENT=pro
 
 # Error handling (default: default)
@@ -168,7 +168,7 @@ DECIMAL_SEPARATOR=.
 - `pro` (default): Production environment
 - `beta`: Staging environment
 - `local`: Local development environment
-- `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
+- `YYYY-MM`: Stable tagged environment
 
 **Error Handling Modes:**
 - `default` (recommended): Errors raise in single operations, warnings collected in bulk operations

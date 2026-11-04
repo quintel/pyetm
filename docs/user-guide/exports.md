@@ -128,7 +128,6 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 
 | Export Name | Description |
 |-------------|-------------|
-| `production_parameters` | Production capacity and utilization |
 | `energy_flow` | Energy flows by carrier (future year) |
 | `energy_flow_present` | Energy flows by carrier (present year) |
 | `molecule_flow` | Molecule/hydrogen flows |
@@ -139,9 +138,6 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 | `district_heating_capacities` | Installed/peak capacity per participant in the heat merit order |
 | `hydrogen_capacities` | Installed/peak capacity for hydrogen participants |
 | `network_gas_capacities` | Installed/peak capacity for network gas participants |
-
-!!! note "Capacity tables and engine version"
-    The four capacity exports are only available on modern engines (`pro`). On the stable `2025-01` tag they do not exist; `get_annual_export()` returns `None` in that case.
 
 ### Basic Access
 
@@ -164,7 +160,7 @@ Retrieve several exports in one call:
 # Get multiple exports
 exports = scenario.get_annual_exports([
     "energy_flow",
-    "production_parameters",
+    "electricity_capacities",
     "costs_parameters"
 ])
 
@@ -190,7 +186,7 @@ exports = scenario.annual_exports
 
 # List all available export types
 print(exports.names)
-# ['production_parameters', 'energy_flow', 'energy_flow_present', ...]
+# ['energy_flow', 'energy_flow_present', 'molecule_flow', ...]
 
 # Get cached export (returns None if not yet fetched)
 cached = exports.get("energy_flow")

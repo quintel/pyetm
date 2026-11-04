@@ -236,38 +236,21 @@ def test_create_saved_scenario_empty_data(dummy_client, fake_response):
     assert len(client.calls) == 0  # Should not make API call
 
 
-def test_create_saved_scenario_flat_payload_for_stable_engine(dummy_client, fake_response):
-    """2025-01 reads the attributes from the top level of the request."""
-    body = {"id": 461, "scenario_id": 123, "title": "Stable"}
-    response = fake_response(ok=True, status_code=201, json_data=body)
-    base_url = "https://2025-01.engine.energytransitionmodel.com/api/v3"
-    client = dummy_client(response, method="post", base_url=base_url)
-
-    saved_scenario_data = {"scenario_id": 123, "title": "Stable"}
-
-    result = CreateSavedScenarioRunner.run(client, saved_scenario_data)
-
-    assert result.success is True
-    assert client.calls == [
-        ("/saved_scenarios", {"json": saved_scenario_payload(saved_scenario_data, base_url)})
-    ]
-
-
 def test_create_saved_scenario_stamps_version_from_the_environment(dummy_client, fake_response):
     """A saved scenario created on a non-production engine must say so.
 
     MyETM defaults an unlabelled saved scenario to production, which strands it on
     the wrong engine for every callback that follows.
     """
-    body = {"id": 462, "scenario_id": 123, "title": "Stable"}
+    body = {"id": 462, "scenario_id": 123, "title": "Beta"}
     response = fake_response(ok=True, status_code=201, json_data=body)
-    base_url = "https://2025-01.engine.energytransitionmodel.com/api/v3"
+    base_url = "https://beta.engine.energytransitionmodel.com/api/v3"
     client = dummy_client(response, method="post", base_url=base_url)
 
-    result = CreateSavedScenarioRunner.run(client, {"scenario_id": 123, "title": "Stable"})
+    result = CreateSavedScenarioRunner.run(client, {"scenario_id": 123, "title": "Beta"})
 
     assert result.success is True
-    assert client.calls[0][1]["json"]["version"] == "2025-01"
+    assert client.calls[0][1]["json"]["saved_scenario"]["version"] == "beta"
 
 
 def test_create_saved_scenario_does_not_stamp_version_on_production(dummy_client, fake_response):

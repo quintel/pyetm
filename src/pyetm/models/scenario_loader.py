@@ -76,9 +76,7 @@ class SessionLoader:
         metadata_updates: dict[str, Any],
     ) -> Session | None:
         """Load an ETEngine Session by ID."""
-        scenario = self._helper._load_or_create_scenario(
-            scenario_id, area_code, end_year, row_label, **metadata_updates
-        )
+        scenario = self._helper._load_session(scenario_id, row_label)
         if scenario is None:
             return None
         self._helper._apply_metadata_to_scenario(scenario, metadata_updates)
@@ -111,8 +109,8 @@ class SessionLoader:
         metadata_updates: dict[str, Any],
     ) -> Session | None:
         """Create a new ETEngine Session."""
-        scenario = self._helper._load_or_create_scenario(
-            None, area_code, end_year, row_label, **metadata_updates
+        scenario = self._helper._create_session(
+            area_code, end_year, row_label, **metadata_updates
         )
         if scenario is None:
             return None
@@ -243,8 +241,8 @@ class SavedScenarioLoader:
         # Validate authentication before attempting to save
         self._require_authentication()
 
-        scenario = self._helper._load_or_create_scenario(
-            None, area_code, end_year, row_label, **metadata_updates
+        scenario = self._helper._create_session(
+            area_code, end_year, row_label, **metadata_updates
         )
         if scenario is None:
             return None

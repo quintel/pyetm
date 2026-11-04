@@ -222,7 +222,7 @@ def _infer_base_url_from_env(environment: str) -> str:
     if env in ("local", "dev", "development"):
         return "http://localhost:3000/api/v3"
 
-    # Stable tagged environments e.g., '2025-01'
+    # Stable tagged environments, 'YYYY-MM'
     if re.fullmatch(r"\d{4}-\d{2}", env):
         return f"https://{env}.engine.energytransitionmodel.com/api/v3"
 

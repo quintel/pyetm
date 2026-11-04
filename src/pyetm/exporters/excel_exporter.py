@@ -46,14 +46,12 @@ class MainSheetWriter:
     """Writes main scenario info sheet to Excel."""
 
     @staticmethod
-    def write(
-        workbook: Workbook, main_info: pd.DataFrame, scenarios: list[Any]
-    ) -> None:
+    def write(workbook: Workbook, main_info: pd.DataFrame) -> None:
         """Write main scenario information sheet."""
         if main_info.empty:
             return
 
-        excel_main_df = excel_utils.build_excel_main_dataframe(main_info, scenarios)
+        excel_main_df = excel_utils.build_excel_main_dataframe(main_info)
         sanitized_df = excel_utils.sanitize_dataframe_for_excel(excel_main_df)
         excel_utils.add_frame(
             name="MAIN",
@@ -445,35 +443,30 @@ class ExcelExporter:
     """Handles Excel export for scenario data."""
 
     @staticmethod
-    def write(
-        export_data: ExportDataCollection, path: str, scenarios: list[Any]
-    ) -> Path:
+    def write(export_data: ExportDataCollection, path: str) -> Path:
         """
         Write export data collection to Excel format.
 
         Args:
             export_data: The collected export data in generic format
             path: Output file path for the main Excel file
-            scenarios: List of scenario objects for proper formatting
 
         Returns:
             Path to the created main Excel file
         """
         PathManager.ensure_directory_exists(path)
 
-        ExcelExporter._write_main_workbook(export_data, path, scenarios)
+        ExcelExporter._write_main_workbook(export_data, path)
         ExcelExporter._write_separate_workbooks(export_data, Path(path))
 
         return Path(path)
 
     @staticmethod
-    def _write_main_workbook(
-        export_data: ExportDataCollection, path: str, scenarios: list[Any]
-    ) -> None:
+    def _write_main_workbook(export_data: ExportDataCollection, path: str) -> None:
         """Write main workbook with all core data sheets."""
         workbook = Workbook(path, {"nan_inf_to_errors": True})
         try:
-            MainSheetWriter.write(workbook, export_data.main_info, scenarios)
+            MainSheetWriter.write(workbook, export_data.main_info)
             DataSheetWriter.write_inputs(workbook, export_data.inputs)
             DataSheetWriter.write_inputs_detailed(workbook, export_data.inputs_detailed)
             DataSheetWriter.write_sortables(workbook, export_data.sortables)
