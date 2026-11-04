@@ -216,12 +216,16 @@ class Session(Base):
         Create a copy of this scenario using ETEngine's copy utility.
         The copied scenario will have its template field set to this scenario's ID.
         """
+        title = overrides.pop("title", None)
         result = CopyScenarioRunner.run(get_client(), self.id, overrides=overrides)
 
         if not result.success:
             raise ScenarioError(f"Failed to copy scenario: {result.errors}")
 
         scenario = Session.model_validate(result.data)
+        if title:
+            # ETEngine sessions have no title, so it is kept here as in Session.new.
+            scenario.title = title
         for warning in result.errors:
             scenario.add_warning("base", warning)
 
@@ -421,7 +425,7 @@ class Session(Base):
         The saved_scenario_id field is None (sessions are not saved scenarios).
         """
         info: Dict[str, Any] = {
-            "title": self.identifier(),
+            "title": self.title,
             "session_id": self.id,
             "saved_scenario_id": None,
             "template_id": self.template_id,

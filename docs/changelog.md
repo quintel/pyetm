@@ -11,6 +11,8 @@ All notable changes to pyetm are documented here.
   replaced it with the four capacity exports (`electricity_capacities`,
   `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities`).
   Requesting it now fails validation, and `annual_exports: true` no longer asks for it.
+- The 17 item limit on a sortable order. ETEngine's own `space_heating` order is longer,
+  so every scenario reported an error. ETEngine still rejects items it does not know.
 
 ### Changed
 
@@ -29,6 +31,11 @@ All notable changes to pyetm are documented here.
 - A blank `hourly_curves` cell means no hourly curves, without a warning.
 - Numbers written to Excel are rounded to the nearest value at the configured precision.
   Previously they were always rounded up, so `0.07` could be written as `0.0700000001`.
+- A `sortables` or `custom_curves` cell in MAIN that names a missing sheet now warns.
+- Two MAIN rows with the same `short_name` now warn, since other sheets find scenarios
+  by `short_name`.
+- MAIN in the results workbook shows a session's title, not its `short_name`.
+- A copied session keeps the title given to it, without an "Ignoring invalid field" warning.
 
 ## [2.0.4] - 14-10-2026
 

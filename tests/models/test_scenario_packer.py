@@ -1737,6 +1737,7 @@ class TestExportIDColumns:
         session = Mock(spec=Session)
         session.id = 67890  # ETEngine session ID
         session.identifier = Mock(return_value="Test Session")
+        session.title = "Test Session"
         session.template_id = None
         session.area_code = "nl"
         session.start_year = 2019
@@ -1845,3 +1846,42 @@ class TestExportIDColumns:
         assert columns[0] == "title"
         assert columns[1] == "session_id"
         assert columns[2] == "saved_scenario_id"
+
+
+class TestMainSheetWarnings:
+    @pytest.fixture
+    def excel_file(self, tmp_path):
+        path = tmp_path / "book.xlsx"
+        with pd.ExcelWriter(path) as writer:
+            pd.DataFrame({"forecast_storage": ["a"]}).to_excel(
+                writer, sheet_name="SORTABLES_A", index=False
+            )
+        with pd.ExcelFile(path) as excel_file:
+            yield excel_file
+
+    def test_named_sheet_found(self, excel_file, caplog):
+        info = {"short_name": "a", "sortables": "SORTABLES_A"}
+        assert ScenarioPacker._named_sheet(excel_file, info, "sortables") == "SORTABLES_A"
+        assert caplog.records == []
+
+    def test_named_sheet_blank_is_quiet(self, excel_file, caplog):
+        info = {"short_name": "a", "custom_curves": None}
+        assert ScenarioPacker._named_sheet(excel_file, info, "custom_curves") is None
+        assert caplog.records == []
+
+    def test_named_sheet_missing_warns(self, excel_file, caplog):
+        info = {"short_name": "a", "custom_curves": "NO_SUCH_SHEET"}
+        assert ScenarioPacker._named_sheet(excel_file, info, "custom_curves") is None
+        assert "custom_curves sheet 'NO_SUCH_SHEET' not found" in caplog.text
+        assert "MAIN row 'a'" in caplog.text
+
+    def test_duplicate_short_name_warns_once(self, caplog):
+        main = pd.DataFrame({"short_name": ["dupe", "dupe", "dupe", "solo", None, None]})
+        ScenarioPacker._warn_duplicate_short_names(main)
+        assert len(caplog.records) == 1
+        assert "short_name 'dupe'" in caplog.text
+
+    def test_unique_short_names_are_quiet(self, caplog):
+        ScenarioPacker._warn_duplicate_short_names(pd.DataFrame({"short_name": ["a", "b"]}))
+        ScenarioPacker._warn_duplicate_short_names(pd.DataFrame({"title": ["a", "a"]}))
+        assert caplog.records == []

@@ -140,7 +140,6 @@ print(sortables.as_dict()["forecast_storage"])
 
 **Validation rules:**
 - No duplicate items within a single sortable order
-- Maximum 17 items per sortable
 - `heat_network` type must always specify subtype
 - No duplicate sortable names in the collection
 - Items must exist in the current scenario (validated against cached valid items from API)

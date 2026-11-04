@@ -718,6 +718,13 @@ def test_to_dataframe(scenario):
     assert dataframe[str(scenario.identifier())]["end_year"] == 2050
 
 
+def test_to_dataframe_exports_title_not_short_name(scenario):
+    session = Session(id=scenario.id, area_code="nl2019", end_year=2050, title="My title")
+    session.set_short_name("short")
+
+    assert session.to_dataframe()["short"]["title"] == "My title"
+
+
 # ------ Warnings tests ------ #
 
 
@@ -1308,6 +1315,22 @@ def test_copy_scenario_with_title_override(monkeypatch, ok_service_result, dummy
     scenario = original.copy_with_preset(title="My Custom Copy")
     assert scenario.id == 67891
     assert scenario.title == "My Custom Copy"
+    assert len(scenario.warnings) == 0
+
+
+def test_copy_keeps_title_the_engine_does_not_store(monkeypatch, ok_service_result, dummy_scenario):
+    sent = {}
+
+    def run(client, scenario_id, overrides):
+        sent.update(overrides)
+        return ok_service_result({"id": 67891, "area_code": "nl", "end_year": 2050})
+
+    monkeypatch.setattr(CopyScenarioRunner, "run", run)
+
+    scenario = dummy_scenario(12345).copy_with_preset(title="My Custom Copy", private=True)
+
+    assert scenario.title == "My Custom Copy"
+    assert sent == {"private": True}
     assert len(scenario.warnings) == 0
 
 

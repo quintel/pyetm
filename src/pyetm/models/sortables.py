@@ -107,9 +107,6 @@ class Sortable(Base):
         if self.type == "heat_network" and self.subtype is None:
             raise ValueError("heat_network type requires a subtype")
 
-        if len(self.order) > 17:
-            raise ValueError("Order cannot contain more than 17 items")
-
         return self
 
     @classmethod
