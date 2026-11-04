@@ -105,7 +105,7 @@ def cli() -> None:
 @click.option(
     "--environment",
     default=None,
-    help="ETM environment to target (e.g., 'pro', 'beta', 'local', 'tyndp2024', '2025-01'). Defaults to 'pro'.",
+    help="ETM environment to target (e.g., 'pro', 'beta', 'local', 'tyndp2024', or a stable tag 'YYYY-MM'). Defaults to 'pro'.",
 )
 @click.option(
     "--force",
@@ -122,7 +122,7 @@ def init(environment: str | None, force: bool) -> None:
 
     # Prompt for environment if not provided
     if not environment:
-        click.echo("Common environments: pro, beta, local, tyndp2024, 2025-01")
+        click.echo("Common environments: pro, beta, local, tyndp2024, or a stable tag YYYY-MM")
         environment = click.prompt(
             "Environment",
             default="pro",

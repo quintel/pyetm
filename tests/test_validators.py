@@ -69,14 +69,13 @@ class TestValidateExportNames:
 
     def test_list_of_valid_exports(self):
         """Test that list of valid exports is accepted."""
-        exports = ["energy_flow", "sankey", "production_parameters"]
+        exports = ["energy_flow", "sankey", "costs_parameters"]
         result = validate_export_names(exports)
         assert result == exports
 
     def test_all_valid_export_types(self):
         """Test that all valid export types are accepted."""
         all_exports = [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -87,6 +86,11 @@ class TestValidateExportNames:
         result = validate_export_names(all_exports)
         assert result == all_exports
 
+    def test_production_parameters_is_no_longer_an_export(self):
+        """Only the 2025-01 engine served it, and pyetm no longer supports that engine."""
+        with pytest.raises(ValueError):
+            validate_export_names("production_parameters")
+
     def test_invalid_export_name(self):
         """Test that invalid export name raises ValueError."""
         with pytest.raises(ValueError) as exc_info:
@@ -94,7 +98,7 @@ class TestValidateExportNames:
 
         error_message = str(exc_info.value)
         assert "Invalid export names: ['invalid_export']" in error_message
-        assert "production_parameters" in error_message
+        assert "costs_parameters" in error_message
         assert "energy_flow" in error_message
 
     def test_mixed_valid_and_invalid_exports(self):

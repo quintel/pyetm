@@ -1,10 +1,4 @@
-"""The saved scenario body differs between the stable engine and everything newer.
-
-Each reader below mirrors how one engine version pulls attributes out of the request,
-so a payload change that would break either deployment fails here.
-"""
-
-from typing import Any
+"""Saved scenario bodies go under a root key and carry the environment they belong to."""
 
 import pytest
 
@@ -14,55 +8,31 @@ from pyetm.config.settings import _infer_base_url_from_env
 ATTRIBUTES = {"scenario_id": 123, "title": "Fix check", "private": False}
 PERMITTED = ("scenario_id", "title", "description", "private")
 
-STABLE = "https://2025-01.engine.energytransitionmodel.com/api/v3"
+STABLE = "https://2026-01.engine.energytransitionmodel.com/api/v3"
 PRO = "https://engine.energytransitionmodel.com/api/v3"
-
-
-def read_as_2025_01(body: dict[str, Any]) -> dict[str, Any]:
-    """CreateSavedScenario::Contract at tag stable.2025.01 reads top-level keys."""
-    return {key: body[key] for key in PERMITTED if key in body}
-
-
-def read_as_2026_01(body: dict[str, Any]) -> dict[str, Any]:
-    """params.require(:saved_scenario) at tag 2026-01 and later reads the root key.
-
-    The KeyError stands in for ActionController::ParameterMissing.
-    """
-    nested = body["saved_scenario"]
-    return {key: nested[key] for key in PERMITTED if key in nested}
-
-
-def test_stable_engine_receives_the_attributes_at_the_top_level():
-    body = saved_scenario_payload(ATTRIBUTES, STABLE)
-
-    assert read_as_2025_01(body) == ATTRIBUTES
 
 
 @pytest.mark.parametrize(
     "base_url",
     [
         PRO,
+        STABLE,
         "https://beta.engine.energytransitionmodel.com/api/v3",
         "http://localhost:3000/api/v3",
-        "https://2025-01-collections.energytransitionmodel.com/api/v3",
         None,
     ],
 )
-def test_every_other_engine_receives_the_root_key(base_url):
-    body = saved_scenario_payload(ATTRIBUTES, base_url)
+def test_every_engine_receives_the_root_key(base_url):
+    """params.require(:saved_scenario) reads the attributes from the root key."""
+    nested = saved_scenario_payload(ATTRIBUTES, base_url)["saved_scenario"]
 
-    assert read_as_2026_01(body) == ATTRIBUTES
-
-
-def test_the_stable_body_carries_no_root_key():
-    """A root key would stop the 2025-01 contract seeing the attributes at all."""
-    assert "saved_scenario" not in saved_scenario_payload(ATTRIBUTES, STABLE)
+    assert {key: nested[key] for key in PERMITTED if key in nested} == ATTRIBUTES
 
 
 @pytest.mark.parametrize(
     ("base_url", "label"),
     [
-        (STABLE, "2025-01"),
+        (STABLE, "2026-01"),
         ("https://beta.engine.energytransitionmodel.com/api/v3", "beta"),
         ("https://tyndp2024.engine.energytransitionmodel.com/api/v3", "tyndp2024"),
         ("https://2026-s1.engine.energytransitionmodel.com/api/v3", "2026-s1"),
@@ -72,7 +42,7 @@ def test_environment_label_identifies_non_production_hosts(base_url, label):
     assert _environment_label(base_url) == label
 
 
-@pytest.mark.parametrize("environment", ["2025-01", "beta", "tyndp2024", "2026-S1"])
+@pytest.mark.parametrize("environment", ["2026-01", "beta", "tyndp2024", "2026-S1"])
 def test_environment_label_round_trips_through_the_inferred_base_url(environment):
     """A label must survive settings' own env-to-URL inference."""
     base_url = _infer_base_url_from_env(environment)
@@ -96,7 +66,7 @@ def test_non_production_payload_is_stamped_with_the_environment_as_version():
     """
     body = saved_scenario_payload(ATTRIBUTES, STABLE)
 
-    assert body["version"] == "2025-01"
+    assert body["saved_scenario"]["version"] == "2026-01"
 
 
 def test_production_payload_is_not_stamped_with_a_version():
@@ -110,4 +80,4 @@ def test_an_explicit_version_is_not_overridden():
 
     body = saved_scenario_payload(attributes, STABLE)
 
-    assert body["version"] == "beta"
+    assert body["saved_scenario"]["version"] == "beta"

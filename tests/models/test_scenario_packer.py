@@ -2,6 +2,7 @@ import pytest
 import pandas as pd
 import tempfile
 import os
+from pathlib import Path
 from unittest.mock import Mock, patch
 from pyetm.models.scenario_packer import (
     ScenarioPacker,
@@ -663,56 +664,6 @@ class TestExportConfigResolver:
         assert ExportConfigResolver.resolve_boolean(None, True, False) == True
         assert ExportConfigResolver.resolve_boolean(None, None, True) == True
 
-    def test_parse_config_from_series(self):
-        """Test parsing config from pandas Series"""
-        series = pd.Series(
-            {
-                "inputs": "yes",
-                "sortables": "no",
-                "defaults": "1",
-                "min_max": "0",
-                "hourly_curves": "electricity,gas",
-                "annual_exports": "energy_flow, sankey",
-            }
-        )
-
-        config = ExportConfigResolver._parse_config_from_series(series)
-
-        assert config.include_inputs == True
-        assert config.include_sortables == False
-        assert config.include_input_defaults == True
-        assert config.include_input_min_max == False
-        assert config.hourly_curves == ["electricity", "gas"]
-        assert config.include_annual_exports == ["energy_flow", "sankey"]
-
-    def test_parse_config_from_series_annual_exports_true(self):
-        """Test that annual_exports='true' in series exports all types"""
-        series = pd.Series(
-            {
-                "annual_exports": "true",
-            }
-        )
-
-        config = ExportConfigResolver._parse_config_from_series(series)
-
-        assert config.include_annual_exports == [
-            "energy_flow",
-            "sankey",
-            "production_parameters",
-        ]
-
-    def test_parse_config_from_series_annual_exports_false(self):
-        """Test that annual_exports='false' in series exports nothing"""
-        series = pd.Series(
-            {
-                "annual_exports": "false",
-            }
-        )
-
-        config = ExportConfigResolver._parse_config_from_series(series)
-
-        assert config.include_annual_exports is None
-
     def test_extract_from_export_config_sheet_hourly_curves_true(self):
         """Test that hourly_curves='true' exports all carriers"""
         df = pd.DataFrame(
@@ -740,7 +691,6 @@ class TestExportConfigResolver:
 
         assert config is not None
         assert config.include_annual_exports == [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -765,7 +715,6 @@ class TestExportConfigResolver:
 
         assert config is not None
         assert config.include_annual_exports == [
-            "production_parameters",
             "energy_flow",
             "energy_flow_present",
             "molecule_flow",
@@ -808,41 +757,126 @@ class TestExportConfigResolver:
         assert config.hourly_curves is None
         assert config.include_annual_exports is None
 
+    def test_extract_from_export_config_sheet_reads_flag_cells(self):
+        """Blank, 'false' and 'no' cells switch a flag off; 'yes' and 1 switch it on"""
+        df = pd.DataFrame(
+            {
+                "inputs": [float("nan")],
+                "sortables": ["false"],
+                "custom_curves": ["no"],
+                "gqueries": ["yes"],
+                "defaults": [1],
+                "min_max": [False],
+            }
+        )
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config.include_inputs is False
+        assert config.include_sortables is False
+        assert config.include_custom_curves is False
+        assert config.include_gqueries is True
+        assert config.include_input_defaults is True
+        assert config.include_input_min_max is False
+
+    @pytest.mark.parametrize("blank", [float("nan"), "", "   "])
+    def test_extract_from_export_config_sheet_blank_hourly_curves_is_quiet(self, blank, caplog):
+        """A blank hourly_curves cell means no curves, without a warning"""
+        df = pd.DataFrame({"hourly_curves": [blank], "annual_exports": ["false"]})
+
+        with caplog.at_level("WARNING"):
+            config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config.hourly_curves is None
+        assert not caplog.records
+
+    def test_extract_from_export_config_sheet_unparseable_hourly_curves_warns(self, caplog):
+        """A filled hourly_curves cell that yields no entries still warns"""
+        df = pd.DataFrame({"hourly_curves": [" , "]})
+
+        with caplog.at_level("WARNING"):
+            config = ExportConfigResolver.extract_from_export_config_sheet(df)
+
+        assert config.hourly_curves is None
+        assert "hourly_curves could not be parsed" in caplog.text
+
+
+EXAMPLE_INPUT = Path(__file__).parents[2] / "examples" / "excel" / "example_input_excel.xlsx"
+
+
+class TestExampleExportConfig:
+    """EXPORT_CONFIG as laid out in examples/excel/example_input_excel.xlsx"""
+
+    @pytest.fixture
+    def sheet(self):
+        return pd.ExcelFile(EXAMPLE_INPUT).parse("EXPORT_CONFIG")
+
+    def test_reads_example_as_shipped(self, sheet):
+        config = ExportConfigResolver.extract_from_export_config_sheet(sheet)
+
+        assert config.include_inputs is True
+        assert config.include_input_defaults is True
+        assert config.include_input_min_max is True
+        assert config.include_gqueries is True
+        assert config.include_sortables is True
+        assert config.include_custom_curves is True
+        assert config.hourly_curves is None
+        assert config.include_annual_exports is None
+
+    def test_reads_lists_in_example_layout(self, sheet):
+        sheet["hourly_curves"] = sheet["hourly_curves"].astype(object)
+        sheet["annual_exports"] = sheet["annual_exports"].astype(object)
+        sheet.loc[0, "hourly_curves"] = "electricity, hydrogen_profiles"
+        sheet.loc[0, "annual_exports"] = "electricity_capacities, sankey"
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(sheet)
+
+        assert config.hourly_curves == ["electricity", "hydrogen_profiles"]
+        assert config.include_annual_exports == ["electricity_capacities", "sankey"]
+
+    def test_reads_true_in_example_layout(self, sheet):
+        sheet.loc[0, ["hourly_curves", "annual_exports"]] = True
+
+        config = ExportConfigResolver.extract_from_export_config_sheet(sheet)
+
+        assert config.hourly_curves == ["electricity", "hydrogen", "heat", "methane"]
+        assert "electricity_capacities" in config.include_annual_exports
+
 
 class TestScenarioPackerHelpers:
-    def test_load_or_create_scenario_load_new_and_failures(self, monkeypatch):
-        """Test _load_or_create_scenario method"""
-        packer = ScenarioPacker()
-
+    def test_load_session_returns_the_loaded_session(self, monkeypatch):
         loaded = Mock(spec=Session)
+        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: loaded))
+
+        assert ScenarioPacker()._load_session(42, "COL") is loaded
+
+    def test_failed_load_skips_the_row_and_never_creates(self, monkeypatch, caplog):
+        def fail_load(_):
+            raise RuntimeError("not found")
+
+        created = Mock()
+        monkeypatch.setattr(Session, "load", staticmethod(fail_load))
+        monkeypatch.setattr(Session, "new", created)
+
+        with caplog.at_level("ERROR"):
+            assert ScenarioPacker()._load_session(42, "COL") is None
+
+        created.assert_not_called()
+        assert "Skipping MAIN row 'COL': scenario 42 could not be loaded" in caplog.text
+
+    def test_create_session_creates_new_and_handles_failures(self, monkeypatch):
+        packer = ScenarioPacker()
         created = Mock(spec=Session)
 
-        # Successful load
-        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: loaded))
-        out = packer._load_or_create_scenario(42, "nl2015", 2050, "COL")
-        assert out is loaded
-
-        # Failing load -> None
-        def boom(_):
-            raise RuntimeError("bad")
-
-        monkeypatch.setattr(Session, "load", staticmethod(boom))
-        assert packer._load_or_create_scenario(42, "nl2015", 2050, "COL") is None
-
-        # Successful new
         monkeypatch.setattr(Session, "new", staticmethod(lambda a, y: created))
-        out = packer._load_or_create_scenario(None, "de", 2030, "COL2")
-        assert out is created
+        assert packer._create_session("de", 2030, "COL2") is created
 
-        # Failing new -> None
-        def boom2(_, __):
+        def fail_new(_, __):
             raise ValueError("bad")
 
-        monkeypatch.setattr(Session, "new", staticmethod(boom2))
-        assert packer._load_or_create_scenario(None, "nl", 2050, "C") is None
-
-        # Missing fields -> None
-        assert packer._load_or_create_scenario(None, None, None, "C") is None
+        monkeypatch.setattr(Session, "new", staticmethod(fail_new))
+        assert packer._create_session("nl", 2050, "C") is None
+        assert packer._create_session(None, None, "C") is None
 
     def test_extract_metadata_updates_and_apply(self):
         """Test metadata extraction and application"""
@@ -961,7 +995,7 @@ class TestCreateScenarioFromColumn:
         """Test _create_scenario_from_row returns None on failure"""
         packer = ScenarioPacker()
         monkeypatch.setattr(
-            ScenarioPacker, "_load_or_create_scenario", lambda self, *a, **k: None
+            ScenarioPacker, "_create_session", lambda self, *a, **k: None
         )
         ser = pd.Series(
             {
@@ -976,38 +1010,6 @@ class TestCreateScenarioFromColumn:
 
 class TestInputsPackIntegration:
     """Test integration with the new InputsPack.to_dataframe method"""
-
-
-class TestExportConfigResolverExtras:
-    def test_extract_from_main_sheet_skips_helper_and_parses(self):
-        # First column is a helper and must be skipped
-        main = pd.DataFrame(
-            {
-                "helper": {"inputs": "no"},
-                "S1": {
-                    "inputs": "yes",
-                    "sortables": 0,
-                    "custom_curves": 1,
-                    "gqueries": "1",
-                    "defaults": "1",
-                    "min_max": "0",
-                    "hourly_curves": "electricity, gas ",
-                },
-            }
-        )
-
-        scenarios = [Mock(spec=Session)]
-        cfg = ExportConfigResolver.extract_from_main_sheet(main, scenarios)
-        assert cfg.include_inputs is True
-        assert cfg.include_sortables is False
-        assert cfg.include_custom_curves is True
-        assert cfg.include_gqueries is True
-        assert cfg.include_input_defaults is True
-        assert cfg.include_input_min_max is False
-        assert cfg.hourly_curves == ["electricity", "gas"]
-
-    def test_extract_from_main_sheet_empty_or_error(self):
-        assert ExportConfigResolver.extract_from_main_sheet(pd.DataFrame(), []) is None
 
 
 class TestScenarioPackerExtras:
@@ -1436,7 +1438,7 @@ class TestPackerValidation:
             packer.annual_exports(exports="invalid_export")
 
         assert "Invalid export names: ['invalid_export']" in str(exc_info.value)
-        assert "production_parameters" in str(exc_info.value)
+        assert "costs_parameters" in str(exc_info.value)
 
     def test_annual_exports_mixed_valid_invalid(self):
         """Test that annual_exports raises ValueError for mixed valid/invalid"""

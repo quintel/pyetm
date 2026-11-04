@@ -244,7 +244,7 @@ class ScenarioPacker(BaseModel):
             include_input_min_max: Include min/max bounds for inputs. Defaults to False.
             include_users: Include user permissions. Defaults to False.
             include_annual_exports: List of annual export names to include.
-                                   Examples: ["energy_flow", "sankey", "production_parameters"]
+                                   Examples: ["energy_flow", "sankey", "costs_parameters"]
                                    Defaults to None (no annual exports).
 
         Returns:
@@ -412,9 +412,7 @@ class ScenarioPacker(BaseModel):
             include_annual_exports=include_annual_exports,
         )
 
-        ExcelExporter.write(
-            export_data=export_data, path=path, scenarios=list(self._scenarios())
-        )
+        ExcelExporter.write(export_data=export_data, path=path)
 
     def _get_global_export_config(self) -> Optional[ExportConfig]:
         """Get global export configuration from first scenario that has one."""
@@ -548,9 +546,7 @@ class ScenarioPacker(BaseModel):
         """Add main scenario information sheet to workbook."""
         main_df = self.main_info()
         if not main_df.empty:
-            excel_main_df = excel_utils.build_excel_main_dataframe(
-                main_df, list(self._scenarios())
-            )
+            excel_main_df = excel_utils.build_excel_main_dataframe(main_df)
             sanitized_df = excel_utils.sanitize_dataframe_for_excel(excel_main_df)
             excel_utils.add_frame(
                 name="MAIN",
@@ -951,51 +947,40 @@ class ScenarioPacker(BaseModel):
             return None
         return loader.create_new(area_code, end_year, row_label, metadata_updates)
 
-    def _load_or_create_scenario(
-        self,
-        scenario_id: Optional[int],
-        area_code: Any,
-        end_year: Optional[int],
-        column_name: str,
-        is_no_updates: bool = False,
-        **kwargs: Any,
+    def _load_session(self, scenario_id: int, column_name: str) -> Optional[Session]:
+        """Load an existing session. A failed load skips the row rather than creating a new one."""
+        try:
+            return Session.load(scenario_id)
+        except Exception as e:
+            logger.error(
+                "Skipping MAIN row '%s': scenario %s could not be loaded: %s",
+                column_name,
+                scenario_id,
+                e,
+            )
+            return None
+
+    def _create_session(
+        self, area_code: Any, end_year: Optional[int], column_name: str, **kwargs: Any
     ) -> Optional[Session]:
-        """Load existing scenario or create new one. Passes all available kwargs to Scenario.new for full metadata."""
-        if scenario_id is not None:
-            try:
-                return Session.load(scenario_id)
-            except Exception as e:
-                logger.warning(
-                    "Failed to load scenario %s for column '%s': %s",
-                    scenario_id,
-                    column_name,
-                    e,
-                )
-                # In no updates mode, if load fails but we have area/year, create locally
-                if is_no_updates and area_code and end_year is not None:
-                    logger.info(
-                        "Creating local-only scenario for column '%s' in no updates mode",
-                        column_name,
-                    )
-                    # Don't return here, fall through to creation logic
-
-        if area_code and end_year is not None:
-            try:
-                return Session.new(str(area_code), int(end_year), **kwargs)
-            except Exception as e:
-                logger.warning(
-                    "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
-                    column_name,
-                    area_code,
-                    end_year,
-                    e,
-                )
-
-        logger.warning(
-            "MAIN row '%s' missing required fields for creation (area_code/end_year)",
-            column_name,
-        )
-        return None
+        """Create a new session from the row's area code and end year."""
+        if not area_code or end_year is None:
+            logger.warning(
+                "MAIN row '%s' missing required fields for creation (area_code/end_year)",
+                column_name,
+            )
+            return None
+        try:
+            return Session.new(str(area_code), int(end_year), **kwargs)
+        except Exception as e:
+            logger.warning(
+                "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
+                column_name,
+                area_code,
+                end_year,
+                e,
+            )
+            return None
 
     def _extract_metadata_updates(self, column_data: pd.Series[Any]) -> Dict[str, Any]:
         """Extract metadata updates from column data."""

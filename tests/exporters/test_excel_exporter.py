@@ -137,7 +137,7 @@ class TestMainSheetWriter:
         workbook = Workbook(str(workbook_path))
 
         empty_df = pd.DataFrame()
-        MainSheetWriter.write(workbook, empty_df, [])
+        MainSheetWriter.write(workbook, empty_df)
 
         workbook.close()
 
@@ -155,17 +155,7 @@ class TestMainSheetWriter:
             "title": ["Test 1", "Test 2"],
         })
 
-        # Mock scenarios
-        class MockScenario:
-            def __init__(self, id_val):
-                self.id = id_val
-
-            def identifier(self):
-                return f"test{self.id}"
-
-        scenarios = [MockScenario(1), MockScenario(2)]
-
-        MainSheetWriter.write(workbook, main_info, scenarios)
+        MainSheetWriter.write(workbook, main_info)
         workbook.close()
 
         # Verify Excel file was created
@@ -406,7 +396,7 @@ class TestAnnualExportsWriter:
 
         output_path = tmp_path / "exports.xlsx"
         exports_data = {
-            "production_parameters": {
+            "costs_parameters": {
                 "scenario1": pd.DataFrame({
                     "technology": ["solar_pv"],
                     "capacity": [100.0]
@@ -424,7 +414,7 @@ class TestAnnualExportsWriter:
 
         # Verify file was created successfully
         assert output_path.exists()
-        df = pd.read_excel(str(output_path), sheet_name="PRODUCTION_PARAMETERS", header=[0, 1])
+        df = pd.read_excel(str(output_path), sheet_name="COSTS_PARAMETERS", header=[0, 1])
 
         # Verify scenarios appear as top-level columns
         assert "scenario1" in df.columns.get_level_values(0)
@@ -601,17 +591,7 @@ class TestExcelExporter:
         """Test writing minimal export data."""
         output_path = tmp_path / "export.xlsx"
 
-        # Mock scenarios
-        class MockScenario:
-            def __init__(self, id_val):
-                self.id = id_val
-
-            def identifier(self):
-                return f"test{self.id}"
-
-        scenarios = [MockScenario(1), MockScenario(2)]
-
-        result_path = ExcelExporter.write(minimal_export_data, str(output_path), scenarios)
+        result_path = ExcelExporter.write(minimal_export_data, str(output_path))
 
         assert result_path == output_path
         assert output_path.exists()
@@ -639,16 +619,7 @@ class TestExcelExporter:
 
         output_path = tmp_path / "export.xlsx"
 
-        class MockScenario:
-            def __init__(self, id_val):
-                self.id = id_val
-
-            def identifier(self):
-                return f"test{self.id}"
-
-        scenarios = [MockScenario(1), MockScenario(2)]
-
-        result_path = ExcelExporter.write(full_export_data, str(output_path), scenarios)
+        result_path = ExcelExporter.write(full_export_data, str(output_path))
 
         assert result_path == output_path
         assert output_path.exists()
@@ -685,13 +656,7 @@ class TestExcelExporter:
 
         export_data = ExportDataCollection(main_info=main_info, config=config)
 
-        class MockScenario:
-            id = 1
-
-            def identifier(self):
-                return "test1"
-
-        ExcelExporter.write(export_data, str(output_path), [MockScenario()])
+        ExcelExporter.write(export_data, str(output_path))
 
         assert output_path.exists()
         assert output_path.parent.exists()
@@ -729,14 +694,8 @@ class TestExcelExporter:
             config=config,
         )
 
-        class MockScenario:
-            id = 1
-
-            def identifier(self):
-                return "test1"
-
         output_path = tmp_path / "export.xlsx"
-        ExcelExporter.write(export_data, str(output_path), [MockScenario()])
+        ExcelExporter.write(export_data, str(output_path))
 
         excel_file = pd.ExcelFile(str(output_path))
         assert "SLIDER_SETTINGS" in excel_file.sheet_names
@@ -763,17 +722,8 @@ class TestIntegration:
 
         output_path = tmp_path / "full_export.xlsx"
 
-        class MockScenario:
-            def __init__(self, id_val):
-                self.id = id_val
-
-            def identifier(self):
-                return f"test{self.id}"
-
-        scenarios = [MockScenario(1), MockScenario(2)]
-
         # Export to Excel
-        result = ExcelExporter.write(full_export_data, str(output_path), scenarios)
+        result = ExcelExporter.write(full_export_data, str(output_path))
 
         # Verify main file
         assert result == output_path

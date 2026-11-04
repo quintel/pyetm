@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import pandas as pd
-from typing import Any, Optional
+from typing import Any, Optional, get_args
 from pydantic import ConfigDict
 
 from pyetm.clients import BaseClient
@@ -10,21 +10,10 @@ from pyetm.models.base import Base
 from pyetm.services.scenario_runners.fetch_annual_exports import (
     DownloadAnnualExportRunner,
 )
+from pyetm.types import AnnualExportType
 
 # Available annual export types - see https://docs.energytransitionmodel.com/api/exports
-ANNUAL_EXPORT_TYPES = [
-    "production_parameters",
-    "energy_flow",
-    "energy_flow_present",
-    "molecule_flow",
-    "sankey",
-    "storage_parameters",
-    "costs_parameters",
-    "electricity_capacities",
-    "district_heating_capacities",
-    "hydrogen_capacities",
-    "network_gas_capacities",
-]
+ANNUAL_EXPORT_TYPES = list(get_args(AnnualExportType))
 
 
 class AnnualExportError(Exception):

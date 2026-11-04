@@ -3,11 +3,10 @@
 from typing import Literal
 
 # Carrier types for hourly output curves
-CarrierType = Literal["electricity", "heat", "hydrogen", "methane"]
+CarrierType = Literal["electricity", "hydrogen", "heat", "methane"]
 
-# Annual export types
+# Annual export types: An export the target engine lacks returns None with a warning.
 AnnualExportType = Literal[
-    "production_parameters",
     "energy_flow",
     "energy_flow_present",
     "molecule_flow",

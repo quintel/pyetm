@@ -2,6 +2,34 @@
 
 All notable changes to pyetm are documented here.
 
+## [2.1.0] - Unreleased
+
+### Removed
+
+- Support for the stable `2025-01` engine. To keep using it, pin `pyetm<2.1`.
+- The `production_parameters` annual export. Only `2025-01` served it; newer engines
+  replaced it with the four capacity exports (`electricity_capacities`,
+  `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities`).
+  Requesting it now fails validation, and `annual_exports: true` no longer asks for it.
+
+### Changed
+
+- Hourly curves are requested under their current names (`electricity_profiles`,
+  `district_heating_profiles`, `hydrogen_profiles`, `network_gas_profiles`). The old
+  names are still accepted as input, with a deprecation warning.
+- Saved scenarios are always sent under the `saved_scenario` root key.
+
+### Fixed
+
+- A MAIN row whose `scenario_id` cannot be loaded is now skipped with an error.
+  Previously, if the row also had an `area_code` and `end_year`, pyetm silently created
+  a new scenario in its place.
+- Blank, `false` and `no` cells in `EXPORT_CONFIG` now switch an export off. Previously
+  any non-empty value, and any blank cell, switched it on.
+- A blank `hourly_curves` cell means no hourly curves, without a warning.
+- Numbers written to Excel are rounded to the nearest value at the configured precision.
+  Previously they were always rounded up, so `0.07` could be written as `0.0700000001`.
+
 ## [2.0.4] - 14-10-2026
 
 ### Fixed

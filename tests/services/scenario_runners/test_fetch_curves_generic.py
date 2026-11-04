@@ -55,8 +55,8 @@ def test_generic_curve_download_runner_custom_type():
     assert "custom_curves/custom_curve.csv" in called_req["path"]
 
 
-def test_renamed_curve_uses_old_wire_name():
-    """A renamed curve is requested under its universal old name (works on pro + 2025-01)."""
+def test_renamed_curve_uses_canonical_name():
+    """A renamed curve is requested under its canonical name."""
     mock_client, mock_scenario = _client_scenario()
 
     with patch.object(
@@ -65,7 +65,7 @@ def test_renamed_curve_uses_old_wire_name():
         return_value=[ServiceResult.ok(data=_ok_csv_response("a,b"))],
     ) as patched:
         GenericCurveDownloadRunner.run(mock_client, mock_scenario, "district_heating_profiles")
-    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/heat_network.csv"
+    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/district_heating_profiles.csv"
 
 
 
@@ -120,9 +120,9 @@ def test_generic_curve_bulk_runner_keys_by_canonical():
         result = GenericCurveBulkRunner.run(
             mock_client, mock_scenario, ["merit_order"], batch_size=10
         )
-    # keyed by canonical, requested under old wire name
+    # an old name is keyed and requested under its canonical name
     assert set(result.data.keys()) == {"electricity_profiles"}
-    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/merit_order.csv"
+    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/electricity_profiles.csv"
 
 
 def test_generic_curve_bulk_runner_partial_failure():

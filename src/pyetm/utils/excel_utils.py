@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import logging
-import math
-from typing import Any, Dict, List, Optional, Set, Union, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Union, Tuple, cast, get_args
 import numpy as np
 import pandas as pd
 from pandas import Series, Index
@@ -12,27 +11,13 @@ import datetime as dt
 from xlsxwriter.workbook import Workbook  # type: ignore[import-untyped]
 from xlsxwriter.worksheet import Worksheet  # type: ignore[import-untyped]
 from pyetm.models.export_config import ExportConfig
+from pyetm.types import AnnualExportType, CarrierType
 
 logger = logging.getLogger(__name__)
 
 
 # Export config resolution
 class ExportConfigResolver:
-    """Handles resolution of export configuration from various sources."""
-
-    @staticmethod
-    def extract_from_main_sheet(main: pd.DataFrame, scenarios: List[Any]) -> Optional[ExportConfig]:
-        """Extract export config from the main sheet, skipping helper columns."""
-        if main is None or main.empty or not scenarios:
-            return None
-        # Find the first non-helper column
-        for col in main.columns:
-            if str(col).lower() == "helper":
-                continue
-            series = main[col]
-            return ExportConfigResolver._parse_config_from_series(series)
-        return None
-
     """Handles resolution of export configuration from various sources."""
 
     @staticmethod
@@ -56,218 +41,129 @@ class ExportConfigResolver:
 
         try:
             row = export_config_df.iloc[0]
-
-            def parse_carriers(value: Any) -> Optional[List[str]]:
-                if not isinstance(value, str) or not value.strip():
-                    return None
-                return [carrier.strip() for carrier in value.split(",") if carrier.strip()]
-
-            rb = ExportConfigResolver.resolve_boolean
-            get = row.get
-
-            def parse_boolean_field(value: Any) -> Optional[bool]:
-                """Parse boolean from string/int/bool, handling 'true'/'false' strings."""
-                import numpy as np
-                if value is None or (isinstance(value, float) and pd.isna(value)):
-                    return None
-                # Check for both Python bool and numpy bool
-                if isinstance(value, (bool, np.bool_)):
-                    return bool(value)
-                if isinstance(value, (int, float)):
-                    try:
-                        return bool(int(value))
-                    except Exception:
-                        return None
-                if isinstance(value, str):
-                    normalized = value.strip().lower()
-                    if normalized in {"true", "yes", "y", "1"}:
-                        return True
-                    if normalized in {"false", "no", "n", "0"}:
-                        return False
-                return None
-
-            # Hourly curves / output_carriers logic
-            from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
-
-            exports_val = get("hourly_curves")
-            output_carriers = None
-            exports_bool = parse_boolean_field(exports_val)
-            if exports_bool is True:
-                output_carriers = ["electricity", "hydrogen", "heat", "methane"]
-                logger.info("EXPORT_CONFIG: hourly_curves set to 'true', exporting all carriers: %s", output_carriers)
-            elif exports_bool is False:
-                output_carriers = None
-                logger.info("EXPORT_CONFIG: hourly_curves set to 'false', no hourly curves will be exported")
-            else:
-                # Not a boolean, try parsing as comma-separated carriers/curves
-                parsed_carriers = parse_carriers(get("output_carriers")) or parse_carriers(
-                    exports_val
-                )
-                if parsed_carriers:
-                    # Validate using packable validation method
-                    output_carriers, warnings = HourlyOutputCurvesPack.validate_curve_config(parsed_carriers)
-                    for warning in warnings:
-                        logger.warning("EXPORT_CONFIG: %s", warning)
-                    if output_carriers:
-                        logger.info("EXPORT_CONFIG: hourly_curves set to specific carriers/curves: %s", output_carriers)
-                    else:
-                        logger.warning("EXPORT_CONFIG: All specified hourly curve entries were invalid, no hourly curves will be exported")
-                else:
-                    logger.warning("EXPORT_CONFIG: hourly_curves has no valid carriers specified, no hourly curves will be exported")
-
-            # Annual exports parsing
-            from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
-            from pyetm.models.annual_exports import ANNUAL_EXPORT_TYPES
-
-            annual_exports_val = get("annual_exports")
-            include_annual_exports = None
-
-            # First check if it's a boolean (True/False from Excel)
-            exports_bool = parse_boolean_field(annual_exports_val)
-            if exports_bool is True:
-                # "true" means export all available annual export types (all 7 types)
-                include_annual_exports = list(ANNUAL_EXPORT_TYPES)
-                logger.info("EXPORT_CONFIG: annual_exports set to 'true', exporting all types: %s", include_annual_exports)
-            elif exports_bool is False:
-                include_annual_exports = None
-                logger.info("EXPORT_CONFIG: annual_exports set to 'false', no annual exports will be included")
-            elif isinstance(annual_exports_val, str):
-                # Parse as comma-separated list
-                parsed = parse_carriers(annual_exports_val)
-                if parsed:
-                    # Validate using packable validation method
-                    include_annual_exports, warnings = AnnualExportsPack.validate_export_types(parsed)
-                    for warning in warnings:
-                        logger.warning("EXPORT_CONFIG: %s", warning)
-                    if include_annual_exports:
-                        logger.info("EXPORT_CONFIG: annual_exports set to: %s", include_annual_exports)
-                    else:
-                        logger.warning("EXPORT_CONFIG: All specified annual export types were invalid, no annual exports will be included")
-                else:
-                    logger.warning("EXPORT_CONFIG: annual_exports could not be parsed, no annual exports will be included")
-
-            config = ExportConfig(
-                include_inputs=rb(get("include_inputs"), get("inputs"), False),
-                include_sortables=rb(get("include_sortables"), get("sortables"), False),
-                include_custom_curves=rb(get("include_custom_curves"), get("custom_curves"), False),
-                include_gqueries=rb(get("include_gqueries"), get("gquery_results"), False)
-                or rb(get("gqueries"), None, False),
-                include_input_defaults=rb(get("include_input_defaults"), get("defaults"), False),
-                include_input_min_max=rb(get("include_input_min_max"), get("min_max"), False),
-                hourly_curves=output_carriers,
-                include_annual_exports=include_annual_exports,
+            return ExportConfig(
+                include_inputs=_flag(row, "include_inputs", "inputs"),
+                include_sortables=_flag(row, "include_sortables", "sortables"),
+                include_custom_curves=_flag(row, "include_custom_curves", "custom_curves"),
+                include_gqueries=_flag(row, "include_gqueries", "gquery_results")
+                or _flag(row, "gqueries"),
+                include_input_defaults=_flag(row, "include_input_defaults", "defaults"),
+                include_input_min_max=_flag(row, "include_input_min_max", "min_max"),
+                hourly_curves=_hourly_curves(row),
+                include_annual_exports=_annual_exports(row.get("annual_exports")),
             )
-            return config
-        except Exception as e:
+        except Exception:
+            logger.exception("EXPORT_CONFIG: could not be read")
             return None
 
-    @staticmethod
-    def _parse_config_from_series(series: Series[Any]) -> "ExportConfig":
-        """Parse ExportConfig from a pandas Series (column from main sheet)."""
 
-        def _iter_rows() -> Any:
-            for label, value in zip(series.index, series.values):
-                yield str(label).strip().lower(), value
+def _parse_bool(value: Any) -> Optional[bool]:
+    """Parse a cell as a boolean: bools, numbers, or yes/no style strings. None when blank or unclear."""
+    if _is_blank(value):
+        return None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (int, float, np.integer)):
+        return bool(int(value)) if np.isfinite(value) else None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "y", "1"}:
+            return True
+        if normalized in {"false", "no", "n", "0"}:
+            return False
+    return None
 
-        def _value_after_output(name: str) -> Any:
-            target = name.strip().lower()
-            seen_output = False
-            chosen: Any = None
-            for lbl, val in _iter_rows():
-                if lbl == "output":
-                    seen_output = True
-                    continue
-                if seen_output and lbl == target:
-                    chosen = val
-            return chosen
 
-        def _value_any(name: str) -> Any:
-            target = name.strip().lower()
-            chosen: Any = None
-            for lbl, val in _iter_rows():
-                if lbl == target:
-                    chosen = val
-            return chosen
+def _is_blank(value: Any) -> bool:
+    """An empty cell: missing, NaN, or whitespace only."""
+    if isinstance(value, str):
+        return not value.strip()
+    return value is None or (isinstance(value, float) and pd.isna(value))
 
-        def get_cell_value(name: str) -> Any:
-            val = _value_after_output(name)
-            return val if val is not None else _value_any(name)
 
-        def parse_bool(value: Any) -> Optional[bool]:
-            """Parse boolean from various formats."""
-            import numpy as np
-            if value is None or (isinstance(value, float) and pd.isna(value)):
-                return None
-            # Check for both Python bool and numpy bool
-            if isinstance(value, (bool, np.bool_)):
-                return bool(value)
-            if isinstance(value, (int, float)):
-                try:
-                    return bool(int(value))
-                except Exception:
-                    return None
-            if isinstance(value, str):
-                normalized = value.strip().lower()
-                if normalized in {"true", "yes", "y", "1"}:
-                    return True
-                if normalized in {"false", "no", "n", "0"}:
-                    return False
-            return None
+def _flag(row: Series[Any], *names: str) -> bool:
+    """First readable boolean among the named cells, else False."""
+    for name in names:
+        value = _parse_bool(row.get(name))
+        if value is not None:
+            return value
+    return False
 
-        def parse_bool_field(*names: str) -> Optional[bool]:
-            """Return the first non-None boolean parsed from the provided field names."""
-            for n in names:
-                val = parse_bool(get_cell_value(n))
-                if val is not None:
-                    return val
-            return None
 
-        def parse_carriers(value: Any) -> Optional[List[str]]:
-            """Parse comma-separated carrier list."""
-            if not isinstance(value, str) or not value.strip():
-                return None
-            return [carrier.strip() for carrier in value.split(",") if carrier.strip()]
+def _parse_list(value: Any) -> Optional[List[str]]:
+    """Split a comma-separated cell into trimmed entries."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return [entry.strip() for entry in value.split(",") if entry.strip()]
 
-        exports_val = get_cell_value("hourly_curves")
-        carriers_val = get_cell_value("output_carriers")
 
-        exports_bool = parse_bool(exports_val)
-        if exports_bool is True:
-            output_carriers = ["electricity", "hydrogen", "heat", "methane"]
-        elif exports_bool is False:
-            output_carriers = None
-        else:
-            output_carriers = parse_carriers(carriers_val) or parse_carriers(exports_val)
+def _hourly_curves(row: Series[Any]) -> Optional[List[str]]:
+    """Carriers or curve names from hourly_curves: true for all carriers, or a list. Blank means false."""
+    value = row.get("hourly_curves")
+    enabled = _parse_bool(value)
+    if enabled is True:
+        carriers = list(get_args(CarrierType))
+        logger.info("EXPORT_CONFIG: hourly_curves set to 'true', exporting all carriers: %s", carriers)
+        return carriers
+    if enabled is False:
+        logger.info("EXPORT_CONFIG: hourly_curves set to 'false', no hourly curves will be exported")
+        return None
 
-        # Annual exports parsing
-        VALID_ANNUAL_EXPORT_TYPES = {"energy_flow", "sankey", "production_parameters"}
-        annual_exports_val = get_cell_value("annual_exports")
-        include_annual_exports = None
+    parsed = _parse_list(row.get("output_carriers")) or _parse_list(value)
+    if parsed:
+        return _validated("hourly_curves", parsed, _validate_curves)
+    if not _is_blank(value):
+        logger.warning("EXPORT_CONFIG: hourly_curves could not be parsed, no hourly curves will be exported")
+    return None
 
-        # First check if it's a boolean (True/False from Excel)
-        exports_bool = parse_bool(annual_exports_val)
-        if exports_bool is True:
-            include_annual_exports = ["energy_flow", "sankey", "production_parameters"]
-        elif exports_bool is False:
-            include_annual_exports = None
-        elif isinstance(annual_exports_val, str):
-            # Parse as comma-separated list
-            parsed = parse_carriers(annual_exports_val)
-            if parsed:
-                valid_exports = [e for e in parsed if e in VALID_ANNUAL_EXPORT_TYPES]
-                include_annual_exports = valid_exports if valid_exports else None
 
-        config = ExportConfig(
-            include_inputs=parse_bool_field("include_inputs", "inputs"),
-            include_sortables=parse_bool_field("include_sortables", "sortables"),
-            include_custom_curves=parse_bool_field("include_custom_curves", "custom_curves"),
-            include_gqueries=parse_bool_field("include_gqueries", "gquery_results", "gqueries"),
-            include_input_defaults=parse_bool_field("include_input_defaults", "defaults"),
-            include_input_min_max=parse_bool_field("include_input_min_max", "min_max"),
-            hourly_curves=output_carriers,
-            include_annual_exports=include_annual_exports,
-        )
-        return config
+def _annual_exports(value: Any) -> Optional[List[str]]:
+    """Export names from annual_exports: true for all types, or a list."""
+    enabled = _parse_bool(value)
+    if enabled is True:
+        exports = list(get_args(AnnualExportType))
+        logger.info("EXPORT_CONFIG: annual_exports set to 'true', exporting all types: %s", exports)
+        return exports
+    if enabled is False:
+        logger.info("EXPORT_CONFIG: annual_exports set to 'false', no annual exports will be included")
+        return None
+    if not isinstance(value, str):
+        return None
+
+    parsed = _parse_list(value)
+    if not parsed:
+        logger.warning("EXPORT_CONFIG: annual_exports could not be parsed, no annual exports will be included")
+        return None
+    return _validated("annual_exports", parsed, _validate_exports)
+
+
+def _validated(
+    field: str,
+    entries: List[str],
+    validate: Callable[[List[str]], Tuple[List[str], List[str]]],
+) -> Optional[List[str]]:
+    """Run a packable validator, log its warnings, and return the valid entries or None."""
+    valid, warnings = validate(entries)
+    for warning in warnings:
+        logger.warning("EXPORT_CONFIG: %s", warning)
+    if not valid:
+        logger.warning("EXPORT_CONFIG: all %s entries were invalid, none will be exported", field)
+        return None
+    logger.info("EXPORT_CONFIG: %s set to: %s", field, valid)
+    return valid
+
+
+# Packables import this module, so these imports stay deferred.
+def _validate_curves(entries: List[str]) -> Tuple[List[str], List[str]]:
+    from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
+
+    return HourlyOutputCurvesPack.validate_curve_config(entries)
+
+
+def _validate_exports(entries: List[str]) -> Tuple[List[str], List[str]]:
+    from pyetm.models.packables.annual_exports_pack import AnnualExportsPack
+
+    return AnnualExportsPack.validate_export_types(entries)
 
 
 # Excel writing
@@ -286,9 +182,7 @@ def handle_numeric_value(
             return cast(int, worksheet.write_formula(row, col, "=NA()", cell_format, "#N/A"))
         return cast(int, worksheet.write(row, col, "N/A", cell_format))
 
-    # Set decimal precision
-    factor = 10**decimal_precision
-    value = math.ceil(value * factor) / factor
+    value = round(value, decimal_precision)
 
     return cast(int, worksheet.write_number(row, col, value, cell_format))
 
@@ -364,7 +258,7 @@ def get_scenario_blocks(columns: pd.MultiIndex) -> List[Tuple[Any, ...]]:
     current_scenario = None
     start_col = None
 
-    for i, (scenario, _) in enumerate(columns):
+    for i, (scenario, *_) in enumerate(columns):
         if scenario != current_scenario:
             if current_scenario is not None:
                 blocks.append((current_scenario, start_col, i - 1))
@@ -393,11 +287,7 @@ def add_frame(
     row_based_scenarios: bool = False,
 ) -> Worksheet:
     """Add DataFrame to Excel workbook as a new worksheet with formatting."""
-
-    # Create worksheet
     worksheet = workbook.add_worksheet(str(name))
-
-    # Add numeric handler
     worksheet.add_write_handler(
         float,
         lambda ws, r, c, v, fmt=None: handle_numeric_value(
@@ -405,215 +295,111 @@ def add_frame(
         ),
     )
 
-    # Create formats
-    formats = (
-        create_scenario_formats(workbook)
-        if scenario_styling
-        else {
-            "bold": workbook.add_format({"bold": True}) if bold_headers else None,
-            "default": None,
-        }
-    )
+    if scenario_styling:
+        formats = create_scenario_formats(workbook)
+    else:
+        formats = {"bold": workbook.add_format({"bold": True}) if bold_headers else None}
+    bold_format = formats["bold"] if bold_headers else None
 
-    # Calculate offsets
     col_offset = frame.index.nlevels if index else 0
     row_offset = frame.columns.nlevels
+    header_format, data_format = _cell_formats(
+        frame.columns, formats, bold_format, scenario_styling, row_based_scenarios
+    )
 
-    # Handle multi-index columns with scenario styling
-    if isinstance(frame.columns, pd.MultiIndex) and scenario_styling:
-        # Get scenario blocks for alternating colors
-        scenario_blocks = get_scenario_blocks(frame.columns)
+    name_format = formats["bold"] if scenario_styling else bold_format
+    _write_column_names(worksheet, frame.columns, col_offset, name_format)
+    _write_headers(worksheet, frame.columns, col_offset, header_format)
+    _write_data(worksheet, frame, row_offset, col_offset, data_format)
 
-        # Write column names
-        if frame.columns.names != [None] * frame.columns.nlevels:
-            for idx, name_val in enumerate(frame.columns.names):
-                if name_val is not None:
-                    col_name: str = str(name_val)
-                    worksheet.write(idx, col_offset - 1, col_name, formats["bold"])
-
-        # Write column headers with alternating scenario backgrounds
-        for col_num, values in enumerate(frame.columns.values):
-            # Determine which scenario block this column belongs to
-            scenario_idx = next(
-                (i for i, (_, start, end) in enumerate(scenario_blocks) if start <= col_num <= end),
-                0,
-            )
-            is_grey = scenario_idx % 2 == 1
-            header_format = formats["grey_header"] if is_grey else formats["white_header"]
-
-            for row_num, value in enumerate(values):
-                worksheet.write(row_num, col_num + col_offset, value, header_format)
-
-        # Write data with scenario block coloring
-        for row_num, row_data in enumerate(frame.values):
-            for col_num, value in enumerate(row_data):
-                # Determine scenario block
-                scenario_idx = next(
-                    (
-                        i
-                        for i, (_, start, end) in enumerate(scenario_blocks)
-                        if start <= col_num <= end
-                    ),
-                    0,
-                )
-                is_grey = scenario_idx % 2 == 1
-                data_format = formats["grey_data"] if is_grey else formats["white_data"]
-
-                # Convert list values (e.g. curve results) to string representation
-                write_value = str(value) if isinstance(value, list) else value
-
-                worksheet.write(
-                    row_num + row_offset, col_num + col_offset, write_value, data_format
-                )
-
-    else:
-        # Standard column handling or single-index scenario styling
-        bold_format = formats.get("bold") if bold_headers else None
-
-        if isinstance(frame.columns, pd.MultiIndex):
-            # Write column names without styling
-            if frame.columns.names != [None] * frame.columns.nlevels:
-                for idx, name_val in enumerate(frame.columns.names):
-                    if name_val is not None:
-                        column_name: str = str(name_val)
-                        worksheet.write(idx, col_offset - 1, column_name, bold_format)
-
-            # Write column values
-            for col_num, values in enumerate(frame.columns.values):
-                for row_num, value in enumerate(values):
-                    worksheet.write(row_num, col_num + col_offset, value, bold_format)
-
-            # Write data without styling
-            for row_num, row_data in enumerate(frame.values):
-                for col_num, value in enumerate(row_data):
-                    # Convert list values (e.g., curve results) to string representation
-                    write_value = str(value) if isinstance(value, list) else value
-                    worksheet.write(row_num + row_offset, col_num + col_offset, write_value)
-        else:
-            # Single-level columns
-            if scenario_styling and row_based_scenarios:
-                # Row-based scenario styling: scenarios are rows, not columns
-                # Use white header for all column headers
-                for col_num, value in enumerate(frame.columns.values):
-                    worksheet.write(row_offset - 1, col_num + col_offset, value, formats["white_header"])
-
-                # Alternate data backgrounds by scenario row
-                for row_num, row_data in enumerate(frame.values):
-                    is_grey = (row_num % 2) == 1
-                    data_format = formats["grey_data"] if is_grey else formats["white_data"]
-                    for col_num, value in enumerate(row_data):
-                        # Convert list values (e.g., curve results) to string representation
-                        write_value = str(value) if isinstance(value, list) else value
-                        worksheet.write(
-                            row_num + row_offset,
-                            col_num + col_offset,
-                            write_value,
-                            data_format,
-                        )
-            elif scenario_styling:
-                # Column-based scenario styling: scenarios are columns
-                # Alternate header backgrounds by scenario column
-                for col_num, value in enumerate(frame.columns.values):
-                    is_grey = (col_num % 2) == 1
-                    header_format = formats["grey_header"] if is_grey else formats["white_header"]
-                    worksheet.write(row_offset - 1, col_num + col_offset, value, header_format)
-
-                # Alternate data backgrounds by scenario column
-                for row_num, row_data in enumerate(frame.values):
-                    for col_num, value in enumerate(row_data):
-                        is_grey = (col_num % 2) == 1
-                        data_format = formats["grey_data"] if is_grey else formats["white_data"]
-                        # Convert list values (e.g., curve results) to string representation
-                        write_value = str(value) if isinstance(value, list) else value
-                        worksheet.write(
-                            row_num + row_offset,
-                            col_num + col_offset,
-                            write_value,
-                            data_format,
-                        )
-            else:
-                # No scenario styling: write simple headers and data
-                for col_num, value in enumerate(frame.columns.values):
-                    worksheet.write(row_offset - 1, col_num + col_offset, value, bold_format)
-
-                for row_num, row_data in enumerate(frame.values):
-                    for col_num, value in enumerate(row_data):
-                        # Convert list values (e.g., curve results) to string representation
-                        write_value = str(value) if isinstance(value, list) else value
-                        worksheet.write(row_num + row_offset, col_num + col_offset, write_value)
-
-    # Set column widths
     set_column_widths(worksheet, col_offset, len(frame.columns), column_width)
-
     if index:
         set_column_widths(worksheet, 0, frame.index.nlevels, index_width or column_width)
-
-        # Create index format matching the styling
-        index_format = formats.get("bold") if bold_headers else None
-        write_index(worksheet, frame.index, row_offset, index_format)
-
+        write_index(worksheet, frame.index, row_offset, bold_format)
     if freeze_panes:
         worksheet.freeze_panes(row_offset, col_offset)
 
     return worksheet
 
 
-def add_series(
-    name: str,
-    series: Series[Any],
-    workbook: Workbook,
-    index: bool = True,
-    column_width: Optional[int] = None,
-    index_width: Union[int, List[int], None] = None,
-    freeze_panes: bool = True,
-    bold_headers: bool = True,
-    nan_as_formula: bool = True,
-    decimal_precision: int = 10,
-) -> Worksheet:
-    """Add Series to Excel workbook as a new worksheet."""
+def _cell_formats(
+    columns: pd.Index[Any],
+    formats: Dict[str, Any],
+    bold_format: Any,
+    scenario_styling: bool,
+    row_based_scenarios: bool,
+) -> Tuple[Callable[[int], Any], Callable[[int, int], Any]]:
+    """Return (header format by column, data format by row and column)."""
+    if not scenario_styling:
+        return (lambda col: bold_format), (lambda row, col: None)
 
-    # Create worksheet
-    worksheet = workbook.add_worksheet(str(name))
+    if row_based_scenarios and not isinstance(columns, pd.MultiIndex):
+        return (lambda col: formats["white_header"]), (lambda row, col: _band(formats, "data", row))
 
-    # Add numeric handler
-    worksheet.add_write_handler(
-        float,
-        lambda ws, r, c, v, fmt=None: handle_numeric_value(
-            ws, r, c, v, fmt, nan_as_formula, decimal_precision
-        ),
+    bands = _column_bands(columns)
+    return (
+        lambda col: _band(formats, "header", bands[col]),
+        lambda row, col: _band(formats, "data", bands[col]),
     )
 
-    # Create bold format if needed
-    bold_format = workbook.add_format({"bold": True}) if bold_headers else None
 
-    # Calculate offsets
-    col_offset = series.index.nlevels if index else 0
+def _column_bands(columns: pd.Index[Any]) -> List[int]:
+    """Band number per column: one band per scenario block, or per column when single level."""
+    if not isinstance(columns, pd.MultiIndex):
+        return list(range(len(columns)))
 
-    # Write header
-    header = str(series.name) if series.name is not None else "Series"
-    if isinstance(series.name, (list, tuple)):
-        header = "_".join(map(str, series.name))
+    return [
+        band
+        for band, (_, start, end) in enumerate(get_scenario_blocks(columns))
+        for _ in range(start, end + 1)
+    ]
 
-    worksheet.write(0, col_offset, header, bold_format)
 
-    # Set column width
-    if column_width:
-        worksheet.set_column(col_offset, col_offset, column_width)
+def _band(formats: Dict[str, Any], kind: str, band: int) -> Any:
+    """Alternate white and grey backgrounds."""
+    return formats[f"grey_{kind}" if band % 2 else f"white_{kind}"]
 
-    # Write data
-    for row_num, value in enumerate(series.values):
-        worksheet.write(row_num + 1, col_offset, value)
 
-    # Write index
-    if index:
-        set_column_widths(worksheet, 0, series.index.nlevels, index_width or column_width)
-        write_index(worksheet, series.index, 1, bold_format)
+def _write_column_names(
+    worksheet: Worksheet, columns: pd.Index[Any], col_offset: int, cell_format: Any
+) -> None:
+    """Write MultiIndex level names in the column left of the headers."""
+    if not isinstance(columns, pd.MultiIndex):
+        return
 
-    # Freeze panes
-    if freeze_panes:
-        worksheet.freeze_panes(1, col_offset)
+    for level, level_name in enumerate(columns.names):
+        if level_name is not None:
+            worksheet.write(level, col_offset - 1, str(level_name), cell_format)
 
-    return worksheet
+
+def _write_headers(
+    worksheet: Worksheet,
+    columns: pd.Index[Any],
+    col_offset: int,
+    header_format: Callable[[int], Any],
+) -> None:
+    """Write column headers, one row per column level."""
+    for col_num, labels in enumerate(columns.values):
+        if not isinstance(columns, pd.MultiIndex):
+            labels = (labels,)
+        for row_num, label in enumerate(labels):
+            worksheet.write(row_num, col_num + col_offset, label, header_format(col_num))
+
+
+def _write_data(
+    worksheet: Worksheet,
+    frame: pd.DataFrame,
+    row_offset: int,
+    col_offset: int,
+    data_format: Callable[[int, int], Any],
+) -> None:
+    """Write cell values, turning lists (e.g. curve results) into strings."""
+    for row_num, row_data in enumerate(frame.values):
+        for col_num, value in enumerate(row_data):
+            cell = str(value) if isinstance(value, list) else value
+            worksheet.write(
+                row_num + row_offset, col_num + col_offset, cell, data_format(row_num, col_num)
+            )
 
 
 # Dataframe prep and sanitization
@@ -663,7 +449,7 @@ def sanitize_excel_value(value: Any) -> Any:
         return ""
 
 
-def build_excel_main_dataframe(main_df: pd.DataFrame, scenarios: List[Any]) -> pd.DataFrame:
+def build_excel_main_dataframe(main_df: pd.DataFrame) -> pd.DataFrame:
     """Build a MAIN sheet DataFrame for Excel export"""
     if main_df is None or main_df.empty:
         return pd.DataFrame()
@@ -706,68 +492,6 @@ def apply_field_ordering(df: pd.DataFrame) -> pd.DataFrame:
     ordered_fields = present_fields + remaining_fields
 
     return df.loc[:, ordered_fields]
-
-
-def apply_scenario_column_labels(df: pd.DataFrame, scenarios: List[Any]) -> pd.DataFrame:
-    """Apply human-readable labels to scenario columns."""
-    try:
-        column_rename_map = build_column_rename_map(scenarios, df.columns)
-
-        if column_rename_map:
-            return df.rename(columns=column_rename_map)
-        return df
-    except Exception:
-        # If renaming fails, return original DataFrame
-        return df
-
-
-def build_column_rename_map(scenarios: List[Any], columns: Any) -> Dict[Any, str]:
-    """Build mapping of column IDs to human-readable labels."""
-    rename_map = {}
-    scenarios_by_id = {str(getattr(s, "id", "")): s for s in scenarios}
-
-    for column in columns:
-        matched_scenario = find_matching_scenario(column, scenarios, scenarios_by_id)
-        if matched_scenario is not None:
-            label = get_scenario_display_label(matched_scenario, column)
-            rename_map[column] = label
-
-    return rename_map
-
-
-def find_matching_scenario(
-    column: Any, scenarios: List[Any], scenarios_by_id: Dict[str, Any]
-) -> Optional[Any]:
-    """Find scenario matching the given column identifier."""
-    # Try exact ID match first
-    for scenario in scenarios:
-        if column == getattr(scenario, "id", None):
-            return scenario
-
-    # Try string ID match as fallback
-    return scenarios_by_id.get(str(column))
-
-
-def get_scenario_display_label(scenario: Any, fallback_column: Any) -> str:
-    """Get display label for scenario, with fallbacks."""
-    try:
-        if hasattr(scenario, "identifier"):
-            return cast(str, scenario.identifier())
-    except Exception:
-        pass
-
-    # Try title attribute
-    title = getattr(scenario, "title", None)
-    if title:
-        return cast(str, title)
-
-    # Try ID attribute
-    scenario_id = getattr(scenario, "id", None)
-    if scenario_id:
-        return str(scenario_id)
-
-    # Final fallback
-    return str(fallback_column)
 
 
 # Excel reading and parsing
