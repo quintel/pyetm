@@ -184,6 +184,7 @@ admin@example.com      | owner       | owner       | owner       |
 **Notes**:
 
 - Empty cells mean the user has no access to that scenario
+- Only saved Scenarios have users. A Session that is not saved to MyETM exports no users, and importing users onto one logs a warning and skips it
 - See `Scenario.update_users()` for programmatic equivalent
 
 ### GQUERIES Sheet
