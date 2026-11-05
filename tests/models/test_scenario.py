@@ -16,6 +16,8 @@ from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
 from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
+from pyetm.services.scenario_runners.destroy_session import DestroySessionRunner
+from pyetm.services.service_result import ServiceResult
 from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
 from pyetm.services.scenario_runners.interpolate_scenarios import (
     InterpolateScenariosRunner,
@@ -1801,3 +1803,42 @@ def test_clear_all_curve_caches(scenario):
 # tested in their respective test files, and the session-level delegation methods
 # (clear_hourly_curves_cache, clear_custom_curves_cache, clear_all_curve_caches)
 # are tested above.
+
+
+class TestSessionUsers:
+    """Session access is managed on the saved Scenario, never through the engine."""
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda s: s.list_users(),
+            lambda s: s.update_users("user@example.com", "viewer"),
+            lambda s: s.apply_pending_users(),
+        ],
+    )
+    def test_user_methods_point_to_the_scenario(self, call):
+        session = Session(id=1, area_code="nl", end_year=2050)
+
+        with pytest.raises(ScenarioError, match="managed on the saved Scenario"):
+            call(session)
+
+
+class TestSessionDelete:
+    """Deleting through the engine is admin only under grants only."""
+
+    @pytest.fixture
+    def session(self):
+        return Session(id=1, area_code="nl", end_year=2050)
+
+    def test_admin_delete_succeeds(self, monkeypatch, session):
+        deleted = ServiceResult.ok({})
+        monkeypatch.setattr(DestroySessionRunner, "run", lambda client, scenario_id: deleted)
+
+        session.delete()
+
+    def test_other_failures_keep_the_engine_error(self, monkeypatch, session):
+        missing = ServiceResult.fail(["Resource not found: 404: No such scenario"])
+        monkeypatch.setattr(DestroySessionRunner, "run", lambda client, scenario_id: missing)
+
+        with pytest.raises(ScenarioError, match="Could not delete session: .*404"):
+            session.delete()

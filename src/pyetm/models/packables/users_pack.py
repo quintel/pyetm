@@ -1,17 +1,18 @@
 """User data packing utilities."""
 
 import logging
-from typing import ClassVar, Dict, Any, List, Optional
-from openpyxl import Workbook  # type: ignore[import-untyped]
+from typing import ClassVar, Dict, Any, Optional
 import pandas as pd
 import numpy as np
-from pydantic import Field
 from pyetm.models.packables.packable import Packable
-from pyetm.services.scenario_runners.scenario_users_index import (
-    ScenarioUsersIndexRunner,
-)
+from pyetm.models.scenario import Scenario
 
 logger = logging.getLogger(__name__)
+
+UNSAVED_SESSION_WARNING = (
+    "Session '%s' is not saved to MyETM, so its users cannot be %s. "
+    "Access is managed on the saved Scenario."
+)
 
 
 class UsersPack(Packable):
@@ -25,86 +26,35 @@ class UsersPack(Packable):
 
     def to_dataframe(self, columns: Any = None) -> pd.DataFrame:
         """
-        Export user roles to a DataFrame in grid format.
+        Export each saved Scenario's members to a DataFrame in grid format.
 
         Returns:
             DataFrame with user emails as index, scenarios as columns
         """
-        if not self.scenarios:
-            return pd.DataFrame()
-
-        # Collect all users across all scenarios
-        user_roles: Dict[str, Dict[Any, str]] = {}  # email -> {scenario_key: role}
-
-        for scenario in self.scenarios:
-            scenario_key = self._get_scenario_display_key(scenario)
-
-            try:
-                result = ScenarioUsersIndexRunner.run(
-                    client=scenario.client, scenario_id=scenario.id  # type: ignore[attr-defined]
-                )
-
-                if not result.success:
-                    logger.warning(
-                        "Failed to fetch users for scenario '%s': %s",
-                        scenario.identifier(),
-                        result.errors,
-                    )
-                    continue
-
-                users = result.data or []
-                for user in users:
-                    email = user.get("email")
-                    role = user.get("role")
-
-                    if not email or not role:
-                        continue
-
-                    # Convert API role to short name for display
-                    short_role = self._api_role_to_short(role)
-
-                    if email not in user_roles:
-                        user_roles[email] = {}
-                    user_roles[email][scenario_key] = short_role
-
-            except Exception as e:
-                logger.warning(
-                    "Error fetching users for scenario '%s': %s",
-                    scenario.identifier(),
-                    e,
-                )
-
-        if not user_roles:
-            return pd.DataFrame()
-
-        # Build DataFrame with multi-level columns
-        frames = []
-        labels = []
-
-        for scenario in self.scenarios:
-            scenario_key = self._get_scenario_display_key(scenario)
-            # Create a series with all emails and their roles for this scenario
-            scenario_roles = {
-                email: roles.get(scenario_key, np.nan) for email, roles in user_roles.items()
-            }
-            df = pd.DataFrame({"role": scenario_roles})
-            frames.append(df)
-            labels.append(scenario_key)
-
-        return (
-            pd.concat(frames, axis=1, keys=labels, names=["scenario", "field"])
-            if frames
-            else pd.DataFrame()
-        )
-
-    def _api_role_to_short(self, api_role: str) -> str:
-        """Convert API role name to short display name."""
-        role_map = {
-            "scenario_owner": "owner",
-            "scenario_collaborator": "collaborator",
-            "scenario_viewer": "viewer",
+        roles_by_key = {
+            self._get_scenario_display_key(s): self._roles_for(s) for s in self.scenarios
         }
-        return role_map.get(api_role, api_role)
+        emails = list(dict.fromkeys(e for roles in roles_by_key.values() for e in roles))
+        if not emails:
+            return pd.DataFrame()
+
+        frames = [
+            pd.DataFrame({"role": [roles.get(e, np.nan) for e in emails]}, index=emails)
+            for roles in roles_by_key.values()
+        ]
+        return pd.concat(frames, axis=1, keys=list(roles_by_key), names=["scenario", "field"])
+
+    def _roles_for(self, scenario: Any) -> Dict[str, str]:
+        """Map each member's email to their short role, e.g. 'owner'."""
+        if not isinstance(scenario, Scenario):
+            logger.warning(UNSAVED_SESSION_WARNING, scenario.identifier(), "exported")
+            return {}
+        try:
+            users = scenario.list_users()
+        except Exception as e:
+            logger.warning("Failed to fetch users for scenario '%s': %s", scenario.identifier(), e)
+            return {}
+        return {u["user_email"]: u["role"] for u in users if u.get("user_email") and u.get("role")}
 
     def from_dataframe(self, df: Any, update_set: Optional[set[str]] = None) -> None:
         """
@@ -133,6 +83,9 @@ class UsersPack(Packable):
                 # Resolve scenario with automatic warning
                 scenario = self._resolve_scenario_with_warning(column_name, "USERS sheet")
                 if scenario is None:
+                    continue
+                if not isinstance(scenario, Scenario):
+                    logger.warning(UNSAVED_SESSION_WARNING, scenario.identifier(), "imported")
                     continue
 
                 # Process each user/role pair for this scenario

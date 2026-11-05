@@ -470,14 +470,11 @@ class Scenario(Base):
 
     def delete(self, client: Optional[BaseClient] = None) -> None:
         """
-        Permanently delete this SavedScenario AND its underlying Session (hard delete with cascade).
+        Permanently delete this SavedScenario from MyETM.
 
-        WARNING: This is a PERMANENT deletion and CANNOT be undone. This will:
-        1. Permanently delete the SavedScenario from MyETM
-        2. Permanently delete the underlying Session from ETEngine
-
-        All scenario data will be irreversibly lost. For recoverable deletion,
-        use discard() instead.
+        WARNING: This is a PERMANENT deletion and CANNOT be undone. MyETM purges the
+        SavedScenario and unbinds its Session, which then expires on its own.
+        For recoverable deletion, use discard() instead.
 
         Args:
             client: Optional BaseClient instance
@@ -492,11 +489,7 @@ class Scenario(Base):
         if client is None:
             client = get_client()
 
-        result = DestroySavedScenarioRunner.run(
-            client,
-            saved_scenario_id=self.id,
-            scenario_id=self.scenario_id
-        )
+        result = DestroySavedScenarioRunner.run(client, saved_scenario_id=self.id)
 
         if not result.success:
             raise SavedScenarioError(
