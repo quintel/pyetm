@@ -39,18 +39,6 @@ from pyetm.services.scenario_runners.fetch_couplings import FetchCouplingsRunner
 from pyetm.services.scenario_runners.update_couplings import UpdateCouplingsRunner
 from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
 from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
-from pyetm.services.scenario_runners.scenario_users_index import (
-    ScenarioUsersIndexRunner,
-)
-from pyetm.services.scenario_runners.scenario_users_create import (
-    ScenarioUsersCreateRunner,
-)
-from pyetm.services.scenario_runners.scenario_users_update import (
-    ScenarioUsersUpdateRunner,
-)
-from pyetm.services.scenario_runners.scenario_users_destroy import (
-    ScenarioUsersDestroyRunner,
-)
 from pyetm.services.scenario_runners.interpolate_scenarios import (
     InterpolateScenariosRunner,
 )
@@ -60,6 +48,18 @@ logger = logging.getLogger(__name__)
 
 class ScenarioError(Exception):
     """Base scenario error"""
+
+
+SESSION_DELETE_ADMIN_ONLY = (
+    "Deleting a Session is not supported. "
+    "An unsaved Session expires on its own. To delete a saved one, use Scenario.delete()."
+)
+
+USERS_ON_SCENARIO = (
+    "Access is managed on the saved Scenario, not the Session. "
+    "Save the Session with session.save(title=...) and use the Scenario's "
+    "list_users(), update_users() or apply_pending_users() instead."
+)
 
 
 # TODO: Tidy up the datetime created_at and updated-at fields - they come through like:  'created_at': datetime.datetime(2025, 6, 25, 14, 18, 6, tzinfo=TzInfo(UTC))
@@ -100,7 +100,6 @@ class Session(Base):
     _queries: Optional[Gqueries] = PrivateAttr(None)
     _export_config: Optional[ExportConfig] = PrivateAttr(default=None)
     _couplings: Optional[Couplings] = PrivateAttr(default=None)
-    _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
 
     @classmethod
     def new(
@@ -1068,119 +1067,26 @@ class Session(Base):
             self.add_warning("couplings", w)
 
     def list_users(self) -> List[Dict[str, Any]]:
-        """
-        Fetch all users with access to this scenario.
-        """
-        result = ScenarioUsersIndexRunner.run(get_client(), self.id)
-
-        if not result.success:
-            raise ScenarioError(f"Could not fetch users: {result.errors}")
-
-        if result.data is None:
-            return []
-
-        for user in result.data:
-            user["role"] = user["role"].replace("scenario_", "", 1)
-
-        return result.data
+        """Users are managed on the saved Scenario. Use Scenario.list_users()."""
+        raise ScenarioError(USERS_ON_SCENARIO)
 
     def update_users(self, email: str, role: str, skip_upload: bool = False) -> None:
-        """
-        Add, update, or remove a user's access to this scenario.
-        - skip_upload: If True, store data locally without uploading (can be applied later)
-        """
-        role = self._normalize_role(role)
-
-        if skip_upload:
-            self._pending_users[email] = role
-            return
-
-        if role == "remove":
-            self._remove_user(email)
-            return
-
-        if self._user_exists(email):
-            self._update_user_role(email, role)
-        else:
-            self._add_user(email, role)
+        """Users are managed on the saved Scenario. Use Scenario.update_users()."""
+        raise ScenarioError(USERS_ON_SCENARIO)
 
     def apply_pending_users(self) -> int:
-        """
-        Apply all pending user updates that were loaded with skip_upload=True.
-        """
-        if not self._pending_users:
-            return 0
-
-        count = 0
-        for email, role in list(self._pending_users.items()):
-            try:
-                self.update_users(email, role, skip_upload=False)
-                count += 1
-            except Exception as e:
-                logger.warning(
-                    "Failed to apply pending user '%s' with role '%s': %s",
-                    email,
-                    role,
-                    e,
-                )
-
-        # Clear pending users after applying
-        self._pending_users.clear()
-        return count
-
-    def _normalize_role(self, role: str) -> str:
-        role_aliases = {
-            "scenario_owner": {"owner", "scenario_owner"},
-            "scenario_collaborator": {"collaborator", "scenario_collaborator"},
-            "scenario_viewer": {"viewer", "scenario_viewer"},
-            "remove": {"remove"},
-        }
-        role_lower = role.lower() if isinstance(role, str) else None
-        normalized_role = next(
-            (k for k, v in role_aliases.items() if role_lower in v), None
-        )
-        if not normalized_role:
-            valid_roles = ", ".join(role_aliases.keys())
-            raise ValueError(f"Invalid role: {role}. Must be one of: {valid_roles}")
-        return normalized_role
-
-    def _user_exists(self, email: str) -> bool:
-        return any(u.get("user_email") == email for u in self.list_users())
-
-    def _remove_user(self, email: str) -> None:
-        result = ScenarioUsersDestroyRunner.run(
-            get_client(), self.id, [{"user_email": email}]
-        )
-        if not result.success:
-            raise ScenarioError(f"Could not remove user: {result.errors}")
-
-    def _update_user_role(self, email: str, role: str) -> None:
-        result = ScenarioUsersUpdateRunner.run(
-            get_client(), self.id, [{"user_email": email, "role": role}]
-        )
-        if not result.success:
-            raise ScenarioError(f"Could not update user: {result.errors}")
-
-    def _add_user(self, email: str, role: str) -> None:
-        result = ScenarioUsersCreateRunner.run(
-            get_client(), self.id, [{"user_email": email, "role": role}]
-        )
-        if not result.success:
-            raise ScenarioError(f"Could not add user: {result.errors}")
+        """Users are managed on the saved Scenario. Use Scenario.apply_pending_users()."""
+        raise ScenarioError(USERS_ON_SCENARIO)
 
     def delete(self) -> None:
         """
-        Permanently delete this ETEngine scenario/session (hard delete).
+        Permanently delete this ETEngine session (hard delete). Admin only.
 
-        WARNING: This is a permanent deletion and cannot be undone. The scenario
-        and all its data will be permanently removed from ETEngine.
-
-        This method should be used when you want to delete a temporary/ephemeral
-        session that is not saved in MyETM. If this session is associated with a
-        SavedScenario, use Scenario.delete() instead to ensure both are deleted.
+        WARNING: This is a permanent deletion and cannot be undone. For a saved
+        scenario, use Scenario.delete() instead.
 
         Raises:
-            ScenarioError: If the deletion fails
+            ScenarioError: If the deletion fails, or the caller is not an admin
 
         Example:
             >>> session = Session.new(area_code="nl2023", end_year=2050)
@@ -1190,6 +1096,8 @@ class Session(Base):
 
         result = DestroySessionRunner.run(get_client(), self.id)
 
+        if any(str(error).startswith("403") for error in result.errors):
+            raise ScenarioError(SESSION_DELETE_ADMIN_ONLY)
         if not result.success:
             raise ScenarioError(f"Could not delete session: {result.errors}")
 

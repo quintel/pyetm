@@ -65,17 +65,16 @@ def test_scenario_discard_with_explicit_client(monkeypatch, ok_service_result, m
 
 # Tests for delete() - hard-delete with cascade, permanent
 def test_scenario_delete_success(monkeypatch, ok_service_result, saved_scenario):
-    """Test successful permanent deletion of a saved scenario (hard delete with cascade)."""
+    """Test successful permanent deletion of a saved scenario through MyETM's purge."""
     delete_response = {
-        "message": "SavedScenario and underlying Session permanently deleted",
+        "message": "SavedScenario permanently deleted",
         "saved_scenario_id": 123,
-        "scenario_id": 456
     }
 
     monkeypatch.setattr(
         DestroySavedScenarioRunner,
         "run",
-        lambda client, saved_scenario_id, scenario_id: ok_service_result(delete_response),
+        lambda client, saved_scenario_id: ok_service_result(delete_response),
     )
 
     # Should not raise an exception
@@ -87,7 +86,7 @@ def test_scenario_delete_failure(monkeypatch, fail_service_result, saved_scenari
     monkeypatch.setattr(
         DestroySavedScenarioRunner,
         "run",
-        lambda client, saved_scenario_id, scenario_id: fail_service_result(
+        lambda client, saved_scenario_id: fail_service_result(
             ["Failed to delete SavedScenario: ['404: SavedScenario not found']"]
         ),
     )
@@ -103,7 +102,7 @@ def test_scenario_delete_not_authorized(
     monkeypatch.setattr(
         DestroySavedScenarioRunner,
         "run",
-        lambda client, saved_scenario_id, scenario_id: fail_service_result(
+        lambda client, saved_scenario_id: fail_service_result(
             ["Failed to delete SavedScenario: ['403: Not authorized to delete this scenario']"]
         ),
     )
@@ -115,15 +114,14 @@ def test_scenario_delete_not_authorized(
 def test_scenario_delete_with_explicit_client(monkeypatch, ok_service_result, mock_client):
     """Test that permanent delete can use an explicitly passed client."""
     delete_response = {
-        "message": "SavedScenario and underlying Session permanently deleted",
+        "message": "SavedScenario permanently deleted",
         "saved_scenario_id": 123,
-        "scenario_id": 456
     }
 
     # Track which client was used
     used_client = None
 
-    def mock_delete(client, saved_scenario_id, scenario_id):
+    def mock_delete(client, saved_scenario_id):
         nonlocal used_client
         used_client = client
         return ok_service_result(delete_response)
