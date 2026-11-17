@@ -4,21 +4,30 @@ from unittest.mock import Mock, MagicMock, patch
 import pytest
 
 from pyetm.models.packables.users_pack import UsersPack
+from pyetm.models.scenario import Scenario
+from pyetm.models.session import Session
 from pyetm.services.service_result import ServiceResult
 
 
-def make_scenario(id_val=1, identifier="S1", client=None):
-    """Create a mock scenario."""
-    s = Mock()
+def make_scenario(id_val=1, identifier="S1"):
+    """Create a mock saved Scenario."""
+    s = Mock(spec=Scenario)
     s.id = id_val
     s.identifier = Mock(return_value=identifier)
-    s.client = client or Mock()
+    return s
+
+
+def make_session(id_val=1, identifier="S1"):
+    """Create a mock Session that is not saved to MyETM."""
+    s = Mock(spec=Session)
+    s.id = id_val
+    s.identifier = Mock(return_value=identifier)
     return s
 
 
 def make_user(email, role):
-    """Create a user dictionary as returned by the API."""
-    return {"email": email, "role": role}
+    """Create a user dictionary as returned by Scenario.list_users()."""
+    return {"user_id": 1, "user_email": email, "role": role}
 
 
 class TestUsersPack:
@@ -96,32 +105,16 @@ class TestUsersPack:
 
         assert result is None
 
-    def test_api_role_to_short(self):
-        pack = UsersPack()
-
-        assert pack._api_role_to_short("scenario_owner") == "owner"
-        assert pack._api_role_to_short("scenario_viewer") == "viewer"
-        assert pack._api_role_to_short("scenario_collaborator") == "collaborator"
-
-    @patch("pyetm.models.packables.users_pack.ScenarioUsersIndexRunner")
-    def test_to_dataframe_with_users(self, mock_runner):
+    def test_to_dataframe_with_users(self):
         s1 = make_scenario(id_val=1, identifier="S1")
+        s1.list_users.return_value = [
+            make_user("user1@example.com", "owner"),
+            make_user("user2@example.com", "viewer"),
+        ]
         s2 = make_scenario(id_val=2, identifier="S2")
-
-        # Mock the API responses
-        mock_runner.run.side_effect = [
-            ServiceResult.ok(
-                [
-                    make_user("user1@example.com", "scenario_owner"),
-                    make_user("user2@example.com", "scenario_viewer"),
-                ]
-            ),
-            ServiceResult.ok(
-                [
-                    make_user("user1@example.com", "scenario_collaborator"),
-                    make_user("user3@example.com", "scenario_viewer"),
-                ]
-            ),
+        s2.list_users.return_value = [
+            make_user("user1@example.com", "collaborator"),
+            make_user("user3@example.com", "viewer"),
         ]
 
         pack = UsersPack()
@@ -129,33 +122,26 @@ class TestUsersPack:
 
         df = pack.to_dataframe()
 
-        assert not df.empty
-        assert "S1" in df.columns.get_level_values("scenario")
-        assert "S2" in df.columns.get_level_values("scenario")
-        assert "user1@example.com" in df.index
-        assert "user2@example.com" in df.index
-        assert "user3@example.com" in df.index
+        assert list(df.index) == ["user1@example.com", "user2@example.com", "user3@example.com"]
+        assert df.loc["user1@example.com", ("S1", "role")] == "owner"
+        assert df.loc["user1@example.com", ("S2", "role")] == "collaborator"
+        assert pd.isna(df.loc["user3@example.com", ("S1", "role")])
 
-    @patch("pyetm.models.packables.users_pack.ScenarioUsersIndexRunner")
-    def test_to_dataframe_converts_to_short_names(self, mock_runner):
+    def test_to_dataframe_skips_members_without_email(self):
         s1 = make_scenario(id_val=1, identifier="S1")
-
-        mock_runner.run.return_value = ServiceResult.ok(
-            [make_user("user@example.com", "scenario_owner")]
-        )
+        s1.list_users.return_value = [
+            make_user(None, "owner"),
+            make_user("user@example.com", "viewer"),
+        ]
 
         pack = UsersPack()
         pack.add(s1)
 
-        df = pack.to_dataframe()
+        assert list(pack.to_dataframe().index) == ["user@example.com"]
 
-        assert df.loc["user@example.com", ("S1", "role")] == "owner"
-
-    @patch("pyetm.models.packables.users_pack.ScenarioUsersIndexRunner")
-    def test_to_dataframe_handles_api_failure(self, mock_runner, caplog):
+    def test_to_dataframe_handles_api_failure(self, caplog):
         s1 = make_scenario(id_val=1, identifier="S1")
-
-        mock_runner.run.return_value = ServiceResult.fail(["API Error"])
+        s1.list_users.side_effect = Exception("API Error")
 
         pack = UsersPack()
         pack.add(s1)
@@ -165,6 +151,22 @@ class TestUsersPack:
 
             assert df.empty
             assert "Failed to fetch users" in caplog.text
+
+    def test_to_dataframe_warns_for_unsaved_session(self, caplog):
+        session = make_session(id_val=1, identifier="Temp")
+        saved = make_scenario(id_val=2, identifier="Saved")
+        saved.list_users.return_value = [make_user("user@example.com", "owner")]
+
+        pack = UsersPack()
+        pack.add(session, saved)
+
+        with caplog.at_level("WARNING"):
+            df = pack.to_dataframe()
+
+            assert "Session 'Temp' is not saved to MyETM" in caplog.text
+        session.list_users.assert_not_called()
+        assert df.loc["user@example.com", ("Saved", "role")] == "owner"
+        assert pd.isna(df.loc["user@example.com", ("Temp", "role")])
 
     def test_to_dataframe_empty_scenarios(self):
         pack = UsersPack()
@@ -322,29 +324,60 @@ class TestUsersPack:
         # Note: roles are passed as-is; normalization happens in update_users()
         s1.update_users.assert_called_once_with("user@example.com", "owner", skip_upload=True)
 
-    def test_apply_pending_users_uploads_stored_data(self):
-        """Test that apply_pending_users() uploads the stored user data"""
-        from pyetm.models.session import Session
+    def test_from_dataframe_warns_for_unsaved_session(self, caplog):
+        session = make_session(id_val=1, identifier="S1")
 
-        # Create a real Session instance to test apply_pending_users
-        s1 = Session(id=1, area_code="nl", end_year=2050)
-        s1._pending_users = {
-            "user1@example.com": "scenario_owner",
-            "user2@example.com": "scenario_viewer",
-        }
+        pack = UsersPack()
+        pack.add(session)
 
-        # Mock the actual API-calling methods
-        s1._user_exists = Mock(return_value=False)
-        s1._add_user = Mock()
-        s1._remove_user = Mock()
-        s1._update_user_role = Mock()
+        df = pd.DataFrame([[np.nan, "S1"], ["user@example.com", "owner"]])
 
-        # Call apply_pending_users
-        count = s1.apply_pending_users()
+        with caplog.at_level("WARNING"):
+            pack.from_dataframe(df, {"users"})
 
-        # Should have called _add_user twice (for new users)
-        assert s1._add_user.call_count == 2
-        assert count == 2
+            assert "Session 'S1' is not saved to MyETM" in caplog.text
+        session.update_users.assert_not_called()
 
-        # Verify _pending_users is cleared
-        assert len(s1._pending_users) == 0
+
+class TestUsersPackThroughMyETM:
+    """A saved Scenario's members round trip through the saved scenario users endpoints."""
+
+    @pytest.fixture
+    def saved(self):
+        scenario = Scenario(id=7, scenario_id=70, title="Saved")
+        scenario._scenario_session = Session(id=70, area_code="nl", end_year=2050)
+        return scenario
+
+    @pytest.fixture
+    def client(self):
+        with patch("pyetm.models.scenario.get_client") as get_client:
+            yield get_client.return_value
+
+    @patch("pyetm.models.scenario.SavedScenarioUsersIndexRunner")
+    def test_export_writes_myetm_members(self, index_runner, saved, client):
+        index_runner.run.return_value = ServiceResult.ok(
+            [make_user("member@example.com", "scenario_collaborator")]
+        )
+        pack = UsersPack()
+        pack.add(saved)
+
+        df = pack.to_dataframe()
+
+        index_runner.run.assert_called_once_with(client, 7)
+        assert df.loc["member@example.com", ("Saved", "role")] == "collaborator"
+
+    @patch("pyetm.models.scenario.SavedScenarioUsersCreateRunner")
+    @patch("pyetm.models.scenario.SavedScenarioUsersIndexRunner")
+    def test_import_sets_myetm_members(self, index_runner, create_runner, saved, client):
+        index_runner.run.return_value = ServiceResult.ok([])
+        create_runner.run.return_value = ServiceResult.ok([])
+        pack = UsersPack()
+        pack.add(saved)
+
+        df = pd.DataFrame([[np.nan, "Saved"], ["new@example.com", "viewer"]])
+
+        pack.from_dataframe(df, {"users"})
+
+        create_runner.run.assert_called_once_with(
+            client, 7, [{"user_email": "new@example.com", "role": "scenario_viewer"}]
+        )

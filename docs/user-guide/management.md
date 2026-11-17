@@ -202,16 +202,15 @@ for user in users:
     print(f"{user['user_email']}: {user['role']}")
 ```
 
-For Sessions (temporary scenarios), the API works the same way:
+Access is managed on the saved Scenario only. A Session's `list_users()`, `update_users()` and `apply_pending_users()` raise a `ScenarioError`. Save the Session first, then manage its users on the Scenario it returns:
 
 ```python
-from pyetm import Scenario
+from pyetm import Session
 
-# Create or load a session
-session = Scenario.new(area_code="nl2023", end_year=2050)
+session = Session.new(area_code="nl2023", end_year=2050)
+scenario = session.save(title="My scenario")
 
-# List users
-users = session.list_users()
+users = scenario.list_users()
 ```
 
 ### Adding or Updating User Access

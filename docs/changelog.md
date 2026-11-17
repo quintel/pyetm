@@ -2,6 +2,23 @@
 
 All notable changes to pyetm are documented here.
 
+## [2.0.5] - 12-11-2026
+
+### Changed
+
+- Access is managed on the saved Scenario only. `Session.list_users()`,
+  `Session.update_users()` and `Session.apply_pending_users()` now raise a
+  `ScenarioError` pointing to the Scenario, without calling the engine.
+- The `USERS` sheet reads and writes members through the saved Scenario, so they come
+  from MyETM. A Session that is not saved exports no users, and importing users onto
+  one logs a warning and skips it.
+- `Session.delete()` says plainly that deleting a Session is admin only when the engine
+  refuses it.
+
+### Removed
+
+- The `ScenarioUsersIndexRunner`, `ScenarioUsersCreateRunner`, `ScenarioUsersUpdateRunner` and `ScenarioUsersDestroyRunner`.
+
 ## [2.0.4] - 14-10-2026
 
 ### Fixed
