@@ -22,24 +22,24 @@ dynamic = ["classifiers"]
 
 dependencies = [
   # Pydantic ecosystem - pinned to v2 for API stability
-  "pydantic>=2.8.0,<3.0.0",
-  "pydantic-settings>=2.14.2,<3.0.0",
+  "pydantic>=2.14.3,<3.0.0",
+  "pydantic-settings>=2.15.0,<3.0.0",
 
   # Data handling - pandas 3.x tested and compatible
-  "pandas>=2.0.0,<4.0.0",
+  "pandas>=3.1.1,<4.0.0",
   "openpyxl>=3.0.0",
-  "xlsxwriter>=3.0.0",
+  "xlsxwriter>=3.3.1",
 
   # HTTP clients
-  "requests>=2.31.0,<3.0.0",
-  "aiohttp>=3.14.1,<4.0.0",
+  "requests>=2.34.2,<3.0.0",
+  "aiohttp>=3.14.5,<4.0.0",
 
   # Configuration and utilities
-  "python-dotenv>=1.0.0",
-  "pyyaml>=6.0.0",
+  "python-dotenv>=1.2.4",
+  "pyyaml>=6.0.3",
 
   # CLI framework
-  "click>=8.0.0",
+  "click>=8.5.1",
 ]
 
 [project.scripts]
@@ -77,26 +77,26 @@ requests-mock = ">=1.12.0"
 
 # Code quality
 pylint = ">=3.0.0"
-pydeps = ">=3.0.0"
-pre-commit = ">=3.5.0"
+pydeps = ">=3.0.9"
+pre-commit = ">=4.7.0"
 
 # Type checking
-mypy = ">=1.7.0"
-pandas-stubs = ">=2.0.0"
+mypy = ">=2.4.1"
+pandas-stubs = ">=3.1.0.261029"
 types-requests = ">=2.31.0"
 types-pyyaml = ">=6.0.0"
 
 # Documentation
 mkdocs = ">=1.5.0,<2.0.0"
-mkdocs-material = ">=9.5.0"
-mkdocstrings = {extras = ["python"], version = ">=0.24.0"}
+mkdocs-material = ">=9.7.7"
+mkdocstrings = {extras = ["python"], version = ">=1.0.8"}
 mkdocs-gen-files = ">=0.5.0"
 mkdocs-literate-nav = ">=0.6.0"
 mkdocs-section-index = ">=0.3.0"
 
 # Jupyter/Notebooks
 ipykernel = ">=6.29.0"
-notebook = ">=7.0.0"
+notebook = ">=7.6.5"
 
 
 
