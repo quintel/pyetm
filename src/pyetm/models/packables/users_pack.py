@@ -3,7 +3,6 @@
 import logging
 from typing import ClassVar, Dict, Any, Optional
 import pandas as pd
-import numpy as np
 from pyetm.models.packables.packable import Packable
 from pyetm.models.scenario import Scenario
 
@@ -38,11 +37,9 @@ class UsersPack(Packable):
         if not emails:
             return pd.DataFrame()
 
-        frames = [
-            pd.DataFrame({"role": [roles.get(e, np.nan) for e in emails]}, index=emails)
-            for roles in roles_by_key.values()
-        ]
-        return pd.concat(frames, axis=1, keys=list(roles_by_key), names=["scenario", "field"])
+        df = pd.DataFrame(roles_by_key, index=emails)
+        df.columns = pd.MultiIndex.from_product([df.columns, ["role"]], names=["scenario", "field"])
+        return df
 
     def _roles_for(self, scenario: Any) -> Dict[str, str]:
         """Map each member's email to their short role, e.g. 'owner'."""
