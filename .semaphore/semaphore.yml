@@ -7,6 +7,9 @@ agent:
 
 blocks:
   - name: Test
+    # Skip the suite on the major-updates dashboard branches — never merged, so don't waste CI.
+    run:
+      when: "branch !~ '^dependabot/.+/major-updates-'"
     task:
       prologue:
         commands:
