@@ -35,16 +35,7 @@ class Base(BaseModel):
         # Initialize all private attributes with their defaults
         private_dict: Dict[str, Any] = self.__pydantic_private__  # type: ignore[assignment]
         for attr_name, attr_info in self.__class__.__private_attributes__.items():
-            if (
-                hasattr(attr_info, "default_factory")
-                and attr_info.default_factory is not None
-            ):
-                # Call factory - signature varies between pydantic versions
-                private_dict[attr_name] = attr_info.default_factory()
-            elif hasattr(attr_info, "default"):
-                private_dict[attr_name] = attr_info.default
-            else:
-                private_dict[attr_name] = None
+            private_dict[attr_name] = attr_info.get_default(call_default_factory=True)
 
         try:
             super().__init__(**data)
