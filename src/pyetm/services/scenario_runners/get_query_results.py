@@ -34,4 +34,4 @@ class GetQueryResultsRunner(BaseRunner[Dict[str, Any]]):
         if not response.success:
             return response
 
-        return ServiceResult.ok(data=response.data["gqueries"])  # type: ignore[index]  # type: ignore[index]  # type: ignore[index]
+        return ServiceResult.ok(data=response.data["gqueries"])  # type: ignore[index]
