@@ -84,7 +84,7 @@ pre-commit = ">=4.7.0"
 mypy = ">=2.4.1"
 pandas-stubs = ">=3.1.0.261029"
 types-requests = ">=2.31.0"
-types-pyyaml = ">=6.0.0"
+types-pyyaml = ">=6.0.12.20261113"
 
 # Documentation
 mkdocs = ">=1.5.0,<2.0.0"
