@@ -71,12 +71,12 @@ include = [
 
 [tool.poetry.group.dev.dependencies]
 # Testing
-pytest = ">=8.0.0"
-pytest-cov = ">=4.0.0"
+pytest = ">=9.2.0"
+pytest-cov = ">=7.1.0"
 requests-mock = ">=1.12.0"
 
 # Code quality
-pylint = ">=3.0.0"
+pylint = ">=4.1.4"
 pydeps = ">=3.0.9"
 pre-commit = ">=4.7.0"
 
@@ -95,7 +95,7 @@ mkdocs-literate-nav = ">=0.6.0"
 mkdocs-section-index = ">=0.3.0"
 
 # Jupyter/Notebooks
-ipykernel = ">=6.29.0"
+ipykernel = ">=7.4.0"
 notebook = ">=7.6.5"
 
 
