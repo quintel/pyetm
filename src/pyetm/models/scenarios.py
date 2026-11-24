@@ -84,7 +84,7 @@ class Scenarios(Base):
             except Exception as e:
                 logger.warning("Failed to fetch %s curves for scenario %s: %s", carrier_type, item.identifier(), e)
 
-        return self.combine.hourly_output_curves(carrier_type)
+        return self.combine.hourly_output_curves(carrier_type=carrier_type)
 
     def get_annual_exports(
         self, exports: AnnualExportType | Sequence[AnnualExportType] | None = None

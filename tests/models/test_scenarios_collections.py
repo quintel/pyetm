@@ -89,7 +89,7 @@ class TestScenariosGetMethods:
         scenario2.get_hourly_curves.assert_called_once_with(["electricity"])
 
         # Verify delegation to packer
-        mock_packer.hourly_output_curves.assert_called_once_with("electricity")
+        mock_packer.hourly_output_curves.assert_called_once_with(carrier_type="electricity")
         assert result == expected_result
 
     def test_get_hourly_output_curves_with_filter(self):
@@ -119,8 +119,23 @@ class TestScenariosGetMethods:
         result = collection.get_hourly_output_curves("electricity")
 
         # Verify carrier type was passed
-        mock_packer.hourly_output_curves.assert_called_once_with("electricity")
+        mock_packer.hourly_output_curves.assert_called_once_with(carrier_type="electricity")
         assert result == expected_result
+
+    def test_get_hourly_output_curves_resolves_the_carrier_through_a_real_packer(self):
+        """The carrier names its curves; it is not a list of curve names."""
+        scenario = Mock(spec=Scenario)
+        scenario.id = 1
+        scenario.identifier.return_value = "scenario_1"
+        collection = Scenarios(items=[scenario])
+
+        with patch(
+            "pyetm.models.packables.hourly_output_curves_pack.HourlyOutputCurvesPack.to_dict_per_curve",
+            return_value={},
+        ) as per_curve:
+            collection.get_hourly_output_curves("electricity")
+
+        per_curve.assert_called_once_with(curves=["electricity_profiles"])
 
     def test_get_hourly_output_curves_triggers_fetch(self):
         """Test that get_hourly_output_curves triggers fetch on each scenario if not cached."""
@@ -163,7 +178,7 @@ class TestScenariosGetMethods:
         scenario2.get_hourly_curves.assert_called_once_with(["electricity"])
 
         # Verify packer was called
-        mock_packer.hourly_output_curves.assert_called_once_with("electricity")
+        mock_packer.hourly_output_curves.assert_called_once_with(carrier_type="electricity")
 
         # Verify result structure
         assert isinstance(result, dict)
