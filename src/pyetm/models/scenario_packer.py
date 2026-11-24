@@ -9,7 +9,6 @@ from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, Sequence, List, TYPE_CHECKING, cast
-from xlsxwriter import Workbook  # type: ignore[import-untyped]
 
 from pyetm.models.packables.inputs_pack import InputsPack
 from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
@@ -548,100 +547,6 @@ class ScenarioPacker(BaseModel):
                 )
             ),
         }
-
-    def _add_main_sheet(self, workbook: Workbook) -> None:
-        """Add main scenario information sheet to workbook."""
-        main_df = self.main_info()
-        if not main_df.empty:
-            excel_main_df = excel_utils.build_excel_main_dataframe(main_df)
-            sanitized_df = excel_utils.sanitize_dataframe_for_excel(excel_main_df)
-            excel_utils.add_frame(
-                name="MAIN",
-                frame=sanitized_df,
-                workbook=workbook,
-                column_width=18,
-                scenario_styling=True,
-            )
-
-    def _add_data_sheets(self, workbook: Workbook, flags: Dict[str, Any]) -> None:
-        """Add data sheets to workbook based on flags."""
-        if flags["include_inputs"]:
-            self._inputs.add_to_workbook(
-                workbook,
-                include_defaults=flags["include_input_defaults"],
-                include_min_max=flags["include_input_min_max"],
-            )
-
-        if flags["include_sortables"]:
-            self._sortables.add_to_workbook(workbook)
-
-        if flags["include_custom_curves"]:
-            self._custom_curves.add_to_workbook(workbook)
-
-        if flags.get("include_users"):
-            self._users.add_to_workbook(workbook)
-
-    def _export_hourly_output_curves_if_needed(
-        self,
-        main_path: str,
-        hourly_curves: Optional[Sequence[str]],
-        include_hourly_curves: bool,
-        global_config: Optional[ExportConfig],
-    ) -> None:
-        """Export output curves to separate file if needed."""
-        if not include_hourly_curves:
-            return
-
-        # Determine output file path
-        base_path = Path(main_path)
-        output_path = str(
-            base_path.with_name(
-                f"{base_path.stem}_hourly_output_curves{base_path.suffix}"
-            )
-        )
-
-        # Determine carriers to export
-        chosen_carriers = list(hourly_curves) if hourly_curves else None
-        if chosen_carriers is None and global_config is not None:
-            config_carriers = getattr(global_config, "hourly_curves", None)
-            chosen_carriers = list(config_carriers) if config_carriers else None
-
-        try:
-            self._hourly_output_curves.to_excel_per_carrier(
-                output_path, chosen_carriers
-            )
-        except Exception as e:
-            logger.warning("Failed exporting output curves workbook: %s", e)
-
-    def _export_annual_exports_if_needed(
-        self,
-        main_path: str,
-        include_annual_exports: Optional[Sequence[str]],
-        global_config: Optional[ExportConfig],
-    ) -> None:
-        """Export annual exports to separate file if needed."""
-        # Determine which exports to include
-        exports_to_include = None
-        if include_annual_exports:
-            exports_to_include = list(include_annual_exports)
-        elif global_config is not None:
-            config_exports = getattr(global_config, "include_annual_exports", None)
-            if config_exports:
-                exports_to_include = list(config_exports)
-
-        if not exports_to_include:
-            return
-
-        # Determine output file path
-        base_path = Path(main_path)
-        output_path = str(
-            base_path.with_name(f"{base_path.stem}_annual_exports{base_path.suffix}")
-        )
-
-        try:
-            self._annual_exports.to_excel(output_path, exports=exports_to_include)
-        except Exception as e:
-            logger.warning("Failed exporting annual exports workbook: %s", e)
 
     @staticmethod
     def _normalize_update(update: bool | List[str]) -> set[str]:
