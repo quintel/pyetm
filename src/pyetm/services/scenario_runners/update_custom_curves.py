@@ -1,7 +1,7 @@
 """Service for update custom curves operations."""
 
 from typing import Any, Dict, List
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -49,7 +49,7 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
             requests.append(
                 {
                     "method": "put",
-                    "path": f"/scenarios/{scenario.id}/custom_curves/{curve_key}",
+                    "path": scenario_path(scenario, f"custom_curves/{curve_key}"),
                     "payload": None,
                     "kwargs": {
                         "files": {
@@ -84,7 +84,7 @@ class UpdateCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
             requests.append(
                 {
                     "method": "put",
-                    "path": f"/scenarios/{scenario.id}/custom_curves/{curve.key}",
+                    "path": scenario_path(scenario, f"custom_curves/{curve.key}"),
                     "payload": None,
                     "kwargs": {
                         "files": {

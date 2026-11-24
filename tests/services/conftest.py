@@ -4,7 +4,7 @@ import pytest
 @pytest.fixture
 def api_url():
     """Base API URL for testing"""
-    return "https://engine.energytransitionmodel.com"
+    return "https://my.energytransitionmodel.com"
 
 
 @pytest.fixture
@@ -24,6 +24,15 @@ def fake_response():
     return FakeResponse
 
 
+def raise_like_the_transport(response):
+    """ETMClient raises on any non-2xx response, so a runner never sees one."""
+    from pyetm.clients.etm_client import ETMResponse
+
+    ETMResponse(status_code=response.status_code, headers={}, url="", text=response.text).raise_for_status(
+        token="etm_token"
+    )
+
+
 @pytest.fixture
 def dummy_client(fake_response):
     """Factory fixture for creating dummy API clients"""
@@ -34,7 +43,7 @@ def dummy_client(fake_response):
             self._response = response
             self.calls = []
             self.supported_methods = supported_methods or ["get"]
-            self.base_url = base_url or "https://engine.energytransitionmodel.com/api/v3"
+            self.base_url = base_url or "https://my.energytransitionmodel.com/api/v4"
 
         @property
         def session(self):
@@ -60,6 +69,8 @@ def dummy_client(fake_response):
 
                 if isinstance(self._response, Exception):
                     raise self._response
+                if not self._response.ok:
+                    raise_like_the_transport(self._response)
                 return self._response
 
             return mock_method

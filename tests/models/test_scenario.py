@@ -3,111 +3,31 @@ import pytest
 import pandas as pd
 from pyetm.models.inputs import Inputs
 from pyetm.models.custom_curves import CustomCurves
-from pyetm.models.session import Session, ScenarioError
 from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )
 from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
-from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
+from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
 from pyetm.models.sortables import Sortables
-from pyetm.services.scenario_runners.create_scenario import CreateScenarioRunner
 from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
 from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
 from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
-from pyetm.services.scenario_runners.copy_scenario import CopyScenarioRunner
-from pyetm.services.scenario_runners.destroy_session import DestroySessionRunner
 from pyetm.services.service_result import ServiceResult
+from pyetm.models import scenario as scenario_module
+from pyetm.models.scenario import SavedScenarioError, Scenario, ScenarioError
+from pyetm.services.scenario_runners.base_runner import BaseRunner
 from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
-from pyetm.services.scenario_runners.interpolate_scenarios import (
-    InterpolateScenariosRunner,
-)
-
-
-def test_new_scenario_success_minimal(monkeypatch, ok_service_result):
-    """Test successful scenario creation with minimal required fields"""
-    created_scenario_data = {
-        "id": 12345,
-        "area_code": "nl",
-        "end_year": 2050,
-        "private": False,
-        "created_at": "2019-01-01T00:00:00Z",
-    }
-
-    monkeypatch.setattr(
-        CreateScenarioRunner,
-        "run",
-        lambda client, data: ok_service_result(created_scenario_data),
-    )
-
-    scenario = Session.new("nl", 2050)
-    assert scenario.id == 12345
-    assert scenario.area_code == "nl"
-    assert scenario.end_year == 2050
-    assert scenario.private is False
-    assert len(scenario.warnings) == 0
-
-
-def test_new_scenario_success_with_kwargs(monkeypatch, ok_service_result):
-    """Test successful scenario creation with optional fields"""
-    created_scenario_data = {
-        "id": 12346,
-        "area_code": "nl",
-        "end_year": 2050,
-        "private": True,
-        "start_year": 2019,
-        "source": "pyetm",
-    }
-
-    monkeypatch.setattr(
-        CreateScenarioRunner,
-        "run",
-        lambda client, data: ok_service_result(created_scenario_data),
-    )
-
-    scenario = Session.new(
-        area_code="nl",
-        end_year=2050,
-        private=True,
-        start_year=2019,
-        source="pyetm",
-    )
-    assert scenario.id == 12346
-    assert scenario.area_code == "nl"
-    assert scenario.private is True
-    assert scenario.start_year == 2019
-    assert scenario.source == "pyetm"
-    assert len(scenario.warnings) == 0
-
-
-def test_new_scenario_with_warnings(monkeypatch, ok_service_result):
-    """Test scenario creation with warnings"""
-    created_scenario_data = {"id": 12347, "area_code": "nl", "end_year": 2050}
-    warnings = ["Ignoring invalid field for scenario creation: 'invalid_field'"]
-
-    monkeypatch.setattr(
-        CreateScenarioRunner,
-        "run",
-        lambda client, data: ok_service_result(created_scenario_data, warnings),
-    )
-
-    scenario = Session.new("nl", 2050, invalid_field="should_be_ignored")
-    assert scenario.id == 12347
-    base_warnings = scenario.warnings.get_by_field("base")
-    assert len(base_warnings) == 1
-    assert base_warnings[0].message == warnings[0]
-
-
-def test_new_scenario_failure(monkeypatch, fail_service_result):
-    """Test scenario creation failure"""
-    monkeypatch.setattr(
-        CreateScenarioRunner,
-        "run",
-        lambda client, data: fail_service_result(["Missing required field: area_code"]),
-    )
-
-    with pytest.raises(ScenarioError, match="Could not create scenario"):
-        Session.new("", 2050)  # Invalid area_code
+from pyetm.services.scenario_runners.create_saved_scenario import CreateSavedScenarioRunner
+from pyetm.services.scenario_runners.destroy_saved_scenario import DestroySavedScenarioRunner
+from pyetm.services.scenario_runners.discard_saved_scenario import DiscardSavedScenarioRunner
+from pyetm.services.scenario_runners.fetch_saved_scenario import FetchSavedScenarioRunner
+from pyetm.services.scenario_runners.save_snapshot import SaveSnapshotRunner
+from pyetm.services.scenario_runners.saved_scenario_users_create import SavedScenarioUsersCreateRunner
+from pyetm.services.scenario_runners.saved_scenario_users_destroy import SavedScenarioUsersDestroyRunner
+from pyetm.services.scenario_runners.saved_scenario_users_index import SavedScenarioUsersIndexRunner
+from pyetm.services.scenario_runners.saved_scenario_users_update import SavedScenarioUsersUpdateRunner
+from pyetm.services.scenario_runners.update_saved_scenario import UpdateSavedScenarioRunner
 
 
 # ------ update_metadata ------ #
@@ -173,99 +93,6 @@ def test_update_metadata_empty_kwargs(monkeypatch, scenario, ok_service_result):
     result = scenario.update_metadata()
     assert result == updated_data
     assert len(scenario.warnings) == 0
-
-
-# ------ Load ------ #
-
-
-def test_load_success(monkeypatch, full_scenario_metadata, ok_service_result):
-    """Test successful scenario load with complete metadata"""
-    monkeypatch.setattr(
-        FetchMetadataRunner,
-        "run",
-        lambda client, stub: ok_service_result(full_scenario_metadata),
-    )
-
-    scenario = Session.load(1)
-    for key, val in full_scenario_metadata.items():
-        assert getattr(scenario, key) == val
-    assert len(scenario.warnings) == 0
-
-
-def test_load_with_warnings(monkeypatch, minimal_scenario_metadata, ok_service_result):
-    """Test scenario load with warnings from missing optional fields"""
-    warns = ["Missing field in response: 'created_at'"]
-
-    monkeypatch.setattr(
-        FetchMetadataRunner,
-        "run",
-        lambda client, stub: ok_service_result(minimal_scenario_metadata, warns),
-    )
-
-    scenario = Session.load(2)
-    assert scenario.id == 2
-    assert scenario.end_year == 2040
-    assert scenario.area_code == "NL"
-    metadata_warnings = scenario.warnings.get_by_field("metadata")
-    assert len(metadata_warnings) == 1
-    assert metadata_warnings[0].message == warns[0]
-
-
-def test_load_failure(monkeypatch, fail_service_result):
-    """Test scenario load failure"""
-    monkeypatch.setattr(
-        FetchMetadataRunner,
-        "run",
-        lambda client, stub: fail_service_result(["fatal error"]),
-    )
-
-    with pytest.raises(ScenarioError):
-        Session.load(3)
-
-
-def test_load_missing_required_field(monkeypatch, ok_service_result):
-    """Test scenario load fails when required fields are missing"""
-    incomplete_data = {"id": 4}  # Missing end_year and area_code
-
-    monkeypatch.setattr(
-        FetchMetadataRunner,
-        "run",
-        lambda client, stub: ok_service_result(incomplete_data),
-    )
-
-    scenario = Session.load(4)
-    end_year_warnings = scenario.warnings.get_by_field("end_year")
-    assert len(end_year_warnings) > 0
-    assert any("Field required" in w.message for w in end_year_warnings)
-
-
-# ------ version ------- #
-
-
-def test_version_when_no_url_set(scenario):
-    assert scenario.version == ""
-
-
-def test_version_when_url_stable():
-    scenario = Session(
-        id=4,
-        area_code="nl",
-        end_year=2050,
-        url="https://2025-01.engine.energytransitionmodel.com/api/v3/scenarios/4",
-    )
-
-    assert scenario.version == "2025-01"
-
-
-def test_version_when_url_latest():
-    scenario = Session(
-        id=4,
-        area_code="nl",
-        end_year=2050,
-        url="https://engine.energytransitionmodel.com/api/v3/scenarios/4",
-    )
-
-    assert scenario.version == "latest"
 
 
 # ------- inputs ------- #
@@ -657,7 +484,7 @@ def test_remove_sortables(monkeypatch, scenario, ok_service_result):
 
 @pytest.fixture(autouse=True)
 def patch_custom_curves_from_json(monkeypatch):
-    dummy = object()
+    dummy = CustomCurves(curves=[])
     monkeypatch.setattr(CustomCurves, "from_json", staticmethod(lambda data: dummy))
     return dummy
 
@@ -713,18 +540,32 @@ def test_custom_curves_failure(monkeypatch, scenario, fail_service_result):
         _ = scenario.custom_curves
 
 
-def test_to_dataframe(scenario):
-    scenario = Session(id=scenario.id, area_code="nl2019", end_year=2050)
-    dataframe = scenario.to_dataframe()
+def test_to_dataframe_merges_myetm_and_session_fields(monkeypatch, ok_service_result):
+    scenario = Scenario(id=7, scenario_id=70, title="My title", area_code="nl2019", end_year=2050)
+    monkeypatch.setattr(
+        FetchMetadataRunner,
+        "run",
+        lambda client, scen: ok_service_result({"start_year": 2019, "metadata": {"foo": "bar"}}),
+    )
 
-    assert dataframe[str(scenario.identifier())]["end_year"] == 2050
+    column = scenario.to_dataframe()["7"]
+
+    assert column["title"] == "My title"
+    assert column["saved_scenario_id"] == 7
+    assert column["session_id"] == 70
+    assert column["start_year"] == 2019
+    assert column["foo"] == "bar"
 
 
-def test_to_dataframe_exports_title_not_short_name(scenario):
-    session = Session(id=scenario.id, area_code="nl2019", end_year=2050, title="My title")
-    session.set_short_name("short")
+def test_to_dataframe_keeps_the_title_beside_the_short_name(monkeypatch, ok_service_result):
+    scenario = Scenario(id=7, area_code="nl2019", end_year=2050, title="My title")
+    scenario.set_short_name("short")
+    monkeypatch.setattr(FetchMetadataRunner, "run", lambda client, scen: ok_service_result({}))
 
-    assert session.to_dataframe()["short"]["title"] == "My title"
+    column = scenario.to_dataframe()["7"]
+
+    assert column["title"] == "My title"
+    assert column["short_name"] == "short"
 
 
 # ------ Warnings tests ------ #
@@ -778,7 +619,7 @@ def test_scenario_update_custom_curves_success(monkeypatch, ok_service_result):
     import pandas as pd
     import numpy as np
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
     scenario._custom_curves = CustomCurves(curves=[])
 
     # Create valid custom curves (mock file data)
@@ -818,7 +659,7 @@ def test_scenario_update_custom_curves_validation_error(monkeypatch):
         UpdateCustomCurvesRunner,
     )
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
     scenario._custom_curves = CustomCurves(curves=[])
 
     # Create custom curves
@@ -856,7 +697,7 @@ def test_scenario_update_custom_curves_excludes_invalid(monkeypatch, ok_service_
         UpdateCustomCurvesRunner,
     )
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
     scenario._custom_curves = CustomCurves(curves=[])
 
     valid_curve = CustomCurve(key="valid_curve", type="profile")
@@ -895,7 +736,7 @@ def test_scenario_update_custom_curves_runner_failure(monkeypatch, fail_service_
         UpdateCustomCurvesRunner,
     )
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Create valid custom curves
     curve = CustomCurve(key="test_curve", type="profile")
@@ -928,7 +769,7 @@ def test_scenario_update_custom_curves_updates_existing_curve(monkeypatch, ok_se
     )
     from pathlib import Path
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with existing curve
     existing_curve = CustomCurve(
@@ -975,7 +816,7 @@ def test_scenario_update_custom_curves_adds_new_curve(monkeypatch, ok_service_re
     )
     from pathlib import Path
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with one existing curve
     existing_curve = CustomCurve(
@@ -1021,7 +862,7 @@ def test_scenario_update_custom_curves_multiple_validation_errors(monkeypatch):
         UpdateCustomCurvesRunner,
     )
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
     scenario._custom_curves = CustomCurves(curves=[])
 
     # Create custom curves
@@ -1078,7 +919,7 @@ def test_scenario_remove_custom_curves_success(monkeypatch, ok_service_result):
     from pathlib import Path
     from unittest.mock import Mock
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with existing curves
     curve1 = CustomCurve(key="curve_to_remove", type="profile", file_path=Path("/tmp/curve1.csv"))
@@ -1122,7 +963,7 @@ def test_scenario_remove_custom_curves_multiple(monkeypatch, ok_service_result):
     from pathlib import Path
     from unittest.mock import Mock
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with three curves
     curves = [
@@ -1165,7 +1006,7 @@ def test_scenario_remove_custom_curves_empty_list(monkeypatch):
     from pyetm.models.custom_curves import CustomCurve, CustomCurves
     from pathlib import Path
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with curves
     curve = CustomCurve(key="existing_curve", type="profile", file_path=Path("/tmp/curve.csv"))
@@ -1188,7 +1029,7 @@ def test_scenario_remove_custom_curves_with_set(monkeypatch, ok_service_result):
     from pathlib import Path
     from unittest.mock import Mock
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with curves
     curve1 = CustomCurve(key="curve1", type="profile", file_path=Path("/tmp/curve1.csv"))
@@ -1227,7 +1068,7 @@ def test_scenario_remove_custom_curves_runner_failure(monkeypatch, fail_service_
     from pathlib import Path
     from unittest.mock import Mock
 
-    scenario = Session(id=12345, area_code="nl", end_year=2050)
+    scenario = Scenario(id=12345, area_code="nl", end_year=2050)
 
     # Set up scenario with curves
     curve = CustomCurve(key="test_curve", type="profile", file_path=Path("/tmp/curve.csv"))
@@ -1251,448 +1092,6 @@ def test_scenario_remove_custom_curves_runner_failure(monkeypatch, fail_service_
     assert len(scenario._custom_curves.curves) == 1
     assert scenario._custom_curves.curves[0].key == "test_curve"
 
-
-def test_scenario_remove_custom_curves_delegates_to_session():
-    """Test that Scenario.remove_custom_curves delegates to Session"""
-    from pyetm.models.scenario import Scenario
-    from unittest.mock import Mock
-
-    # Create a Scenario with a mocked Session
-    mock_session = Mock(spec=Session)
-    scenario = Scenario.__new__(Scenario)
-    object.__setattr__(scenario, "_scenario_session", mock_session)
-
-    # Call remove_custom_curves
-    curve_keys = ["curve1", "curve2"]
-    scenario.remove_custom_curves(curve_keys)
-
-    # Verify it delegated to the session
-    mock_session.remove_custom_curves.assert_called_once_with(curve_keys)
-
-
-# ------ copy ------ #
-
-
-def test_copy_scenario_success_minimal(monkeypatch, ok_service_result, dummy_scenario):
-    """Test successful scenario copy with no overrides"""
-    copied_scenario_data = {
-        "id": 67890,
-        "area_code": "nl",
-        "end_year": 2050,
-        "private": False,
-        "title": "Copy of Original Scenario",
-    }
-
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
-    )
-
-    original = dummy_scenario(12345)
-    scenario = original.copy_with_preset()
-    assert scenario.id == 67890
-    assert scenario.area_code == "nl"
-    assert scenario.end_year == 2050
-    assert scenario.title == "Copy of Original Scenario"
-    assert len(scenario.warnings) == 0
-
-
-def test_copy_scenario_with_title_override(monkeypatch, ok_service_result, dummy_scenario):
-    """Test successful scenario copy with title override"""
-    copied_scenario_data = {
-        "id": 67891,
-        "area_code": "nl",
-        "end_year": 2050,
-        "title": "My Custom Copy",
-    }
-
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
-    )
-
-    original = dummy_scenario(12345)
-    scenario = original.copy_with_preset(title="My Custom Copy")
-    assert scenario.id == 67891
-    assert scenario.title == "My Custom Copy"
-    assert len(scenario.warnings) == 0
-
-
-def test_copy_keeps_title_the_engine_does_not_store(monkeypatch, ok_service_result, dummy_scenario):
-    sent = {}
-
-    def run(client, scenario_id, overrides):
-        sent.update(overrides)
-        return ok_service_result({"id": 67891, "area_code": "nl", "end_year": 2050})
-
-    monkeypatch.setattr(CopyScenarioRunner, "run", run)
-
-    scenario = dummy_scenario(12345).copy_with_preset(title="My Custom Copy", private=True)
-
-    assert scenario.title == "My Custom Copy"
-    assert sent == {"private": True}
-    assert len(scenario.warnings) == 0
-
-
-def test_copy_scenario_with_multiple_overrides(monkeypatch, ok_service_result, dummy_scenario):
-    """Test successful scenario copy with multiple overrides"""
-    copied_scenario_data = {
-        "id": 67892,
-        "area_code": "de",
-        "end_year": 2040,
-        "private": True,
-        "title": "Private Copy",
-        "source": "test",
-    }
-
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
-    )
-
-    original = dummy_scenario(12345)
-    scenario = original.copy_with_preset(title="Private Copy", private=True, source="test")
-    assert scenario.id == 67892
-    assert scenario.title == "Private Copy"
-    assert scenario.private is True
-    assert scenario.source == "test"
-    assert len(scenario.warnings) == 0
-
-
-def test_copy_scenario_with_warnings(monkeypatch, ok_service_result, dummy_scenario):
-    """Test scenario copy with warnings"""
-    copied_scenario_data = {"id": 67893, "area_code": "nl", "end_year": 2050}
-    warnings = ["Ignoring invalid field for scenario copy: 'invalid_field'"]
-
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data, warnings),
-    )
-
-    original = dummy_scenario(12345)
-    scenario = original.copy_with_preset(invalid_field="should_be_ignored")
-    assert scenario.id == 67893
-    base_warnings = scenario.warnings.get_by_field("base")
-    assert len(base_warnings) == 1
-    assert base_warnings[0].message == warnings[0]
-
-
-def test_copy_scenario_failure(monkeypatch, fail_service_result, dummy_scenario):
-    """Test scenario copy failure"""
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: fail_service_result(["Scenario not found"]),
-    )
-
-    original = dummy_scenario(99999)
-    with pytest.raises(ScenarioError, match="Failed to copy scenario"):
-        original.copy_with_preset()
-
-
-def test_copy_scenario_with_preset_scenario_id(monkeypatch, ok_service_result, dummy_scenario):
-    """Test that template is visible in copied scenarios"""
-    copied_scenario_data = {
-        "id": 67894,
-        "area_code": "nl",
-        "end_year": 2050,
-        "preset_scenario_id": 12345,
-    }
-
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
-    )
-
-    original = dummy_scenario(12345)
-    scenario = original.copy_with_preset()
-    assert scenario.id == 67894
-    assert scenario.template_id == 12345
-    assert len(scenario.warnings) == 0
-
-
-def test_copy_scenario_deep_copy_success(monkeypatch, ok_service_result, dummy_scenario):
-    """Test successful copy that breaks the preset link"""
-    copied_scenario_data = {
-        "id": 67894,
-        "area_code": "nl",
-        "end_year": 2050,
-        "preset_scenario_id": 12345,  # Initially linked
-    }
-
-    break_link_response = {
-        "scenario": {
-            "id": 67894,
-            "area_code": "nl",
-            "end_year": 2050,
-            "preset_scenario_id": None,  # Link broken
-        }
-    }
-
-    # Track calls to verify both runners are called
-    calls = []
-
-    def mock_copy_run(client, scenario_id, overrides):
-        calls.append(("copy", scenario_id))
-        return ok_service_result(copied_scenario_data)
-
-    def mock_break_link_run(client, scenario):
-        calls.append(("break_link", scenario.id))
-        return ok_service_result(break_link_response)
-
-    monkeypatch.setattr(CopyScenarioRunner, "run", mock_copy_run)
-    monkeypatch.setattr(BreakPresetLinkRunner, "run", mock_break_link_run)
-
-    original = dummy_scenario(12345)
-    scenario = original.copy()
-
-    # Verify both operations were called
-    assert len(calls) == 2
-    assert calls[0] == ("copy", 12345)
-    assert calls[1] == ("break_link", 67894)
-
-    # Verify the scenario is correct and preset link was broken
-    assert scenario.id == 67894
-    assert scenario.template_id is None
-    assert len(scenario.warnings) == 0
-
-
-def test_copy_scenario_deep_copy_break_link_failure(
-    monkeypatch, ok_service_result, fail_service_result, dummy_scenario
-):
-    """Test copy when breaking the preset link fails"""
-    copied_scenario_data = {
-        "id": 67895,
-        "area_code": "nl",
-        "end_year": 2050,
-    }
-
-    monkeypatch.setattr(
-        CopyScenarioRunner,
-        "run",
-        lambda client, scenario_id, overrides: ok_service_result(copied_scenario_data),
-    )
-
-    monkeypatch.setattr(
-        BreakPresetLinkRunner,
-        "run",
-        lambda client, scenario: fail_service_result(["Cannot modify scenario"]),
-    )
-
-    original = dummy_scenario(12345)
-    with pytest.raises(ScenarioError, match="Copied scenario but failed to break template link"):
-        original.copy()
-
-
-def test_copy_scenario_deep_false_doesnt_break_link(monkeypatch, ok_service_result, dummy_scenario):
-    """Test that copy_with_preset() doesn't call BreakPresetLinkRunner"""
-    copied_scenario_data = {
-        "id": 67896,
-        "area_code": "nl",
-        "end_year": 2050,
-    }
-
-    copy_called = []
-    break_link_called = []
-
-    def mock_copy_run(client, scenario_id, overrides):
-        copy_called.append(True)
-        return ok_service_result(copied_scenario_data)
-
-    def mock_break_link_run(client, scenario):
-        break_link_called.append(True)
-        return ok_service_result({})
-
-    monkeypatch.setattr(CopyScenarioRunner, "run", mock_copy_run)
-    monkeypatch.setattr(BreakPresetLinkRunner, "run", mock_break_link_run)
-
-    original = dummy_scenario(12345)
-    scenario = original.copy_with_preset()
-
-    # Verify only copy was called, not break_link
-    assert len(copy_called) == 1
-    assert len(break_link_called) == 0
-    assert scenario.id == 67896
-
-
-# ------ interpolate ------ #
-
-
-def test_interpolate_success_two_scenarios(monkeypatch, ok_service_result, dummy_scenario):
-    """Test successful batch interpolation with two scenarios"""
-    interpolated_data = [
-        {
-            "id": 88881,
-            "area_code": "nl",
-            "end_year": 2040,
-            "start_year": 2023,
-            "title": "Interpolated to 2040",
-        }
-    ]
-
-    monkeypatch.setattr(
-        InterpolateScenariosRunner,
-        "run",
-        lambda client, scenario_ids, end_years: ok_service_result(interpolated_data),
-    )
-
-    scenario_2030 = dummy_scenario(12345, end_year=2030)
-    scenario_2050 = dummy_scenario(67890, end_year=2050)
-
-    interpolated = Session.interpolate([scenario_2030, scenario_2050], 2040)
-
-    assert len(interpolated) == 1
-    assert interpolated[0].id == 88881
-    assert interpolated[0].end_year == 2040
-    assert len(interpolated[0].warnings) == 0
-
-
-def test_interpolate_success_three_scenarios(monkeypatch, ok_service_result, dummy_scenario):
-    """Test batch interpolation with three scenarios and two target years"""
-    interpolated_data = [
-        {
-            "id": 88881,
-            "area_code": "nl",
-            "end_year": 2040,
-            "start_year": 2023,
-            "title": "Interpolated to 2040",
-        },
-        {
-            "id": 88882,
-            "area_code": "nl",
-            "end_year": 2060,
-            "start_year": 2023,
-            "title": "Interpolated to 2060",
-        },
-    ]
-
-    monkeypatch.setattr(
-        InterpolateScenariosRunner,
-        "run",
-        lambda client, scenario_ids, end_years: ok_service_result(interpolated_data),
-    )
-
-    scenario_2030 = dummy_scenario(12345, end_year=2030)
-    scenario_2050 = dummy_scenario(45678, end_year=2050)
-    scenario_2070 = dummy_scenario(67890, end_year=2070)
-
-    interpolated = Session.interpolate([scenario_2030, scenario_2050, scenario_2070], 2040, 2060)
-
-    assert len(interpolated) == 2
-    assert interpolated[0].id == 88881
-    assert interpolated[0].end_year == 2040
-    assert interpolated[1].id == 88882
-    assert interpolated[1].end_year == 2060
-    assert all(len(s.warnings) == 0 for s in interpolated)
-
-
-def test_interpolate_with_warnings(monkeypatch, ok_service_result, dummy_scenario):
-    """Test batch interpolation with warnings"""
-    interpolated_data = [{"id": 88883, "area_code": "nl", "end_year": 2040, "start_year": 2023}]
-    warnings = ["Some inputs could not be interpolated"]
-
-    monkeypatch.setattr(
-        InterpolateScenariosRunner,
-        "run",
-        lambda client, scenario_ids, end_years: ok_service_result(interpolated_data, warnings),
-    )
-
-    scenario_2030 = dummy_scenario(12345, end_year=2030)
-    scenario_2050 = dummy_scenario(67890, end_year=2050)
-
-    interpolated = Session.interpolate([scenario_2030, scenario_2050], 2040)
-
-    assert len(interpolated) == 1
-    assert interpolated[0].id == 88883
-    base_warnings = interpolated[0].warnings.get_by_field("base")
-    assert len(base_warnings) == 1
-    assert base_warnings[0].message == warnings[0]
-
-
-def test_interpolate_failure_too_few_scenarios(monkeypatch, fail_service_result, dummy_scenario):
-    """Test batch interpolation failure with too few scenarios"""
-    monkeypatch.setattr(
-        InterpolateScenariosRunner,
-        "run",
-        lambda client, scenario_ids, end_years: fail_service_result(
-            ["must contain at least 2 scenarios"]
-        ),
-    )
-
-    scenario = dummy_scenario(12345)
-
-    with pytest.raises(ScenarioError, match="Interpolation failed"):
-        Session.interpolate([scenario], 2040)
-
-
-def test_interpolate_failure_validation_error(monkeypatch, fail_service_result, dummy_scenario):
-    """Test batch interpolation with validation error"""
-    monkeypatch.setattr(
-        InterpolateScenariosRunner,
-        "run",
-        lambda client, scenario_ids, end_years: fail_service_result(
-            ["all scenarios must have the same area code"]
-        ),
-    )
-
-    scenario_nl = dummy_scenario(12345, end_year=2030)
-    scenario_de = dummy_scenario(67890, end_year=2050)
-
-    with pytest.raises(ScenarioError, match="Interpolation failed"):
-        Session.interpolate([scenario_nl, scenario_de], 2040)
-
-
-def test_interpolate_with_custom_client(monkeypatch, ok_service_result, dummy_scenario):
-    """Test batch interpolation with custom client"""
-    from pyetm.clients import BaseClient
-
-    interpolated_data = [{"id": 88884, "area_code": "nl", "end_year": 2040, "start_year": 2023}]
-
-    calls = []
-
-    def mock_run(client, scenario_ids, end_years):
-        calls.append((client, scenario_ids, end_years))
-        return ok_service_result(interpolated_data)
-
-    monkeypatch.setattr(InterpolateScenariosRunner, "run", mock_run)
-
-    scenario_2030 = dummy_scenario(12345, end_year=2030)
-    scenario_2050 = dummy_scenario(67890, end_year=2050)
-
-    with BaseClient() as mock_client:
-        interpolated = Session.interpolate(
-            [scenario_2030, scenario_2050], 2040, client=mock_client
-        )
-
-        assert len(interpolated) == 1
-        assert interpolated[0].id == 88884
-        # Verify custom client was used
-        assert len(calls) == 1
-        assert calls[0][0] is mock_client
-
-
-def test_interpolate_rejects_duplicate_end_years(dummy_scenario):
-    """Test that interpolate raises ValueError when sessions have duplicate end_years"""
-    scenario_2040_a = dummy_scenario(12345, end_year=2040)
-    scenario_2040_b = dummy_scenario(67890, end_year=2040)
-    scenario_2050 = dummy_scenario(11111, end_year=2050)
-
-    with pytest.raises(ValueError, match="Sessions must have unique end_year values"):
-        Session.interpolate([scenario_2040_a, scenario_2040_b, scenario_2050], 2045)
-
-
-def test_interpolate_rejects_different_area_codes(dummy_scenario):
-    """Test that interpolate raises ValueError when sessions have different area_codes"""
-    scenario_nl = dummy_scenario(12345, area_code="nl", end_year=2030)
-    scenario_de = dummy_scenario(67890, area_code="de", end_year=2050)
-
-    with pytest.raises(ValueError, match="All sessions must have the same area_code"):
-        Session.interpolate([scenario_nl, scenario_de], 2040)
 
 
 # ------ Validation tests ------ #
@@ -1742,32 +1141,6 @@ def test_get_annual_exports_mixed_valid_and_invalid(scenario):
     assert "bad_export" in error_message
 
 
-def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, ok_service_result):
-    """Test that get_annual_exports auto-converts single string to list"""
-    # Mock the retrieve_multiple method to capture the arguments
-    calls = []
-
-    def mock_retrieve_multiple(client, session, export_names):
-        calls.append(export_names)
-        return {}
-
-    # Need to mock at the Session level since Scenario delegates to Session
-    original_method = Session.get_annual_exports
-
-    def mock_session_get_annual_exports(self, export_names):
-        from pyetm.validators import validate_export_names
-
-        validated_names = validate_export_names(export_names)
-        calls.append(validated_names)
-        return {}
-
-    monkeypatch.setattr(Session, "get_annual_exports", mock_session_get_annual_exports)
-
-    # Call with a single string
-    scenario.get_annual_exports("energy_flow")
-
-    # Verify it was converted to a list
-    assert calls[-1] == ["energy_flow"]
 
 
 # ============================================================================
@@ -1777,7 +1150,7 @@ def test_get_annual_exports_auto_converts_single_string(monkeypatch, scenario, o
 
 def test_clear_hourly_curves_cache(scenario):
     """Test clearing hourly output curves cache."""
-    # Create mock collection - scenario fixture is already a Session
+    # Create mock collection - scenario fixture is already a Scenario
     mock_collection = Mock()
     mock_collection.clear_cache = Mock(return_value=5)
     scenario._hourly_output_curves = mock_collection
@@ -1790,7 +1163,7 @@ def test_clear_hourly_curves_cache(scenario):
 
 def test_clear_custom_curves_cache(scenario):
     """Test clearing custom curves cache."""
-    # Create mock collection - scenario fixture is already a Session
+    # Create mock collection - scenario fixture is already a Scenario
     mock_collection = Mock()
     mock_collection.clear_cache = Mock(return_value=3)
     scenario._custom_curves = mock_collection
@@ -1803,7 +1176,7 @@ def test_clear_custom_curves_cache(scenario):
 
 def test_clear_all_curve_caches(scenario):
     """Test clearing all curve caches at once."""
-    # Create mock collections - scenario fixture is already a Session
+    # Create mock collections - scenario fixture is already a Scenario
     mock_hourly = Mock()
     mock_hourly.clear_cache = Mock(return_value=5)
     scenario._hourly_output_curves = mock_hourly
@@ -1820,48 +1193,414 @@ def test_clear_all_curve_caches(scenario):
     mock_custom.clear_cache.assert_called_once()
 
 
-# Note: Session.clear_session_cache() tests are omitted because they require
-# complex mocking of the settings system. The underlying collection cache clearing
-# methods (clear_cache() on HourlyOutputCurves and CustomCurves) are thoroughly
-# tested in their respective test files, and the session-level delegation methods
-# (clear_hourly_curves_cache, clear_custom_curves_cache, clear_all_curve_caches)
-# are tested above.
 
 
-class TestSessionUsers:
-    """Session access is managed on the saved Scenario, never through the engine."""
-
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda s: s.list_users(),
-            lambda s: s.update_users("user@example.com", "viewer"),
-            lambda s: s.apply_pending_users(),
-        ],
+def test_get_annual_exports_accepts_a_single_name(monkeypatch, scenario):
+    calls = []
+    monkeypatch.setattr(
+        type(scenario.annual_exports),
+        "retrieve_multiple",
+        lambda self, client, scen, names: calls.append(names) or {},
     )
-    def test_user_methods_point_to_the_scenario(self, call):
-        session = Session(id=1, area_code="nl", end_year=2050)
 
-        with pytest.raises(ScenarioError, match="managed on the saved Scenario"):
-            call(session)
+    scenario.get_annual_exports("energy_flow")
+
+    assert calls == [["energy_flow"]]
 
 
-class TestSessionDelete:
-    """Deleting through the engine is admin only under grants only."""
+# ------ Creating, copying, interpolating and saving through MyETM ------ #
 
-    @pytest.fixture
-    def session(self):
-        return Session(id=1, area_code="nl", end_year=2050)
+def myetm_record(**overrides):
+    record = {
+        "id": 789,
+        "scenario_id": 123,
+        "title": "New",
+        "area_code": "nl2023",
+        "end_year": 2050,
+        "version": "latest",
+        "private": False,
+    }
+    record.update(overrides)
+    return record
 
-    def test_admin_delete_succeeds(self, monkeypatch, session):
-        deleted = ServiceResult.ok({})
-        monkeypatch.setattr(DestroySessionRunner, "run", lambda client, scenario_id: deleted)
 
-        session.delete()
+@pytest.fixture
+def created(monkeypatch):
+    """Records what each create sent, and answers with a MyETM record."""
+    sent = []
 
-    def test_other_failures_keep_the_engine_error(self, monkeypatch, session):
-        missing = ServiceResult.fail(["Resource not found: 404: No such scenario"])
-        monkeypatch.setattr(DestroySessionRunner, "run", lambda client, scenario_id: missing)
+    def create(client, params):
+        sent.append(params)
+        return ServiceResult.ok(myetm_record(id=789 + len(sent) - 1, title=params["title"]))
 
-        with pytest.raises(ScenarioError, match="Could not delete session: .*404"):
-            session.delete()
+    monkeypatch.setattr(CreateSavedScenarioRunner, "run", create)
+    return sent
+
+
+@pytest.fixture(autouse=True)
+def forget_warned_versions():
+    scenario_module._versions_warned.clear()
+    yield
+    scenario_module._versions_warned.clear()
+
+
+def test_new_creates_on_etm_version_and_drops_unset_members(created, mock_client):
+    scenario = Scenario.new(title="New", area_code="nl2023", end_year=2050, client=mock_client)
+
+    assert created == [{"title": "New", "area_code": "nl2023", "end_year": 2050, "version": "latest"}]
+    assert scenario.id == 789
+    assert scenario.client is mock_client
+
+
+def test_new_keeps_runner_warnings(monkeypatch, mock_client):
+    monkeypatch.setattr(
+        CreateSavedScenarioRunner,
+        "run",
+        lambda client, params: ServiceResult.ok(myetm_record(), ["Ignoring invalid field"]),
+    )
+
+    scenario = Scenario.new(title="New", area_code="nl2023", end_year=2050, client=mock_client)
+
+    assert [w.message for w in scenario.warnings.get_by_field("base")] == ["Ignoring invalid field"]
+
+
+def test_new_failure_raises_and_the_old_name_still_catches(monkeypatch, mock_client):
+    monkeypatch.setattr(
+        CreateSavedScenarioRunner, "run", lambda client, params: ServiceResult.fail(["422: bad"])
+    )
+
+    with pytest.raises(SavedScenarioError, match="Could not create saved scenario"):
+        Scenario.new(title="New", area_code="nl2023", end_year=2050, client=mock_client)
+    assert SavedScenarioError is ScenarioError
+
+
+def test_new_sends_user_values_to_the_new_scenario(monkeypatch, created, mock_client):
+    batches = []
+    monkeypatch.setattr(
+        BaseRunner,
+        "_make_batch_requests",
+        classmethod(lambda cls, client, requests: batches.append(requests) or [ServiceResult.ok({})]),
+    )
+
+    Scenario.new(title="New", area_code="nl", end_year=2050, client=mock_client, user_values={"a": 1})
+
+    (request,) = batches[0]
+    assert request["path"] == "/saved_scenarios/789/"
+    assert request["payload"] == {"scenario": {"user_values": {"a": 1}}}
+
+
+def test_new_turns_a_failed_data_upload_into_a_warning(monkeypatch, created, mock_client):
+    monkeypatch.setattr(
+        BaseRunner,
+        "_make_batch_requests",
+        classmethod(lambda cls, client, requests: [ServiceResult.fail(["422: no"])]),
+    )
+
+    scenario = Scenario.new(title="New", area_code="nl", end_year=2050, client=mock_client, user_values={"a": 1})
+
+    assert any("422: no" in w.message for w in scenario.warnings.get_by_field("base"))
+
+
+def test_copy_with_preset_creates_from_this_scenario(created, saved_scenario):
+    saved_scenario.version = "latest"
+
+    copied = saved_scenario.copy_with_preset(private=True)
+
+    assert created == [
+        {"title": "Copy of My Saved Scenario", "source": 456, "version": "latest", "private": True}
+    ]
+    assert copied.id == 789
+
+
+def test_copy_breaks_the_preset_link(monkeypatch, created, saved_scenario):
+    broken = []
+    monkeypatch.setattr(
+        BreakPresetLinkRunner, "run", lambda client, scen: broken.append(scen.id) or ServiceResult.ok({})
+    )
+
+    copied = saved_scenario.copy(title="Independent")
+
+    assert created[0]["title"] == "Independent"
+    assert broken == [copied.id]
+
+
+def test_copy_raises_when_the_preset_link_stays(monkeypatch, created, saved_scenario):
+    monkeypatch.setattr(BreakPresetLinkRunner, "run", lambda client, scen: ServiceResult.fail(["502"]))
+
+    with pytest.raises(ScenarioError, match="could not break its preset link"):
+        saved_scenario.copy()
+
+
+def test_interpolate_creates_one_scenario_per_year_from_the_source(created, saved_scenario):
+    saved_scenario.version = "latest"
+
+    results = Scenario.interpolate(saved_scenario, 2030, 2040)
+
+    assert [r["end_year"] for r in created] == [2030, 2040]
+    assert {r["source"] for r in created} == {456}
+    assert created[0]["title"] == "My Saved Scenario interpolated to 2030"
+    assert len(results) == 2
+
+
+def test_interpolate_accepts_a_list_of_one_and_custom_titles(created, saved_scenario):
+    Scenario.interpolate([saved_scenario], 2030, titles=["Mid"])
+
+    assert created[0]["title"] == "Mid"
+
+
+def test_interpolate_refuses_several_sources(saved_scenario):
+    with pytest.raises(ValueError, match="several scenarios"):
+        Scenario.interpolate([saved_scenario, saved_scenario], 2030)
+
+
+def test_interpolate_refuses_mismatched_titles(saved_scenario):
+    with pytest.raises(ValueError, match="Length of titles"):
+        Scenario.interpolate(saved_scenario, 2030, 2040, titles=["one"])
+
+
+def test_save_refreshes_the_current_session(monkeypatch, saved_scenario):
+    monkeypatch.setattr(
+        SaveSnapshotRunner, "run", lambda client, ssid: ServiceResult.ok(myetm_record(id=ssid, scenario_id=999))
+    )
+
+    saved_scenario.save()
+
+    assert saved_scenario.scenario_id == 999
+
+
+def test_save_failure_raises(monkeypatch, saved_scenario):
+    monkeypatch.setattr(SaveSnapshotRunner, "run", lambda client, ssid: ServiceResult.fail(["403: forbidden"]))
+
+    with pytest.raises(ScenarioError, match="Could not save scenario 456"):
+        saved_scenario.save()
+
+
+# ------ The MyETM record ------ #
+
+
+def test_load_keeps_the_client(monkeypatch, mock_client):
+    monkeypatch.setattr(
+        FetchSavedScenarioRunner, "run", lambda client, ssid: ServiceResult.ok(myetm_record(id=ssid))
+    )
+
+    scenario = Scenario.load(5, client=mock_client)
+
+    assert scenario.id == 5
+    assert scenario.client is mock_client
+
+
+def test_load_failure_names_the_scenario(monkeypatch, mock_client):
+    monkeypatch.setattr(
+        FetchSavedScenarioRunner, "run", lambda client, ssid: ServiceResult.fail(["404: scenario_not_found"])
+    )
+
+    with pytest.raises(ScenarioError, match="Could not load saved scenario 5: .*404"):
+        Scenario.load(5, client=mock_client)
+
+
+def test_another_version_warns_once(monkeypatch, mock_client, caplog):
+    monkeypatch.setattr(
+        FetchSavedScenarioRunner,
+        "run",
+        lambda client, ssid: ServiceResult.ok(myetm_record(id=ssid, version="2025-01")),
+    )
+
+    with caplog.at_level("WARNING", logger="pyetm.models.scenario"):
+        Scenario.load(1, client=mock_client)
+        Scenario.load(2, client=mock_client)
+
+    assert sum("Version 2025-01" in r.message for r in caplog.records) == 1
+
+
+def test_the_targeted_version_does_not_warn(monkeypatch, mock_client, caplog):
+    monkeypatch.setattr(
+        FetchSavedScenarioRunner, "run", lambda client, ssid: ServiceResult.ok(myetm_record(id=ssid))
+    )
+
+    with caplog.at_level("WARNING", logger="pyetm.models.scenario"):
+        Scenario.load(1, client=mock_client)
+
+    assert not [r for r in caplog.records if "Version" in r.message]
+
+
+def test_update_refreshes_from_the_response(monkeypatch, saved_scenario):
+    sent = []
+
+    def update(client, ssid, data):
+        sent.append(data)
+        return ServiceResult.ok(myetm_record(id=ssid, title="Renamed"), ["Ignoring invalid field"])
+
+    monkeypatch.setattr(UpdateSavedScenarioRunner, "run", update)
+
+    saved_scenario.update(title="Renamed")
+
+    assert sent == [{"title": "Renamed"}]
+    assert saved_scenario.title == "Renamed"
+    assert [w.message for w in saved_scenario.warnings.get_by_field("update")] == ["Ignoring invalid field"]
+
+
+def test_update_failure_raises(monkeypatch, saved_scenario):
+    monkeypatch.setattr(UpdateSavedScenarioRunner, "run", lambda client, ssid, data: ServiceResult.fail(["422"]))
+
+    with pytest.raises(ScenarioError, match="Could not update saved scenario"):
+        saved_scenario.update(title="")
+
+
+def test_discard_records_when(monkeypatch, saved_scenario):
+    monkeypatch.setattr(
+        DiscardSavedScenarioRunner,
+        "run",
+        lambda client, ssid: ServiceResult.ok(myetm_record(id=ssid, discarded_at="2026-11-20T10:00:00Z")),
+    )
+
+    saved_scenario.discard()
+
+    assert saved_scenario.discarded_at is not None
+
+
+def test_delete_failure_raises(monkeypatch, saved_scenario):
+    monkeypatch.setattr(DestroySavedScenarioRunner, "run", lambda client, ssid: ServiceResult.fail(["403"]))
+
+    with pytest.raises(ScenarioError, match="Could not permanently delete"):
+        saved_scenario.delete()
+
+
+# ------ The current Session's metadata ------ #
+
+
+def test_session_metadata_is_fetched_once(monkeypatch, saved_scenario):
+    calls = []
+
+    def fetch(client, scen):
+        calls.append(scen.id)
+        return ServiceResult.ok(
+            {"start_year": 2019, "url": "https://engine/1", "preset_scenario_id": 5, "keep_compatible": True}
+        )
+
+    monkeypatch.setattr(FetchMetadataRunner, "run", fetch)
+
+    assert (saved_scenario.start_year, saved_scenario.url, saved_scenario.template_id) == (
+        2019,
+        "https://engine/1",
+        5,
+    )
+    assert saved_scenario.keep_compatible is True
+    assert calls == [456]
+
+
+def test_session_metadata_failure_raises(monkeypatch, saved_scenario):
+    monkeypatch.setattr(FetchMetadataRunner, "run", lambda client, scen: ServiceResult.fail(["502"]))
+
+    with pytest.raises(ScenarioError, match="from the engine"):
+        saved_scenario.start_year
+
+
+def test_update_metadata_replaces_the_cached_session(monkeypatch, saved_scenario):
+    monkeypatch.setattr(
+        UpdateMetadataRunner,
+        "run",
+        lambda client, scen, metadata: ServiceResult.ok({"scenario": {"keep_compatible": True}}),
+    )
+    monkeypatch.setattr(FetchMetadataRunner, "run", Mock(side_effect=AssertionError("fetched")))
+
+    saved_scenario.update_metadata(keep_compatible=True)
+
+    assert saved_scenario.keep_compatible is True
+
+
+def test_identifier_prefers_title_then_short_name_then_id():
+    scenario = Scenario(id=3, title="Title")
+    assert scenario.identifier() == "Title"
+
+    scenario = Scenario(id=3)
+    scenario.set_short_name("short")
+    assert scenario.identifier() == "short"
+
+    assert Scenario(id=3).identifier() == 3
+
+
+# ------ Users ------ #
+
+
+def test_list_users_shortens_roles(monkeypatch, saved_scenario):
+    monkeypatch.setattr(
+        SavedScenarioUsersIndexRunner,
+        "run",
+        lambda client, ssid: ServiceResult.ok(
+            [{"email": "a@example.com", "role": "scenario_owner", "pending": False}]
+        ),
+    )
+
+    assert saved_scenario.list_users() == [
+        {"user_email": "a@example.com", "role": "owner", "pending": False}
+    ]
+
+
+@pytest.fixture
+def user_calls(monkeypatch):
+    calls = []
+    for name, runner in (
+        ("add", SavedScenarioUsersCreateRunner),
+        ("update", SavedScenarioUsersUpdateRunner),
+        ("remove", SavedScenarioUsersDestroyRunner),
+    ):
+        monkeypatch.setattr(
+            runner,
+            "run",
+            lambda client, ssid, users, name=name: calls.append((name, users)) or ServiceResult.ok([]),
+        )
+    monkeypatch.setattr(
+        SavedScenarioUsersIndexRunner,
+        "run",
+        lambda client, ssid: ServiceResult.ok([{"email": "known@example.com", "role": "scenario_viewer"}]),
+    )
+    return calls
+
+
+def test_update_users_adds_a_new_user(user_calls, saved_scenario):
+    saved_scenario.update_users("new@example.com", "viewer")
+
+    assert user_calls == [("add", [{"email": "new@example.com", "role": "scenario_viewer"}])]
+
+
+def test_update_users_changes_a_known_users_role(user_calls, saved_scenario):
+    saved_scenario.update_users("known@example.com", "scenario_collaborator")
+
+    assert user_calls == [("update", [{"email": "known@example.com", "role": "scenario_collaborator"}])]
+
+
+def test_update_users_removes(user_calls, saved_scenario):
+    saved_scenario.update_users("known@example.com", "remove")
+
+    assert user_calls == [("remove", [{"email": "known@example.com"}])]
+
+
+def test_update_users_failure_raises(monkeypatch, user_calls, saved_scenario):
+    monkeypatch.setattr(
+        SavedScenarioUsersCreateRunner, "run", lambda client, ssid, users: ServiceResult.fail(["validation_failed"])
+    )
+
+    with pytest.raises(ScenarioError, match="Could not add user"):
+        saved_scenario.update_users("new@example.com", "owner")
+
+
+def test_pending_users_wait_until_applied(user_calls, saved_scenario):
+    saved_scenario.update_users("new@example.com", "owner", skip_upload=True)
+    assert user_calls == []
+
+    assert saved_scenario.apply_pending_users() == 1
+    assert user_calls == [("add", [{"email": "new@example.com", "role": "scenario_owner"}])]
+    assert saved_scenario.apply_pending_users() == 0
+
+
+@pytest.mark.parametrize(
+    "role, expected",
+    [("owner", "scenario_owner"), ("Viewer", "scenario_viewer"), ("scenario_collaborator", "scenario_collaborator"), ("remove", "remove")],
+)
+def test_normalize_role(role, expected):
+    assert Scenario._normalize_role(role) == expected
+
+
+def test_normalize_role_refuses_unknown_roles():
+    with pytest.raises(ValueError, match="Invalid role: admin"):
+        Scenario._normalize_role("admin")

@@ -1,50 +1,40 @@
-"""Service for saved scenario users update operations."""
+"""Runner for changing the role of a saved scenario's users in MyETM."""
 
 from typing import Any, Dict, List
-from pyetm.services.scenario_runners.base_runner import BaseRunner
-from ..service_result import ServiceResult
+
 from pyetm.clients.base_client import BaseClient
+from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.saved_scenario_users_index import batch_outcome
+from ..service_result import ServiceResult
 
 
 class SavedScenarioUsersUpdateRunner(BaseRunner[List[Dict[str, Any]]]):
     """
-    Runner for updating user roles on a SavedScenario.
+    Changes the role of users, each given as {"email": ..., "role": ...}. Fails naming every refused user.
 
-    PUT /api/v3/saved_scenarios/:saved_scenario_id/users
+    PUT /api/v4/saved_scenarios/{id}/users
     """
 
-    REQUIRED_KEYS = ["role"]
+    REQUIRED_KEYS = ['email', 'role']
 
     @staticmethod
     def run(
-        client: BaseClient,
-        saved_scenario_id: int,
-        users: List[Dict[str, Any]],
-        **kwargs: Any,
+        client: BaseClient, saved_scenario_id: int, users: List[Dict[str, Any]], **kwargs: Any
     ) -> ServiceResult[List[Dict[str, Any]]]:
-        if not users:
-            return ServiceResult.fail(["No users provided"])
+        errors = [
+            f"User {i}: {error}"
+            for i, user in enumerate(users)
+            for error in SavedScenarioUsersUpdateRunner._validate_required_fields(user, SavedScenarioUsersUpdateRunner.REQUIRED_KEYS)
+        ]
+        if not users or errors:
+            return ServiceResult.fail(errors or ["No users provided"])
 
-        errors = []
-        for i, user in enumerate(users):
-            missing = SavedScenarioUsersUpdateRunner._validate_required_fields(
-                user, SavedScenarioUsersUpdateRunner.REQUIRED_KEYS
+        return batch_outcome(
+            SavedScenarioUsersUpdateRunner._make_request(
+                client,
+                "put",
+                f"/saved_scenarios/{saved_scenario_id}/users",
+                payload={"saved_scenario_users": users},
+                **kwargs,
             )
-            if missing:
-                errors.extend([f"User {i}: {err}" for err in missing])
-
-            if "user_id" not in user and "user_email" not in user:
-                errors.append(f"User {i}: Must provide either 'user_id' or 'user_email'")
-
-        if errors:
-            return ServiceResult.fail(errors)
-
-        payload = {"saved_scenario_users": users}
-
-        return SavedScenarioUsersUpdateRunner._make_request(
-            client=client,
-            method="put",
-            path=f"/saved_scenarios/{saved_scenario_id}/users",
-            payload=payload,
-            **kwargs,
         )

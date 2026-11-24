@@ -1,7 +1,7 @@
 """Service for updating metadata on a scenario."""
 
 from typing import Any, Dict
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -10,7 +10,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for updating metadata fields on a scenario through the main scenario endpoint.
 
-    PUT /api/v3/scenarios/{scenario_id}
+    PUT /api/v4/saved_scenarios/{id}/
     """
 
     META_KEYS = [
@@ -109,7 +109,7 @@ class UpdateMetadataRunner(BaseRunner[Dict[str, Any]]):
         result = UpdateMetadataRunner._make_request(
             client=client,
             method="put",
-            path=f"/scenarios/{scenario.id}",
+            path=scenario_path(scenario),
             payload=payload,
         )
 

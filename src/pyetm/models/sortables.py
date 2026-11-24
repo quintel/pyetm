@@ -271,7 +271,7 @@ class Sortables(Base):
     def from_json(cls, data: Dict[str, Any]) -> "Sortables":
         """
         :param data: the raw JSON dict from
-                     GET /api/v3/scenarios/:id/user_sortables
+                     GET /api/v4/saved_scenarios/:id/user_sortables, relayed from the engine
         """
         items: List[Sortable] = []
         for pair in data.items():

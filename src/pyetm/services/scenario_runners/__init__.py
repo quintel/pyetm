@@ -2,7 +2,6 @@ from .fetch_inputs import FetchInputsRunner
 from .fetch_sortables import FetchSortablesRunner
 from .fetch_metadata import FetchMetadataRunner
 from .get_query_results import GetQueryResultsRunner
-from .copy_scenario import CopyScenarioRunner
 from .break_preset_link import BreakPresetLinkRunner
 from .discard_saved_scenario import DiscardSavedScenarioRunner
 from .fetch_user_collections import FetchUserCollectionsRunner
@@ -16,7 +15,6 @@ __all__ = [
     "FetchSortablesRunner",
     "FetchMetadataRunner",
     "GetQueryResultsRunner",
-    "CopyScenarioRunner",
     "BreakPresetLinkRunner",
     "DiscardSavedScenarioRunner",
     "FetchUserCollectionsRunner",

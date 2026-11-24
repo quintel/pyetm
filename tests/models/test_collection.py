@@ -26,7 +26,7 @@ def test_collection_validation_minimal():
     collection = Collection.model_validate(data)
     assert collection.id == 1
     assert collection.title == "Test Collection"
-    assert collection.interpolation is False
+    assert collection.saved_scenario_ids == []
 
 
 def test_collection_validation_full():
@@ -34,25 +34,18 @@ def test_collection_validation_full():
     data = {
         "id": 123,
         "title": "Full Collection",
-        "interpolation": True,
-        "area_code": "nl",
-        "end_year": 2050,
-        "version": "2024.01",
+        "version": "latest",
         "owner": {"id": 1, "name": "Test User"},
         "saved_scenario_ids": [1, 2, 3],
-        "scenario_ids": [101, 102],
         "collections_app_url": "https://example.com/collections/123",
-        "interpolation_params": {"area_code": "nl", "end_years": [2030, 2040, 2050]},
-        "discarded": False,
+        "discarded_at": None,
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-02T00:00:00Z",
     }
     collection = Collection.model_validate(data)
     assert collection.id == 123
     assert collection.title == "Full Collection"
-    assert collection.interpolation is True
-    assert collection.area_code == "nl"
-    assert collection.end_year == 2050
+    assert collection.version == "latest"
     assert collection.owner["name"] == "Test User"
     assert collection.saved_scenario_ids == [1, 2, 3]
 
@@ -109,18 +102,18 @@ def test_collection_create_success(monkeypatch, ok_service_result, mock_client):
     created_data = {
         "id": 456,
         "title": "New Collection",
-        "interpolation": False,
+        "version": "latest",
         "saved_scenario_ids": [1, 2, 3],
-        "scenario_ids": [],
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-01T00:00:00Z",
     }
+    sent = {}
 
-    monkeypatch.setattr(
-        CreateCollectionRunner,
-        "run",
-        lambda client, collection_data: ok_service_result(created_data),
-    )
+    def fake_run(client, collection_data):
+        sent.update(collection_data)
+        return ok_service_result(created_data)
+
+    monkeypatch.setattr(CreateCollectionRunner, "run", fake_run)
 
     collection = Collection.create(
         title="New Collection",
@@ -128,42 +121,29 @@ def test_collection_create_success(monkeypatch, ok_service_result, mock_client):
         client=mock_client,
     )
     assert collection.id == 456
-    assert collection.title == "New Collection"
     assert collection.saved_scenario_ids == [1, 2, 3]
-    assert collection.interpolation is False
+    assert sent == {"title": "New Collection", "saved_scenario_ids": [1, 2, 3], "version": "latest"}
 
 
-def test_collection_create_interpolated(monkeypatch, ok_service_result, mock_client):
-    """Test creation of interpolated collection."""
-    created_data = {
-        "id": 789,
-        "title": "Interpolated Collection",
-        "interpolation": True,
-        "area_code": "nl",
-        "end_year": 2050,
-        "saved_scenario_ids": [1],
-        "interpolation_params": {"area_code": "nl", "end_years": [2030, 2040, 2050]},
-        "created_at": "2024-01-01T00:00:00Z",
-        "updated_at": "2024-01-01T00:00:00Z",
-    }
+def test_collection_create_defaults_version_to_etm_version(monkeypatch, ok_service_result, mock_client):
+    """Without a version, a collection is created on ETM_VERSION."""
+    monkeypatch.setenv("ETM_VERSION", "2025-01")
+    from pyetm.config.settings import reload_configuration
 
-    monkeypatch.setattr(
-        CreateCollectionRunner,
-        "run",
-        lambda client, collection_data: ok_service_result(created_data),
-    )
+    reload_configuration()
+    sent = {}
 
-    collection = Collection.create(
-        title="Interpolated Collection",
-        saved_scenario_ids=[1],
-        area_code="nl",
-        end_year=2050,
-        interpolation=True,
-        client=mock_client,
-    )
-    assert collection.interpolation is True
-    assert collection.area_code == "nl"
-    assert collection.end_year == 2050
+    def fake_run(client, collection_data):
+        sent.update(collection_data)
+        return ok_service_result({"id": 1, "title": "C", "version": "2025-01"})
+
+    monkeypatch.setattr(CreateCollectionRunner, "run", fake_run)
+
+    Collection.create(title="C", saved_scenario_ids=[1], client=mock_client)
+    assert sent["version"] == "2025-01"
+
+    Collection.create(title="C", saved_scenario_ids=[1], version="latest", client=mock_client)
+    assert sent["version"] == "latest"
 
 
 def test_collection_create_with_warnings(monkeypatch, ok_service_result, mock_client):
@@ -213,10 +193,8 @@ def test_collection_load_success(monkeypatch, ok_service_result, mock_client):
     collection_data = {
         "id": 123,
         "title": "Test Collection",
-        "interpolation": False,
         "saved_scenario_ids": [1, 2, 3],
-        "scenario_ids": [],
-        "discarded": False,
+        "discarded_at": None,
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-02T00:00:00Z",
         "owner": {"id": 1, "name": "Test User"},
@@ -479,7 +457,6 @@ def test_collection_to_dict():
     collection = Collection(
         id=123,
         title="Test Collection",
-        interpolation=False,
         saved_scenario_ids=[1, 2, 3],
         created_at="2024-01-01T00:00:00Z",
         updated_at="2024-01-01T00:00:00Z",

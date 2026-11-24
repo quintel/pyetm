@@ -9,7 +9,7 @@ from typing import Any, Optional
 import os
 
 logger = logging.getLogger(__name__)
-from pyetm.clients import BaseClient, get_client
+from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pyetm.models.warnings import WarningCollector
 from pyetm.config.settings import get_settings
@@ -48,27 +48,6 @@ class HourlyOutputCurve(Base):
     type: str
     file_path: Optional[Path] = None
 
-    @staticmethod
-    def _normalize_to_session(scenario: Any) -> Any:
-        """
-        Normalize scenario parameter to Session object to extract ETEngine session ID.
-
-        Args:
-            scenario: Either a Session object or a Scenario (SavedScenario) object
-
-        Returns:
-            Session object with the ETEngine session ID
-        """
-        # Import at function level to avoid circular imports
-        from pyetm.models.scenario import Scenario
-
-        # If it's a SavedScenario, extract the underlying Session
-        if isinstance(scenario, Scenario):
-            return scenario.session
-
-        # Otherwise assume it's already a Session
-        return scenario
-
     def available(self) -> bool:
         return bool(self.file_path)
 
@@ -76,11 +55,9 @@ class HourlyOutputCurve(Base):
         self, client: Any, scenario: Any, force_refresh: bool = False
     ) -> Optional[pd.DataFrame]:
         """Process curve from client, save to file, set file_path"""
-        # Normalize to Session to get ETEngine session ID
-        session = self._normalize_to_session(scenario)
 
         file_path = (
-            get_settings().path_to_tmp(str(session.id))
+            get_settings().path_to_tmp(str(scenario.id))
             / f"{self.key.replace('/', '-')}.csv"
         )
 
@@ -97,7 +74,7 @@ class HourlyOutputCurve(Base):
                         f"Failed to read cached curve file for {self.key}: {e}; refetching",
                     )
         try:
-            result = DownloadHourlyOutputCurveRunner.run(client, session, self.key)
+            result = DownloadHourlyOutputCurveRunner.run(client, scenario, self.key)
             if result.success and result.data is not None:
                 try:
                     result.data.seek(0)
@@ -193,27 +170,6 @@ class HourlyOutputCurves(Base):
 
     curves: list[HourlyOutputCurve]
 
-    @staticmethod
-    def _normalize_to_session(scenario: Any) -> Any:
-        """
-        Normalize scenario parameter to Session object to extract ETEngine session ID.
-
-        Args:
-            scenario: Either a Session object or a Scenario (SavedScenario) object
-
-        Returns:
-            Session object with the ETEngine session ID
-        """
-        # Import at function level to avoid circular imports
-        from pyetm.models.scenario import Scenario
-
-        # If it's a SavedScenario, extract the underlying Session
-        if isinstance(scenario, Scenario):
-            return scenario.session
-
-        # Otherwise assume it's already a Session
-        return scenario
-
     def __len__(self) -> int:
         return len(self.curves)
 
@@ -232,8 +188,6 @@ class HourlyOutputCurves(Base):
         # Resolve any legacy/old/mis-spelled name to the canonical key
         curve_name = registry.accept_alias(curve_name)
 
-        # Normalize to Session to get ETEngine session ID
-        session = self._normalize_to_session(scenario)
 
         curve = self._find(curve_name)
 
@@ -244,7 +198,7 @@ class HourlyOutputCurves(Base):
         if not curve.available():
             # Try to attach a cached file from disk first
             expected_path = (
-                get_settings().path_to_tmp(str(session.id))
+                get_settings().path_to_tmp(str(scenario.id))
                 / f"{curve.key.replace('/', '-')}.csv"
             )
             if expected_path.is_file():
@@ -253,7 +207,7 @@ class HourlyOutputCurves(Base):
                 self._merge_submodel_warnings(curve, key_attr="key")
                 return contents
 
-            result = curve.retrieve(get_client(), session)
+            result = curve.retrieve(scenario.client, scenario)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -279,7 +233,7 @@ class HourlyOutputCurves(Base):
 
         Args:
             identifier: Curve name (e.g., 'merit_order') or carrier type alias
-            scenario: The scenario or session object
+            scenario: The scenario
 
         Returns:
             DataFrame with hourly data, or None if not found
@@ -321,7 +275,7 @@ class HourlyOutputCurves(Base):
 
         Args:
             identifiers: List of curve names and/or carrier type aliases
-            scenario: The scenario or session object
+            scenario: The scenario
 
         Returns:
             Dictionary mapping curve names to DataFrames
@@ -384,11 +338,6 @@ class HourlyOutputCurves(Base):
         cls, service_result: Any, scenario: Any, cache_curves: bool = True
     ) -> "HourlyOutputCurves":
         """Create HourlyOutputCurves instance from service result"""
-        # Normalize to Session to get ETEngine session ID
-        from pyetm.models.scenario import Scenario
-
-        session = scenario.session if isinstance(scenario, Scenario) else scenario
-
         if not service_result.success or not service_result.data:
             empty_curves = cls(curves=[])
             for error in service_result.errors:
@@ -398,7 +347,7 @@ class HourlyOutputCurves(Base):
         curves_list = []
 
         if cache_curves:
-            cache_dir = get_settings().path_to_tmp(str(session.id))
+            cache_dir = get_settings().path_to_tmp(str(scenario.id))
             cache_dir.mkdir(parents=True, exist_ok=True)
 
         for curve_name, curve_data in service_result.data.items():
@@ -445,13 +394,8 @@ class HourlyOutputCurves(Base):
         """
         Convenience method to fetch all carrier curves for a scenario.
         """
-        # Normalize to Session to get ETEngine session ID
-        from pyetm.models.scenario import Scenario
-
-        session = scenario.session if isinstance(scenario, Scenario) else scenario
-
-        service_result = FetchAllHourlyOutputCurvesRunner.run(get_client(), session)
-        return cls.from_service_result(service_result, session, cache_curves)
+        service_result = FetchAllHourlyOutputCurvesRunner.run(scenario.client, scenario)
+        return cls.from_service_result(service_result, scenario, cache_curves)
 
     def _to_dataframe(
         self, curves: Optional[list[str]] = None, **kwargs: Any

@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from os import PathLike
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Sequence, List, Union, TYPE_CHECKING, cast
+from typing import Optional, Dict, Any, Sequence, List, TYPE_CHECKING, cast
 from xlsxwriter import Workbook  # type: ignore[import-untyped]
 
 from pyetm.models.packables.inputs_pack import InputsPack
@@ -18,7 +18,6 @@ from pyetm.models.packables.query_pack import QueryPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.users_pack import UsersPack
-from pyetm.models import Session
 from pyetm.models.export_config import ExportConfig
 from pyetm.models.export_data_collection import ExportDataCollection
 from pyetm.types import AnnualExportType, HourlyCurveType, CarrierType
@@ -30,11 +29,6 @@ from pyetm.validators import (
 
 if TYPE_CHECKING:
     from pyetm.models.scenario import Scenario
-from pyetm.models.scenario_loader import (
-    ScenarioLoader,
-    SessionLoader,
-    SavedScenarioLoader,
-)
 from pyetm.utils import excel_utils
 from pyetm.utils.safe_cast import cast_bool, cast_int
 
@@ -57,7 +51,7 @@ class ScenarioPacker(BaseModel):
 
     # Scenario management methods
     def add(self, *scenarios: Any) -> None:
-        """Add scenarios to all packs. Supports Sessions and Scenarios"""
+        """Add scenarios to all packs."""
         self.add_custom_curves(*scenarios)
         self.add_inputs(*scenarios)
         self.add_sortables(*scenarios)
@@ -658,8 +652,6 @@ class ScenarioPacker(BaseModel):
         """
         Import scenarios from Excel file.
 
-        Uses per-row 'session' column to determine loader type for each scenario.
-
         Args:
             xlsx_path: Path to Excel file
             update: Whether to upload data to ETM. Can be:
@@ -748,7 +740,7 @@ class ScenarioPacker(BaseModel):
         self,
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
-        scenarios_by_column: Dict[Any, Session],
+        scenarios_by_column: Dict[Any, Scenario],
         update_set: set[str],
     ) -> None:
         """Import all data sheets from Excel file."""
@@ -800,10 +792,15 @@ class ScenarioPacker(BaseModel):
 
     def _create_scenarios_from_main(
         self, main_df: pd.DataFrame, update_set: Optional[set[str]] = None
-    ) -> Dict[Any, Session]:
+    ) -> Dict[Any, Scenario]:
         """Create scenarios from main sheet rows."""
         self._warn_duplicate_short_names(main_df)
-        scenarios_by_row: Dict[Any, Session] = {}
+        if "session" in main_df.columns:
+            logger.warning(
+                "MAIN: the session column is ignored. Every row is a saved scenario now, "
+                "so the column can be removed."
+            )
+        scenarios_by_row: Dict[Any, Scenario] = {}
         for idx, row in main_df.iterrows():
             try:
                 scenario = self._create_scenario_from_row(idx, row, update_set)
@@ -836,133 +833,74 @@ class ScenarioPacker(BaseModel):
         row_idx: Any,
         row_data: pd.Series[Any],
         update_set: Optional[set[str]] = None,
-    ) -> Optional[Session]:
+    ) -> Optional[Scenario]:
         """
-        Create a scenario from a main sheet row.
-
-        Uses per-row 'session' column to determine loader:
-        - session=True: SessionLoader (IDs refer to ETEngine Sessions)
-        - session=False: SavedScenarioLoader (IDs refer to MyETM SavedScenarios)
-        - Default: False (SavedScenarioLoader)
+        Load, copy or create the scenario a MAIN row describes: by its scenario_id, from its
+        copy_from, or from its area_code and end_year.
         """
-        is_session = cast_bool(row_data.get("session")) or False
-        loader: ScenarioLoader = cast(
-            ScenarioLoader,
-            SessionLoader(self) if is_session else SavedScenarioLoader(self),
-        )
+        row_label = str(row_idx)
+        metadata = self._extract_metadata_updates(row_data)
 
-        row_params = self._extract_row_parameters(row_data, row_idx)
-
-        if row_params["scenario_id"]:
-            return self._load_existing_scenario(
-                row_params["scenario_id"],
-                row_params["area_code"],
-                row_params["end_year"],
-                row_params["row_label"],
-                row_params["metadata"],
-                loader,
-            )
-        if row_params["copy_from"]:
-            return self._copy_scenario(
-                row_params["copy_from"],
-                row_params["row_label"],
-                row_params["metadata"],
-                loader,
-            )
+        if scenario_id := cast_int(row_data.get("scenario_id")):
+            return self._load_scenario(scenario_id, row_label)
+        if copy_from := cast_int(row_data.get("copy_from")):
+            return self._copy_scenario(copy_from, row_label, metadata)
         return self._create_new_scenario(
-            row_params["area_code"],
-            row_params["end_year"],
-            row_params["row_label"],
-            row_params["metadata"],
-            update_set,
-            loader,
+            row_data.get("area_code"), cast_int(row_data.get("end_year")), row_label, metadata
         )
 
-    def _extract_row_parameters(
-        self, row_data: pd.Series[Any], row_idx: Any
-    ) -> Dict[str, Any]:
-        """Extract scenario parameters from row data."""
-        return {
-            "scenario_id": cast_int(row_data.get("scenario_id")),
-            "copy_from": cast_int(row_data.get("copy_from")),
-            "area_code": row_data.get("area_code"),
-            "end_year": cast_int(row_data.get("end_year")),
-            "metadata": self._extract_metadata_updates(row_data),
-            "row_label": str(row_idx),
-        }
+    def _load_scenario(self, scenario_id: int, row_label: str) -> Optional[Scenario]:
+        """Load a saved scenario. A failed load skips the row rather than creating a new one."""
+        from pyetm.models.scenario import Scenario
 
-    def _load_existing_scenario(
-        self,
-        scenario_id: int,
-        area_code: Any,
-        end_year: Optional[int],
-        row_label: str,
-        metadata_updates: Dict[str, Any],
-        loader: ScenarioLoader,
-    ) -> Optional[Session]:
-        """Load an existing scenario by ID and apply metadata updates."""
-        return loader.load(
-            scenario_id, area_code, end_year, row_label, metadata_updates
-        )
-
-    def _copy_scenario(
-        self,
-        scenario_id: int,
-        row_label: str,
-        metadata_updates: Dict[str, Any],
-        loader: ScenarioLoader,
-    ) -> Optional[Session]:
-        """Create a deep copy of a scenario (no template link)."""
-        return loader.copy(scenario_id, row_label, metadata_updates)
-
-    def _create_new_scenario(
-        self,
-        area_code: Any,
-        end_year: Optional[int],
-        row_label: str,
-        metadata_updates: Dict[str, Any],
-        update_set: Optional[set[str]] = None,
-        loader: Optional[ScenarioLoader] = None,
-    ) -> Optional[Session]:
-        """Create a brand new scenario."""
-        if loader is None:
-            return None
-        return loader.create_new(area_code, end_year, row_label, metadata_updates)
-
-    def _load_session(self, scenario_id: int, column_name: str) -> Optional[Session]:
-        """Load an existing session. A failed load skips the row rather than creating a new one."""
         try:
-            return Session.load(scenario_id)
+            return Scenario.load(scenario_id)
         except Exception as e:
             logger.error(
-                "Skipping MAIN row '%s': scenario %s could not be loaded: %s",
-                column_name,
-                scenario_id,
-                e,
+                "Skipping MAIN row '%s': scenario %s could not be loaded: %s", row_label, scenario_id, e
             )
             return None
 
-    def _create_session(
-        self, area_code: Any, end_year: Optional[int], column_name: str, **kwargs: Any
-    ) -> Optional[Session]:
-        """Create a new session from the row's area code and end year."""
-        if not area_code or end_year is None:
-            logger.warning(
-                "MAIN row '%s' missing required fields for creation (area_code/end_year)",
-                column_name,
-            )
+    def _copy_scenario(
+        self, scenario_id: int, row_label: str, metadata: Dict[str, Any]
+    ) -> Optional[Scenario]:
+        """Copy a saved scenario into an independent one, with no preset link back to it."""
+        source = self._load_scenario(scenario_id, row_label)
+        if source is None:
             return None
         try:
-            return Session.new(str(area_code), int(end_year), **kwargs)
+            copied = source.copy(title=metadata.pop("title", None), private=metadata.pop("private", None))
+        except Exception as e:
+            logger.warning("Failed to copy scenario %s for row '%s': %s", scenario_id, row_label, e)
+            return None
+
+        self._apply_metadata_to_scenario(copied, metadata)
+        return copied
+
+    def _create_new_scenario(
+        self, area_code: Any, end_year: Optional[int], row_label: str, metadata: Dict[str, Any]
+    ) -> Optional[Scenario]:
+        """Create a saved scenario from the row's area code and end year."""
+        from pyetm.models.scenario import Scenario
+
+        if not area_code or end_year is None:
+            logger.warning("MAIN row '%s' missing required fields for creation (area_code/end_year)", row_label)
+            return None
+        title = metadata.pop("title", None) or f"Scenario {area_code} {end_year}"
+        try:
+            scenario = Scenario.new(title, str(area_code), int(end_year), private=metadata.pop("private", None))
         except Exception as e:
             logger.warning(
-                "Failed to create scenario for column '%s' (area_code=%s, end_year=%s): %s",
-                column_name,
+                "Failed to create scenario for row '%s' (area_code=%s, end_year=%s): %s",
+                row_label,
                 area_code,
                 end_year,
                 e,
             )
             return None
+
+        self._apply_metadata_to_scenario(scenario, metadata)
+        return scenario
 
     def _extract_metadata_updates(self, column_data: pd.Series[Any]) -> Dict[str, Any]:
         """Extract metadata updates from column data."""
@@ -982,10 +920,8 @@ class ScenarioPacker(BaseModel):
 
         return metadata
 
-    def _apply_metadata_to_scenario(
-        self, scenario: Session, metadata: Dict[str, Any]
-    ) -> None:
-        """Apply metadata updates to scenario."""
+    def _apply_metadata_to_scenario(self, scenario: Scenario, metadata: Dict[str, Any]) -> None:
+        """Set the Session's own fields, such as keep_compatible and source."""
         if not metadata:
             return
 
@@ -1001,7 +937,7 @@ class ScenarioPacker(BaseModel):
     def _apply_export_configuration(
         self,
         main_df: pd.DataFrame,
-        scenarios_by_column: Dict[Any, Session],
+        scenarios_by_column: Dict[Any, Scenario],
         export_config_df: Optional[pd.DataFrame] = None,
     ) -> None:
         """Apply export configuration to all scenarios. Requires EXPORT_CONFIG sheet."""
@@ -1036,7 +972,7 @@ class ScenarioPacker(BaseModel):
         self,
         excel_file: pd.ExcelFile,
         main_df: pd.DataFrame,
-        scenarios_by_column: Dict[Any, Session],
+        scenarios_by_column: Dict[Any, Scenario],
         update_set: Optional[set[str]] = None,
     ) -> None:
         """Import scenario-specific sortables and custom curves sheets."""
@@ -1084,7 +1020,7 @@ class ScenarioPacker(BaseModel):
             return None
         return name
 
-    def _scenarios(self) -> list[Session]:
+    def _scenarios(self) -> list[Scenario]:
         """All scenarios we are packing info for across all packs, in insertion order."""
         seen = set()
         result = []
@@ -1115,7 +1051,7 @@ class ScenarioPacker(BaseModel):
             except Exception:
                 pass
 
-    def remove_scenario(self, scenario: Session) -> None:
+    def remove_scenario(self, scenario: Scenario) -> None:
         """Remove a specific scenario from all collections."""
         for pack in self._packs():
             try:

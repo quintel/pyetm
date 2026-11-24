@@ -1,12 +1,9 @@
 """PyETM - Python client for the Energy Transition Model API."""
 
 from importlib.metadata import version
+from typing import Any
 
-# Client
 from pyetm.clients import BaseClient, get_client
-
-# Core models
-# Sub-models
 from pyetm.models import (
     Collection,
     CustomCurves,
@@ -15,8 +12,6 @@ from pyetm.models import (
     Scenario,
     ScenarioPacker,
     Scenarios,
-    Session,
-    Sessions,
 )
 
 __version__ = version("pyetm")
@@ -30,8 +25,18 @@ __all__ = [
     "Scenario",
     "ScenarioPacker",
     "Scenarios",
-    "Session",
-    "Sessions",
     "__version__",
     "get_client",
 ]
+
+# TEMPORARY(2.2): names removed in 2.1, which say what replaced them for one release
+_REMOVED = {"Session": "Scenario", "Sessions": "Scenarios"}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _REMOVED:
+        raise ImportError(
+            f"pyetm.{name} was removed in 2.1. Use {_REMOVED[name]} instead: every scenario is a "
+            f"saved scenario now. See the 2.1.0 changelog for each replacement."
+        )
+    raise AttributeError(f"module 'pyetm' has no attribute {name!r}")

@@ -95,7 +95,7 @@ def test_base_url_inference_from_environment(clean_settings_env):
     config = AppConfig()
 
     assert config.environment == "beta"
-    assert config.base_url == HttpUrl("https://beta.engine.energytransitionmodel.com/api/v3")
+    assert config.base_url == HttpUrl("https://beta.my.energytransitionmodel.com/api/v4")
 
 
 # Test no .env file, only environment variables
@@ -106,7 +106,7 @@ def test_no_env_file_uses_env_vars_and_defaults(clean_settings_env, monkeypatch)
     config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
+    assert config.base_url == HttpUrl("https://my.energytransitionmodel.com/api/v4")
     assert config.log_level == "INFO"
     assert config.environment == "pro"
 
@@ -155,25 +155,21 @@ def test_default_values(clean_settings_env):
     assert config.log_level == "INFO"
     assert config.csv_separator == ","
     assert config.decimal_separator == "."
-    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
+    assert config.base_url == HttpUrl("https://my.energytransitionmodel.com/api/v4")
+    assert config.etm_version == "latest"
 
 
 # Test environment inference for different values
 @pytest.mark.parametrize(
     "env,expected_url",
     [
-        ("pro", "https://engine.energytransitionmodel.com/api/v3"),
-        ("beta", "https://beta.engine.energytransitionmodel.com/api/v3"),
-        ("local", "http://localhost:3000/api/v3"),
-        ("2025-01", "https://2025-01.engine.energytransitionmodel.com/api/v3"),
-        ("", "https://engine.energytransitionmodel.com/api/v3"),  # default
-        # Custom environments now resolve to subdomain
-        ("tyndp2024", "https://tyndp2024.engine.energytransitionmodel.com/api/v3"),
-        ("tyndp2026", "https://tyndp2026.engine.energytransitionmodel.com/api/v3"),
-        (
-            "custom-env",
-            "https://custom-env.engine.energytransitionmodel.com/api/v3",
-        ),
+        ("pro", "https://my.energytransitionmodel.com/api/v4"),
+        ("beta", "https://beta.my.energytransitionmodel.com/api/v4"),
+        ("local", "https://myetm.local.energytransitionmodel.com/api/v4"),
+        ("", "https://my.energytransitionmodel.com/api/v4"),  # default
+        ("prod", "https://my.energytransitionmodel.com/api/v4"),
+        ("staging", "https://beta.my.energytransitionmodel.com/api/v4"),
+        ("dev", "https://myetm.local.energytransitionmodel.com/api/v4"),
     ],
 )
 def test_environment_inference(clean_settings_env, env, expected_url):
@@ -188,6 +184,41 @@ def test_environment_inference(clean_settings_env, env, expected_url):
     assert config.base_url == HttpUrl(expected_url)
 
 
+@pytest.mark.parametrize("env", ["2025-01", "2027"])
+def test_a_stable_version_environment_fails_naming_the_replacement(clean_settings_env, env):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": env})
+
+    with pytest.raises(ValidationError, match="names a stable Version.*Install pyetm 2.0.x.*pro, beta or local"):
+        AppConfig()
+
+
+def test_an_unknown_environment_fails_naming_the_choices(clean_settings_env):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "tyndp2024"})
+
+    with pytest.raises(ValidationError, match="Unknown ENVIRONMENT=tyndp2024. Set it to pro, beta or local"):
+        AppConfig()
+
+
+def test_an_engine_base_url_fails_naming_the_api_to_use(clean_settings_env):
+    write_env_file(clean_settings_env, {"BASE_URL": "https://beta.engine.energytransitionmodel.com/api/v3"})
+
+    with pytest.raises(ValidationError, match="points at an engine.*https://my.energytransitionmodel.com/api/v4"):
+        AppConfig()
+
+
+def test_get_settings_reports_an_engine_setting_at_startup(clean_settings_env):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "2025-01"})
+
+    with pytest.raises(RuntimeError, match="names a stable Version"):
+        get_settings()
+
+
+def test_etm_version_can_be_set(clean_settings_env):
+    write_env_file(clean_settings_env, {"ETM_VERSION": "2025-01"})
+
+    assert AppConfig().etm_version == "2025-01"
+
+
 # Test explicit base_url overrides environment inference
 def test_explicit_base_url_overrides_environment(clean_settings_env):
     env_file = clean_settings_env
@@ -196,14 +227,14 @@ def test_explicit_base_url_overrides_environment(clean_settings_env):
         {
             "ETM_API_TOKEN": "etm_valid.looking.token",
             "ENVIRONMENT": "beta",
-            "BASE_URL": "https://custom.override.com/api/v3",
+            "BASE_URL": "https://custom.override.com/api/v4",
         },
     )
 
     config = AppConfig()
 
     assert config.environment == "beta"
-    assert config.base_url == HttpUrl("https://custom.override.com/api/v3")
+    assert config.base_url == HttpUrl("https://custom.override.com/api/v4")
 
 
 # VALID TOKENS

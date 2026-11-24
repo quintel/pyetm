@@ -10,7 +10,6 @@ import pytest
 from datetime import datetime
 from pathlib import Path
 from pyetm.models.sortables import Sortables
-from pyetm.models.session import Session
 from pyetm.models.hourly_output_curves import HourlyOutputCurves
 from pyetm.models.scenario import Scenario
 
@@ -21,7 +20,7 @@ def multiple_scenarios():
     """Create multiple scenarios for testing"""
     scenarios = []
     for i in range(3):
-        scenario = Mock(spec=Session)
+        scenario = Mock(spec=Scenario)
         scenario.id = f"scenario_{i}"
         scenario.area_code = "nl2015"
         scenario.end_year = 2050
@@ -34,7 +33,7 @@ def multiple_scenarios():
 @pytest.fixture
 def scenario_with_inputs():
     """Create a scenario with mock inputs"""
-    scenario = Mock(spec=Session)
+    scenario = Mock(spec=Scenario)
     scenario.id = "input_scenario"
     scenario.area_code = "nl2015"
     scenario.end_year = 2050
@@ -56,7 +55,7 @@ def scenario_with_inputs():
 @pytest.fixture
 def scenario_with_queries():
     """Create a scenario with mock queries"""
-    scenario = Mock(spec=Session)
+    scenario = Mock(spec=Scenario)
     scenario.id = "query_scenario"
     scenario.area_code = "nl2015"
     scenario.end_year = 2050
@@ -104,7 +103,7 @@ def minimal_scenario_metadata():
 @pytest.fixture
 def scenario(minimal_scenario_metadata):
     """A basic Scenario instance for testing"""
-    return Session.model_validate(minimal_scenario_metadata)
+    return Scenario.model_validate(minimal_scenario_metadata)
 
 
 @pytest.fixture
@@ -118,7 +117,7 @@ def dummy_scenario():
             "end_year": 2050,
         }
         defaults.update(kwargs)
-        return Session.model_validate(defaults)
+        return Scenario.model_validate(defaults)
 
     return _make_scenario
 
@@ -127,7 +126,7 @@ def dummy_scenario():
 def sample_scenario():
     """Create a sample scenario for testing"""
     # Use Mock to avoid Pydantic validation issues
-    scenario = Mock(spec=Session)
+    scenario = Mock(spec=Scenario)
     scenario.id = "test_scenario"
     scenario.area_code = "nl2015"
     scenario.end_year = 2050
@@ -160,7 +159,7 @@ def sample_scenario():
 @pytest.fixture
 def scenario_with_inputs():
     """Create a scenario with input data"""
-    scenario = Mock(spec=Session)
+    scenario = Mock(spec=Scenario)
     scenario.id = "input_scenario"
     scenario.area_code = "nl2015"
     scenario.end_year = 2050
@@ -196,7 +195,7 @@ def scenario_with_inputs():
 @pytest.fixture
 def scenario_with_queries():
     """Create a scenario with query results"""
-    scenario = Mock(spec=Session)
+    scenario = Mock(spec=Scenario)
     scenario.id = "query_scenario"
     scenario.area_code = "nl2015"
     scenario.end_year = 2050
@@ -243,7 +242,7 @@ def multiple_scenarios():
     """Create multiple scenarios for testing"""
     scenarios = []
     for i in range(3):
-        scenario = Mock(spec=Session)
+        scenario = Mock(spec=Scenario)
         scenario.id = f"scenario_{i}"
         scenario.area_code = "nl2015"
         scenario.end_year = 2050

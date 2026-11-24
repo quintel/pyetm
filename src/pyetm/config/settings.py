@@ -11,6 +11,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("pyetm")
 
+# The Version this release creates Scenarios on. A maintenance branch pins its stable tag here.
+ETM_VERSION = "latest"
+
+MYETM_URLS = {
+    "pro": "https://my.energytransitionmodel.com/api/v4",
+    "beta": "https://beta.my.energytransitionmodel.com/api/v4",
+    "local": "https://myetm.local.energytransitionmodel.com/api/v4",
+}
+ENVIRONMENT_ALIASES = {"prod": "pro", "staging": "beta", "dev": "local", "development": "local"}
+
 
 class AppConfig(BaseSettings):
     """
@@ -29,14 +39,15 @@ class AppConfig(BaseSettings):
     ]
     base_url: Optional[HttpUrl] = Field(
         None,
-        description="Base URL for the ETM API (will be inferred from environment if not provided)",
+        description="The ETM API URL, for an address ENVIRONMENT does not cover",
     )
     environment: Optional[str] = Field(
         "pro",
-        description=(
-            "ETM environment to target. One of: 'pro' (default), 'beta', 'local', or a stable tag 'YYYY-MM'. "
-            "When set and base_url is not provided, base_url will be inferred."
-        ),
+        description="Which ETM to talk to: 'pro' (default), 'beta' or 'local'",
+    )
+    etm_version: str = Field(
+        ETM_VERSION,
+        description="The Version new Scenarios are created on",
     )
     log_level: Optional[str] = Field(
         "INFO",
@@ -131,12 +142,19 @@ class AppConfig(BaseSettings):
 
         return v
 
-    def model_post_init(self, __context: Any) -> None:
-        """Post-initialization to handle base_url inference and token warnings."""
-        if not self.base_url:
-            self.base_url = HttpUrl(_infer_base_url_from_env(self.environment or "production"))
+    @model_validator(mode="after")
+    def target_the_etm(self) -> "AppConfig":
+        """Resolve base_url from ENVIRONMENT, refusing a BASE_URL that points at an engine."""
+        if self.base_url is None:
+            self.base_url = HttpUrl(_myetm_url_for(self.environment))
+        elif "engine." in str(self.base_url):
+            raise ValueError(
+                f"BASE_URL {self.base_url} points at an engine, which pyETM no longer talks to. "
+                f"Remove BASE_URL, or set it to the ETM's API, such as {MYETM_URLS['pro']}."
+            )
+        return self
 
-        # Warn if no token is provided
+    def model_post_init(self, __context: Any) -> None:
         if not self.etm_api_token:
             logger.warning(
                 "No ETM_API_TOKEN provided. You will only be able to access public scenarios without authentication."
@@ -199,33 +217,19 @@ def reload_configuration() -> None:
     get_error_policy.cache_clear()
 
 
-def _infer_base_url_from_env(environment: str) -> str:
-    """
-    Infers the ETM API base URL from an environment string.
+def _myetm_url_for(environment: Optional[str]) -> str:
+    """The ETM API URL for an ENVIRONMENT, or a startup error naming what to set instead."""
+    env = (environment or "pro").strip().lower()
+    env = ENVIRONMENT_ALIASES.get(env, env)
+    if env in MYETM_URLS:
+        return MYETM_URLS[env]
 
-    Supported values (case-insensitive):
-      - 'pro'/'prod' (default): https://engine.energytransitionmodel.com/api/v3
-      - 'beta'/'staging':       https://beta.engine.energytransitionmodel.com/api/v3
-      - 'local'/'dev'/'development': http://localhost:3000/api/v3
-      - stable tags 'YYYY-MM':  https://{YYYY-MM}.engine.energytransitionmodel.com/api/v3
-      - custom environments:    https://{environment}.engine.energytransitionmodel.com/api/v3
-        (e.g., 'tyndp2024' -> https://tyndp2024.engine.energytransitionmodel.com/api/v3)
-
-    Falls back to the 'pro' URL if the input is empty.
-    """
-    env = (environment or "").strip().lower()
-
-    if env in ("", "pro", "prod"):  # default
-        return "https://engine.energytransitionmodel.com/api/v3"
-    if env in ("beta", "staging"):
-        return "https://beta.engine.energytransitionmodel.com/api/v3"
-    if env in ("local", "dev", "development"):
-        return "http://localhost:3000/api/v3"
-
-    # Stable tagged environments, 'YYYY-MM'
-    if re.fullmatch(r"\d{4}-\d{2}", env):
-        return f"https://{env}.engine.energytransitionmodel.com/api/v3"
-
-    # Custom environments (e.g., tyndp2024, tyndp2026, etc.)
-    # Use the environment string as a subdomain
-    return f"https://{env}.engine.energytransitionmodel.com/api/v3"
+    if re.fullmatch(r"\d{4}(-\d{2})?", env):
+        raise ValueError(
+            f"ENVIRONMENT={environment} names a stable Version, which this pyETM release cannot reach. "
+            f"Install pyetm 2.0.x to work on it, or set ENVIRONMENT to pro, beta or local."
+        )
+    raise ValueError(
+        f"Unknown ENVIRONMENT={environment}. Set it to pro, beta or local, "
+        f"or set BASE_URL to the ETM's API URL."
+    )

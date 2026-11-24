@@ -8,7 +8,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, PrivateAttr
 from xlsxwriter import Workbook  # type: ignore[import-untyped]
 
-from pyetm.models.session import Session
+from pyetm.models.scenario import Scenario
 from pyetm.utils import excel_utils
 
 logger = logging.getLogger(__name__)
@@ -28,17 +28,17 @@ class Packable(BaseModel):
         - Any specialized import/export logic
     """
 
-    scenarios: List[Session] = Field(default_factory=list)
+    scenarios: List[Scenario] = Field(default_factory=list)
     key: ClassVar[str] = "base_pack"
     sheet_name: ClassVar[str] = "SHEET"
-    _scenario_id_cache: Dict[str, Session] | None = PrivateAttr(default=None)
+    _scenario_id_cache: Dict[str, Scenario] | None = PrivateAttr(default=None)
     _scenario_short_names: Dict[str, str] = PrivateAttr(default_factory=dict)
 
     def set_scenario_short_names(self, scenario_short_names: Dict[str, str]) -> None:
         """Set mapping of scenario IDs to short names for display purposes."""
         self._scenario_short_names = scenario_short_names or {}
 
-    def add(self, *scenarios: Session) -> None:
+    def add(self, *scenarios: Scenario) -> None:
         """Add one or more scenarios to the packable, maintaining insertion order and uniqueness."""
         if not scenarios:
             return
@@ -47,7 +47,7 @@ class Packable(BaseModel):
                 self.scenarios.append(scenario)
         self._scenario_id_cache = None
 
-    def discard(self, scenario: Session) -> None:
+    def discard(self, scenario: Scenario) -> None:
         "Removes a scenario from the pack"
         if scenario in self.scenarios:
             self.scenarios.remove(scenario)
@@ -60,33 +60,17 @@ class Packable(BaseModel):
     def summary(self) -> Dict[str, Any]:
         return {self.key: {"scenario_count": len(self.scenarios)}}
 
-    def _key_for(self, scenario: Session) -> str:
+    def _key_for(self, scenario: Scenario) -> str:
         """Return the identifier used as the top-level column key when packing.
         Uses short name, identifier, or ID in that priority order."""
         return self._get_scenario_display_key(scenario)
 
-    def _scenario_short_name(self, scenario: Session) -> Optional[str]:
-        """Return short name, handling both Session and Scenario objects."""
-        # First check the short_names dictionary
-        dict_short_name = self._scenario_short_names.get(str(scenario.id))
-        if dict_short_name:
-            return dict_short_name
+    def _scenario_short_name(self, scenario: Scenario) -> Optional[str]:
+        """The short name set for display, else the scenario's own."""
+        short_name = self._scenario_short_names.get(str(scenario.id)) or getattr(scenario, "short_name", None)
+        return short_name if isinstance(short_name, str) and short_name else None
 
-        # Then check if scenario has a session attribute (for Scenario wrapping Session)
-        if hasattr(scenario, "session") and hasattr(scenario.session, "short_name"):
-            short_name = getattr(scenario.session, "short_name", None)
-            if short_name and isinstance(short_name, str):
-                return short_name
-
-        # Finally check if scenario directly has short_name (for Session)
-        if hasattr(scenario, "short_name"):
-            short_name = getattr(scenario, "short_name", None)
-            if short_name and isinstance(short_name, str):
-                return short_name
-
-        return None
-
-    def _get_scenario_display_key(self, scenario: Session) -> str:
+    def _get_scenario_display_key(self, scenario: Scenario) -> str:
         """Get the display key for a scenario (short name, identifier, or ID)."""
         short_name = self._scenario_short_name(scenario)
         if short_name:
@@ -102,7 +86,7 @@ class Packable(BaseModel):
         return str(scenario.id)
 
     def _build_dataframe_for_scenario(
-        self, scenario: Session, columns: str = "", **kwargs: Any
+        self, scenario: Scenario, columns: str = "", **kwargs: Any
     ) -> Optional[pd.DataFrame]:
         return None
 
@@ -169,7 +153,7 @@ class Packable(BaseModel):
     def _refresh_cache(self) -> None:
         self._scenario_id_cache = {str(s.identifier()): s for s in self.scenarios}
 
-    def _find_by_identifier(self, identifier: str) -> Optional[Session]:
+    def _find_by_identifier(self, identifier: str) -> Optional[Scenario]:
         ident_str = str(identifier)
         if self._scenario_id_cache is None or len(self._scenario_id_cache) != len(
             self.scenarios
@@ -179,7 +163,7 @@ class Packable(BaseModel):
             return None
         return self._scenario_id_cache.get(ident_str)
 
-    def resolve_scenario(self, label: Any) -> Optional[Session]:
+    def resolve_scenario(self, label: Any) -> Optional[Scenario]:
         """Resolve a scenario from various label formats (short name, identifier, or numeric ID)."""
         if label is None:
             return None
@@ -266,7 +250,7 @@ class Packable(BaseModel):
 
     def _resolve_scenario_with_warning(
         self, column_name: str, context: Optional[str] = None
-    ) -> Optional[Session]:
+    ) -> Optional[Scenario]:
         """
         Resolve scenario with warning logging.
         """
@@ -312,8 +296,8 @@ class Packable(BaseModel):
     def apply_identifier_blocks(
         self,
         df: pd.DataFrame,
-        apply_block: Callable[[Session, pd.DataFrame], None],
-        resolve: Optional[Callable[[Any], Optional[Session]]] = None,
+        apply_block: Callable[[Scenario, pd.DataFrame], None],
+        resolve: Optional[Callable[[Any], Optional[Scenario]]] = None,
     ) -> None:
         if df is None or not isinstance(df.columns, pd.MultiIndex):
             return
@@ -417,7 +401,7 @@ class Packable(BaseModel):
         self,
         excel_file: pd.ExcelFile,
         main_df: Optional[pd.DataFrame] = None,
-        scenarios_by_column: Optional[Dict[str, Session]] = None,
+        scenarios_by_column: Optional[Dict[str, Scenario]] = None,
         update_set: Optional[Set[str]] = None,
     ) -> None:
         """Import pack data from Excel file.
@@ -427,7 +411,7 @@ class Packable(BaseModel):
             self.from_dataframe(df, update_set=update_set)
 
     def log_scenario_warnings(
-        self, scenario: Session, attribute_name: str, context: str
+        self, scenario: Scenario, attribute_name: str, context: str
     ) -> None:
         """Log warnings from scenario attributes if available."""
         try:

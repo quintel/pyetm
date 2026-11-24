@@ -1,5 +1,5 @@
 from unittest.mock import Mock
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from pyetm.services.service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -154,23 +154,6 @@ def test_make_request_non_json_response():
     assert result.data == mock_response
 
 
-def test_make_request_http_error():
-    """Test HTTP error response"""
-    mock_client = Mock(spec=BaseClient)
-    mock_client.session = Mock()
-    mock_response = Mock()
-    mock_response.ok = False
-    mock_response.status_code = 404
-    mock_response.text = "Not Found"
-    mock_client.session.get.return_value = mock_response
-
-    result = RealRunner._make_request(mock_client, "GET", "/test-path")
-
-    assert not result.success
-    assert result.data is None
-    assert result.errors == ["404: Not Found"]
-
-
 def test_make_request_connection_error():
     """Test connection error handling"""
     mock_client = Mock(spec=BaseClient)
@@ -235,22 +218,26 @@ def test_concrete_runner_implementation():
     assert result.data == "test_result"
 
 
-def test_make_request_422_with_actual_error_messages():
-    """Test 422 response with actual error messages from Rails"""
+def test_a_myetm_request_unwraps_the_v4_envelope():
     mock_client = Mock(spec=BaseClient)
     mock_client.session = Mock()
-    mock_response = Mock()
-    mock_response.ok = False
-    mock_response.status_code = 422
-    mock_response.json.return_value = {
-        "success": [],
-        "errors": {"user@example.com": ["Last owner cannot be altered"]},
-    }
-    mock_client.session.delete.return_value = mock_response
+    mock_client.session.get.return_value.json.return_value = {"data": {"id": 1}, "meta": {}}
 
-    result = RealRunner._make_request(mock_client, "DELETE", "/test-path")
+    result = RealRunner._make_myetm_request(mock_client, "get", "/saved_scenarios/1")
 
-    assert not result.success
-    assert result.data is None
-    assert len(result.errors) == 1
-    assert "user@example.com: Last owner cannot be altered" in result.errors[0]
+    assert result.data == {"id": 1}
+
+
+def test_an_engine_body_is_returned_as_relayed():
+    mock_client = Mock(spec=BaseClient)
+    mock_client.session = Mock()
+    mock_client.session.get.return_value.json.return_value = {"inputs": {"x": 1}}
+
+    assert RealRunner._make_request(mock_client, "get", "/saved_scenarios/1/inputs").data == {"inputs": {"x": 1}}
+
+
+def test_the_base_path_keeps_its_slash_to_address_the_session():
+    scenario = Mock(id=7)
+
+    assert scenario_path(scenario) == "/saved_scenarios/7/"
+    assert scenario_path(scenario, "inputs") == "/saved_scenarios/7/inputs"

@@ -1,57 +1,22 @@
-"""Service for breaking preset scenario links."""
+"""Runner for breaking a scenario's preset link."""
 
-from typing import Any, Dict, Union
-from pyetm.services.scenario_runners.base_runner import BaseRunner
-from ..service_result import ServiceResult
+from typing import Any, Dict
+
 from pyetm.clients.base_client import BaseClient
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
+from ..service_result import ServiceResult
 
 
 class BreakPresetLinkRunner(BaseRunner[Dict[str, Any]]):
     """
-    Runner for breaking the preset link on a scenario.
+    Clears the preset link of a scenario's Session, making it independent of the scenario it was
+    copied from.
 
-    This sets the preset_scenario_id to nil, making the scenario independent
-    from its parent preset scenario.
-
-    PUT /api/v3/scenarios/{scenario_id}
+    PUT /api/v4/saved_scenarios/{id}/
     """
 
     @staticmethod
-    def run(
-        client: BaseClient, scenario: Union[Any, int], **kwargs: Any
-    ) -> ServiceResult[Dict[str, Any]]:
-        """
-        Break the preset link for a scenario.
-
-        This makes the scenario independent by removing its connection to the
-        preset scenario it was copied from.
-
-        Args:
-            client: The HTTP client to use
-            scenario: The scenario object (must have an 'id' attribute) or scenario ID
-            **kwargs: Additional arguments passed to the request
-
-        Example usage:
-            result = BreakPresetLinkRunner.run(
-                client=client,
-                scenario=scenario_obj
-            )
-
-            # Or with scenario ID:
-            result = BreakPresetLinkRunner.run(
-                client=client,
-                scenario=123456
-            )
-        """
-        # Extract scenario ID
-        scenario_id = scenario if isinstance(scenario, int) else scenario.id
-
-        # Build payload to break the preset link
-        payload = {"scenario": {"preset_scenario_id": None}}
-
+    def run(client: BaseClient, scenario: Any, **kwargs: Any) -> ServiceResult[Dict[str, Any]]:
         return BreakPresetLinkRunner._make_request(
-            client=client,
-            method="put",
-            path=f"/scenarios/{scenario_id}",
-            payload=payload,
+            client, "put", scenario_path(scenario), payload={"scenario": {"preset_scenario_id": None}}
         )

@@ -4,10 +4,10 @@ from pyetm.services.scenario_runners.fetch_custom_curves import (
     FetchAllCustomCurveDataRunner,
 )
 from pyetm.services.service_result import ServiceResult
-from pyetm.clients.session import ETMResponse
+from pyetm.clients.etm_client import ETMResponse
 
 
-def test_download_custom_curve_success(requests_mock, api_url, scenario):
+def test_download_custom_curve_success(api_url, scenario):
     """200 → success=True, data returns the StringIO object (batch infra)."""
     curve_key = "interconnector_2_export_availability"
     csv_content = "time,value\n0,1.0\n1,0.5"
@@ -28,48 +28,22 @@ def test_download_custom_curve_success(requests_mock, api_url, scenario):
     assert result.success and "time,value" in result.data.getvalue()
 
 
-def test_fetch_custom_curves_success(requests_mock, api_url, scenario, custom_curves_json):
-    """
-    200 → success=True, data returns the JSON payload.
-    """
-    url = f"{api_url}/scenarios/{scenario.id}/custom_curves"
-    requests_mock.get(url, status_code=200, json=custom_curves_json)
+def test_fetch_custom_curves_http_error(dummy_client, fake_response, dummy_scenario):
+    client = dummy_client(fake_response(ok=False, status_code=500, text="server failure"))
+
+    result = FetchAllCustomCurveDataRunner.run(client, dummy_scenario(5))
+
+    assert result.errors == ["500: server failure"]
 
 
-def test_fetch_custom_curves_http_error(requests_mock, api_url, scenario):
-    """
-    500 → success=False, error message surfaced.
-    """
-    url = f"{api_url}/scenarios/{scenario.id}/custom_curves"
-    requests_mock.get(url, status_code=500, text="server failure")
+def test_download_curve_http_error(api_url, scenario):
+    with patch(
+        "pyetm.services.scenario_runners.fetch_custom_curves.GenericCurveDownloadRunner._make_batch_requests",
+        return_value=[ServiceResult.fail(["500: server failure"])],
+    ):
+        result = DownloadCustomCurveRunner.run(None, scenario, "some_curve_key")
 
-
-def test_download_curve_http_error(requests_mock, api_url, scenario):
-    """
-    500 → success=False, error message surfaced for download.
-    """
-    curve_key = "some_curve_key"
-    url = f"{api_url}/scenarios/{scenario.id}/custom_curves/{curve_key}.csv"
-    requests_mock.get(url, status_code=500, text="server failure")
-
-
-def test_multiple_curves(requests_mock, api_url, scenario, custom_curves_json):
-    """
-    Test fetching multiple custom curves successfully.
-    Expected: 200 responses for all endpoints with appropriate content.
-    """
-
-    list_url = f"{api_url}/scenarios/{scenario.id}/custom_curves"
-    requests_mock.get(list_url, status_code=200, json=custom_curves_json)
-
-    csv_content = "time,value\n0,1.0\n1,0.5"
-    curve_url_1 = (
-        f"{api_url}/scenarios/{scenario.id}/custom_curves/interconnector_2_export_availability.csv"
-    )
-    curve_url_2 = f"{api_url}/scenarios/{scenario.id}/custom_curves/solar_pv_profile_1.csv"
-
-    requests_mock.get(curve_url_1, status_code=200, text=csv_content)
-    requests_mock.get(curve_url_2, status_code=200, text=csv_content)
+    assert result.errors == ["500: server failure"]
 
 
 def test_fetch_all_curves_includes_internal_parameter(dummy_client, fake_response, dummy_scenario):
@@ -105,7 +79,7 @@ def test_fetch_all_curves_includes_internal_parameter(dummy_client, fake_respons
     # Verify that include_internal parameter was passed
     assert len(client.calls) == 1
     url, params = client.calls[0]
-    assert url == "/scenarios/12345/custom_curves"
+    assert url == "/saved_scenarios/12345/custom_curves"
     assert params is not None
     assert "params" in params
     assert params["params"]["include_internal"] == "true"

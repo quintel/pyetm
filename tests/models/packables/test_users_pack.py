@@ -5,21 +5,12 @@ import pytest
 
 from pyetm.models.packables.users_pack import UsersPack
 from pyetm.models.scenario import Scenario
-from pyetm.models.session import Session
 from pyetm.services.service_result import ServiceResult
 
 
 def make_scenario(id_val=1, identifier="S1"):
     """Create a mock saved Scenario."""
     s = Mock(spec=Scenario)
-    s.id = id_val
-    s.identifier = Mock(return_value=identifier)
-    return s
-
-
-def make_session(id_val=1, identifier="S1"):
-    """Create a mock Session that is not saved to MyETM."""
-    s = Mock(spec=Session)
     s.id = id_val
     s.identifier = Mock(return_value=identifier)
     return s
@@ -151,22 +142,6 @@ class TestUsersPack:
 
             assert df.empty
             assert "Failed to fetch users" in caplog.text
-
-    def test_to_dataframe_warns_for_unsaved_session(self, caplog):
-        session = make_session(id_val=1, identifier="Temp")
-        saved = make_scenario(id_val=2, identifier="Saved")
-        saved.list_users.return_value = [make_user("user@example.com", "owner")]
-
-        pack = UsersPack()
-        pack.add(session, saved)
-
-        with caplog.at_level("WARNING"):
-            df = pack.to_dataframe()
-
-            assert "Session 'Temp' is not saved to MyETM" in caplog.text
-        session.list_users.assert_not_called()
-        assert df.loc["user@example.com", ("Saved", "role")] == "owner"
-        assert pd.isna(df.loc["user@example.com", ("Temp", "role")])
 
     def test_to_dataframe_empty_scenarios(self):
         pack = UsersPack()
@@ -324,29 +299,13 @@ class TestUsersPack:
         # Note: roles are passed as-is; normalization happens in update_users()
         s1.update_users.assert_called_once_with("user@example.com", "owner", skip_upload=True)
 
-    def test_from_dataframe_warns_for_unsaved_session(self, caplog):
-        session = make_session(id_val=1, identifier="S1")
-
-        pack = UsersPack()
-        pack.add(session)
-
-        df = pd.DataFrame([[np.nan, "S1"], ["user@example.com", "owner"]])
-
-        with caplog.at_level("WARNING"):
-            pack.from_dataframe(df, {"users"})
-
-            assert "Session 'S1' is not saved to MyETM" in caplog.text
-        session.update_users.assert_not_called()
-
 
 class TestUsersPackThroughMyETM:
     """A saved Scenario's members round trip through the saved scenario users endpoints."""
 
     @pytest.fixture
     def saved(self):
-        scenario = Scenario(id=7, scenario_id=70, title="Saved")
-        scenario._scenario_session = Session(id=70, area_code="nl", end_year=2050)
-        return scenario
+        return Scenario(id=7, scenario_id=70, title="Saved")
 
     @pytest.fixture
     def client(self):
@@ -356,7 +315,7 @@ class TestUsersPackThroughMyETM:
     @patch("pyetm.models.scenario.SavedScenarioUsersIndexRunner")
     def test_export_writes_myetm_members(self, index_runner, saved, client):
         index_runner.run.return_value = ServiceResult.ok(
-            [make_user("member@example.com", "scenario_collaborator")]
+            [{"email": "member@example.com", "role": "scenario_collaborator", "pending": False}]
         )
         pack = UsersPack()
         pack.add(saved)
@@ -379,5 +338,5 @@ class TestUsersPackThroughMyETM:
         pack.from_dataframe(df, {"users"})
 
         create_runner.run.assert_called_once_with(
-            client, 7, [{"user_email": "new@example.com", "role": "scenario_viewer"}]
+            client, 7, [{"email": "new@example.com", "role": "scenario_viewer"}]
         )

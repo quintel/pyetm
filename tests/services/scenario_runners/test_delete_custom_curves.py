@@ -35,7 +35,7 @@ def test_delete_custom_curves_success_single_curve():
     assert len(request_list) == 1
     req = request_list[0]
     assert req["method"] == "delete"
-    assert f"/scenarios/{mock_scenario.id}/custom_curves/test_curve" in req["path"]
+    assert f"/saved_scenarios/{mock_scenario.id}/custom_curves/test_curve" in req["path"]
     assert req["payload"] is None
 
 
@@ -301,12 +301,12 @@ def test_delete_custom_curves_request_structure():
 
         # Verify first request
         assert requests[0]["method"] == "delete"
-        assert requests[0]["path"] == f"/scenarios/77777/custom_curves/weather/solar_pv"
+        assert requests[0]["path"] == f"/saved_scenarios/77777/custom_curves/weather/solar_pv"
         assert requests[0]["payload"] is None
 
         # Verify second request
         assert requests[1]["method"] == "delete"
-        assert requests[1]["path"] == f"/scenarios/77777/custom_curves/weather/wind_offshore"
+        assert requests[1]["path"] == f"/saved_scenarios/77777/custom_curves/weather/wind_offshore"
         assert requests[1]["payload"] is None
 
 

@@ -1,600 +1,157 @@
 """
-Integration tests for Scenarios.create_many() with user_values, custom_curves, and sortables parameters.
+Tests for Scenarios.create_many() with user_values, custom_curves, sortables and sources.
 """
 
 import pytest
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock, call, ANY
+from unittest.mock import Mock, patch
 from pyetm.models.scenarios import Scenarios, ScenarioCreationParams
-from pyetm.models.scenario import Scenario
-from pyetm.models.session import Session
-from pyetm.clients import BaseClient
+from pyetm.models.scenario import Scenario, ScenarioError
 
 
-class TestCreateManyWithUserValues:
-    """Test create_many() with user_values parameter."""
+def saved(id_val=10):
+    scenario = Mock(spec=Scenario)
+    scenario.id = id_val
+    scenario.warnings = Mock(__len__=Mock(return_value=0))
+    return scenario
 
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    def test_create_many_with_inputs(self, mock_create, mock_apply_data):
-        """Test that user_values are passed to concurrent data application."""
-        # Mock Scenario.new to return mock saved scenarios
-        mock_saved_1 = Mock(spec=Scenario)
-        mock_saved_1.id = 10
-        mock_saved_1.session = Mock(id=1)
-        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_2 = Mock(spec=Scenario)
-        mock_saved_2.id = 20
-        mock_saved_2.session = Mock(id=2)
-        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.side_effect = [mock_saved_1, mock_saved_2]
 
-        # Mock data application to return no warnings
-        mock_apply_data.return_value = []
+def data_sent(mock_apply_data):
+    """The (scenario, data) pairs passed to apply_data."""
+    return mock_apply_data.call_args[0][0]
 
-        # Create scenarios collection
-        scenarios = Scenarios(client=Mock())
 
-        # Call create_many with user_values
+@patch("pyetm.models.scenarios.apply_data", return_value=[])
+@patch("pyetm.models.scenario.Scenario.new")
+class TestCreateManyData:
+    """Inputs, curves and sortables go to apply_data, for the scenarios that have them."""
+
+    def test_user_values_are_applied(self, mock_new, mock_apply_data):
+        first, second = saved(10), saved(20)
+        mock_new.side_effect = [first, second]
         params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "user_values": {"capacity_of_solar_pv": 1000},
-            },
-            {
-                "title": "Scenario 2",
-                "area_code": "nl",
-                "end_year": 2050,
-                "user_values": {"capacity_of_solar_pv": 2000},
-            },
+            {"title": "S1", "area_code": "nl", "end_year": 2050, "user_values": {"a": 1000}},
+            {"title": "S2", "area_code": "nl", "end_year": 2050, "user_values": {"a": 2000}},
         ]
 
-        result = scenarios.create_many(params)
+        result = Scenarios.create_many(params, client=Mock())
 
-        # Verify scenarios were created
         assert len(result.items) == 2
+        pairs = data_sent(mock_apply_data)
+        assert [scenario for scenario, _ in pairs] == [first, second]
+        assert pairs[0][1]["user_values"] == {"a": 1000}
+        assert pairs[1][1]["user_values"] == {"a": 2000}
 
-        # Verify concurrent data application was called
-        mock_apply_data.assert_called_once()
-        call_args = mock_apply_data.call_args[0]
-
-        # Check that data_to_apply has the right structure
-        data_to_apply = call_args[1]
-        assert len(data_to_apply) == 2
-        # data_to_apply is list of (index, data_dict) tuples
-        assert data_to_apply[0][0] == 0  # index
-        assert data_to_apply[0][1]["user_values"] == {"capacity_of_solar_pv": 1000}
-        assert data_to_apply[1][0] == 1  # index
-        assert data_to_apply[1][1]["user_values"] == {"capacity_of_solar_pv": 2000}
-
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_mixed_inputs(
-        self, mock_session_new, mock_create, mock_apply_data
-    ):
-        """Test create_many where only some scenarios have user_values."""
-        mock_session_1 = Mock()
-        mock_session_1.id = 1
-        mock_session_2 = Mock()
-        mock_session_2.id = 2
-        mock_session_3 = Mock()
-        mock_session_3.id = 3
-        mock_session_new.side_effect = [mock_session_1, mock_session_2, mock_session_3]
-
-        mock_saved_1 = Mock(spec=Scenario)
-        mock_saved_1.session = mock_session_1
-        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_2 = Mock(spec=Scenario)
-        mock_saved_2.session = mock_session_2
-        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_3 = Mock(spec=Scenario)
-        mock_saved_3.session = mock_session_3
-        mock_saved_3.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.side_effect = [mock_saved_1, mock_saved_2, mock_saved_3]
-
-        mock_apply_data.return_value = []
-
-        scenarios = Scenarios(client=Mock())
-
+    def test_only_scenarios_with_data_are_applied(self, mock_new, mock_apply_data):
+        first, second, third = saved(1), saved(2), saved(3)
+        mock_new.side_effect = [first, second, third]
         params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "user_values": {"capacity_of_solar_pv": 1000},
-            },
-            {
-                "title": "Scenario 2",
-                "area_code": "nl",
-                "end_year": 2050,
-                # No user_values for this one
-            },
-            {
-                "title": "Scenario 3",
-                "area_code": "nl",
-                "end_year": 2050,
-                "user_values": {"capacity_of_solar_pv": 3000},
-            },
+            {"title": "S1", "area_code": "nl", "end_year": 2050, "user_values": {"a": 1}},
+            {"title": "S2", "area_code": "nl", "end_year": 2050},
+            {"title": "S3", "area_code": "nl", "end_year": 2050, "user_values": {"a": 3}},
         ]
 
-        result = scenarios.create_many(params)
+        result = Scenarios.create_many(params, client=Mock())
 
         assert len(result.items) == 3
+        assert [scenario for scenario, _ in data_sent(mock_apply_data)] == [first, third]
 
-        # Verify data application includes only scenarios with user_values
-        call_args = mock_apply_data.call_args[0]
-        data_to_apply = call_args[1]
-        # Only 2 scenarios have data to apply
-        assert len(data_to_apply) == 2
-        assert data_to_apply[0][0] == 0  # First scenario
-        assert data_to_apply[0][1]["user_values"] == {"capacity_of_solar_pv": 1000}
-        assert data_to_apply[1][0] == 2  # Third scenario (index 2)
-        assert data_to_apply[1][1]["user_values"] == {"capacity_of_solar_pv": 3000}
-
-
-class TestCreateManyWithCustomCurves:
-    """Test create_many() with custom_curves parameter."""
-
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_custom_curves(
-        self, mock_session_new, mock_create, mock_apply_data
-    ):
-        """Test that custom curves are passed to concurrent data application."""
-        mock_session_1 = Mock()
-        mock_session_1.id = 1
-        mock_session_2 = Mock()
-        mock_session_2.id = 2
-        mock_session_new.side_effect = [mock_session_1, mock_session_2]
-
-        mock_saved_1 = Mock(spec=Scenario)
-        mock_saved_1.session = mock_session_1
-        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_2 = Mock(spec=Scenario)
-        mock_saved_2.session = mock_session_2
-        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.side_effect = [mock_saved_1, mock_saved_2]
-
-        mock_apply_data.return_value = []
-
-        scenarios = Scenarios(client=Mock())
-
-        # Create sample curve data
-        curve1 = pd.Series([1, 2, 3] * 2920, name="solar_profile")
-        curve2 = pd.Series([4, 5, 6] * 2920, name="solar_profile")
-
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "custom_curves": {"solar_profile": curve1},
-            },
-            {
-                "title": "Scenario 2",
-                "area_code": "nl",
-                "end_year": 2050,
-                "custom_curves": {"solar_profile": curve2},
-            },
-        ]
-
-        result = scenarios.create_many(params)
-
-        assert len(result.items) == 2
-
-        # Verify concurrent data application was called with curves
-        call_args = mock_apply_data.call_args[0]
-        data_to_apply = call_args[1]
-        assert len(data_to_apply) == 2
-        assert "custom_curves" in data_to_apply[0][1]
-        assert "custom_curves" in data_to_apply[1][1]
-
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_multiple_curves_per_scenario(
-        self, mock_session_new, mock_create, mock_apply_data
-    ):
-        """Test create_many with multiple custom curves per scenario."""
-        mock_session = Mock()
-        mock_session.id = 1
-        mock_session_new.return_value = mock_session
-
-        mock_saved = Mock(spec=Scenario)
-        mock_saved.session = mock_session
-        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.return_value = mock_saved
-
-        mock_apply_data.return_value = []
-
-        scenarios = Scenarios(client=Mock())
-
-        curve1 = pd.Series([1] * 8760, name="solar_profile")
-        curve2 = pd.Series([2] * 8760, name="wind_profile")
-
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "custom_curves": {
-                    "solar_profile": curve1,
-                    "wind_profile": curve2,
-                },
-            },
-        ]
-
-        result = scenarios.create_many(params)
-
-        assert len(result.items) == 1
-
-        call_args = mock_apply_data.call_args[0]
-        data_to_apply = call_args[1]
-        assert "solar_profile" in data_to_apply[0][1]["custom_curves"]
-        assert "wind_profile" in data_to_apply[0][1]["custom_curves"]
-
-
-class TestCreateManyWithSortables:
-    """Test create_many() with sortables parameter."""
-
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_sortables(
-        self, mock_session_new, mock_create, mock_apply_data
-    ):
-        """Test that sortables are passed to concurrent data application."""
-        mock_session_1 = Mock()
-        mock_session_1.id = 1
-        mock_session_2 = Mock()
-        mock_session_2.id = 2
-        mock_session_new.side_effect = [mock_session_1, mock_session_2]
-
-        mock_saved_1 = Mock(spec=Scenario)
-        mock_saved_1.session = mock_session_1
-        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_2 = Mock(spec=Scenario)
-        mock_saved_2.session = mock_session_2
-        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.side_effect = [mock_saved_1, mock_saved_2]
-
-        mock_apply_data.return_value = []
-
-        scenarios = Scenarios(client=Mock())
-
-        sortables1 = {
-            "forecast_storage": ["item1", "item2"],
-            "hydrogen_supply": ["h1", "h2"],
-        }
-        sortables2 = {
-            "forecast_storage": ["item2", "item1"],
-            "hydrogen_supply": ["h2", "h1"],
-        }
-
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "sortables": sortables1,
-            },
-            {
-                "title": "Scenario 2",
-                "area_code": "nl",
-                "end_year": 2050,
-                "sortables": sortables2,
-            },
-        ]
-
-        result = scenarios.create_many(params)
-
-        assert len(result.items) == 2
-
-        call_args = mock_apply_data.call_args[0]
-        data_to_apply = call_args[1]
-        assert data_to_apply[0][1]["sortables"] == sortables1
-        assert data_to_apply[1][1]["sortables"] == sortables2
-
-
-class TestCreateManyCombined:
-    """Test create_many() with multiple parameter types combined."""
-
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_all_parameters(
-        self, mock_session_new, mock_create, mock_apply_data
-    ):
-        """Test create_many with user_values, curves, and sortables combined."""
-        mock_session = Mock()
-        mock_session.id = 1
-        mock_session_new.return_value = mock_session
-
-        mock_saved = Mock(spec=Scenario)
-        mock_saved.session = mock_session
-        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.return_value = mock_saved
-
-        mock_apply_data.return_value = []
-
-        scenarios = Scenarios(client=Mock())
-
-        curve = pd.Series([1] * 8760, name="solar_profile")
+    def test_curves_and_sortables_are_applied(self, mock_new, mock_apply_data):
+        mock_new.return_value = saved()
+        curve = pd.Series([1] * 8760)
         sortables = {"forecast_storage": ["item1"]}
-
         params: list[ScenarioCreationParams] = [
             {
-                "title": "Scenario 1",
+                "title": "S1",
                 "area_code": "nl",
                 "end_year": 2050,
-                "user_values": {"capacity_of_solar_pv": 1000},
-                "custom_curves": {"solar_profile": curve},
+                "user_values": {"a": 1},
+                "custom_curves": {"solar_profile": curve, "wind_profile": curve},
                 "sortables": sortables,
             },
         ]
 
-        result = scenarios.create_many(params)
+        Scenarios.create_many(params, client=Mock())
 
-        assert len(result.items) == 1
+        data = data_sent(mock_apply_data)[0][1]
+        assert data["user_values"] == {"a": 1}
+        assert set(data["custom_curves"]) == {"solar_profile", "wind_profile"}
+        assert data["sortables"] == sortables
 
-        call_args = mock_apply_data.call_args[0]
-        data_to_apply = call_args[1]
-        data = data_to_apply[0][1]
-        assert "user_values" in data
-        assert "custom_curves" in data
-        assert "sortables" in data
-
-
-class TestCreateManyErrorHandling:
-    """Test error handling in create_many()."""
-
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_data_warnings_populated(
-        self, mock_session_new, mock_create, mock_apply_data
-    ):
-        """Test that data_warnings attribute is populated when data application fails."""
-        mock_session_1 = Mock()
-        mock_session_1.id = 1
-        mock_session_2 = Mock()
-        mock_session_2.id = 2
-        mock_session_new.side_effect = [mock_session_1, mock_session_2]
-
-        mock_saved_1 = Mock(spec=Scenario)
-        mock_saved_1.session = mock_session_1
-        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_2 = Mock(spec=Scenario)
-        mock_saved_2.session = mock_session_2
-        mock_saved_2.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.side_effect = [mock_saved_1, mock_saved_2]
-
-        # Mock data application to return warnings
-        mock_apply_data.return_value = [
-            "Failed to apply user_values to scenario 1: Invalid input",
-            "Failed to upload curve to scenario 2: Invalid curve",
-        ]
-
-        scenarios = Scenarios(client=Mock())
-
+    def test_data_warnings_are_collected(self, mock_new, mock_apply_data):
+        mock_new.side_effect = [saved(1), saved(2)]
+        mock_apply_data.return_value = ["Invalid input", "Invalid curve"]
         params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "user_values": {"invalid_input": 999},
-            },
-            {
-                "title": "Scenario 2",
-                "area_code": "nl",
-                "end_year": 2050,
-                "custom_curves": {"invalid_curve": pd.Series([1, 2, 3])},
-            },
+            {"title": "S1", "area_code": "nl", "end_year": 2050, "user_values": {"x": 1}},
+            {"title": "S2", "area_code": "nl", "end_year": 2050, "custom_curves": {"c": [1]}},
         ]
 
-        result = scenarios.create_many(params)
+        result = Scenarios.create_many(params, client=Mock())
 
-        # Scenarios should still be created
         assert len(result.items) == 2
+        messages = " ".join(w.message for w in result.warnings)
+        assert "Invalid input" in messages and "Invalid curve" in messages
 
-        # Warnings should be stored in the WarningCollector
-        assert len(result.warnings) >= 2  # At least the 2 data application warnings
-        # Check that data application warnings are present
-        all_warnings_str = " ".join([w.message for w in result.warnings])
-        assert "Invalid input" in all_warnings_str
-        assert "Invalid curve" in all_warnings_str
+
+class TestCreateManyCreation:
+    @patch("pyetm.models.scenario.Scenario.new")
+    def test_area_code_and_end_year_defaults(self, mock_new):
+        mock_new.return_value = saved()
+
+        Scenarios.create_many([{"title": "S1", "private": True}], area_code="nl", end_year=2050, client=Mock())
+
+        mock_new.assert_called_once_with(
+            title="S1", area_code="nl", end_year=2050, private=True, client=mock_new.call_args.kwargs["client"]
+        )
+
+    @patch("pyetm.models.scenarios.Scenario.load")
+    def test_source_copies_the_saved_scenario(self, mock_load):
+        source = saved(100)
+        source.copy_with_preset.return_value = saved(101)
+        mock_load.return_value = source
+
+        result = Scenarios.create_many([{"title": "From source", "source": 100, "private": False}], client=Mock())
+
+        assert result.items == [source.copy_with_preset.return_value]
+        assert mock_load.call_args.args == (100,)
+        source.copy_with_preset.assert_called_once_with(title="From source", private=False)
+
+    @patch("pyetm.models.scenario.Scenario.new")
+    def test_missing_title_or_area_becomes_a_warning(self, mock_new):
+        result = Scenarios.create_many(
+            [{"area_code": "nl", "end_year": 2050}, {"title": "No area"}], client=Mock()
+        )
+
+        assert result.items == []
+        mock_new.assert_not_called()
+        messages = " ".join(w.message for w in result.warnings)
+        assert "Missing required 'title'" in messages
+        assert "Missing area_code or end_year" in messages
+
+    @patch("pyetm.models.scenario.Scenario.new")
+    def test_partial_creation_failure(self, mock_new):
+        first, third = saved(1), saved(3)
+        mock_new.side_effect = [first, ScenarioError("Creation failed"), third]
+        params: list[ScenarioCreationParams] = [
+            {"title": f"S{i}", "area_code": "nl", "end_year": 2050} for i in (1, 2, 3)
+        ]
+
+        result = Scenarios.create_many(params, client=Mock())
+
+        assert result.items == [first, third]
+        assert "Creation failed" in " ".join(w.message for w in result.warnings)
 
     @patch("pyetm.models.base.get_error_policy")
-    @patch("pyetm.models.scenarios.Scenarios._apply_data_concurrently")
+    @patch("pyetm.models.scenarios.apply_data", return_value=["Failed to apply data"])
     @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_raise_on_data_errors(
-        self, mock_session_new, mock_create, mock_apply_data, mock_get_policy
-    ):
-        """Test that PYETM_ERROR_MODE=safe raises exception on data failure."""
+    def test_safe_mode_raises_on_data_errors(self, mock_new, _apply, mock_get_policy):
         from pyetm.models.error_policy import ErrorMode, ErrorPolicy
 
-        # Set error mode to safe to raise on all errors
-        mock_policy = ErrorPolicy(mode=ErrorMode.SAFE)
-        mock_get_policy.return_value = mock_policy
+        mock_get_policy.return_value = ErrorPolicy(mode=ErrorMode.SAFE)
+        mock_new.return_value = saved()
 
-        mock_session = Mock()
-        mock_session.id = 1
-        mock_session_new.return_value = mock_session
-
-        mock_saved = Mock(spec=Scenario)
-        mock_saved.session = mock_session
-        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved.set_bulk_context = Mock()  # Add this method
-        mock_create.return_value = mock_saved
-
-        # Mock data application to return errors
-        mock_apply_data.return_value = ["Failed to apply data"]
-
-        scenarios = Scenarios(client=Mock())
-
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario 1",
-                "area_code": "nl",
-                "end_year": 2050,
-                "user_values": {"invalid_input": 999},
-            },
-        ]
-
-        # Should raise when in safe mode with data errors
-        with pytest.raises(RuntimeError) as exc_info:
-            scenarios.create_many(params)
-
-        # Check that the error message mentions the failure
-        assert "failed to apply data" in str(exc_info.value).lower()
-
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_partial_scenario_creation_failure(
-        self, mock_session_new, mock_create
-    ):
-        """Test behavior when some scenario creations fail."""
-        mock_session_1 = Mock()
-        mock_session_1.id = 1
-        mock_session_3 = Mock()
-        mock_session_3.id = 3
-
-        # First succeeds, second fails, third succeeds
-        mock_session_new.side_effect = [
-            mock_session_1,
-            Exception("Creation failed"),
-            mock_session_3,
-        ]
-
-        mock_saved_1 = Mock(spec=Scenario)
-        mock_saved_1.session = mock_session_1
-        mock_saved_1.warnings = Mock(__len__=Mock(return_value=0))
-        mock_saved_3 = Mock(spec=Scenario)
-        mock_saved_3.session = mock_session_3
-        mock_saved_3.warnings = Mock(__len__=Mock(return_value=0))
-
-        mock_create.side_effect = [mock_saved_1, mock_saved_3]
-
-        scenarios = Scenarios(client=Mock())
-
-        params: list[ScenarioCreationParams] = [
-            {"title": "Scenario 1", "area_code": "nl", "end_year": 2050},
-            {"title": "Scenario 2", "area_code": "nl", "end_year": 2050},
-            {"title": "Scenario 3", "area_code": "nl", "end_year": 2050},
-        ]
-
-        # Should handle the exception gracefully
-        result = scenarios.create_many(params)
-
-        # Should only have the successful scenarios
-        assert len(result.items) == 2
-
-
-class TestCreateManyWithTemplateId:
-    """Test create_many() with template_id parameter."""
-
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_template_id_only(self, mock_session_new, mock_create):
-        """Test that template_id allows creating scenarios without area_code and end_year."""
-        # Mock Session.new to return mock session
-        mock_session = Mock()
-        mock_session.id = 1
-        mock_session_new.return_value = mock_session
-
-        # Mock Scenario.from_scenario to return mock saved scenario
-        mock_saved = Mock(spec=Scenario)
-        mock_saved.id = 10
-        mock_saved.session = mock_session
-        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.return_value = mock_saved
-
-        scenarios = Scenarios(client=Mock())
-
-        # Create scenario with only template_id (no area_code or end_year)
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario from template",
-                "template_id": 100000,
-            },
-        ]
-
-        result = scenarios.create_many(params)
-
-        # Verify scenario was created successfully
-        assert len(result.items) == 1
-
-        # Verify Session.new was called with None for area_code and end_year
-        # and template_id parameter passed through
-        mock_session_new.assert_called_once_with(None, None, client=ANY, template_id=100000)
-
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_template_id_and_explicit_area_year(
-        self, mock_session_new, mock_create
-    ):
-        """Test that template_id works with explicit area_code and end_year too."""
-        mock_session = Mock()
-        mock_session.id = 1
-        mock_session_new.return_value = mock_session
-
-        mock_saved = Mock(spec=Scenario)
-        mock_saved.session = mock_session
-        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.return_value = mock_saved
-
-        scenarios = Scenarios(client=Mock())
-
-        # Create scenario with template_id AND explicit area_code/end_year
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario with template and overrides",
-                "template_id": 100000,
-                "area_code": "de",
-                "end_year": 2040,
-            },
-        ]
-
-        result = scenarios.create_many(params)
-
-        assert len(result.items) == 1
-
-        # Verify Session.new was called with explicit values
-        mock_session_new.assert_called_once_with("de", 2040, client=ANY, template_id=100000)
-
-    @patch("pyetm.models.scenario.Scenario.new")
-    @patch("pyetm.models.session.Session.new")
-    def test_create_many_with_default_area_year_and_template(
-        self, mock_session_new, mock_create
-    ):
-        """Test that default area_code/end_year are used when template_id is present."""
-        mock_session = Mock()
-        mock_session.id = 1
-        mock_session_new.return_value = mock_session
-
-        mock_saved = Mock(spec=Scenario)
-        mock_saved.session = mock_session
-        mock_saved.warnings = Mock(__len__=Mock(return_value=0))
-        mock_create.return_value = mock_saved
-
-        scenarios = Scenarios(client=Mock())
-
-        # Create scenario with template_id and default area_code/end_year
-        params: list[ScenarioCreationParams] = [
-            {
-                "title": "Scenario with defaults and template",
-                "template_id": 100000,
-            },
-        ]
-
-        result = scenarios.create_many(params, area_code="nl", end_year=2050)
-
-        assert len(result.items) == 1
-
-        # Verify Session.new was called with defaults (not None)
-        mock_session_new.assert_called_once_with("nl", 2050, client=ANY, template_id=100000)
+        with pytest.raises(RuntimeError, match="(?i)failed to apply data"):
+            Scenarios.create_many(
+                [{"title": "S1", "area_code": "nl", "end_year": 2050, "user_values": {"x": 1}}],
+                client=Mock(),
+            )

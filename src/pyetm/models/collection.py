@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field, PrivateAttr
 from pyetm.models.base import Base
 from pyetm.clients import BaseClient, get_client
+from pyetm.config.settings import get_settings
 from pyetm.services.scenario_runners.create_collection import CreateCollectionRunner
 from pyetm.services.scenario_runners.update_collection import UpdateCollectionRunner
 from pyetm.services.scenario_runners.fetch_collection import FetchCollectionRunner
@@ -21,34 +22,20 @@ class CollectionError(Exception):
 
 class Collection(Base):
     """
-    Pydantic model for a MyETM Collection (transition path).
-
-    A Collection groups multiple scenarios together, optionally with interpolation
-    for multi-year projections.
+    A Collection: saved scenarios on one Version, viewed together.
     """
 
-    id: int = Field(..., description="Unique collection identifier in MyETM")
+    id: int = Field(..., description="The collection's ID")
     title: str = Field(..., description="Title of the collection")
-    interpolation: Optional[bool] = Field(
-        False, description="Whether this is an interpolated collection"
-    )
-    area_code: Optional[str] = Field(None, description="Area code for interpolated collections")
-    end_year: Optional[int] = Field(None, description="End year for interpolated collections")
-    version: Optional[str] = Field(None, description="ETM version")
+    version: Optional[str] = Field(None, description="The Version its saved scenarios are on")
     owner: Optional[Dict[str, Any]] = Field(None, description="Owner information")
-    saved_scenario_ids: Optional[List[int]] = Field(
+    saved_scenario_ids: List[int] = Field(
         default_factory=list, description="List of saved scenario IDs"
-    )
-    scenario_ids: Optional[List[int]] = Field(
-        default_factory=list, description="List of ETEngine scenario IDs"
     )
     collections_app_url: Optional[str] = Field(
         None, description="URL to view collection in app"
     )
-    interpolation_params: Optional[Dict[str, Any]] = Field(
-        None, description="Interpolation parameters for multi-year collections"
-    )
-    discarded: Optional[bool] = Field(False, description="Whether collection is soft-deleted")
+    discarded_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -66,26 +53,18 @@ class Collection(Base):
     def create(
         cls,
         title: str,
-        scenario_ids: Optional[List[int]] = None,
-        saved_scenario_ids: Optional[List[int]] = None,
-        area_code: Optional[str] = None,
-        end_year: Optional[int] = None,
-        interpolation: bool = False,
+        saved_scenario_ids: List[int],
+        version: Optional[str] = None,
         client: Optional[BaseClient] = None,
-        **kwargs: Any,
     ) -> "Collection":
         """
-        Create a new Collection in MyETM.
+        Create a new Collection.
 
         Args:
-            title: Title for the collection (required)
-            scenario_ids: List of ETEngine scenario IDs to include
-            saved_scenario_ids: List of MyETM saved scenario IDs to include
-            area_code: Area code for interpolated collections
-            end_year: End year for interpolated collections
-            interpolation: Whether this is an interpolated collection
+            title: Title for the collection
+            saved_scenario_ids: The saved scenarios to include, at least one
+            version: The Version they are on, defaulting to ETM_VERSION
             client: Optional BaseClient instance
-            **kwargs: Additional collection parameters
 
         Returns:
             Collection: The created collection
@@ -94,30 +73,16 @@ class Collection(Base):
             CollectionError: If creation fails
 
         Example:
-            collection = Collection.create(
-                title="My Collection",
-                saved_scenario_ids=[1, 2, 3],
-                interpolation=False
-            )
+            collection = Collection.create(title="My Collection", saved_scenario_ids=[1, 2, 3])
         """
         if client is None:
             client = get_client()
 
         collection_data = {
             "title": title,
-            "interpolation": interpolation,
-            **kwargs,
+            "saved_scenario_ids": saved_scenario_ids,
+            "version": version or get_settings().etm_version,
         }
-
-        if scenario_ids:
-            collection_data["scenario_ids"] = scenario_ids
-        if saved_scenario_ids:
-            collection_data["saved_scenario_ids"] = saved_scenario_ids
-        if area_code:
-            collection_data["area_code"] = area_code
-        if end_year:
-            collection_data["end_year"] = end_year
-
         result = CreateCollectionRunner.run(client, collection_data)
 
         if not result.success:
@@ -134,7 +99,7 @@ class Collection(Base):
     @classmethod
     def load(cls, collection_id: int, client: Optional[BaseClient] = None) -> "Collection":
         """
-        Load a Collection from MyETM by ID.
+        Load a Collection by ID.
 
         Args:
             collection_id: ID of the collection to load
@@ -210,8 +175,7 @@ class Collection(Base):
 
         Args:
             client: Optional BaseClient instance
-            **kwargs: Fields to update (title, area_code, end_year, interpolation,
-                     discarded, scenario_ids, saved_scenario_ids)
+            **kwargs: Fields to update: title, saved_scenario_ids
 
         Raises:
             CollectionError: If update fails
@@ -231,24 +195,19 @@ class Collection(Base):
         for warning in result.errors:
             self.add_warning("update", warning)
 
-        if result.data:
-            for field, value in result.data.items():
-                if hasattr(self, field):
-                    setattr(self, field, value)
-
-        for field, value in kwargs.items():
-            if hasattr(self, field) and (not result.data or field not in result.data):
+        for field, value in (result.data or {}).items():
+            if field in Collection.model_fields:
                 setattr(self, field, value)
 
     def delete(self, client: Optional[BaseClient] = None) -> None:
         """
-        Permanently delete this Collection from MyETM (hard delete).
+        Permanently delete this Collection.
 
         WARNING: This is a PERMANENT deletion and CANNOT be undone. The collection
-        will be permanently removed from MyETM.
+        will be permanently removed.
 
         NOTE: SavedScenarios within the collection are NOT deleted. Only the
-        collection itself is removed. The scenarios will remain in MyETM and
+        collection itself is removed. The scenarios will remain and
         can still be accessed individually.
 
         Args:

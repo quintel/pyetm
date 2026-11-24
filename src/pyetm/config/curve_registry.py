@@ -1,7 +1,7 @@
 """Single source of truth for hourly output curve names.
 
 Each logical curve has a canonical key, used inside pyetm (cache files, ``curve.key``) and in
-the request URL ``/scenarios/{id}/curves/{canonical}.csv``. etengine renamed four curves
+the request URL ``curves/{canonical}.csv``. etengine renamed four curves
 (``merit_order`` -> ``electricity_profiles``, ``heat_network`` -> ``district_heating_profiles``,
 ``hydrogen`` -> ``hydrogen_profiles``, ``network_gas`` -> ``network_gas_profiles``); callers may
 still pass the old names, which resolve to the canonical key with a deprecation warning.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger("pyetm")
 
@@ -84,8 +84,3 @@ def curve_type_for(name: str) -> str:
 def carrier_to_canonical() -> dict[str, str]:
     """Carrier alias -> canonical curve name (primary curve per carrier)."""
     return {s.carrier: s.canonical for s in _SPECS if s.carrier}
-
-
-def build_path(session_id: Any, name: str) -> str:
-    """Request path for an output curve: /scenarios/{id}/curves/{canonical}.csv."""
-    return f"/scenarios/{session_id}/curves/{accept_alias(name)}.csv"

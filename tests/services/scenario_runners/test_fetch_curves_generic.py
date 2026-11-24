@@ -5,7 +5,7 @@ from pyetm.services.scenario_runners.fetch_curves_generic import (
     GenericCurveBulkRunner,
 )
 from pyetm.clients.base_client import BaseClient
-from pyetm.clients.session import ETMResponse
+from pyetm.clients.etm_client import ETMResponse
 from pyetm.services.service_result import ServiceResult
 
 
@@ -65,7 +65,7 @@ def test_renamed_curve_uses_canonical_name():
         return_value=[ServiceResult.ok(data=_ok_csv_response("a,b"))],
     ) as patched:
         GenericCurveDownloadRunner.run(mock_client, mock_scenario, "district_heating_profiles")
-    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/district_heating_profiles.csv"
+    assert patched.call_args[0][1][0]["path"] == "/saved_scenarios/123/curves/district_heating_profiles.csv"
 
 
 
@@ -122,7 +122,7 @@ def test_generic_curve_bulk_runner_keys_by_canonical():
         )
     # an old name is keyed and requested under its canonical name
     assert set(result.data.keys()) == {"electricity_profiles"}
-    assert patched.call_args[0][1][0]["path"] == "/scenarios/123/curves/electricity_profiles.csv"
+    assert patched.call_args[0][1][0]["path"] == "/saved_scenarios/123/curves/electricity_profiles.csv"
 
 
 def test_generic_curve_bulk_runner_partial_failure():

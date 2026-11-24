@@ -7,13 +7,12 @@ from unittest.mock import Mock, patch
 from pyetm.models.scenario_packer import (
     ScenarioPacker,
 )
-from pyetm.models.scenario_loader import SessionLoader, SavedScenarioLoader
 from pyetm.models.packables.custom_curves_pack import CustomCurvesPack
 from pyetm.models.packables.inputs_pack import InputsPack
 from pyetm.models.packables.hourly_output_curves_pack import HourlyOutputCurvesPack
 from pyetm.models.packables.sortable_pack import SortablePack
 from pyetm.models.packables.query_pack import QueryPack
-from pyetm.models import Session
+from pyetm.models import Scenario
 from pyetm.models.export_config import ExportConfig
 from pyetm.utils.excel_utils import ExportConfigResolver
 
@@ -125,7 +124,7 @@ class TestScenarioPackerDataExtraction:
         packer = ScenarioPacker()
 
         # Create scenarios with distinct IDs
-        scenarios = [Mock(spec=Session, id=i) for i in range(10)]
+        scenarios = [Mock(spec=Scenario, id=i) for i in range(10)]
 
         # Add them in specific order to different packs
         # Note: _scenarios() iterates packs in this order: inputs, sortables, custom_curves, hourly_output_curves, annual_exports
@@ -148,7 +147,7 @@ class TestScenarioPackerDataExtraction:
         """Test that _scenarios() deduplicates while preserving first occurrence order"""
         packer = ScenarioPacker()
 
-        scenarios = [Mock(spec=Session, id=i) for i in range(5)]
+        scenarios = [Mock(spec=Scenario, id=i) for i in range(5)]
 
         # Add scenarios to multiple packs (will deduplicate)
         packer.add_inputs(scenarios[0], scenarios[1], scenarios[2])
@@ -393,7 +392,7 @@ class TestGqueryResults:
         """Test gquery_results with multiple scenarios"""
         scenarios = []
         for i in range(2):
-            scenario = Mock(spec=Session)
+            scenario = Mock(spec=Scenario)
             scenario.id = f"query_scenario_{i}"
             scenario.area_code = "nl2015"
             scenario.end_year = 2050
@@ -554,7 +553,7 @@ class TestExcelExport:
 
     def test_to_excel_sheet_types(self):
         """Test to_excel with all types of data"""
-        scenario = Mock(spec=Session)
+        scenario = Mock(spec=Scenario)
         scenario.id = "full_scenario"
         scenario.area_code = "nl2015"
         scenario.end_year = 2050
@@ -638,7 +637,7 @@ class TestUtilityMethods:
     def test_remove_scenario_not_present(self, sample_scenario):
         """Test removing scenario that's not in packer"""
         packer = ScenarioPacker()
-        other_scenario = Session(id="other", area_code="de", end_year=2030)
+        other_scenario = Scenario(id=998, area_code="de", end_year=2030)
 
         packer.add(sample_scenario)
 
@@ -844,39 +843,43 @@ class TestExampleExportConfig:
 
 
 class TestScenarioPackerHelpers:
-    def test_load_session_returns_the_loaded_session(self, monkeypatch):
-        loaded = Mock(spec=Session)
-        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: loaded))
+    def test_load_scenario_returns_the_loaded_scenario(self, monkeypatch):
+        loaded = Mock(spec=Scenario)
+        monkeypatch.setattr(Scenario, "load", staticmethod(lambda sid: loaded))
 
-        assert ScenarioPacker()._load_session(42, "COL") is loaded
+        assert ScenarioPacker()._load_scenario(42, "COL") is loaded
 
     def test_failed_load_skips_the_row_and_never_creates(self, monkeypatch, caplog):
         def fail_load(_):
             raise RuntimeError("not found")
 
         created = Mock()
-        monkeypatch.setattr(Session, "load", staticmethod(fail_load))
-        monkeypatch.setattr(Session, "new", created)
+        monkeypatch.setattr(Scenario, "load", staticmethod(fail_load))
+        monkeypatch.setattr(Scenario, "new", created)
 
         with caplog.at_level("ERROR"):
-            assert ScenarioPacker()._load_session(42, "COL") is None
+            assert ScenarioPacker()._load_scenario(42, "COL") is None
 
         created.assert_not_called()
         assert "Skipping MAIN row 'COL': scenario 42 could not be loaded" in caplog.text
 
-    def test_create_session_creates_new_and_handles_failures(self, monkeypatch):
+    def test_create_new_scenario_creates_and_handles_failures(self, monkeypatch):
         packer = ScenarioPacker()
-        created = Mock(spec=Session)
+        created = Mock(spec=Scenario)
+        new = Mock(return_value=created)
+        monkeypatch.setattr(Scenario, "new", new)
 
-        monkeypatch.setattr(Session, "new", staticmethod(lambda a, y: created))
-        assert packer._create_session("de", 2030, "COL2") is created
+        assert packer._create_new_scenario("de", 2030, "COL2", {"title": "T", "private": True}) is created
+        new.assert_called_once_with("T", "de", 2030, private=True)
+        created.update_metadata.assert_not_called()
 
-        def fail_new(_, __):
-            raise ValueError("bad")
+        new.reset_mock()
+        packer._create_new_scenario("de", 2030, "COL2", {})
+        new.assert_called_once_with("Scenario de 2030", "de", 2030, private=None)
 
-        monkeypatch.setattr(Session, "new", staticmethod(fail_new))
-        assert packer._create_session("nl", 2050, "C") is None
-        assert packer._create_session(None, None, "C") is None
+        new.side_effect = ValueError("bad")
+        assert packer._create_new_scenario("nl", 2050, "C", {}) is None
+        assert packer._create_new_scenario(None, None, "C", {}) is None
 
     def test_extract_metadata_updates_and_apply(self):
         """Test metadata extraction and application"""
@@ -920,20 +923,14 @@ class TestScenarioPackerHelpers:
         assert meta_empty == {}
 
         # apply updates
-        scenario = Mock(spec=Session)
-        packer._apply_metadata_to_scenario(
-            scenario, {"private": False, "keep_compatible": True}
-        )
-        scenario.update_metadata.assert_called_once_with(
-            private=False, keep_compatible=True
-        )
+        scenario = Mock(spec=Scenario)
+        packer._apply_metadata_to_scenario(scenario, {"keep_compatible": True, "source": "src"})
+        scenario.update_metadata.assert_called_once_with(keep_compatible=True, source="src")
 
         # swallow exceptions
         scenario.update_metadata.reset_mock()
         scenario.update_metadata.side_effect = RuntimeError("boom")
-        packer._apply_metadata_to_scenario(
-            scenario, {"private": True, "keep_compatible": False}
-        )  # should not raise
+        packer._apply_metadata_to_scenario(scenario, {"keep_compatible": False})  # should not raise
 
         # no updates does nothing
         scenario.update_metadata.reset_mock()
@@ -942,70 +939,69 @@ class TestScenarioPackerHelpers:
         scenario.update_metadata.assert_not_called()
 
 
-class TestCreateScenarioFromColumn:
-    def test_create_scenario_from_row_loads_and_updates(self, monkeypatch):
-        """Test _create_scenario_from_row method with loading existing scenario"""
+class TestCreateScenarioFromRow:
+    def test_scenario_id_loads_the_saved_scenario(self, monkeypatch):
         packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-        scenario.identifier = Mock(return_value="SID")
-        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: scenario))
+        scenario = Mock(spec=Scenario)
+        load = Mock(return_value=scenario)
+        new = Mock()
+        monkeypatch.setattr(Scenario, "load", load)
+        monkeypatch.setattr(Scenario, "new", new)
+
+        ser = pd.Series({"scenario_id": "101", "area_code": "nl2015", "end_year": 2050})
+
+        assert packer._create_scenario_from_row("COL", ser) is scenario
+        load.assert_called_once_with(101)
+        new.assert_not_called()
+
+    def test_area_and_end_year_create_a_saved_scenario(self, monkeypatch):
+        packer = ScenarioPacker()
+        scenario = Mock(spec=Scenario)
+        new = Mock(return_value=scenario)
+        monkeypatch.setattr(Scenario, "new", new)
 
         ser = pd.Series(
-            {
-                "session": True,  # Use session column to select SessionLoader
-                "scenario_id": "101",
-                "area_code": "nl2015",
-                "end_year": 2050,
-                "private": "yes",
-                "template_id": "7",
-                "source": " src ",
-                "title": " title ",
-            }
+            {"scenario_id": None, "area_code": "de", "end_year": 2030, "private": 0, "keep_compatible": 1}
         )
 
-        out = packer._create_scenario_from_row("COL", ser)
-        assert out is scenario
-        scenario.update_metadata.assert_called_once()
+        assert packer._create_scenario_from_row("COL", ser) is scenario
+        new.assert_called_once_with("Scenario de 2030", "de", 2030, private=False)
+        scenario.update_metadata.assert_called_once_with(keep_compatible=True)
 
-    def test_create_scenario_fromrow_creates(self, monkeypatch):
-        """Test _create_scenario_from_row method with creating new scenario"""
+    def test_copy_from_goes_through_scenario_copy(self, monkeypatch):
         packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-        scenario.identifier = Mock(return_value="NEW")
-        # Accept *args, **kwargs for compatibility with production code
-        monkeypatch.setattr(
-            Session, "new", staticmethod(lambda *args, **kwargs: scenario)
-        )
+        source = Mock(spec=Scenario)
+        copied = Mock(spec=Scenario)
+        source.copy.return_value = copied
+        monkeypatch.setattr(Scenario, "load", Mock(return_value=source))
 
         ser = pd.Series(
-            {
-                "session": True,  # Use session column to select SessionLoader (no auto-save)
-                "scenario_id": None,
-                "area_code": "de",
-                "end_year": 2030,
-                "private": 0,
-                "template_id": None,
-            }
+            {"copy_from": "808", "title": " Copied ", "private": "yes", "source": "excel"}
         )
 
-        out = packer._create_scenario_from_row("COL", ser)
-        assert out is scenario
+        assert packer._create_scenario_from_row("ROW8", ser) is copied
+        Scenario.load.assert_called_once_with(808)
+        source.copy.assert_called_once_with(title="Copied", private=True)
+        copied.update_metadata.assert_called_once_with(source="excel")
 
-    def test_create_scenario_from_row_returns_none_on_fail(self, monkeypatch):
-        """Test _create_scenario_from_row returns None on failure"""
-        packer = ScenarioPacker()
-        monkeypatch.setattr(
-            ScenarioPacker, "_create_session", lambda self, *a, **k: None
-        )
-        ser = pd.Series(
-            {
-                "session": True,  # Session column is present but creation will fail
-                "scenario_id": None,
-                "area_code": None,
-                "end_year": None,
-            }
-        )
-        assert packer._create_scenario_from_row("COL", ser) is None
+    def test_copy_from_a_missing_scenario_skips_the_row(self, monkeypatch):
+        monkeypatch.setattr(Scenario, "load", Mock(side_effect=RuntimeError("not found")))
+
+        ser = pd.Series({"copy_from": "808"})
+
+        assert ScenarioPacker()._create_scenario_from_row("ROW8", ser) is None
+
+    def test_failed_copy_skips_the_row(self, monkeypatch):
+        source = Mock(spec=Scenario)
+        source.copy.side_effect = RuntimeError("502")
+        monkeypatch.setattr(Scenario, "load", Mock(return_value=source))
+
+        assert ScenarioPacker()._create_scenario_from_row("ROW8", pd.Series({"copy_from": 8})) is None
+
+    def test_create_scenario_from_row_returns_none_without_area(self):
+        """Test _create_scenario_from_row returns None when nothing identifies a scenario"""
+        ser = pd.Series({"scenario_id": None, "area_code": None, "end_year": None})
+        assert ScenarioPacker()._create_scenario_from_row("COL", ser) is None
 
 
 class TestInputsPackIntegration:
@@ -1016,12 +1012,12 @@ class TestScenarioPackerExtras:
     def test_get_global_export_config_first_available(self):
         packer = ScenarioPacker()
 
-        s1 = Mock(spec=Session)
+        s1 = Mock(spec=Scenario)
         s1.id = "1"
         s1.identifier = Mock(return_value="1")
         s1._export_config = ExportConfig(include_inputs=True)
 
-        s2 = Mock(spec=Session)
+        s2 = Mock(spec=Scenario)
         s2.id = "2"
         s2.identifier = Mock(return_value="2")
         s2._export_config = ExportConfig(include_inputs=False)
@@ -1033,7 +1029,7 @@ class TestScenarioPackerExtras:
 
     def test_apply_export_configuration_sets_on_scenarios(self):
         packer = ScenarioPacker()
-        s = Mock(spec=Session)
+        s = Mock(spec=Scenario)
         s.id = "X"
         s.identifier = Mock(return_value="X")
 
@@ -1068,7 +1064,7 @@ class TestScenarioPackerExtras:
     def test_add_pack_and_gqueries_sheets(self):
         """Test that to_excel exports all requested data types."""
         packer = ScenarioPacker()
-        s = Mock(spec=Session)
+        s = Mock(spec=Scenario)
         s.id = "S"
         s.identifier = Mock(return_value="S")
         s._to_dataframe = Mock(return_value=pd.DataFrame({"S": [1]}, index=["row"]))
@@ -1125,7 +1121,7 @@ def test_clear_and_remove_scenario_swallow_errors():
 
     with patch.object(ScenarioPacker, "_packs", return_value=[fake_pack1, fake_pack2]):
         packer.clear()  # should not raise
-        sc = Mock(spec=Session)
+        sc = Mock(spec=Scenario)
         packer.remove_scenario(sc)  # should not raise
 
 
@@ -1168,245 +1164,47 @@ class TestNormalizeUpdate:
             mock_logger.warning.assert_called_once()
 
 
-class TestSessionColumnFeature:
-    """Test the per-row session column feature for selecting loader type"""
+class TestSessionColumn:
+    """The 2.0 session column is ignored: every row is a saved scenario."""
 
-    def test_create_scenario_from_row_with_session_true(self, monkeypatch):
-        """Test that session=True uses SessionLoader"""
-        packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-        scenario.identifier = Mock(return_value="SESSION_ID")
-        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: scenario))
-
-        ser = pd.Series(
-            {
-                "session": True,
-                "scenario_id": "101",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
+    def test_warns_once_per_workbook_and_still_loads_each_row(self, monkeypatch, caplog):
+        loaded = [Mock(spec=Scenario), Mock(spec=Scenario)]
+        load = Mock(side_effect=loaded)
+        new = Mock()
+        monkeypatch.setattr(Scenario, "load", load)
+        monkeypatch.setattr(Scenario, "new", new)
+        main = pd.DataFrame(
+            {"session": [True, False], "scenario_id": [101, 202], "short_name": [None, None]}
         )
 
-        with patch.object(
-            SessionLoader, "load", return_value=scenario
-        ) as mock_session_load:
-            with patch.object(SavedScenarioLoader, "load") as mock_saved_load:
-                result = packer._create_scenario_from_row("ROW1", ser)
+        with caplog.at_level("WARNING"):
+            result = ScenarioPacker()._create_scenarios_from_main(main)
 
-                # Should use SessionLoader, not SavedScenarioLoader
-                assert mock_session_load.called
-                assert not mock_saved_load.called
-                assert result is scenario
+        assert list(result.values()) == loaded
+        assert [c.args for c in load.call_args_list] == [(101,), (202,)]
+        new.assert_not_called()
+        assert caplog.text.count("the session column is ignored") == 1
 
-    def test_create_scenario_from_row_with_session_false(self, monkeypatch):
-        """Test that session=False uses SavedScenarioLoader"""
-        from pyetm.models.scenario import Scenario
+    def test_session_row_without_id_is_created_as_a_saved_scenario(self, monkeypatch, caplog):
+        created = Mock(spec=Scenario)
+        new = Mock(return_value=created)
+        monkeypatch.setattr(Scenario, "new", new)
+        main = pd.DataFrame({"session": [True], "area_code": ["nl2015"], "end_year": [2050]})
 
-        packer = ScenarioPacker()
-        saved_scenario = Mock(spec=Scenario)
+        with caplog.at_level("WARNING"):
+            result = ScenarioPacker()._create_scenarios_from_main(main)
 
-        ser = pd.Series(
-            {
-                "session": False,
-                "scenario_id": "202",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
+        assert list(result.values()) == [created]
+        new.assert_called_once_with("Scenario nl2015 2050", "nl2015", 2050, private=None)
+        assert "the session column is ignored" in caplog.text
 
-        with patch.object(
-            SavedScenarioLoader, "load", return_value=saved_scenario
-        ) as mock_saved_load:
-            with patch.object(SessionLoader, "load") as mock_session_load:
-                result = packer._create_scenario_from_row("ROW2", ser)
+    def test_no_session_column_is_quiet(self, monkeypatch, caplog):
+        monkeypatch.setattr(Scenario, "load", Mock(return_value=Mock(spec=Scenario)))
 
-                # Should use SavedScenarioLoader, not SessionLoader
-                assert mock_saved_load.called
-                assert not mock_session_load.called
-                assert result is saved_scenario
+        with caplog.at_level("WARNING"):
+            ScenarioPacker()._create_scenarios_from_main(pd.DataFrame({"scenario_id": [101]}))
 
-    def test_create_scenario_from_row_with_session_missing_defaults_false(
-        self, monkeypatch
-    ):
-        """Test that missing session column defaults to False (SavedScenarioLoader)"""
-        from pyetm.models.scenario import Scenario
-
-        packer = ScenarioPacker()
-        saved_scenario = Mock(spec=Scenario)
-
-        ser = pd.Series(
-            {
-                "scenario_id": "303",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
-
-        with patch.object(
-            SavedScenarioLoader, "load", return_value=saved_scenario
-        ) as mock_saved_load:
-            with patch.object(SessionLoader, "load") as mock_session_load:
-                result = packer._create_scenario_from_row("ROW3", ser)
-
-                # Should default to SavedScenarioLoader
-                assert mock_saved_load.called
-                assert not mock_session_load.called
-                assert result is saved_scenario
-
-    def test_create_scenario_from_row_with_session_nan_defaults_false(
-        self, monkeypatch
-    ):
-        """Test that NaN session value defaults to False"""
-        from pyetm.models.scenario import Scenario
-
-        packer = ScenarioPacker()
-        saved_scenario = Mock(spec=Scenario)
-
-        ser = pd.Series(
-            {
-                "session": float("nan"),
-                "scenario_id": "404",
-                "area_code": "de",
-                "end_year": 2040,
-            }
-        )
-
-        with patch.object(
-            SavedScenarioLoader, "load", return_value=saved_scenario
-        ) as mock_saved_load:
-            with patch.object(SessionLoader, "load") as mock_session_load:
-                result = packer._create_scenario_from_row("ROW4", ser)
-
-                # Should default to SavedScenarioLoader when NaN
-                assert mock_saved_load.called
-                assert not mock_session_load.called
-
-    def test_create_scenario_from_row_with_session_string_true(self, monkeypatch):
-        """Test that session='true' string is parsed as True"""
-        packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: scenario))
-
-        ser = pd.Series(
-            {
-                "session": "true",
-                "scenario_id": "505",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
-
-        with patch.object(
-            SessionLoader, "load", return_value=scenario
-        ) as mock_session_load:
-            with patch.object(SavedScenarioLoader, "load") as mock_saved_load:
-                result = packer._create_scenario_from_row("ROW5", ser)
-
-                # Should parse "true" as True and use SessionLoader
-                assert mock_session_load.called
-                assert not mock_saved_load.called
-
-    def test_create_scenario_from_row_with_session_int_1(self, monkeypatch):
-        """Test that session=1 is parsed as True"""
-        packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-        monkeypatch.setattr(Session, "load", staticmethod(lambda sid: scenario))
-
-        ser = pd.Series(
-            {
-                "session": 1,
-                "scenario_id": "606",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
-
-        with patch.object(
-            SessionLoader, "load", return_value=scenario
-        ) as mock_session_load:
-            with patch.object(SavedScenarioLoader, "load") as mock_saved_load:
-                result = packer._create_scenario_from_row("ROW6", ser)
-
-                # Should parse 1 as True and use SessionLoader
-                assert mock_session_load.called
-                assert not mock_saved_load.called
-
-    def test_create_scenario_from_row_with_session_int_0(self, monkeypatch):
-        """Test that session=0 is parsed as False"""
-        from pyetm.models.scenario import Scenario
-
-        packer = ScenarioPacker()
-        saved_scenario = Mock(spec=Scenario)
-
-        ser = pd.Series(
-            {
-                "session": 0,
-                "scenario_id": "707",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
-
-        with patch.object(
-            SavedScenarioLoader, "load", return_value=saved_scenario
-        ) as mock_saved_load:
-            with patch.object(SessionLoader, "load") as mock_session_load:
-                result = packer._create_scenario_from_row("ROW7", ser)
-
-                # Should parse 0 as False and use SavedScenarioLoader
-                assert mock_saved_load.called
-                assert not mock_session_load.called
-
-    def test_create_scenario_from_row_with_copy_from_respects_session(
-        self, monkeypatch
-    ):
-        """Test that copy_from respects the session column"""
-        packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-
-        ser = pd.Series(
-            {
-                "session": True,
-                "copy_from": "808",
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
-
-        with patch.object(
-            SessionLoader, "copy", return_value=scenario
-        ) as mock_session_copy:
-            with patch.object(SavedScenarioLoader, "copy") as mock_saved_copy:
-                result = packer._create_scenario_from_row("ROW8", ser)
-
-                # Should use SessionLoader for copy operation
-                assert mock_session_copy.called
-                assert not mock_saved_copy.called
-
-    def test_create_scenario_from_row_with_new_scenario_respects_session(
-        self, monkeypatch
-    ):
-        """Test that creating new scenario respects the session column"""
-        packer = ScenarioPacker()
-        scenario = Mock(spec=Session)
-
-        ser = pd.Series(
-            {
-                "session": True,
-                "area_code": "nl2015",
-                "end_year": 2050,
-            }
-        )
-
-        with patch.object(
-            SessionLoader, "create_new", return_value=scenario
-        ) as mock_session_create:
-            with patch.object(SavedScenarioLoader, "create_new") as mock_saved_create:
-                result = packer._create_scenario_from_row("ROW9", ser)
-
-                # Should use SessionLoader for new scenario
-                assert mock_session_create.called
-                assert not mock_saved_create.called
+        assert "session column" not in caplog.text
 
 
 class TestPackerValidation:
@@ -1577,6 +1375,7 @@ class TestScenarioPackerCollectExportData:
         """Test collecting export data with users"""
         from pyetm.models.export_data_collection import ExportDataCollection
 
+        sample_scenario.list_users.return_value = [{"user_email": "a@example.com", "role": "owner"}]
         packer = ScenarioPacker()
         packer.add(sample_scenario)
 
@@ -1629,6 +1428,8 @@ class TestScenarioPackerCollectExportData:
         """Test collecting export data with all options enabled"""
         from pyetm.models.export_data_collection import ExportDataCollection
 
+        for scenario in (sample_scenario, scenario_with_inputs, scenario_with_queries):
+            scenario.list_users.return_value = []
         packer = ScenarioPacker()
         packer.add(sample_scenario, scenario_with_inputs, scenario_with_queries)
 
@@ -1687,85 +1488,28 @@ class TestExportIDColumns:
 
     def test_scenario_dataframe_has_correct_id_columns(self):
         """Test Scenario._to_dataframe() exports session_id and saved_scenario_id"""
-        from pyetm.models.scenario import Scenario
+        scenario = Scenario(
+            id=12345, scenario_id=67890, title="Test Scenario", private=False, area_code="nl", end_year=2050
+        )
+        scenario._session = {
+            "start_year": 2019,
+            "keep_compatible": True,
+            "source": None,
+            "url": "https://test.energytransitionmodel.com",
+            "metadata": {},
+        }
 
-        # Create mock scenario
-        scenario = Mock(spec=Scenario)
-        scenario.id = 12345  # SavedScenario ID
-        scenario.scenario_id = 67890  # ETEngine session ID
-        scenario.title = "Test Scenario"
-        scenario.private = False
-
-        # Mock the session
-        mock_session = Mock()
-        mock_session.template_id = None
-        mock_session.area_code = "nl"
-        mock_session.start_year = 2019
-        mock_session.end_year = 2050
-        mock_session.keep_compatible = True
-        mock_session.source = None
-        mock_session.url = "https://test.energytransitionmodel.com"
-        mock_session.version = 1
-        mock_session.created_at = "2023-01-01T00:00:00Z"
-        mock_session.updated_at = "2023-01-01T00:00:00Z"
-        mock_session.short_name = None
-        mock_session.metadata = {}
-
-        scenario.session = mock_session
-
-        # Call the actual _to_dataframe method
-        from pyetm.models.scenario import Scenario as RealScenario
-
-        result = RealScenario._to_dataframe(scenario)
+        result = scenario._to_dataframe()
 
         # Verify the DataFrame structure - column is scenario.id
         col_name = str(scenario.id)
-        assert "saved_scenario_id" in result.index
-        assert "session_id" in result.index
         assert result.loc["saved_scenario_id", col_name] == 12345
         assert result.loc["session_id", col_name] == 67890
+        assert result.loc["start_year", col_name] == 2019
 
         # Ensure old column names don't exist
         assert "id" not in result.index
         assert "preset" not in result.index
-
-    def test_session_dataframe_has_correct_id_columns(self):
-        """Test Session._to_dataframe() exports session_id and empty saved_scenario_id"""
-        from pyetm.models.session import Session
-
-        # Create mock session
-        session = Mock(spec=Session)
-        session.id = 67890  # ETEngine session ID
-        session.identifier = Mock(return_value="Test Session")
-        session.title = "Test Session"
-        session.template_id = None
-        session.area_code = "nl"
-        session.start_year = 2019
-        session.end_year = 2050
-        session.keep_compatible = True
-        session.private = False
-        session.source = None
-        session.url = "https://test.energytransitionmodel.com"
-        session.version = 1
-        session.created_at = "2023-01-01T00:00:00Z"
-        session.updated_at = "2023-01-01T00:00:00Z"
-        session.metadata = {}
-
-        # Call the actual _to_dataframe method
-        from pyetm.models.session import Session as RealSession
-
-        result = RealSession._to_dataframe(session)
-
-        # Verify the DataFrame structure - column is session identifier
-        col_name = "Test Session"
-        assert "session_id" in result.index
-        assert "saved_scenario_id" in result.index
-        assert result.loc["session_id", col_name] == 67890
-        assert result.loc["saved_scenario_id", col_name] is None
-
-        # Ensure old column names don't exist
-        assert "id" not in result.index
-        assert "scenario_id" not in result.index
 
     def test_main_info_no_identifier_column(self):
         """Test that main_info() doesn't include the old identifier column"""

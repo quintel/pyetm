@@ -1,7 +1,7 @@
 """Service for delete custom curves operations."""
 
 from typing import Any, Dict, List, Set, Union
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -10,7 +10,7 @@ class DeleteCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for deleting custom curves from a scenario.
 
-    DELETE /api/v3/scenarios/{scenario_id}/custom_curves/{curve_key}
+    DELETE /api/v4/saved_scenarios/{id}/custom_curves/{curve_key}
     """
 
     @staticmethod
@@ -47,7 +47,7 @@ class DeleteCustomCurvesRunner(BaseRunner[Dict[str, Any]]):
         requests = [
             {
                 "method": "delete",
-                "path": f"/scenarios/{scenario.id}/custom_curves/{key}",
+                "path": scenario_path(scenario, f"custom_curves/{key}"),
                 "payload": None,
             }
             for key in curve_keys_list
