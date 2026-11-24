@@ -98,6 +98,7 @@ nav:
     - Installation: getting-started/installation.md
     - Quick Start: getting-started/quickstart.md
     - Configuration: getting-started/configuration.md
+    - Compatibility: getting-started/compatibility.md
   - User Guide:
     - Overview: user-guide/index.md
     - Working with Excel: user-guide/excel.md

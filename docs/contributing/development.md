@@ -151,7 +151,7 @@ pyetm/
 ├── src/pyetm/          # Source code
 │   ├── clients/        # HTTP client infrastructure
 │   ├── config/         # Configuration management
-│   ├── models/         # Domain models (Scenario, Session, etc.)
+│   ├── models/         # Domain models (Scenario, Scenarios, Collection, etc.)
 │   ├── services/       # Business logic and API services
 │   └── utils/          # Utility functions
 ├── tests/              # Test suite

@@ -2,18 +2,14 @@
 
 Create, load, copy, and manage ETM scenarios programmatically.
 
-## Session vs Scenario
+## How a Scenario works
 
-pyetm has two scenario types with different purposes:
+A `Scenario` is a saved scenario, like the ones you see in the ETM. It has a title, privacy,
+users and a history of saved snapshots. Inputs, curves, queries and exports all work on its
+current state.
 
-Users are encouraged to use scenarios for most purposes/
-
-| Feature | Session | Scenario (SavedScenario) |
-|---------|---------|--------------------------|
-| **Level** | ETEngine | MyETM |
-| **Title** | Optional | Required |
-| **Sharing** | Public link only | User permissions (owner/collaborator/viewer) |
-| **Use Case** | Quick calculations, batch processing | Long-term storage, collaboration |
+Reading a public scenario needs no token. Creating, changing or listing scenarios needs an
+`ETM_API_TOKEN`. See [Configuration](../getting-started/configuration.md).
 
 
 ## Creating Scenarios
@@ -31,15 +27,9 @@ scenario = Scenario.new(
 )
 ```
 
-**Minimal session:**
-```python
-from pyetm import Session
-
-session = Session.new(area_code="nl2023", end_year=2050)
-```
-
 !!! tip "Minimal Data"
-    You need at least an **area_code** and **end_year** to create a session, and also a **title** to create a scenario.
+    You need a **title**, an **area_code** and an **end_year**. The scenario is created on the
+    Version set by `ETM_VERSION`, which defaults to `latest`.
 
 ### With Initial Data
 
@@ -60,13 +50,15 @@ scenario = Scenario.new(
 )
 ```
 
-### From Template
+### From a Template
+
+Templates are saved scenarios too, so start from one by copying it:
 
 ```python
-from pyetm import Session
+from pyetm import Scenario
 
-# Copy from existing scenario/preset
-session = Session.new(template_id=123456)
+template = Scenario.load(123456)
+scenario = template.copy_with_preset(title="Based on the template")
 ```
 
 ### Bulk Creation
@@ -97,22 +89,22 @@ scenarios = Scenarios.create_many(
 ### Load Single
 
 ```python
-from pyetm import Scenario, Session
+from pyetm import Scenario
 
-# Load saved scenario
 scenario = Scenario.load(123456)
-
-# Load session
-session = Session.load(789012)
 ```
+
+A scenario on a Version other than `ETM_VERSION` loads with a warning, shown once per Version.
 
 ### Load Multiple
 
 ```python
-from pyetm import Scenarios, Sessions
+from pyetm import Scenarios
 
 scenarios = Scenarios.load_many([111111, 222222, 333333])
-sessions = Sessions.load_many([444444, 555555])
+
+# Every scenario you can access
+mine = Scenarios.load_all()
 ```
 
 ### With Custom Client
@@ -123,7 +115,7 @@ from pyetm.clients import BaseClient
 
 beta_client = BaseClient(
     token="your_beta_token",
-    base_url="https://beta-engine.energytransitionmodel.com"
+    base_url="https://beta.my.energytransitionmodel.com/api/v4"
 )
 
 scenario = Scenario.load(123456, client=beta_client)
@@ -139,7 +131,7 @@ from pyetm import Scenario
 scenario = Scenario.load(123456)
 
 # Key properties
-print(f"ID: {scenario.id}, Session: {scenario.scenario_id}")
+print(f"ID: {scenario.id}, Version: {scenario.version}")
 print(f"Title: {scenario.title}, Area: {scenario.area_code}")
 print(f"End year: {scenario.end_year}, private?: {scenario.private}")
 ```
@@ -148,29 +140,33 @@ print(f"End year: {scenario.end_year}, private?: {scenario.private}")
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `int` | MyETM saved scenario ID (Scenario only) |
-| `scenario_id` | `int` | ETEngine session ID |
-| `title` | `str` | Scenario title (required for Scenario) |
-| `area_code` | `str` | Geographic region (e.g., "nl", "de", "uk") |
-| `start_year` | `int \| None` | Start year (typically 2019) |
+| `id` | `int` | The saved scenario's ID |
+| `title` | `str` | Scenario title |
+| `description` | `str \| None` | Scenario description |
+| `area_code` | `str` | Geographic region (e.g., "nl2023", "de") |
 | `end_year` | `int` | Target end year |
-| `template_id` | `int \| None` | Preset scenario ID if copied from template |
-| `keep_compatible` | `bool \| None` | Update with preset changes |
-| `private` | `bool \| None` | Visibility (Scenario only) |
-| `source` | `str \| None` | Source identifier |
-| `url` | `str` | Full ETM URL |
-| `version` | `str` | ETM version (from URL) |
+| `version` | `str` | The Version the scenario is on, e.g. "latest" |
+| `private` | `bool \| None` | Visibility |
+| `scenario_id` | `int \| None` | The ID of its current state, for reference only |
+| `discarded_at` | `datetime \| None` | When the scenario was discarded, if it was |
 | `created_at` | `datetime \| None` | Creation timestamp |
 | `updated_at` | `datetime \| None` | Last update timestamp |
-| `metadata` | `dict \| None` | Custom metadata |
+| `start_year` | `int \| None` | Start year of the dataset |
+| `template_id` | `int \| None` | What the current state was copied from, if it keeps a preset link |
+| `keep_compatible` | `bool \| None` | Whether the engine keeps it compatible with model updates |
+| `source` | `str \| None` | Source identifier |
+| `url` | `str \| None` | The API URL of its current state |
+| `metadata` | `dict` | Custom metadata |
+
+pyetm fetches the last six the first time you read one.
 
 ### Update Metadata
 
 ```python
 scenario = Scenario.load(123456)
 
-# Update title/privacy
-scenario.update(title="Updated Title", private=True)
+# Update title, description or privacy
+scenario.update(title="Updated Title", description="Second draft", private=True)
 
 # Custom metadata
 scenario.update_metadata(
@@ -179,36 +175,40 @@ scenario.update_metadata(
 )
 ```
 
-### Save a session to history
+### Save a Snapshot
 
-Pointing a scenario at a new session saves a version. MyETM moves the current
-session into the scenario's history, where it can be viewed and restored.
+Changes land on the scenario as you make them. Saving keeps the current state in the
+scenario's history, where you can view and restore it in the ETM. Later changes carry on
+from there.
 
 ```python
-snapshot = scenario.session.copy_with_preset()
-scenario.update(scenario_id=snapshot.id)
-
-# Later changes apply to the new session
 scenario.update_user_values({"investment_costs_co2_ccs": 50.0})
-```
+scenario.save()
 
-Passing an ID that is already in the history restores that version.
+# Later changes apply after the saved snapshot
+scenario.update_user_values({"investment_costs_co2_ccs": 60.0})
+```
 
 ### Set Identifier
 
+The short name is a local label. Workbooks and exports use it to name the scenario's columns.
+
 ```python
 scenario.set_short_name("RES_2050_HIGH")
-print(scenario.identifier())  # "RES_2050_HIGH"
+print(scenario.short_name)  # "RES_2050_HIGH"
 ```
 
 ## Copying Scenarios
 
 ### Copy Methods
 
-| Method | Template Link |
-|--------|---------------|
+Both create a new saved scenario owned by you. The title defaults to
+"Copy of" the original's, and the privacy to the original's.
+
+| Method | Preset link to the original |
+|--------|-----------------------------|
 | `copy()` | No |
-| `copy_with_preset()` | Yes |
+| `copy_with_preset()` | Yes, so its edits read against the original |
 
 ### Independent Copy
 
@@ -242,90 +242,38 @@ original = Scenario.load(123456)
 
 preset_copy = original.copy_with_preset()
 
-print(f"Template ID: {preset_copy.template_id}")  # Points to original
+print(f"Template ID: {preset_copy.template_id}")  # Points at the original
 ```
 
 ## Interpolating Scenarios
 
-Create intermediate-year scenarios by interpolating between 2 or more scenarios with different end years. Useful for generating multi-year pathway scenarios or filling gaps between existing scenarios.
-
-### Basic Interpolation (Sessions)
-
-Create interpolated sessions without saving to MyETM:
+Create scenarios for earlier end years, with inputs interpolated from one source scenario.
+Each new scenario is saved.
 
 ```python
-from pyetm import Session, Sessions
+from pyetm import Scenario
 
-# Create or load scenarios with different end years
-session_2030 = Session.new(area_code="nl2023", end_year=2030)
-session_2050 = Session.new(area_code="nl2023", end_year=2050)
-
-# Interpolate to create intermediate years
-interpolated = Sessions.interpolate(
-    sessions=[session_2030, session_2050],
-    target_years=[2035, 2040, 2045]
-)
-
-# Returns list of Session objects
-print([s.end_year for s in interpolated])  # [2035, 2040, 2045]
-```
-
-### Interpolating Saved Scenarios
-
-Create and save interpolated scenarios to MyETM:
-
-```python
-from pyetm import Scenario, Scenarios
-
-# Load saved scenarios
-scenario_2030 = Scenario.load(111111)
 scenario_2050 = Scenario.load(222222)
 
-# Interpolate and save to MyETM
-interpolated = Scenarios.interpolate(
-    scenarios=[scenario_2030, scenario_2050],
-    target_years=[2035, 2040]
-)
+interpolated = Scenario.interpolate(scenario_2050, 2030, 2040)
 
-# Returns list of Scenario objects (saved to MyETM)
 print([(s.title, s.end_year) for s in interpolated])
+# [('... interpolated to 2030', 2030), ('... interpolated to 2040', 2040)]
 ```
 
 ### Custom Titles
 
-Specify custom titles for each interpolated scenario:
-
 ```python
-interpolated = Scenarios.interpolate(
-    scenarios=[scenario_2030, scenario_2050],
-    target_years=[2035, 2040, 2045],
-    titles=["Pathway 2035", "Pathway 2040", "Pathway 2045"]
-)
-```
-
-### Multi-Scenario Interpolation
-
-Interpolate between 3 or more scenarios:
-
-```python
-# Load multiple scenarios spanning different years
-s_2030 = Scenario.load(111111)
-s_2040 = Scenario.load(222222)
-s_2050 = Scenario.load(333333)
-
-# Interpolate between all of them
-interpolated = Scenarios.interpolate(
-    scenarios=[s_2030, s_2040, s_2050],
-    target_years=[2035, 2045]
+interpolated = Scenario.interpolate(
+    scenario_2050, 2030, 2040,
+    titles=["Pathway 2030", "Pathway 2040"]
 )
 ```
 
 !!! info "Requirements"
-    - All scenarios must have the **same area_code**
-    - All scenarios must have **unique end_year** values
-    - Target years must be **between** the earliest and latest scenario end years
-    - Cannot interpolate **scaled scenarios**
-    - For `Scenario.interpolate()`, scenarios must be saved (have an ID)
+    - Interpolate from **one source** at a time. Passing several scenarios raises an error.
+    - Each end year must be **before** the source's end year and after its start year.
+    - Cannot interpolate **scaled scenarios**.
 
 
 ## Collections and Bulk Operations
@@ -344,7 +292,7 @@ scenarios = Scenarios(items=[scenario_1, scenario_2])
 #### Main metadata
 
 ```python
-scenario.combine.main_info()
+scenarios.combine.main_info()
 ```
 
 ### Collection Operations
@@ -358,7 +306,7 @@ scenario.combine.main_info()
 | Length | `len()` | `len(scenarios)` |
 | Bulk export | `to_excel()` | `scenarios.to_excel("file.xlsx")` |
 | Combined data | `.combine` | `packer = scenarios.combine` |
-| Hourly curves | `get_hourly_curves()` | `scenarios.get_hourly_curves(["electricity"])` |
+| Hourly curves | `get_hourly_output_curves()` | `scenarios.get_hourly_output_curves("electricity")` |
 | Annual exports | `get_annual_exports()` | `scenarios.get_annual_exports(["energy_flow"])` |
 
 ### Bulk Export
@@ -390,7 +338,7 @@ results_df = packer.gquery_results()
 |--------|---------|---------|
 | `create_many()` | Create multiple scenarios | `Scenarios.create_many(configs, area_code="nl2023")` |
 | `load_many()` | Load multiple scenarios | `Scenarios.load_many([111, 222, 333])` |
-| `Sessions.load_many()` | Load multiple sessions | `Sessions.load_many([444, 555])` |
+| `load_all()` | Load every scenario you can access | `Scenarios.load_all()` |
 | `discard_many()` | Discard multiple saved scenarios | `Scenarios.discard_many([111, 222, 333])` |
 
 **Example:**
@@ -400,15 +348,19 @@ from pyetm import Scenarios
 configs = [
     {"title": "Base", "user_values": {...}},
     {"title": "Policy A", "user_values": {...}},
+    # Copy an existing saved scenario instead of starting from scratch
+    {"title": "Policy B", "source": 123456},
 ]
 
 scenarios = Scenarios.create_many(
     configs,
     area_code="nl2023",
     end_year=2050,
-    raise_on_data_errors=False
 )
 ```
+
+A scenario that cannot be created, or whose data cannot be sent, becomes a warning. The rest
+of the batch carries on.
 
 ### Bulk Discard
 
@@ -426,15 +378,6 @@ print(f"Failed to discard: {result['failed']}")
 ```
 
 !!! info "Soft-Delete and Recovery"
-    Scenarios are marked as discarded and hidden from listings, but can be recovered through the MyETM web interface within 60 days. After 60 days, MyETM automatically removes discarded scenarios permanently.
+    Scenarios are marked as discarded and hidden from listings, but can be recovered in the ETM within 60 days. After 60 days, they are removed discarded scenarios permanently.
 
 The method continues processing even if individual discards fail, returning a summary of successes and failures.
-
-### Extract Underlying Sessions
-
-```python
-scenarios = Scenarios(items=[Scenario.load(111), Session.load(222)])
-
-# Get list of Session objects
-sessions = scenarios.sessions
-```

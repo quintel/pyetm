@@ -39,7 +39,7 @@ df = scenario.sortables.to_dataframe()
 # Import
 scenario.set_user_values_from_dataframe(inputs_df)
 scenario.set_sortables_from_dataframe(sortables_df)
-scenario.update_custom_curves(CustomCurves._from_dataframe(curves_df, scenario.session.id))
+scenario.update_custom_curves(CustomCurves._from_dataframe(curves_df, scenario.id))
 ```
 
 ### Batch Updates

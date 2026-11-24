@@ -23,8 +23,7 @@ The `MAIN` sheet contains scenario metadata with the following fields:
 |-------|------|-------------|---------|
 | `short_name` | String | Short identifier for the scenario | `BASE` |
 | `scenario_id` | Integer | Saved scenario ID (if loading existing) | `123456` |
-| `session` | Boolean | If true, indicates you are working with sessions, for example scenario_id now refers to a session_id (defaults to false) | `TRUE` |
-| `copy_from` | Integer | ID of scenario to copy from | `111111` |
+| `copy_from` | Integer | Saved scenario ID to copy into a new, independent scenario | `111111` |
 | `title` | String | Scenario name | `My Scenario` |
 | `area_code` | String | Dataset area code (also indicates start year) | `nl2023` |
 | `end_year` | Integer | Future year for the scenario | `2050` |
@@ -32,6 +31,22 @@ The `MAIN` sheet contains scenario metadata with the following fields:
 | `private` | Boolean | Whether scenario is private | `true`, `false` |
 | `custom_curves` | String | Name of custom curves sheet | `CUSTOM_CURVES` |
 | `sortables` | String | Name of sortables sheet | `SORTABLES` |
+
+Each row becomes one saved scenario, in this order of preference:
+
+1. With a `scenario_id`, the saved scenario is loaded. A row whose scenario cannot be loaded is
+   skipped with an error, rather than replaced by a new scenario.
+2. With a `copy_from`, that saved scenario is copied into a new one with no preset link back to
+   it. The row's `title` and `private` apply to the copy.
+3. Otherwise a new scenario is created from `area_code` and `end_year`. Its title defaults to
+   "Scenario <area_code> <end_year>".
+
+`keep_compatible` and `source` are set on copied and created scenarios. Creating or copying
+needs an `ETM_API_TOKEN`.
+
+!!! note "Workbooks from pyetm 2.0"
+    The `session` column is gone, because every row is a saved scenario now. A workbook that
+    still has one loads as normal, with one warning that the column is ignored.
 
 ### EXPORT_CONFIG Sheet Structure
 
@@ -184,7 +199,6 @@ admin@example.com      | owner       | owner       | owner       |
 **Notes**:
 
 - Empty cells mean the user has no access to that scenario
-- Only saved Scenarios have users. A Session that is not saved to MyETM exports no users, and importing users onto one logs a warning and skips it
 - See `Scenario.update_users()` for programmatic equivalent
 
 ### GQUERIES Sheet
@@ -316,7 +330,7 @@ scenarios = Scenarios.from_excel(
 - `"user_values"` - Slider input values
 - `"custom_curves"` - Custom price/demand curves
 - `"sortables"` - Technology ordering
-- `"users"` - User access permissions (Scenario only, not Session)
+- `"users"` - User access permissions
 
 
 #### Import with ScenarioPacker

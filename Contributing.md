@@ -318,20 +318,22 @@ When multiple scenarios have configs the first one encountered is used as a “g
 Most high-level actions use a default cached `BaseClient` internally. If you need to batch raw HTTP operations:
 
 ```python
-from pyetm.clients.base_client import BaseClient, make_batch_requests, get_client
+from pyetm.clients.base_client import BaseClient, get_client
+from pyetm.services.scenario_runners.base_runner import BaseRunner
 
 # Option 1: Use the default cached client (picks up ETM_API_TOKEN + base_url from env)
 client = get_client()
 
 # Option 2: Create a new client instance with custom config
-client = BaseClient(token="etm_custom_token", base_url="https://beta.engine.energytransitionmodel.com/api/v3")
+client = BaseClient(token="etm_custom_token", base_url="https://beta.my.energytransitionmodel.com/api/v4")
 
+# Paths are relative to MyETM's API. Calls on a scenario's Session go under /saved_scenarios/{id}/.
 requests = [
-   {"method": "GET", "url": "/api/v3/scenarios/"},
-   {"method": "GET", "url": "/api/v3/areas"},
+   {"method": "get", "path": "/saved_scenarios/123"},
+   {"method": "get", "path": "/saved_scenarios/123/inputs"},
 ]
 
-results = make_batch_requests(client, requests)
+results = BaseRunner._make_batch_requests(client, requests)
 for r in results:
    if r.success:
       print(r.data)
@@ -351,13 +353,13 @@ prod_client = BaseClient()  # Uses env vars
 
 # Beta environment client
 beta_client = BaseClient(
-    base_url="https://beta.engine.energytransitionmodel.com/api/v3",
+    base_url="https://beta.my.energytransitionmodel.com/api/v4",
     token="etm_beta_..."
 )
 
 # Create scenarios on different environments
-prod_scenario = Scenario.new(title="Prod Test", client=prod_client)
-beta_scenario = Scenario.new(title="Beta Test", client=beta_client)
+prod_scenario = Scenario.new(title="Prod Test", area_code="nl2023", end_year=2050, client=prod_client)
+beta_scenario = Scenario.new(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
 ```
 
 ### Next Steps
