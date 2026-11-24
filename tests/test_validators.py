@@ -82,6 +82,8 @@ class TestValidateExportNames:
             "sankey",
             "storage_parameters",
             "costs_parameters",
+            "direct_emissions_present",
+            "direct_emissions_future",
         ]
         result = validate_export_names(all_exports)
         assert result == all_exports

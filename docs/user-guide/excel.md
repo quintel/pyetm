@@ -145,6 +145,7 @@ The `annual_exports` field has three modes:
 - `storage_parameters` - Storage parameters for technologies
 - `costs_parameters` - Cost parameters for technologies
 - `electricity_capacities`, `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities` - Installed and peak capacity per participant
+- `direct_emissions_present`, `direct_emissions_future` - Direct emissions per node
 
 !!! note "Validation"
     Invalid export type names will be filtered out with a warning. Only valid entries will be exported.

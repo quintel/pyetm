@@ -138,6 +138,8 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 | `district_heating_capacities` | Installed/peak capacity per participant in the heat merit order |
 | `hydrogen_capacities` | Installed/peak capacity for hydrogen participants |
 | `network_gas_capacities` | Installed/peak capacity for network gas participants |
+| `direct_emissions_present` | Direct emissions per node (present year) |
+| `direct_emissions_future` | Direct emissions per node (future year) |
 
 ### Basic Access
 

@@ -700,6 +700,8 @@ class TestExportConfigResolver:
             "district_heating_capacities",
             "hydrogen_capacities",
             "network_gas_capacities",
+            "direct_emissions_present",
+            "direct_emissions_future",
         ]
 
     def test_extract_from_export_config_sheet_annual_exports_boolean_true(self):
@@ -724,6 +726,8 @@ class TestExportConfigResolver:
             "district_heating_capacities",
             "hydrogen_capacities",
             "network_gas_capacities",
+            "direct_emissions_present",
+            "direct_emissions_future",
         ]
 
     def test_extract_from_export_config_sheet_specific_carriers(self):

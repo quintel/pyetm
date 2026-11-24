@@ -116,6 +116,7 @@ working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
 - A Compatibility page and the release line rule.
 - `include_gquery_present` (EXPORT_CONFIG column `gqueries_present`) exports each query's start
   year value beside its future value.
+- The `direct_emissions_present` and `direct_emissions_future` annual exports.
 
 ### Removed
 
