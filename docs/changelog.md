@@ -136,6 +136,7 @@ working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
   returned.
 - `created_at` and `updated_at` in MAIN now describe the saved scenario, not its current
   session.
+- A `BASE_URL` beside a different `ENVIRONMENT` now warns that `ENVIRONMENT` is ignored.
 
 ### Fixed
 

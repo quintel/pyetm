@@ -144,13 +144,22 @@ class AppConfig(BaseSettings):
 
     @model_validator(mode="after")
     def target_the_etm(self) -> "AppConfig":
-        """Resolve base_url from ENVIRONMENT, refusing a BASE_URL that points at an engine."""
+        """Resolve base_url from ENVIRONMENT, refusing an engine URL or a BASE_URL that contradicts it."""
+        environment_set = "environment" in self.model_fields_set
         if self.base_url is None:
             self.base_url = HttpUrl(_myetm_url_for(self.environment))
-        elif "engine." in str(self.base_url):
+            return self
+        if "engine." in str(self.base_url):
             raise ValueError(
                 f"BASE_URL {self.base_url} points at an engine, which pyETM no longer talks to. "
                 f"Remove BASE_URL, or set it to the ETM's API, such as {MYETM_URLS['pro']}."
+            )
+        if environment_set and _known_url(self.environment) != str(self.base_url).rstrip("/"):
+            logger.warning(
+                "BASE_URL %s is used and ENVIRONMENT=%s is ignored, as they point at different places. "
+                "Remove one of them.",
+                self.base_url,
+                self.environment,
             )
         return self
 
@@ -217,13 +226,17 @@ def reload_configuration() -> None:
     get_error_policy.cache_clear()
 
 
+def _known_url(environment: Optional[str]) -> Optional[str]:
+    env = (environment or "pro").strip().lower()
+    return MYETM_URLS.get(ENVIRONMENT_ALIASES.get(env, env))
+
+
 def _myetm_url_for(environment: Optional[str]) -> str:
     """The ETM API URL for an ENVIRONMENT, or a startup error naming what to set instead."""
-    env = (environment or "pro").strip().lower()
-    env = ENVIRONMENT_ALIASES.get(env, env)
-    if env in MYETM_URLS:
-        return MYETM_URLS[env]
+    if url := _known_url(environment):
+        return url
 
+    env = (environment or "").strip()
     if re.fullmatch(r"\d{4}(-\d{2})?", env):
         raise ValueError(
             f"ENVIRONMENT={environment} names a stable Version, which this pyETM release cannot reach. "

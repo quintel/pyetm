@@ -57,7 +57,6 @@ def test_config_loads_env_file_values(clean_settings_env):
         "ETM_API_TOKEN": "etm_valid.looking.token",
         "BASE_URL": "https://custom.local/api",
         "LOG_LEVEL": "DEBUG",
-        "ENVIRONMENT": "beta",
         "CSV_SEPARATOR": ";",
         "DECIMAL_SEPARATOR": ",",
     }
@@ -68,7 +67,6 @@ def test_config_loads_env_file_values(clean_settings_env):
     assert config.etm_api_token == "etm_valid.looking.token"
     assert config.base_url == HttpUrl("https://custom.local/api")
     assert config.log_level == "DEBUG"
-    assert config.environment == "beta"
     assert config.csv_separator == ";"
     assert config.decimal_separator == ","
 
@@ -219,22 +217,44 @@ def test_etm_version_can_be_set(clean_settings_env):
     assert AppConfig().etm_version == "2025-01"
 
 
-# Test explicit base_url overrides environment inference
-def test_explicit_base_url_overrides_environment(clean_settings_env):
-    env_file = clean_settings_env
-    write_env_file(
-        env_file,
-        {
-            "ETM_API_TOKEN": "etm_valid.looking.token",
-            "ENVIRONMENT": "beta",
-            "BASE_URL": "https://custom.override.com/api/v4",
-        },
-    )
+def test_a_base_url_alone_is_used_as_given(clean_settings_env):
+    write_env_file(clean_settings_env, {"BASE_URL": "https://custom.override.com/api/v4"})
 
-    config = AppConfig()
+    assert AppConfig().base_url == HttpUrl("https://custom.override.com/api/v4")
 
-    assert config.environment == "beta"
-    assert config.base_url == HttpUrl("https://custom.override.com/api/v4")
+
+def test_a_base_url_matching_the_environment_is_accepted(clean_settings_env):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "beta", "BASE_URL": "https://beta.my.energytransitionmodel.com/api/v4/"})
+
+    assert AppConfig().base_url == HttpUrl("https://beta.my.energytransitionmodel.com/api/v4/")
+
+
+def test_a_base_url_contradicting_the_environment_wins_with_a_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "beta", "BASE_URL": "https://my.energytransitionmodel.com/api/v4"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        config = AppConfig()
+
+    assert config.base_url == HttpUrl("https://my.energytransitionmodel.com/api/v4")
+    assert "ENVIRONMENT=beta is ignored" in caplog.text
+
+
+def test_a_base_url_alone_gives_no_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"BASE_URL": "https://my.energytransitionmodel.com/api/v4"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        AppConfig()
+
+    assert "ignored" not in caplog.text
+
+
+def test_a_stable_version_environment_beside_a_base_url_is_ignored_with_a_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "2025-01", "BASE_URL": "https://my.energytransitionmodel.com/api/v4"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        AppConfig()
+
+    assert "ENVIRONMENT=2025-01 is ignored" in caplog.text
 
 
 # VALID TOKENS
