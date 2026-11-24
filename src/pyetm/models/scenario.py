@@ -434,7 +434,11 @@ class Scenario(Base):
 
     @property
     def url(self) -> Optional[str]:
-        return self._session_metadata().get("url")
+        """The scenario's page on MyETM."""
+        if self.id is None:
+            return None
+        myetm = self.client.session.base_url.removesuffix("/api/v4")
+        return f"{myetm}/saved_scenarios/{self.id}"
 
     @property
     def metadata(self) -> Dict[str, Any]:

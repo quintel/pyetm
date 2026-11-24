@@ -151,10 +151,10 @@ ETM_API_TOKEN=etm_your_token_here
 - **With a token** you can also create, change and list your scenarios, and read private ones.
 - Get your token on your [tokens page](https://my.energytransitionmodel.com/identity/tokens).
 
-pyetm 2.1 works on the `latest` Version of the ETM. To work on a stable Version such as
-`2025-01`, use pyetm 2.0.x. See the
+pyetm 2.1 is tested on the `latest` Version of the ETM. For `2025-01`, use
+pyetm 2.0.x. See the
 [compatibility table](https://quintel.github.io/pyetm/getting-started/compatibility/).
-`ENVIRONMENT=beta` switches to the beta ETM, and the
+`ETM_ENVIRONMENT=beta` switches to the beta ETM, and the
 [configuration page](https://quintel.github.io/pyetm/getting-started/configuration/) lists the
 other settings.
 

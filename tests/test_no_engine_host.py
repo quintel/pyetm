@@ -55,7 +55,6 @@ class RecordingSession:
 
 
 def test_no_request_reaches_an_engine_host(monkeypatch):
-    monkeypatch.setenv("BASE_URL", MYETM)
     client = BaseClient()
     recorder = RecordingSession()
     client.session._session = recorder

@@ -8,9 +8,8 @@ All notable changes to pyetm are documented here.
 
 pyetm talks to the ETM through one API, at `my.energytransitionmodel.com`, and no longer
 reaches an engine directly. Every scenario is a saved scenario. `Session` and `Sessions` are
-gone. pyetm 2.1 targets `latest`; to keep
-working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
-[Compatibility](getting-started/compatibility.md)).
+gone. pyetm 2.1 is tested on `latest` and no longer works on `2025-01`; for that, stay on
+pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 
 #### Upgrading
 
@@ -18,10 +17,10 @@ working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
 
 | 2.0 | 2.1 |
 |---|---|
-| `ENVIRONMENT=pro`, `beta` or `local` | Unchanged names, now picking the ETM's API. `local` is the ETLauncher stack at `https://myetm.local.energytransitionmodel.com` |
+| `ENVIRONMENT=pro`, `beta` or `local` | `ETM_ENVIRONMENT`, picking the ETM's API. `local` is the ETLauncher stack at `https://myetm.local.energytransitionmodel.com`. A bare `ENVIRONMENT` is still read for this release |
 | `ENVIRONMENT=2025-01` or another stable tag | Fails at startup. Install pyetm 2.0.x for a stable Version |
-| `ENVIRONMENT=tyndp2024` or another custom label | Fails at startup. Use `pro`, `beta` or `local`, or set `BASE_URL` |
-| `BASE_URL=https://...engine.../api/v3` | Fails at startup. Remove it, or set the ETM's API URL ending in `/api/v4` |
+| `ENVIRONMENT=tyndp2024` or another custom label | Fails at startup. Use `pro`, `beta` or `local`, or pass `BaseClient(base_url=...)` |
+| `BASE_URL` | Ignored, with a warning naming the API pyetm talks to. Set `ETM_ENVIRONMENT`, or pass `BaseClient(base_url=...)` |
 | (none) | `ETM_VERSION`, the Version new scenarios are created on, default `latest` |
 
 **Session**
@@ -42,7 +41,8 @@ working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
 | `session.list_users()`, `update_users()`, `apply_pending_users()` | The same methods on `Scenario` |
 | `session.from_excel(path)` | `Scenario.from_excel(path)` |
 | Every data method: `inputs`, `user_values()`, `update_user_values()`, `remove_user_values()`, `set_user_values_from_dataframe()`, `sortables`, `update_sortables()`, `remove_sortables()`, `set_sortables_from_dataframe()`, `custom_curves`, `custom_curve_series()`, `custom_curves_series()`, `update_custom_curves()`, `remove_custom_curves()`, `hourly_output_curves`, `get_hourly_curve()`, `get_hourly_curves()`, `all_hourly_output_curves()`, the four `clear_*_cache()` methods, `annual_exports`, `get_annual_export()`, `get_annual_exports()`, `set_export_config()`, `get_export_config()`, `add_queries()`, `remove_queries()`, `clear_queries()`, `execute_queries()`, `results()`, `queries_requested()`, `couplings`, `update_couplings()`, `update_metadata()`, `set_short_name()`, `identifier()`, `show_all_warnings()`, `to_excel()`, `collect_export_data()` | The same methods on `Scenario` |
-| The fields `start_year`, `keep_compatible`, `scaling`, `source`, `url`, `metadata`, `template_id` | Read only properties on `Scenario`, fetched from the current Session on first use |
+| The fields `start_year`, `keep_compatible`, `scaling`, `source`, `metadata`, `template_id` | Read only properties on `Scenario`, fetched from the current Session on first use |
+| `session.url`, the engine's API URL | `scenario.url`, the scenario's page on MyETM. MAIN's `url` row follows it |
 
 **Sessions**
 
@@ -139,7 +139,10 @@ working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
   returned.
 - `created_at` and `updated_at` in MAIN now describe the saved scenario, not its current
   session.
-- A `BASE_URL` beside a different `ENVIRONMENT` now warns that `ENVIRONMENT` is ignored.
+- `pyetm init` writes `ETM_ENVIRONMENT`. Its workbook holds one example scenario, a query
+  and the `gqueries_present` column. The example notebook uses that workbook, and
+  `examples/excel/example_input_excel.xlsx` is gone.
+- `ETM_ENVIRONMENT=production` picks `pro`, like `prod`.
 
 ### Fixed
 

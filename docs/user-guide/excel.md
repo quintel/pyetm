@@ -44,10 +44,6 @@ Each row becomes one saved scenario, in this order of preference:
 `keep_compatible` and `source` are set on copied and created scenarios. Creating or copying
 needs an `ETM_API_TOKEN`.
 
-!!! note "Workbooks from pyetm 2.0"
-    The `session` column is gone, because every row is a saved scenario now. A workbook that
-    still has one loads as normal, with one warning that the column is ignored.
-
 ### EXPORT_CONFIG Sheet Structure
 
 | Field Name | Valid Values | Description | Example |
@@ -56,7 +52,7 @@ needs an `ETM_API_TOKEN`.
 | `include_sortables` (or `sortables`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export technology ordering | `true` |
 | `include_custom_curves` (or `custom_curves`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export custom price/demand curves | `true` |
 | `include_gqueries` (or `gquery_results`, `gqueries`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export query results | `true` |
-| `include_gquery_present` (or `gqueries_present`) | `true`, `false` | Add each query's start year value beside its future value | `true` |
+| `include_gquery_present` (or `gqueries_present`) | `true`, `false`, `yes`, `no`, `1`, `0` | Add each query's start year value beside its future value | `true` |
 | `hourly_curves` | `true`, `false`, OR comma-separated carriers | Controls hourly curve exports (see below) | `electricity, heat` |
 | `annual_exports` | `true`, `false`, OR comma-separated types | Annual export types to include (see below) | `energy_flow, sankey` |
 | `include_input_defaults` (or `defaults`) | `true`, `false` | Include default input values (not just user-set) | `false` |

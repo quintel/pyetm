@@ -19,10 +19,10 @@ def test_get_client_returns_cached_instance():
 def test_multiple_clients_with_different_configs():
     """Test that we can create multiple clients with different configurations."""
     with BaseClient(
-        base_url="https://engine.energytransitionmodel.com/api/v3"
+        base_url="https://my.energytransitionmodel.com/api/v4"
     ) as prod_client, BaseClient(
-        base_url="https://beta.engine.energytransitionmodel.com/api/v3"
+        base_url="https://beta.my.energytransitionmodel.com/api/v4"
     ) as beta_client:
         assert prod_client is not beta_client
-        assert prod_client.session.base_url == "https://engine.energytransitionmodel.com/api/v3"
-        assert beta_client.session.base_url == "https://beta.engine.energytransitionmodel.com/api/v3"
+        assert prod_client.session.base_url == "https://my.energytransitionmodel.com/api/v4"
+        assert beta_client.session.base_url == "https://beta.my.energytransitionmodel.com/api/v4"

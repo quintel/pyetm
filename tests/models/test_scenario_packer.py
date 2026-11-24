@@ -806,23 +806,24 @@ class TestExportConfigResolver:
         assert "hourly_curves could not be parsed" in caplog.text
 
 
-EXAMPLE_INPUT = Path(__file__).parents[2] / "examples" / "excel" / "example_input_excel.xlsx"
+INPUT_TEMPLATE = Path(__file__).parents[2] / "src" / "pyetm" / "templates" / "input_template.xlsx"
 
 
-class TestExampleExportConfig:
-    """EXPORT_CONFIG as laid out in examples/excel/example_input_excel.xlsx"""
+class TestTemplateExportConfig:
+    """EXPORT_CONFIG as laid out in the input template that pyetm init copies"""
 
     @pytest.fixture
     def sheet(self):
-        return pd.ExcelFile(EXAMPLE_INPUT).parse("EXPORT_CONFIG")
+        return pd.ExcelFile(INPUT_TEMPLATE).parse("EXPORT_CONFIG")
 
-    def test_reads_example_as_shipped(self, sheet):
+    def test_reads_template_as_shipped(self, sheet):
         config = ExportConfigResolver.extract_from_export_config_sheet(sheet)
 
         assert config.include_inputs is True
         assert config.include_input_defaults is True
         assert config.include_input_min_max is True
         assert config.include_gqueries is True
+        assert config.include_gquery_present is True
         assert config.include_sortables is True
         assert config.include_custom_curves is True
         assert config.hourly_curves is None
@@ -1648,7 +1649,7 @@ def test_gquery_results_carry_start_year_values_only_when_asked(present, columns
     results.assert_called_once_with(columns)
 
 
-def test_gquery_results_show_start_and_future_values_per_scenario():
+def test_results_workbook_shows_start_and_future_values_per_scenario(tmp_path):
     scenario = Mock(spec=Scenario)
     scenario.id = 1
     scenario.identifier = Mock(return_value="national")
@@ -1657,8 +1658,12 @@ def test_gquery_results_show_start_and_future_values_per_scenario():
     scenario.queries_requested = Mock(return_value=True)
     packer = ScenarioPacker()
     packer.add(scenario)
+    path = tmp_path / "results.xlsx"
 
-    result = packer.gquery_results(["present", "future"])
+    with patch.object(ScenarioPacker, "main_info", return_value=pd.DataFrame()):
+        packer.to_excel(str(path), include_gqueries=True, include_gquery_present=True)
 
+    sheet = pd.read_excel(path, sheet_name="GQUERIES", header=[0, 1], index_col=[0, 1])
     scenario.results.assert_called_with(columns=["present", "future"])
-    assert result.loc[("final_demand", "PJ")].tolist() == [10.0, 20.0]
+    assert sheet.columns.tolist() == [("national", "present"), ("national", "future")]
+    assert sheet.loc[("final_demand", "PJ")].tolist() == [10.0, 20.0]

@@ -9,7 +9,6 @@ from pyetm.services.service_result import ServiceResult
 def test_delete_custom_curves_success_single_curve():
     """Test successful deletion of a single custom curve"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -42,7 +41,6 @@ def test_delete_custom_curves_success_single_curve():
 def test_delete_custom_curves_success_multiple_curves():
     """Test successful deletion of multiple custom curves"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 54321
@@ -80,7 +78,6 @@ def test_delete_custom_curves_success_multiple_curves():
 def test_delete_custom_curves_empty_list():
     """Test deletion with empty curve keys list"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -100,7 +97,6 @@ def test_delete_custom_curves_empty_list():
 def test_delete_custom_curves_with_set():
     """Test deletion with set of curve keys instead of list"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 99999
@@ -126,7 +122,6 @@ def test_delete_custom_curves_with_set():
 def test_delete_custom_curves_http_404_error():
     """Test handling of 404 errors (curve not found)"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -149,7 +144,6 @@ def test_delete_custom_curves_http_404_error():
 def test_delete_custom_curves_http_422_error():
     """Test handling of 422 validation errors"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -172,7 +166,6 @@ def test_delete_custom_curves_http_422_error():
 def test_delete_custom_curves_http_500_error():
     """Test handling of 500 server errors"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -195,7 +188,6 @@ def test_delete_custom_curves_http_500_error():
 def test_delete_custom_curves_network_exception():
     """Test handling of network errors"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -218,7 +210,6 @@ def test_delete_custom_curves_network_exception():
 def test_delete_custom_curves_mixed_success_failure():
     """Test deletion with mix of successful and failed curves"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -247,7 +238,6 @@ def test_delete_custom_curves_mixed_success_failure():
 def test_delete_custom_curves_all_failures():
     """Test deletion where all curves fail"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -276,7 +266,6 @@ def test_delete_custom_curves_all_failures():
 def test_delete_custom_curves_request_structure():
     """Test that requests are structured correctly for the API"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 77777
@@ -313,7 +302,6 @@ def test_delete_custom_curves_request_structure():
 def test_delete_custom_curves_multiple_errors_per_curve():
     """Test handling when a curve deletion returns multiple error messages"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345

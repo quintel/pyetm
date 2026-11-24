@@ -41,7 +41,6 @@ def temp_curve_files():
 def test_update_custom_curves_success_single_curve(temp_curve_files):
     """Test successful upload of a single custom curve"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -76,7 +75,6 @@ def test_update_custom_curves_success_single_curve(temp_curve_files):
 def test_update_custom_curves_success_multiple_curves(temp_curve_files):
     """Test successful upload of multiple custom curves"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 54321
@@ -112,7 +110,6 @@ def test_update_custom_curves_success_multiple_curves(temp_curve_files):
 def test_update_custom_curves_curve_without_file():
     """Test upload of curve without file (uses contents() method)"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 99999
@@ -142,7 +139,6 @@ def test_update_custom_curves_curve_without_file():
 def test_update_custom_curves_http_error():
     """Test handling of HTTP errors during upload"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -169,7 +165,6 @@ def test_update_custom_curves_http_error():
 def test_update_custom_curves_network_exception():
     """Test handling of network errors (simulated as failure result)"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -196,7 +191,6 @@ def test_update_custom_curves_network_exception():
 def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     """Test upload with mix of successful and failed curves"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -229,7 +223,6 @@ def test_update_custom_curves_empty_curves_list():
     """Test upload with empty curves list"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
     mock_scenario = Mock()

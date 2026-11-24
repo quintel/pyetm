@@ -22,6 +22,5 @@ tmp/
 /site/
 
 *.xlsx
-# Keep the templates & examples
-!/examples/excel/example_input_excel.xlsx
+# Keep the input template
 !/src/pyetm/templates/input_template.xlsx

@@ -6,7 +6,7 @@ import logging
 import re
 import tempfile
 from typing import Optional, ClassVar, List, Annotated, Any, Literal
-from pydantic import Field, ValidationError, HttpUrl, field_validator, model_validator
+from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("pyetm")
@@ -19,7 +19,13 @@ MYETM_URLS = {
     "beta": "https://beta.my.energytransitionmodel.com/api/v4",
     "local": "https://myetm.local.energytransitionmodel.com/api/v4",
 }
-ENVIRONMENT_ALIASES = {"prod": "pro", "staging": "beta", "dev": "local", "development": "local"}
+ENVIRONMENT_ALIASES = {
+    "prod": "pro",
+    "production": "pro",
+    "staging": "beta",
+    "dev": "local",
+    "development": "local",
+}
 
 
 class AppConfig(BaseSettings):
@@ -37,14 +43,14 @@ class AppConfig(BaseSettings):
             ),
         ),
     ]
-    base_url: Optional[HttpUrl] = Field(
-        None,
-        description="The ETM API URL, for an address ENVIRONMENT does not cover",
-    )
     environment: Optional[str] = Field(
         "pro",
         description="Which ETM to talk to: 'pro' (default), 'beta' or 'local'",
+        # TEMPORARY(2.2): also read a bare ENVIRONMENT
+        validation_alias=AliasChoices("ETM_ENVIRONMENT", "ENVIRONMENT"),
     )
+    # TEMPORARY(2.2): read only to warn that it is ignored
+    ignored_base_url: Optional[str] = Field(None, validation_alias="BASE_URL", exclude=True)
     etm_version: str = Field(
         ETM_VERSION,
         description="The Version new Scenarios are created on",
@@ -144,24 +150,20 @@ class AppConfig(BaseSettings):
 
     @model_validator(mode="after")
     def target_the_etm(self) -> "AppConfig":
-        """Resolve base_url from ENVIRONMENT, refusing an engine URL or a BASE_URL that contradicts it."""
-        environment_set = "environment" in self.model_fields_set
-        if self.base_url is None:
-            self.base_url = HttpUrl(_myetm_url_for(self.environment))
-            return self
-        if "engine." in str(self.base_url):
-            raise ValueError(
-                f"BASE_URL {self.base_url} points at an engine, which pyETM no longer talks to. "
-                f"Remove BASE_URL, or set it to the ETM's API, such as {MYETM_URLS['pro']}."
-            )
-        if environment_set and _known_url(self.environment) != str(self.base_url).rstrip("/"):
+        """Refuse an ETM_ENVIRONMENT this release cannot reach, and warn about a leftover BASE_URL."""
+        url = _myetm_url_for(self.environment)
+        if self.ignored_base_url:
             logger.warning(
-                "BASE_URL %s is used and ENVIRONMENT=%s is ignored, as they point at different places. "
-                "Remove one of them.",
-                self.base_url,
-                self.environment,
+                "BASE_URL is ignored since pyetm 2.1, so pyetm talks to %s. Remove BASE_URL, and set "
+                "ETM_ENVIRONMENT to pro, beta or local, or pass BaseClient(base_url=...).",
+                url,
             )
         return self
+
+    @property
+    def base_url(self) -> str:
+        """The ETM API URL that ETM_ENVIRONMENT picks."""
+        return _myetm_url_for(self.environment)
 
     def model_post_init(self, __context: Any) -> None:
         if not self.etm_api_token:
@@ -226,23 +228,19 @@ def reload_configuration() -> None:
     get_error_policy.cache_clear()
 
 
-def _known_url(environment: Optional[str]) -> Optional[str]:
-    env = (environment or "pro").strip().lower()
-    return MYETM_URLS.get(ENVIRONMENT_ALIASES.get(env, env))
-
-
 def _myetm_url_for(environment: Optional[str]) -> str:
-    """The ETM API URL for an ENVIRONMENT, or a startup error naming what to set instead."""
-    if url := _known_url(environment):
-        return url
+    """The ETM API URL for an ETM_ENVIRONMENT, or a startup error naming what to set instead."""
+    env = (environment or "pro").strip().lower()
+    env = ENVIRONMENT_ALIASES.get(env, env)
+    if env in MYETM_URLS:
+        return MYETM_URLS[env]
 
-    env = (environment or "").strip()
     if re.fullmatch(r"\d{4}(-\d{2})?", env):
         raise ValueError(
-            f"ENVIRONMENT={environment} names a stable Version, which this pyETM release cannot reach. "
-            f"Install pyetm 2.0.x to work on it, or set ENVIRONMENT to pro, beta or local."
+            f"ETM_ENVIRONMENT={environment} names a stable Version, which this pyETM release cannot reach. "
+            f"Install pyetm 2.0.x to work on it, or set ETM_ENVIRONMENT to pro, beta or local."
         )
     raise ValueError(
-        f"Unknown ENVIRONMENT={environment}. Set it to pro, beta or local, "
-        f"or set BASE_URL to the ETM's API URL."
+        f"Unknown ETM_ENVIRONMENT={environment}. Set it to pro, beta or local, "
+        f"or pass BaseClient(base_url=...) for another address."
     )

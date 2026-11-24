@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 import pyetm.config.settings as settings_module
-from pydantic import HttpUrl, ValidationError
+from pydantic import ValidationError
 
 AppConfig = settings_module.AppConfig
 get_settings = settings_module.get_settings
@@ -19,6 +19,7 @@ def clean_settings_env(monkeypatch, tmp_path):
         "ETM_API_TOKEN",
         "BASE_URL",
         "LOG_LEVEL",
+        "ETM_ENVIRONMENT",
         "ENVIRONMENT",
         "CSV_SEPARATOR",
         "DECIMAL_SEPARATOR",
@@ -55,7 +56,6 @@ def test_config_loads_env_file_values(clean_settings_env):
     env_file = clean_settings_env
     env_data = {
         "ETM_API_TOKEN": "etm_valid.looking.token",
-        "BASE_URL": "https://custom.local/api",
         "LOG_LEVEL": "DEBUG",
         "CSV_SEPARATOR": ";",
         "DECIMAL_SEPARATOR": ",",
@@ -65,7 +65,6 @@ def test_config_loads_env_file_values(clean_settings_env):
     config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.base_url == HttpUrl("https://custom.local/api")
     assert config.log_level == "DEBUG"
     assert config.csv_separator == ";"
     assert config.decimal_separator == ","
@@ -88,12 +87,12 @@ def test_env_vars_override_env_file(clean_settings_env, monkeypatch):
 # Test base_url inference from environment
 def test_base_url_inference_from_environment(clean_settings_env):
     env_file = clean_settings_env
-    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ENVIRONMENT": "beta"})
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ETM_ENVIRONMENT": "beta"})
 
     config = AppConfig()
 
     assert config.environment == "beta"
-    assert config.base_url == HttpUrl("https://beta.my.energytransitionmodel.com/api/v4")
+    assert config.base_url == "https://beta.my.energytransitionmodel.com/api/v4"
 
 
 # Test no .env file, only environment variables
@@ -104,7 +103,7 @@ def test_no_env_file_uses_env_vars_and_defaults(clean_settings_env, monkeypatch)
     config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.base_url == HttpUrl("https://my.energytransitionmodel.com/api/v4")
+    assert config.base_url == "https://my.energytransitionmodel.com/api/v4"
     assert config.log_level == "INFO"
     assert config.environment == "pro"
 
@@ -153,7 +152,7 @@ def test_default_values(clean_settings_env):
     assert config.log_level == "INFO"
     assert config.csv_separator == ","
     assert config.decimal_separator == "."
-    assert config.base_url == HttpUrl("https://my.energytransitionmodel.com/api/v4")
+    assert config.base_url == "https://my.energytransitionmodel.com/api/v4"
     assert config.etm_version == "latest"
 
 
@@ -166,6 +165,7 @@ def test_default_values(clean_settings_env):
         ("local", "https://myetm.local.energytransitionmodel.com/api/v4"),
         ("", "https://my.energytransitionmodel.com/api/v4"),  # default
         ("prod", "https://my.energytransitionmodel.com/api/v4"),
+        ("production", "https://my.energytransitionmodel.com/api/v4"),
         ("staging", "https://beta.my.energytransitionmodel.com/api/v4"),
         ("dev", "https://myetm.local.energytransitionmodel.com/api/v4"),
     ],
@@ -174,38 +174,31 @@ def test_environment_inference(clean_settings_env, env, expected_url):
     env_file = clean_settings_env
     env_data = {}
     if env:  # Don't add environment key if it's empty string
-        env_data["ENVIRONMENT"] = env
+        env_data["ETM_ENVIRONMENT"] = env
 
     write_env_file(env_file, env_data)
 
     config = AppConfig()
-    assert config.base_url == HttpUrl(expected_url)
+    assert config.base_url == expected_url
 
 
 @pytest.mark.parametrize("env", ["2025-01", "2027"])
 def test_a_stable_version_environment_fails_naming_the_replacement(clean_settings_env, env):
-    write_env_file(clean_settings_env, {"ENVIRONMENT": env})
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": env})
 
     with pytest.raises(ValidationError, match="names a stable Version.*Install pyetm 2.0.x.*pro, beta or local"):
         AppConfig()
 
 
 def test_an_unknown_environment_fails_naming_the_choices(clean_settings_env):
-    write_env_file(clean_settings_env, {"ENVIRONMENT": "tyndp2024"})
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
 
-    with pytest.raises(ValidationError, match="Unknown ENVIRONMENT=tyndp2024. Set it to pro, beta or local"):
-        AppConfig()
-
-
-def test_an_engine_base_url_fails_naming_the_api_to_use(clean_settings_env):
-    write_env_file(clean_settings_env, {"BASE_URL": "https://beta.engine.energytransitionmodel.com/api/v3"})
-
-    with pytest.raises(ValidationError, match="points at an engine.*https://my.energytransitionmodel.com/api/v4"):
+    with pytest.raises(ValidationError, match="Unknown ETM_ENVIRONMENT=tyndp2024. Set it to pro, beta or local"):
         AppConfig()
 
 
 def test_get_settings_reports_an_engine_setting_at_startup(clean_settings_env):
-    write_env_file(clean_settings_env, {"ENVIRONMENT": "2025-01"})
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "2025-01"})
 
     with pytest.raises(RuntimeError, match="names a stable Version"):
         get_settings()
@@ -217,44 +210,35 @@ def test_etm_version_can_be_set(clean_settings_env):
     assert AppConfig().etm_version == "2025-01"
 
 
-def test_a_base_url_alone_is_used_as_given(clean_settings_env):
-    write_env_file(clean_settings_env, {"BASE_URL": "https://custom.override.com/api/v4"})
+def test_bare_environment_is_still_read(clean_settings_env):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "beta"})
 
-    assert AppConfig().base_url == HttpUrl("https://custom.override.com/api/v4")
-
-
-def test_a_base_url_matching_the_environment_is_accepted(clean_settings_env):
-    write_env_file(clean_settings_env, {"ENVIRONMENT": "beta", "BASE_URL": "https://beta.my.energytransitionmodel.com/api/v4/"})
-
-    assert AppConfig().base_url == HttpUrl("https://beta.my.energytransitionmodel.com/api/v4/")
+    assert AppConfig().base_url == "https://beta.my.energytransitionmodel.com/api/v4"
 
 
-def test_a_base_url_contradicting_the_environment_wins_with_a_warning(clean_settings_env, caplog):
-    write_env_file(clean_settings_env, {"ENVIRONMENT": "beta", "BASE_URL": "https://my.energytransitionmodel.com/api/v4"})
+def test_etm_environment_wins_over_bare_environment(clean_settings_env):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "beta", "ENVIRONMENT": "production-cluster"})
+
+    assert AppConfig().base_url == "https://beta.my.energytransitionmodel.com/api/v4"
+
+
+def test_a_leftover_base_url_is_ignored_with_a_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"BASE_URL": "https://beta.engine.energytransitionmodel.com/api/v3"})
 
     with caplog.at_level("WARNING", logger="pyetm"):
         config = AppConfig()
 
-    assert config.base_url == HttpUrl("https://my.energytransitionmodel.com/api/v4")
-    assert "ENVIRONMENT=beta is ignored" in caplog.text
+    assert config.base_url == "https://my.energytransitionmodel.com/api/v4"
+    assert "BASE_URL is ignored since pyetm 2.1, so pyetm talks to https://my.energytransitionmodel.com/api/v4" in caplog.text
 
 
-def test_a_base_url_alone_gives_no_warning(clean_settings_env, caplog):
-    write_env_file(clean_settings_env, {"BASE_URL": "https://my.energytransitionmodel.com/api/v4"})
-
-    with caplog.at_level("WARNING", logger="pyetm"):
-        AppConfig()
-
-    assert "ignored" not in caplog.text
-
-
-def test_a_stable_version_environment_beside_a_base_url_is_ignored_with_a_warning(clean_settings_env, caplog):
-    write_env_file(clean_settings_env, {"ENVIRONMENT": "2025-01", "BASE_URL": "https://my.energytransitionmodel.com/api/v4"})
+def test_no_base_url_gives_no_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "beta"})
 
     with caplog.at_level("WARNING", logger="pyetm"):
         AppConfig()
 
-    assert "ENVIRONMENT=2025-01 is ignored" in caplog.text
+    assert "BASE_URL" not in caplog.text
 
 
 # VALID TOKENS

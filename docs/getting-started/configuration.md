@@ -22,15 +22,15 @@ Your personal token. Create one on your [tokens page](https://my.energytransitio
 !!! warning
     Never commit your `.env` file. Add it to `.gitignore`.
 
-## ENVIRONMENT
+## ETM_ENVIRONMENT
 
 Which ETM to talk to: `pro` (the default) or `beta`.
 
 ```env
-ENVIRONMENT=beta
+ETM_ENVIRONMENT=beta
 ```
 
-pyetm 2.1 works on the `latest` Version of the ETM. To work on a stable Version such as `2025-01`, install pyetm 2.0.x. See [Compatibility](compatibility.md).
+pyetm 2.1 is tested on the `latest` Version of the ETM, and can work on other Versions through the same API. For `2025-01`, install pyetm 2.0.x. See [Compatibility](compatibility.md).
 
 ## PYETM_ERROR_MODE
 

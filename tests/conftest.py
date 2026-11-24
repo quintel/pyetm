@@ -3,7 +3,6 @@ Runs during test collection. You can also supply fixtures here that should be lo
 before each test
 """
 
-from pydantic import HttpUrl
 import os, sys, pytest
 from pathlib import Path
 
@@ -13,14 +12,8 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-os.environ["BASE_URL"] = "https://example.com/api"
+os.environ["ETM_ENVIRONMENT"] = "pro"
 os.environ["ETM_API_TOKEN"] = "etm_real.looking.token"
-
-
-# Fixture to give back that same base URL for building expected mock URLs
-@pytest.fixture
-def api_url():
-    return HttpUrl(os.getenv("BASE_URL"))
 
 
 # Clear LRU caches after each test to prevent test pollution
@@ -67,17 +60,17 @@ def clean_settings_env(monkeypatch, tmp_path):
     # Clear caches to ensure each test gets a fresh config
     reload_configuration()
 
-    # Clear all PYETM environment variables (with PYETM_ prefix)
     etm_vars = [
-        "PYETM_ETM_API_TOKEN",
-        "PYETM_BASE_URL",
-        "PYETM_LOG_LEVEL",
-        "PYETM_ENVIRONMENT",
-        "PYETM_CSV_SEPARATOR",
-        "PYETM_DECIMAL_SEPARATOR",
-        "PYETM_SSL_VERIFY",
-        "PYETM_TRUST_ENV",
-        "PYETM_SSL_CERT_PATH",
+        "ETM_API_TOKEN",
+        "BASE_URL",
+        "LOG_LEVEL",
+        "ETM_ENVIRONMENT",
+        "ENVIRONMENT",
+        "CSV_SEPARATOR",
+        "DECIMAL_SEPARATOR",
+        "SSL_VERIFY",
+        "TRUST_ENV",
+        "SSL_CERT_PATH",
         "PYETM_ERROR_MODE",
     ]
     for var in etm_vars:
@@ -101,7 +94,7 @@ def unauthenticated_config(monkeypatch):
     get_settings.cache_clear()
 
     monkeypatch.delenv("ETM_API_TOKEN", raising=False)
-    monkeypatch.setenv("ENVIRONMENT", "pro")
+    monkeypatch.setenv("ETM_ENVIRONMENT", "pro")
 
     # Explicitly set etm_api_token to None to override .env file
     return AppConfig(etm_api_token=None)

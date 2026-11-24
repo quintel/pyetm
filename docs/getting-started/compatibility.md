@@ -1,11 +1,15 @@
 # Compatibility
 
-Each pyetm line targets one ETM Version. The table says which line to install for the Version you work on.
+Each pyetm line is tested on one ETM Version. Since 2.1, pyetm reaches every Version through one API, so a line can also work on other Versions whose inputs, curves and exports still have the names it expects.
 
 | pyetm | Talks to | Versions |
 |---|---|---|
-| 2.1.x | The ETM's single API at `my.energytransitionmodel.com` | `latest`. Scenarios on other Versions load with a warning, untested. |
+| 2.1.x | The ETM's single API at `my.energytransitionmodel.com` | Tested on `latest`. Other Versions load with a warning. Not `2025-01`, whose curve and export names differ |
 | 2.0.x | Each Version's engine directly | Every Version, including stable ones such as `2025-01`, until the engine's direct API access for tokens is retired |
+
+## Working across Versions
+
+One pyetm can serve work that spans several Versions, so you do not need a second virtual environment. Loading a scenario on a Version other than `ETM_VERSION` warns once, because that pairing is untested.
 
 A token works with both lines. pyetm 2.0 reaches stable Versions through the engine's legacy token support, which is temporary.
 

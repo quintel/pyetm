@@ -63,7 +63,7 @@ This command will:
 
 - Ask which environment to use (production, beta, or local - [learn more](https://docs.energytransitionmodel.com/api/intro#environments))
 - Create a `.env` configuration file in your project folder
-- Create an `excel/` folder with a template Excel file (`input.xlsx`)
+- Create an `excel/` folder with a workbook (`input.xlsx`) holding one example scenario to edit
 
 After initialization, add your API token to the `.env` file if you want to create or change scenarios, or read private ones (see [Adding Your API Token](#adding-your-api-token) below).
 
@@ -94,7 +94,7 @@ Your `.env` should look like this:
 
 ```env
 ETM_API_TOKEN=etm_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
-ENVIRONMENT=pro
+ETM_ENVIRONMENT=pro
 LOG_LEVEL=INFO
 ```
 
@@ -182,7 +182,7 @@ scenario = Scenario.new(
 )
 
 print(f"Created scenario {scenario.id}")
-print(f"URL: {scenario.url}")
+print(f"Open it on MyETM: {scenario.url}")
 ```
 
 ### Modifying Inputs
@@ -305,7 +305,7 @@ Make sure your `.env` file contains a valid token:
 
 ```env
 ETM_API_TOKEN=etm_your.token.here
-ENVIRONMENT=pro
+ETM_ENVIRONMENT=pro
 ```
 
 ### Import Errors

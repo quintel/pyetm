@@ -145,9 +145,6 @@ def init(environment: str | None, force: bool) -> None:
         # Replace placeholders
         env_content = env_template.replace("{{ENVIRONMENT}}", environment)
 
-        # Handle optional BASE_URL line
-        env_content = env_content.replace("{{BASE_URL_LINE}}", "# BASE_URL=")
-
         # Write .env file
         env_path = target_dir / ".env"
         if write_file_safely(env_path, env_content, force):
@@ -178,7 +175,7 @@ def init(environment: str | None, force: bool) -> None:
     click.echo(
         "     • ETM_API_TOKEN (get one at https://my.energytransitionmodel.com/identity/tokens)"
     )
-    click.echo("     • ENVIRONMENT (pro, beta or local)")
+    click.echo("     • ETM_ENVIRONMENT (pro, beta or local)")
     click.echo("")
     click.echo("  2. Edit excel/input.xlsx with your scenario data")
     click.echo("        (Don't forget to save your changes!)")

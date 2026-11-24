@@ -1474,18 +1474,28 @@ def test_session_metadata_is_fetched_once(monkeypatch, saved_scenario):
     def fetch(client, scen):
         calls.append(scen.id)
         return ServiceResult.ok(
-            {"start_year": 2019, "url": "https://engine/1", "preset_scenario_id": 5, "keep_compatible": True}
+            {"start_year": 2019, "preset_scenario_id": 5, "keep_compatible": True}
         )
 
     monkeypatch.setattr(FetchMetadataRunner, "run", fetch)
 
-    assert (saved_scenario.start_year, saved_scenario.url, saved_scenario.template_id) == (
-        2019,
-        "https://engine/1",
-        5,
-    )
+    assert (saved_scenario.start_year, saved_scenario.template_id) == (2019, 5)
     assert saved_scenario.keep_compatible is True
     assert calls == [456]
+
+
+@pytest.mark.parametrize(
+    "api, page",
+    [
+        ("https://my.energytransitionmodel.com/api/v4", "https://my.energytransitionmodel.com/saved_scenarios/456"),
+        ("https://beta.my.energytransitionmodel.com/api/v4", "https://beta.my.energytransitionmodel.com/saved_scenarios/456"),
+    ],
+)
+def test_url_is_the_page_on_the_clients_myetm_without_a_fetch(monkeypatch, saved_scenario, api, page):
+    saved_scenario._client.session.base_url = api
+    monkeypatch.setattr(FetchMetadataRunner, "run", Mock(side_effect=AssertionError("fetched")))
+
+    assert saved_scenario.url == page
 
 
 def test_session_metadata_failure_raises(monkeypatch, saved_scenario):
