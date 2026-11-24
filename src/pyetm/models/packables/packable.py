@@ -86,7 +86,7 @@ class Packable(BaseModel):
         return str(scenario.id)
 
     def _build_dataframe_for_scenario(
-        self, scenario: Scenario, columns: str = "", **kwargs: Any
+        self, scenario: Scenario, columns: Any = "", **kwargs: Any
     ) -> Optional[pd.DataFrame]:
         return None
 
@@ -97,7 +97,7 @@ class Packable(BaseModel):
             return pd.DataFrame()
         return pd.concat(frames, axis=1, keys=keys)
 
-    def build_pack_dataframe(self, columns: str = "", **kwargs: Any) -> pd.DataFrame:
+    def build_pack_dataframe(self, columns: Any = "", **kwargs: Any) -> pd.DataFrame:
         frames: list[pd.DataFrame] = []
         keys: list[Any] = []
         for scenario in self.scenarios:

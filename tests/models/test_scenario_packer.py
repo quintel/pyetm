@@ -766,6 +766,7 @@ class TestExportConfigResolver:
                 "gqueries": ["yes"],
                 "defaults": [1],
                 "min_max": [False],
+                "gqueries_present": ["yes"],
             }
         )
 
@@ -777,6 +778,7 @@ class TestExportConfigResolver:
         assert config.include_gqueries is True
         assert config.include_input_defaults is True
         assert config.include_input_min_max is False
+        assert config.include_gquery_present is True
 
     @pytest.mark.parametrize("blank", [float("nan"), "", "   "])
     def test_extract_from_export_config_sheet_blank_hourly_curves_is_quiet(self, blank, caplog):
@@ -1629,3 +1631,30 @@ class TestMainSheetWarnings:
         ScenarioPacker._warn_duplicate_short_names(pd.DataFrame({"short_name": ["a", "b"]}))
         ScenarioPacker._warn_duplicate_short_names(pd.DataFrame({"title": ["a", "a"]}))
         assert caplog.records == []
+
+
+@pytest.mark.parametrize("present, columns", [(True, ["present", "future"]), (False, "future")])
+def test_gquery_results_carry_start_year_values_only_when_asked(present, columns):
+    flags = dict.fromkeys(["include_inputs", "include_sortables", "include_custom_curves", "include_hourly_curves", "include_users"], False)
+    flags.update(include_gqueries=True, include_gquery_present=present)
+
+    with patch.object(ScenarioPacker, "gquery_results", return_value=pd.DataFrame()) as results:
+        ScenarioPacker()._collect_data_by_flags(flags, None)
+
+    results.assert_called_once_with(columns)
+
+
+def test_gquery_results_show_start_and_future_values_per_scenario():
+    scenario = Mock(spec=Scenario)
+    scenario.id = 1
+    scenario.identifier = Mock(return_value="national")
+    frame = pd.DataFrame({"present": [10.0], "future": [20.0], "unit": ["PJ"]}, index=pd.Index(["final_demand"], name="gquery"))
+    scenario.results = Mock(return_value=frame.set_index("unit", append=True))
+    scenario.queries_requested = Mock(return_value=True)
+    packer = ScenarioPacker()
+    packer.add(scenario)
+
+    result = packer.gquery_results(["present", "future"])
+
+    scenario.results.assert_called_with(columns=["present", "future"])
+    assert result.loc[("final_demand", "PJ")].tolist() == [10.0, 20.0]

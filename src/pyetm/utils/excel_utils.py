@@ -47,6 +47,7 @@ class ExportConfigResolver:
                 include_custom_curves=_flag(row, "include_custom_curves", "custom_curves"),
                 include_gqueries=_flag(row, "include_gqueries", "gquery_results")
                 or _flag(row, "gqueries"),
+                include_gquery_present=_flag(row, "include_gquery_present", "gqueries_present"),
                 include_input_defaults=_flag(row, "include_input_defaults", "defaults"),
                 include_input_min_max=_flag(row, "include_input_min_max", "min_max"),
                 hourly_curves=_hourly_curves(row),

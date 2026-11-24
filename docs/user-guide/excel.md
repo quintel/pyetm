@@ -56,6 +56,7 @@ needs an `ETM_API_TOKEN`.
 | `include_sortables` (or `sortables`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export technology ordering | `true` |
 | `include_custom_curves` (or `custom_curves`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export custom price/demand curves | `true` |
 | `include_gqueries` (or `gquery_results`, `gqueries`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export query results | `true` |
+| `include_gquery_present` (or `gqueries_present`) | `true`, `false` | Add each query's start year value beside its future value | `true` |
 | `hourly_curves` | `true`, `false`, OR comma-separated carriers | Controls hourly curve exports (see below) | `electricity, heat` |
 | `annual_exports` | `true`, `false`, OR comma-separated types | Annual export types to include (see below) | `energy_flow, sankey` |
 | `include_input_defaults` (or `defaults`) | `true`, `false` | Include default input values (not just user-set) | `false` |
@@ -373,6 +374,7 @@ config = ExportConfig(
     include_sortables=True,        # Include technology ordering
     include_custom_curves=False,   # Skip custom curves
     include_gqueries=True,         # Include query results
+    include_gquery_present=True,   # With their start year values
     include_users=True,            # Include user permissions
     include_input_defaults=False,  # Don't include default values
     include_input_min_max=True,    # Include min/max bounds
@@ -395,6 +397,7 @@ current_config = scenario.get_export_config()
 | `include_sortables` | `bool` | Export technology ordering |
 | `include_custom_curves` | `bool` | Export custom curves |
 | `include_gqueries` | `bool` | Export query results |
+| `include_gquery_present` | `bool` | Add each query's start year value beside its future value |
 | `include_users` | `bool` | Export user permissions |
 | `include_input_defaults` | `bool` | Include default input values (not just user-set) |
 | `include_input_min_max` | `bool` | Include min/max bounds for inputs |

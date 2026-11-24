@@ -98,7 +98,7 @@ class ScenarioPacker(BaseModel):
     def inputs(self, columns: str = "value") -> pd.DataFrame:
         return self._inputs.to_dataframe(columns=columns)
 
-    def gquery_results(self, columns: str = "future") -> pd.DataFrame:
+    def gquery_results(self, columns: str | list[str] = "future") -> pd.DataFrame:
         return self._query_pack.to_dataframe(columns=columns)
 
     def sortables(self) -> pd.DataFrame:
@@ -217,6 +217,7 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool] = None,
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
+        include_gquery_present: Optional[bool] = None,
         include_hourly_curves: Optional[bool] = None,
         include_input_defaults: Optional[bool] = None,
         include_input_min_max: Optional[bool] = None,
@@ -233,6 +234,7 @@ class ScenarioPacker(BaseModel):
             include_sortables: Include sortable technologies. Defaults to False.
             include_custom_curves: Include custom curves. Defaults to False.
             include_gqueries: Include query results. Defaults to False.
+            include_gquery_present: Add each query's start year value beside its future value.
             include_hourly_curves: Include hourly output curves. Defaults to False.
             include_input_defaults: Include default values for inputs. Defaults to False.
             include_input_min_max: Include min/max bounds for inputs. Defaults to False.
@@ -260,6 +262,7 @@ class ScenarioPacker(BaseModel):
             include_users,
             include_annual_exports,
             hourly_curves,
+            include_gquery_present,
         )
 
         hourly_curve_carriers = self._determine_hourly_curve_carriers(
@@ -307,6 +310,7 @@ class ScenarioPacker(BaseModel):
             include_sortables=resolved_flags["include_sortables"],
             include_custom_curves=resolved_flags["include_custom_curves"],
             include_gqueries=resolved_flags["include_gqueries"],
+            include_gquery_present=resolved_flags.get("include_gquery_present", False),
             include_users=resolved_flags.get("include_users", False),
             hourly_curves=hourly_curve_carriers,
             include_annual_exports=resolved_flags.get("include_annual_exports"),
@@ -345,7 +349,8 @@ class ScenarioPacker(BaseModel):
                 exports=resolved_flags["include_annual_exports"]
             )
         if resolved_flags["include_gqueries"]:
-            collected["gquery_results"] = self.gquery_results()
+            present = resolved_flags.get("include_gquery_present")
+            collected["gquery_results"] = self.gquery_results(["present", "future"] if present else "future")
         if resolved_flags["include_users"]:
             collected["users"] = self._users.to_dataframe()
 
@@ -384,6 +389,7 @@ class ScenarioPacker(BaseModel):
         include_sortables: Optional[bool] = None,
         include_custom_curves: Optional[bool] = None,
         include_gqueries: Optional[bool] = None,
+        include_gquery_present: Optional[bool] = None,
         include_hourly_curves: Optional[bool] = None,
         include_input_defaults: Optional[bool] = None,
         include_input_min_max: Optional[bool] = None,
@@ -399,6 +405,7 @@ class ScenarioPacker(BaseModel):
             include_sortables=include_sortables,
             include_custom_curves=include_custom_curves,
             include_gqueries=include_gqueries,
+            include_gquery_present=include_gquery_present,
             include_hourly_curves=include_hourly_curves,
             include_input_defaults=include_input_defaults,
             include_input_min_max=include_input_min_max,
@@ -446,6 +453,7 @@ class ScenarioPacker(BaseModel):
         include_users: Optional[bool],
         include_annual_exports: Optional[Sequence[str]] = None,
         hourly_curves: Optional[Sequence[str]] = None,
+        include_gquery_present: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Resolve all export flags from parameters and configuration."""
         resolver = excel_utils.ExportConfigResolver()
@@ -513,6 +521,11 @@ class ScenarioPacker(BaseModel):
                     if global_config
                     else None
                 ),
+                False,
+            ),
+            "include_gquery_present": resolver.resolve_boolean(
+                include_gquery_present,
+                getattr(global_config, "include_gquery_present", None) if global_config else None,
                 False,
             ),
             "include_users": resolver.resolve_boolean(

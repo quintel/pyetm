@@ -114,6 +114,8 @@ working on a stable Version such as `2025-01`, stay on pyetm 2.0.x (see
 - A `401` says whether a token is set. A `502 engine_unavailable` raises `ConnectionError`.
 - Loading a scenario on a Version other than `ETM_VERSION` warns once.
 - A Compatibility page and the release line rule.
+- `include_gquery_present` (EXPORT_CONFIG column `gqueries_present`) exports each query's start
+  year value beside its future value.
 
 ### Removed
 
