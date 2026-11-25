@@ -49,6 +49,11 @@ class Collection(Base):
     def __hash__(self) -> int:
         return hash(self.id)
 
+    @property
+    def client(self) -> BaseClient:
+        """The client this collection was loaded with, or the default one."""
+        return self._client or get_client()
+
     @classmethod
     def create(
         cls,
@@ -169,12 +174,11 @@ class Collection(Base):
 
         return collections
 
-    def update(self, client: Optional[BaseClient] = None, **kwargs: Any) -> None:
+    def update(self, **kwargs: Any) -> None:
         """
         Update this Collection.
 
         Args:
-            client: Optional BaseClient instance
             **kwargs: Fields to update: title, saved_scenario_ids
 
         Raises:
@@ -184,10 +188,7 @@ class Collection(Base):
             collection = Collection.load(123)
             collection.update(title="Updated Title", saved_scenario_ids=[1, 2, 3, 4])
         """
-        if client is None:
-            client = get_client()
-
-        result = UpdateCollectionRunner.run(client, self.id, kwargs)
+        result = UpdateCollectionRunner.run(self.client, self.id, kwargs)
 
         if not result.success:
             raise CollectionError(f"Could not update collection: {result.errors}")
@@ -199,7 +200,7 @@ class Collection(Base):
             if field in Collection.model_fields:
                 setattr(self, field, value)
 
-    def delete(self, client: Optional[BaseClient] = None) -> None:
+    def delete(self) -> None:
         """
         Permanently delete this Collection.
 
@@ -210,9 +211,6 @@ class Collection(Base):
         collection itself is removed. The scenarios will remain and
         can still be accessed individually.
 
-        Args:
-            client: Optional BaseClient instance
-
         Raises:
             CollectionError: If deletion fails
 
@@ -220,10 +218,7 @@ class Collection(Base):
             collection = Collection.load(123)
             collection.delete()  # PERMANENT deletion - cannot be recovered
         """
-        if client is None:
-            client = get_client()
-
-        result = DeleteCollectionRunner.run(client, self.id)
+        result = DeleteCollectionRunner.run(self.client, self.id)
 
         if not result.success:
             raise CollectionError(f"Could not delete collection: {result.errors}")

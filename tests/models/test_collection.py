@@ -421,32 +421,23 @@ def test_collection_delete_failure(monkeypatch, fail_service_result, mock_client
         collection.delete()
 
 
-def test_collection_delete_with_explicit_client(monkeypatch, ok_service_result, mock_client):
-    """Test that delete can use an explicitly passed client."""
-    delete_response = {"message": "Deleted"}
+@pytest.mark.parametrize(
+    "runner, call",
+    [
+        (UpdateCollectionRunner, lambda collection: collection.update(title="Renamed")),
+        (DeleteCollectionRunner, lambda collection: collection.delete()),
+    ],
+)
+def test_update_and_delete_use_the_client_the_collection_was_loaded_with(
+    monkeypatch, ok_service_result, runner, call
+):
+    loaded_with, used = Mock(), []
+    monkeypatch.setattr(FetchCollectionRunner, "run", lambda client, collection_id: ok_service_result({"id": 123, "title": "C"}))
+    monkeypatch.setattr(runner, "run", lambda client, *args: used.append(client) or ok_service_result({}))
 
-    # Track which client was used
-    used_client = None
+    call(Collection.load(123, client=loaded_with))
 
-    def mock_delete(client, collection_id):
-        nonlocal used_client
-        used_client = client
-        return ok_service_result(delete_response)
-
-    monkeypatch.setattr(DeleteCollectionRunner, "run", mock_delete)
-
-    collection = Collection(
-        id=123,
-        title="Test",
-        created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z",
-    )
-
-    # Delete with explicit client
-    collection.delete(client=mock_client)
-
-    # Verify the explicit client was used
-    assert used_client is mock_client
+    assert used == [loaded_with]
 
 
 # --- to_dict Tests ---

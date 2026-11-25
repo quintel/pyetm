@@ -65,7 +65,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | `scenario.scenario` (the nested engine scenario) | Removed: see the read only properties above |
 | `scenario.update(scenario_id=...)` | `scenario.save()`, which appends a Snapshot |
 | `scenario.update(discarded=...)` | `scenario.discard()` |
-| `update()`, `discard()`, `delete()`, `list_users()`, `update_users()`, `apply_pending_users()` with `client=` | Without `client=`. A scenario uses the client it was loaded with |
+| `update()`, `discard()`, `delete()`, `list_users()`, `update_users()`, `apply_pending_users()` with `client=` | Without `client=`. A scenario uses the client it was loaded with. To act as another client, load it with that one: `Scenario.load(scenario.id, client=other)` |
 | `scenario.copy(**overrides)` passing engine fields | `copy(title=..., private=...)`. Set engine fields afterwards with `update_metadata()` |
 | `SavedScenarioError` | Still raised, now an alias of `ScenarioError` |
 | `list_users()` | Returns `user_email`, `role` and `pending` for each user |
@@ -84,6 +84,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | `Collection.create(title, scenario_ids=..., area_code=..., end_year=..., interpolation=...)` | `Collection.create(title, saved_scenario_ids, version=None)`. Interpolated collections and engine scenario IDs are not supported through MyETM's API |
 | The fields `interpolation`, `area_code`, `end_year`, `scenario_ids`, `interpolation_params`, `discarded` | Removed. `discarded_at` replaces `discarded` |
 | `collection.update(...)` | Accepts `title` and `saved_scenario_ids` |
+| `collection.update()`, `collection.delete()` with `client=` | Without `client=`. A collection uses the client it was loaded with. To act as another client, use `Collection.load(collection.id, client=other)` |
 
 **Excel**
 
@@ -165,7 +166,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 - `user_values`, `custom_curves` and `sortables` passed to `Scenario.new()` or `copy()` are
   uploaded. Custom curves and sortables were always refused before, as warnings.
 - A scenario's calls use the client it was loaded with, including curve downloads, which
-  used the default client.
+  used the default client. So do a collection's `update()` and `delete()`.
 - An empty `ENVIRONMENT` picks `pro`. It used to build an invalid `production.engine...` URL.
 - A batch, such as downloading several curves, works as a new client's first call. It used to
   fail every request with "Session not initialized".
