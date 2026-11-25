@@ -1,9 +1,16 @@
-"""Tests for ETMClient's headers and ETMResponse's errors."""
+"""Tests for ETMClient's headers, its shared event loop, and ETMResponse's errors."""
+
+import asyncio
+import os
+import signal
+import threading
 
 import pytest
+from aiohttp import web
 from unittest.mock import patch
 
-from pyetm.clients.etm_client import USER_AGENT, ETMClient, ETMResponse
+from pyetm.clients.base_client import AsyncBatchRunner
+from pyetm.clients.etm_client import USER_AGENT, ETMClient, ETMResponse, shared_loop
 
 
 def response(status_code, text):
@@ -130,3 +137,87 @@ def test_a_success_does_not_raise():
 
     ok.raise_for_status(token=None)
     assert ok.json() == {"id": 123}
+
+
+# ------ The shared event loop ------ #
+
+
+@pytest.fixture
+def ping_server():
+    async def ping(request):
+        return web.json_response({"ok": True})
+
+    async def start():
+        app = web.Application()
+        app.router.add_get("/ping", ping)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        return runner, f"http://127.0.0.1:{runner.addresses[0][1]}"
+
+    runner, url = asyncio.run_coroutine_threadsafe(start(), shared_loop()).result()
+    yield url
+    asyncio.run_coroutine_threadsafe(runner.cleanup(), shared_loop()).result()
+
+
+def loop_threads():
+    return [thread for thread in threading.enumerate() if thread.name == "pyetm-event-loop"]
+
+
+def test_creating_clients_starts_no_thread():
+    before = threading.active_count()
+
+    clients = [ETMClient() for _ in range(3)]
+
+    assert threading.active_count() == before
+    for client in clients:
+        client.close()
+
+
+def test_clients_share_one_loop_and_closing_one_leaves_the_other_working(ping_server):
+    first, second = ETMClient(base_url=ping_server), ETMClient(base_url=ping_server)
+    try:
+        assert first.get("/ping").json() == second.get("/ping").json() == {"ok": True}
+        assert len(loop_threads()) == 1
+
+        first.close()
+
+        assert second.get("/ping").json() == {"ok": True}
+        assert first.get("/ping").json() == {"ok": True}
+    finally:
+        first.close()
+        second.close()
+
+
+def test_a_batch_can_be_a_new_clients_first_call(ping_server):
+    client = ETMClient(base_url=ping_server)
+    try:
+        results = AsyncBatchRunner.batch_requests_sync(client, [{"method": "GET", "url": "/ping"}] * 2)
+
+        assert [(r.success, r.data) for r in results] == [(True, {"ok": True})] * 2
+    finally:
+        client.close()
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="fork is POSIX only")
+@pytest.mark.filterwarnings("ignore:.*fork.*:DeprecationWarning")
+def test_a_forked_child_runs_its_own_loop(ping_server):
+    client = ETMClient(base_url=ping_server)
+    client.get("/ping")
+    read_end, write_end = os.pipe()
+
+    pid = os.fork()
+    if pid == 0:
+        try:
+            signal.alarm(5)
+            os.write(write_end, client.get("/ping").text.encode())
+        finally:
+            os._exit(0)
+
+    os.close(write_end)
+    try:
+        assert os.read(read_end, 100) == b'{"ok": true}'
+    finally:
+        os.waitpid(pid, 0)
+        client.close()

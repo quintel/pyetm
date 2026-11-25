@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import ssl
 import threading
+import weakref
 from importlib.metadata import version
 from pathlib import Path
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, Coroutine, TypeVar, cast
 
 import aiohttp
 from pydantic import BaseModel
@@ -17,7 +19,35 @@ from pydantic import BaseModel
 from pyetm.config.settings import get_settings
 
 USER_AGENT = f"pyetm/{version('pyetm')}"
+T = TypeVar("T")
 TOKEN_HELP = "Get your token at https://my.energytransitionmodel.com/identity/tokens"
+
+_shared_loop: asyncio.AbstractEventLoop | None = None
+_shared_loop_lock = threading.Lock()
+_clients: weakref.WeakSet[ETMClient] = weakref.WeakSet()
+
+
+def shared_loop() -> asyncio.AbstractEventLoop:
+    """The background event loop every client runs its requests on, started on first use."""
+    global _shared_loop
+    with _shared_loop_lock:
+        if _shared_loop is None:
+            _shared_loop = asyncio.new_event_loop()
+            threading.Thread(target=_shared_loop.run_forever, name="pyetm-event-loop", daemon=True).start()
+        return _shared_loop
+
+
+def _forget_parent_loop() -> None:
+    """In a forked child: the parent's loop has no thread here, so drop it and every client's connections."""
+    global _shared_loop, _shared_loop_lock
+    _shared_loop = None
+    _shared_loop_lock = threading.Lock()
+    for client in list(_clients):
+        client._session = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_forget_parent_loop)
 
 
 class ETMResponse(BaseModel):
@@ -107,7 +137,7 @@ def _as_list(value: Any) -> list[Any]:
 # TODO: Extract utils and organise private methods
 # aiohttp usage looks legit - researching possibility to yield from pool [not likely]
 class ETMClient:
-    """The HTTP transport to MyETM, sync and async, on a background event loop."""
+    """The HTTP transport to MyETM, sync and async. Each client has its own connections on one shared loop."""
 
     def __init__(
         self,
@@ -130,36 +160,14 @@ class ETMClient:
         self.ssl_cert_path = ssl_cert_path or settings.ssl_cert_path
 
         self._session: aiohttp.ClientSession | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._loop_thread: threading.Thread | None = None
-        self._loop_started = threading.Event()
+        _clients.add(self)
 
-        self._start_loop_thread()
+    def run(self, coro: Coroutine[Any, Any, T]) -> T:
+        """Run a coroutine on the shared loop and wait for its result."""
+        return asyncio.run_coroutine_threadsafe(coro, shared_loop()).result()
 
-    def _start_loop_thread(self) -> None:
-        """Start background thread with event loop."""
-
-        def run_loop() -> None:
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-            self._loop_started.set()
-            self._loop.run_forever()
-
-        self._loop_thread = threading.Thread(target=run_loop, daemon=True)
-        self._loop_thread.start()
-        if not self._loop_started.wait(timeout=5.0):
-            raise RuntimeError("Event loop thread failed to start within 5 seconds")
-
-    def _ensure_session(self) -> None:
-        """Ensure aiohttp session exists."""
-        if self._session is None:
-            if self._loop is None:
-                raise RuntimeError("Event loop not initialized")
-            future = asyncio.run_coroutine_threadsafe(self._create_session(), self._loop)
-            future.result()
-
-    async def _create_session(self) -> None:
-        """Create aiohttp session with SSL configuration."""
+    def _new_session(self) -> aiohttp.ClientSession:
+        """An aiohttp session with this client's headers and SSL configuration, made on the shared loop."""
         connector_kwargs: dict[str, Any] = {
             "limit": 10,
             "limit_per_host": 2,
@@ -180,7 +188,7 @@ class ETMClient:
         connector = aiohttp.TCPConnector(**connector_kwargs)
         timeout = aiohttp.ClientTimeout(total=120, connect=120)
 
-        self._session = aiohttp.ClientSession(
+        return aiohttp.ClientSession(
             headers=self.headers,
             connector=connector,
             timeout=timeout,
@@ -189,13 +197,7 @@ class ETMClient:
 
     def request(self, method: str, url: str, **kwargs: Any) -> ETMResponse:
         """Make HTTP request (sync)."""
-        self._ensure_session()
-        if self._loop is None:
-            raise RuntimeError("Event loop not initialized")
-        future = asyncio.run_coroutine_threadsafe(
-            self.async_request(method, url, **kwargs), self._loop
-        )
-        return future.result()
+        return self.run(self.async_request(method, url, **kwargs))
 
     def __getattr__(self, name: str) -> Any:
         """Method generation for HTTP verbs."""
@@ -220,7 +222,7 @@ class ETMClient:
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
 
         if self._session is None:
-            raise RuntimeError("Session not initialized")
+            self._session = self._new_session()
 
         async with self._session.request(method, full_url, **request_kwargs) as response:
             etm_response = ETMResponse(
@@ -281,22 +283,10 @@ class ETMClient:
         return request_kwargs
 
     def close(self) -> None:
-        """Close session and clean up resources."""
-        if self._session and self._loop:
-            future = asyncio.run_coroutine_threadsafe(self._session.close(), self._loop)
-            future.result()
+        """Close this client's connections. The shared loop keeps serving other clients."""
+        if self._session is not None:
+            self.run(self._session.close())
             self._session = None
-
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-
-        if self._loop_thread:
-            self._loop_thread.join(timeout=5)
-            self._loop_thread = None
-
-        if self._loop and not self._loop.is_closed():
-            self._loop.close()
-            self._loop = None
 
     def __enter__(self) -> ETMClient:
         """Enter the runtime context, returning this session."""

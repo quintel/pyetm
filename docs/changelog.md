@@ -143,6 +143,9 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
   and the `gqueries_present` column. The example notebook uses that workbook, and
   `examples/excel/example_input_excel.xlsx` is gone.
 - `ETM_ENVIRONMENT=production` picks `pro`, like `prod`.
+- Every client shares one background thread and event loop, started on first request. Each
+  client keeps its own connections, and closing one leaves the others working. A forked child
+  process, such as a `multiprocessing` worker on Linux, starts its own loop and connections.
 
 ### Fixed
 
@@ -164,6 +167,8 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 - A scenario's calls use the client it was loaded with, including curve downloads, which
   used the default client.
 - An empty `ENVIRONMENT` picks `pro`. It used to build an invalid `production.engine...` URL.
+- A batch, such as downloading several curves, works as a new client's first call. It used to
+  fail every request with "Session not initialized".
 
 ## [2.0.5] - 12-11-2026
 

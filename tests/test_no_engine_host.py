@@ -54,11 +54,10 @@ class RecordingSession:
         yield FakeResponse(url, body, content_type)
 
 
-def test_no_request_reaches_an_engine_host(monkeypatch):
+def test_no_request_reaches_an_engine_host():
     client = BaseClient()
     recorder = RecordingSession()
     client.session._session = recorder
-    monkeypatch.setattr(client.session, "_ensure_session", lambda: None)
 
     try:
         scenario = Scenario.load(7, client=client)

@@ -150,8 +150,7 @@ class AsyncBatchRunner:
         """Synchronous wrapper for batch_requests method.
 
         This method provides a synchronous interface to the async batch_requests
-        functionality by running it in the session's event loop using
-        asyncio.run_coroutine_threadsafe.
+        functionality by running it on the shared event loop.
 
         Args:
             session (ETMClient): Active ETM session instance for making requests.
@@ -166,8 +165,4 @@ class AsyncBatchRunner:
             This method blocks until all requests are completed and should only
             be used when async/await syntax is not available in the calling context.
         """
-        coro = AsyncBatchRunner.batch_requests(session, requests, max_concurrent)
-        if session._loop is None:
-            raise RuntimeError("Event loop not initialized in session")
-        future = asyncio.run_coroutine_threadsafe(coro, session._loop)
-        return future.result()
+        return session.run(AsyncBatchRunner.batch_requests(session, requests, max_concurrent))
