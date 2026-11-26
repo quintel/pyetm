@@ -148,9 +148,9 @@ class AppConfig(BaseSettings):
 
         return v
 
-    @model_validator(mode="after")
-    def target_the_etm(self) -> "AppConfig":
-        """Refuse an ETM_ENVIRONMENT this release cannot reach, and warn about a leftover BASE_URL."""
+    @functools.cached_property
+    def base_url(self) -> str:
+        """The ETM API URL that ETM_ENVIRONMENT picks, warning once about settings it cannot use."""
         url = _myetm_url_for(self.environment)
         if self.ignored_base_url:
             logger.warning(
@@ -158,12 +158,7 @@ class AppConfig(BaseSettings):
                 "ETM_ENVIRONMENT to pro, beta or local, or pass BaseClient(base_url=...).",
                 url,
             )
-        return self
-
-    @property
-    def base_url(self) -> str:
-        """The ETM API URL that ETM_ENVIRONMENT picks."""
-        return _myetm_url_for(self.environment)
+        return url
 
     def model_post_init(self, __context: Any) -> None:
         if not self.etm_api_token:
@@ -229,7 +224,7 @@ def reload_configuration() -> None:
 
 
 def _myetm_url_for(environment: Optional[str]) -> str:
-    """The ETM API URL for an ETM_ENVIRONMENT, or a startup error naming what to set instead."""
+    """The ETM API URL for an ETM_ENVIRONMENT. A Version raises; an unknown label warns and falls back to pro."""
     env = (environment or "pro").strip().lower()
     env = ENVIRONMENT_ALIASES.get(env, env)
     if env in MYETM_URLS:
@@ -237,10 +232,16 @@ def _myetm_url_for(environment: Optional[str]) -> str:
 
     if re.fullmatch(r"\d{4}(-\d{2})?", env):
         raise ValueError(
-            f"ETM_ENVIRONMENT={environment} names a stable Version, which this pyETM release cannot reach. "
-            f"Install pyetm 2.0.x to work on it, or set ETM_ENVIRONMENT to pro, beta or local."
+            f"ETM_ENVIRONMENT={environment} names a Version, not an ETM. Set ETM_ENVIRONMENT=pro, and "
+            f"ETM_VERSION={environment} to create scenarios on that Version. For 2025-01, whose curve and "
+            f"export names differ, install pyetm 2.0.x."
         )
-    raise ValueError(
-        f"Unknown ETM_ENVIRONMENT={environment}. Set it to pro, beta or local, "
-        f"or pass BaseClient(base_url=...) for another address."
+
+    fallback = MYETM_URLS["pro"]
+    logger.warning(
+        "Unknown ETM_ENVIRONMENT=%s, so pyetm talks to %s instead. Set it to pro, beta or local, "
+        "or pass BaseClient(base_url=...) for another address.",
+        environment,
+        fallback,
     )
+    return fallback

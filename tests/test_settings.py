@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 import pyetm.config.settings as settings_module
 from pydantic import ValidationError
+from pyetm.clients import BaseClient
 
 AppConfig = settings_module.AppConfig
 get_settings = settings_module.get_settings
@@ -183,25 +184,50 @@ def test_environment_inference(clean_settings_env, env, expected_url):
 
 
 @pytest.mark.parametrize("env", ["2025-01", "2027"])
-def test_a_stable_version_environment_fails_naming_the_replacement(clean_settings_env, env):
+def test_a_version_environment_raises_naming_etm_version(clean_settings_env, env):
     write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": env})
 
-    with pytest.raises(ValidationError, match="names a stable Version.*Install pyetm 2.0.x.*pro, beta or local"):
-        AppConfig()
+    with pytest.raises(ValueError, match=f"names a Version.*ETM_ENVIRONMENT=pro.*ETM_VERSION={env}"):
+        get_settings().base_url
 
 
-def test_an_unknown_environment_fails_naming_the_choices(clean_settings_env):
-    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
-
-    with pytest.raises(ValidationError, match="Unknown ETM_ENVIRONMENT=tyndp2024. Set it to pro, beta or local"):
-        AppConfig()
-
-
-def test_get_settings_reports_an_engine_setting_at_startup(clean_settings_env):
+def test_an_explicit_base_url_skips_a_version_environment(clean_settings_env):
     write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "2025-01"})
 
-    with pytest.raises(RuntimeError, match="names a stable Version"):
-        get_settings()
+    client = BaseClient(base_url="https://etm.example.com/api/v4")
+
+    assert client.session.base_url == "https://etm.example.com/api/v4"
+
+
+def test_an_unknown_environment_warns_and_falls_back_to_pro(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        url = get_settings().base_url
+
+    assert url == "https://my.energytransitionmodel.com/api/v4"
+    assert "Unknown ETM_ENVIRONMENT=tyndp2024, so pyetm talks to https://my.energytransitionmodel.com" in caplog.text
+
+
+def test_an_unusable_environment_warns_once(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
+    config = AppConfig()
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        config.base_url
+        config.base_url
+
+    assert caplog.text.count("Unknown ETM_ENVIRONMENT") == 1
+
+
+def test_an_explicit_base_url_skips_the_environment(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        client = BaseClient(base_url="https://etm.example.com/api/v4")
+
+    assert client.session.base_url == "https://etm.example.com/api/v4"
+    assert "ETM_ENVIRONMENT" not in caplog.text
 
 
 def test_etm_version_can_be_set(clean_settings_env):
@@ -226,9 +252,9 @@ def test_a_leftover_base_url_is_ignored_with_a_warning(clean_settings_env, caplo
     write_env_file(clean_settings_env, {"BASE_URL": "https://beta.engine.energytransitionmodel.com/api/v3"})
 
     with caplog.at_level("WARNING", logger="pyetm"):
-        config = AppConfig()
+        url = AppConfig().base_url
 
-    assert config.base_url == "https://my.energytransitionmodel.com/api/v4"
+    assert url == "https://my.energytransitionmodel.com/api/v4"
     assert "BASE_URL is ignored since pyetm 2.1, so pyetm talks to https://my.energytransitionmodel.com/api/v4" in caplog.text
 
 
@@ -236,7 +262,7 @@ def test_no_base_url_gives_no_warning(clean_settings_env, caplog):
     write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "beta"})
 
     with caplog.at_level("WARNING", logger="pyetm"):
-        AppConfig()
+        AppConfig().base_url
 
     assert "BASE_URL" not in caplog.text
 

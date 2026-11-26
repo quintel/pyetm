@@ -6,24 +6,24 @@ All notable changes to pyetm are documented here.
 
 ### Breaking
 
-pyetm talks to the ETM through one API, at `my.energytransitionmodel.com`, and no longer
-reaches an engine directly. Every scenario is a saved scenario. `Session` and `Sessions` are
-gone. pyetm 2.1 is tested on `latest` and no longer works on `2025-01`; for that, stay on
+pyetm talks to the ETM through one API, at `my.energytransitionmodel.com`, no longer targeting
+`engine.energytransitionmodel.com`. Every scenario is a saved scenario. `Session` and `Sessions`
+are gone. pyetm 2.1 is tested on `latest` and no longer works on `2025-01`; for that, stay on
 pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 
 #### Upgrading
 
-**Settings**
+**[Settings](getting-started/configuration.md)**
 
 | 2.0 | 2.1 |
 |---|---|
-| `ENVIRONMENT=pro`, `beta` or `local` | `ETM_ENVIRONMENT`, picking the ETM's API. `local` is the ETLauncher stack at `https://myetm.local.energytransitionmodel.com`. A bare `ENVIRONMENT` is still read for this release |
-| `ENVIRONMENT=2025-01` or another stable tag | Fails at startup. Install pyetm 2.0.x for a stable Version |
-| `ENVIRONMENT=tyndp2024` or another custom label | Fails at startup. Use `pro`, `beta` or `local`, or pass `BaseClient(base_url=...)` |
+| `ENVIRONMENT=pro`, `beta` or `local` | `ETM_ENVIRONMENT`, picking the ETM's API. `local` is the etlauncher stack at `https://myetm.local.energytransitionmodel.com`. A bare `ENVIRONMENT` is still read for this release |
+| `ENVIRONMENT=2025-01` or another stable tag | Raises on first use, naming the replacement: `ETM_ENVIRONMENT=pro` with `ETM_VERSION` set to the tag. For `2025-01`, install pyetm 2.0.x |
+| `ENVIRONMENT=tyndp2024` or another custom label | Warns and talks to `pro` instead. Use `pro`, `beta` or `local`, or pass `BaseClient(base_url=...)`, which skips `ETM_ENVIRONMENT` |
 | `BASE_URL` | Ignored, with a warning naming the API pyetm talks to. Set `ETM_ENVIRONMENT`, or pass `BaseClient(base_url=...)` |
 | (none) | `ETM_VERSION`, the Version new scenarios are created on, default `latest` |
 
-**Session**
+**[Session](user-guide/scenarios.md)**
 
 | 2.0 | 2.1 |
 |---|---|
@@ -35,7 +35,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | `session.copy_with_preset(**overrides)` | `scenario.copy_with_preset(title=..., private=...)` |
 | `Session.interpolate(sessions, *years)` | `Scenario.interpolate(scenario, *years, titles=...)`, from one source. Interpolating between several scenarios is no longer supported |
 | `session.delete()` | `scenario.delete()`, which deletes the saved scenario |
-| `session.preset_scenario_id` | `scenario.template_id`, which now reads the engine's `template` field. It was always `None` in 2.0 |
+| `session.template_id` | `scenario.template_id`, which now reads the engine's `template` field. It was always `None` in 2.0 |
 | `session.version` (parsed from the engine URL) | `scenario.version`, the saved scenario's Version tag |
 | `session.id` | `scenario.scenario_id` for reference. Calls use `scenario.id`, the saved scenario |
 | `session.list_users()`, `update_users()`, `apply_pending_users()` | The same methods on `Scenario` |
@@ -44,7 +44,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | The fields `start_year`, `keep_compatible`, `scaling`, `source`, `metadata`, `template_id` | Read only properties on `Scenario`, fetched from the current Session on first use |
 | `session.url`, the engine's API URL | `scenario.url`, the scenario's page on MyETM. MAIN's `url` row follows it |
 
-**Sessions**
+**[Sessions](user-guide/scenarios.md)**
 
 | 2.0 | 2.1 |
 |---|---|
@@ -55,7 +55,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | `Sessions.from_excel(path)`, `to_excel(path)` | `Scenarios.from_excel(path)`, `to_excel(path)` |
 | `scenarios.sessions` | Removed: `Scenarios` holds only `Scenario` |
 
-**Scenario**
+**[Scenario](user-guide/scenarios.md)**
 
 | 2.0 | 2.1 |
 |---|---|
@@ -70,14 +70,14 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | `SavedScenarioError` | Still raised, now an alias of `ScenarioError` |
 | `list_users()` | Returns `user_email`, `role` and `pending` for each user |
 
-**Scenarios**
+**[Scenarios](user-guide/scenarios.md)**
 
 | 2.0 | 2.1 |
 |---|---|
 | `create_many` with `scenario_id` (save a Session) | Removed |
 | `create_many` with `template_id` (a Session ID) | `source`, a saved scenario ID |
 
-**Collection**
+**[Collection](user-guide/management.md)**
 
 | 2.0 | 2.1 |
 |---|---|
@@ -86,7 +86,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
 | `collection.update(...)` | Accepts `title` and `saved_scenario_ids` |
 | `collection.update()`, `collection.delete()` with `client=` | Without `client=`. A collection uses the client it was loaded with. To act as another client, use `Collection.load(collection.id, client=other)` |
 
-**Excel**
+**[Excel](user-guide/excel.md)**
 
 | 2.0 | 2.1 |
 |---|---|
@@ -113,7 +113,7 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
   error names its pointer, for example `422: validation_failed: must be an integer (at
   /saved_scenario/end_year)`. Calculation errors read as before.
 - A `401` says whether a token is set. A `502 engine_unavailable` raises `ConnectionError`.
-- Loading a scenario on a Version other than `ETM_VERSION` warns once.
+- Loading, creating or copying a scenario on a Version other than `ETM_VERSION` warns once per Version.
 - A Compatibility page and the release line rule.
 - `include_gquery_present` (EXPORT_CONFIG column `gqueries_present`) exports each query's start
   year value beside its future value.
@@ -167,7 +167,6 @@ pyetm 2.0.x (see [Compatibility](getting-started/compatibility.md)).
   uploaded. Custom curves and sortables were always refused before, as warnings.
 - A scenario's calls use the client it was loaded with, including curve downloads, which
   used the default client. So do a collection's `update()` and `delete()`.
-- An empty `ENVIRONMENT` picks `pro`. It used to build an invalid `production.engine...` URL.
 - A batch, such as downloading several curves, works as a new client's first call. It used to
   fail every request with "Session not initialized".
 

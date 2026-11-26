@@ -276,9 +276,11 @@ interpolated = Scenario.interpolate(
     - Cannot interpolate **scaled scenarios**.
 
 
-## Collections and Bulk Operations
+## Working with Several Scenarios
 
-### Creating Collections
+To group saved scenarios for the Collections app, see [Managing Collections](management.md).
+
+### Grouping Several Scenarios
 
 ```python
 from pyetm import Scenarios, Scenario
@@ -295,7 +297,7 @@ scenarios = Scenarios(items=[scenario_1, scenario_2])
 scenarios.combine.main_info()
 ```
 
-### Collection Operations
+### Operations on Several Scenarios
 
 | Operation | Method | Example |
 |-----------|--------|---------|

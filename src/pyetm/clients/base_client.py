@@ -32,12 +32,8 @@ class BaseClient:
                 base URL from application settings.
         """
         settings = get_settings()
-        # Convert HttpUrl to string if needed
-        base_url_str = base_url or (
-            str(settings.base_url) if settings.base_url else None
-        )
         self.session = ETMClient(
-            base_url=base_url_str,
+            base_url=base_url or settings.base_url,
             token=token or settings.etm_api_token,
             ssl_verify=settings.ssl_verify,
             trust_env=settings.trust_env,

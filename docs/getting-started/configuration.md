@@ -30,6 +30,8 @@ Which ETM to talk to: `pro` (the default) or `beta`.
 ETM_ENVIRONMENT=beta
 ```
 
+A Version tag such as `2027-01` raises: set `ETM_ENVIRONMENT=pro` and pick the Version with `ETM_VERSION`. Any other value logs a warning and pyetm talks to `pro`. A client made with `BaseClient(base_url=...)` ignores this setting.
+
 pyetm 2.1 is tested on the `latest` Version of the ETM, and can work on other Versions through the same API. For `2025-01`, install pyetm 2.0.x. See [Compatibility](compatibility.md).
 
 ## PYETM_ERROR_MODE

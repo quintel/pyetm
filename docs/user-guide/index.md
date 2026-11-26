@@ -28,7 +28,7 @@ Learn how to create, load, copy, and manage ETM scenarios programmatically.
 - Properties and metadata
 - Saving a Snapshot
 - Copying and interpolating scenarios
-- The Scenarios collection and bulk operations
+- Working with several scenarios and bulk operations
 
 ### [Management](management.md)
 Advanced features for power users and automation workflows.
