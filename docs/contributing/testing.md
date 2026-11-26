@@ -84,7 +84,6 @@ tests/
 ├── conftest.py              # Shared fixtures
 ├── models/                  # Model tests
 │   ├── test_scenario.py
-│   ├── test_session.py
 │   └── ...
 ├── services/                # Service tests
 │   ├── test_scenario_runners.py

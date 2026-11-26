@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -11,7 +11,7 @@ class GetQueryResultsRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for calculating queries on a scenario.
 
-    PUT /api/v3/scenarios/{scenario_id}
+    PUT /api/v4/saved_scenarios/{id}/
     """
 
     @staticmethod
@@ -27,7 +27,7 @@ class GetQueryResultsRunner(BaseRunner[Dict[str, Any]]):
         response = GetQueryResultsRunner._make_request(
             client=client,
             method="put",
-            path=f"/scenarios/{scenario.id}",
+            path=scenario_path(scenario),
             payload={"gqueries": gquery_keys},
         )
 

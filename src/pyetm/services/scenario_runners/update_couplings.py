@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Union
 
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -11,8 +11,8 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for updating coupling groups in a scenario.
 
-    POST /api/v3/scenarios/{scenario_id}/couple
-    POST /api/v3/scenarios/{scenario_id}/uncouple
+    POST /api/v4/saved_scenarios/{id}/couple
+    POST /api/v4/saved_scenarios/{id}/uncouple
     """
 
     @staticmethod
@@ -48,7 +48,7 @@ class UpdateCouplingsRunner(BaseRunner[Dict[str, Any]]):
         result = UpdateCouplingsRunner._make_request(
             client=client,
             method="post",
-            path=f"/scenarios/{scenario.id}/{action}",
+            path=scenario_path(scenario, f"{action}"),
             payload=data,
         )
 

@@ -12,7 +12,7 @@ def test_update_inputs_success(dummy_client, fake_response, dummy_scenario):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/1", {"json": {"scenario": {"user_values": inputs}}})]
+    assert client.calls == [("/saved_scenarios/1/", {"json": {"scenario": {"user_values": inputs}}})]
 
 
 def test_update_inputs_single_input(dummy_client, fake_response, dummy_scenario):
@@ -27,7 +27,7 @@ def test_update_inputs_single_input(dummy_client, fake_response, dummy_scenario)
     print(result.data)
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/2", {"json": {"scenario": {"user_values": inputs}}})]
+    assert client.calls == [("/saved_scenarios/2/", {"json": {"scenario": {"user_values": inputs}}})]
 
 
 def test_update_inputs_empty_inputs(dummy_client, fake_response, dummy_scenario):
@@ -41,7 +41,7 @@ def test_update_inputs_empty_inputs(dummy_client, fake_response, dummy_scenario)
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/3", {"json": {"scenario": {"user_values": {}}}})]
+    assert client.calls == [("/saved_scenarios/3/", {"json": {"scenario": {"user_values": {}}}})]
 
 
 def test_update_inputs_with_kwargs(dummy_client, fake_response, dummy_scenario):
@@ -57,7 +57,7 @@ def test_update_inputs_with_kwargs(dummy_client, fake_response, dummy_scenario):
     assert result.errors == []
     # Just verify the basic structure - kwargs handling might vary
     assert len(client.calls) == 1
-    assert client.calls[0][0] == "/scenarios/4"
+    assert client.calls[0][0] == "/saved_scenarios/4/"
     assert client.calls[0][1]["json"] == {"scenario": {"user_values": inputs}}
 
 
@@ -142,7 +142,7 @@ def test_update_inputs_payload_structure(dummy_client, fake_response, dummy_scen
 
     # Verify the exact payload structure
     expected_call = (
-        "/scenarios/10",
+        "/saved_scenarios/10/",
         {"json": {"scenario": {"user_values": {"input_a": 1.0, "input_b": 2.0, "input_c": 3.0}}}},
     )
     assert client.calls == [expected_call]
@@ -158,7 +158,7 @@ def test_update_inputs_numeric_scenario_id(dummy_client, fake_response, dummy_sc
 
     result = UpdateInputsRunner.run(client, scenario, inputs)
     assert result.success is True
-    assert client.calls[0][0] == "/scenarios/12345"
+    assert client.calls[0][0] == "/saved_scenarios/12345/"
 
 
 def test_build_request(dummy_scenario):
@@ -169,7 +169,7 @@ def test_build_request(dummy_scenario):
     request = UpdateInputsRunner.build_request(scenario, inputs)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/100"
+    assert request["path"] == "/saved_scenarios/100/"
     assert request["payload"] == {"scenario": {"user_values": inputs}}
     assert request["kwargs"] == {}
 
@@ -182,7 +182,7 @@ def test_build_request_single_input(dummy_scenario):
     request = UpdateInputsRunner.build_request(scenario, inputs)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/200"
+    assert request["path"] == "/saved_scenarios/200/"
     assert request["payload"] == {"scenario": {"user_values": {"co_firing_biocoal_share": 80}}}
 
 
@@ -194,7 +194,7 @@ def test_build_request_empty_inputs(dummy_scenario):
     request = UpdateInputsRunner.build_request(scenario, inputs)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/300"
+    assert request["path"] == "/saved_scenarios/300/"
     assert request["payload"] == {"scenario": {"user_values": {}}}
 
 
@@ -211,6 +211,6 @@ def test_build_request_multiple_inputs(dummy_scenario):
     request = UpdateInputsRunner.build_request(scenario, inputs)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/400"
+    assert request["path"] == "/saved_scenarios/400/"
     assert request["payload"]["scenario"]["user_values"] == inputs
     assert len(request["payload"]["scenario"]["user_values"]) == 4

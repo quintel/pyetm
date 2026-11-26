@@ -41,17 +41,11 @@ poetry shell
 
 ### 5. Configure Environment
 
-Create a `.env` file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your settings:
+Create a `.env` file in the repository root:
 
 ```env
 ETM_API_TOKEN=etm_your.token.here
-ENVIRONMENT=pro
+ETM_ENVIRONMENT=pro
 LOG_LEVEL=DEBUG
 ```
 
@@ -151,7 +145,7 @@ pyetm/
 ├── src/pyetm/          # Source code
 │   ├── clients/        # HTTP client infrastructure
 │   ├── config/         # Configuration management
-│   ├── models/         # Domain models (Scenario, Session, etc.)
+│   ├── models/         # Domain models (Scenario, Scenarios, Collection, etc.)
 │   ├── services/       # Business logic and API services
 │   └── utils/          # Utility functions
 ├── tests/              # Test suite

@@ -2,7 +2,7 @@
 
 import io
 from typing import Any
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -19,7 +19,7 @@ class DownloadAnnualExportRunner(BaseRunner[Any]):
         """
         Download a single annual export.
         """
-        path = f"/scenarios/{scenario.id}/{export_name}"
+        path = scenario_path(scenario, f"{export_name}")
 
         req = [
             {

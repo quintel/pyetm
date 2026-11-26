@@ -14,7 +14,7 @@ def test_fetch_sortables_success(dummy_client, fake_response, dummy_scenario):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/10/user_sortables", None)]
+    assert client.calls == [("/saved_scenarios/10/user_sortables", None)]
 
 
 def test_fetch_sortables_http_failure(dummy_client, fake_response, dummy_scenario):

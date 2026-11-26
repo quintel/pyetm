@@ -40,8 +40,8 @@ def test_scenario_discard_failure(monkeypatch, fail_service_result, saved_scenar
         saved_scenario.discard()
 
 
-def test_scenario_discard_with_explicit_client(monkeypatch, ok_service_result, mock_client):
-    """Test that discard can use an explicitly passed client."""
+def test_scenario_discard_uses_its_own_client(monkeypatch, ok_service_result, mock_client):
+    """Discard uses the client the scenario was loaded with."""
     discard_response = {"message": "Discarded"}
 
     # Track which client was used
@@ -56,10 +56,9 @@ def test_scenario_discard_with_explicit_client(monkeypatch, ok_service_result, m
 
     scenario = Scenario(id=123, scenario_id=456, title="Test")
 
-    # Discard with explicit client
-    scenario.discard(client=mock_client)
+    scenario._client = mock_client
+    scenario.discard()
 
-    # Verify the explicit client was used
     assert used_client is mock_client
 
 
@@ -111,8 +110,8 @@ def test_scenario_delete_not_authorized(
         saved_scenario.delete()
 
 
-def test_scenario_delete_with_explicit_client(monkeypatch, ok_service_result, mock_client):
-    """Test that permanent delete can use an explicitly passed client."""
+def test_scenario_delete_uses_its_own_client(monkeypatch, ok_service_result, mock_client):
+    """Permanent delete uses the client the scenario was loaded with."""
     delete_response = {
         "message": "SavedScenario permanently deleted",
         "saved_scenario_id": 123,
@@ -130,8 +129,7 @@ def test_scenario_delete_with_explicit_client(monkeypatch, ok_service_result, mo
 
     scenario = Scenario(id=123, scenario_id=456, title="Test")
 
-    # Delete with explicit client
-    scenario.delete(client=mock_client)
+    scenario._client = mock_client
+    scenario.delete()
 
-    # Verify the explicit client was used
     assert used_client is mock_client

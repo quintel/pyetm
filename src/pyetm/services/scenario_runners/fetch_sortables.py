@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -11,7 +11,7 @@ class FetchSortablesRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for reading all user sortables on a scenario.
 
-    GET /api/v3/scenarios/{scenario_id}/user_sortables
+    GET /api/v4/saved_scenarios/{id}/user_sortables
     """
 
     @staticmethod
@@ -25,5 +25,5 @@ class FetchSortablesRunner(BaseRunner[Dict[str, Any]]):
                 contains error messages.
         """
         return FetchSortablesRunner._make_request(
-            client=client, method="get", path=f"/scenarios/{scenario.id}/user_sortables"
+            client=client, method="get", path=scenario_path(scenario, "user_sortables")
         )

@@ -333,7 +333,7 @@ class HourlyOutputCurvesPack(Packable):
         workbook = None
         try:
             # Sort scenarios for deterministic sheet layout
-            scenarios_sorted = sorted(self.scenarios, key=lambda s: s.id)
+            scenarios_sorted = sorted(self.scenarios, key=lambda s: s.id or 0)
 
             for carrier in selected:
                 series_entries: list[Tuple[Tuple[str, str], Series[Any]]] = []

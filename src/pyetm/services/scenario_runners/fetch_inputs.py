@@ -1,7 +1,7 @@
 """Service for fetch inputs operations."""
 
 from typing import Any, Dict, Optional
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -10,7 +10,7 @@ class FetchInputsRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for reading *all* inputs on a scenario.
 
-    GET /api/v3/scenarios/{scenario_id}/inputs
+    GET /api/v4/saved_scenarios/{id}/inputs
     """
 
     @staticmethod
@@ -29,6 +29,6 @@ class FetchInputsRunner(BaseRunner[Dict[str, Any]]):
         return FetchInputsRunner._make_request(
             client=client,
             method="get",
-            path=f"/scenarios/{scenario.id}/inputs",
+            path=scenario_path(scenario, "inputs"),
             params=params,
         )

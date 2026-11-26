@@ -1,6 +1,6 @@
 # Working with Exports
 
-This guide covers accessing scenario outputs through **Hourly Output Curves** and **Annual Exports**. Both scenarios and sessions provide identical access patterns.
+This guide covers accessing scenario outputs through **Hourly Output Curves** and **Annual Exports**.
 
 For detailed API signatures and parameters, see the [API Reference](../api/index.md).
 
@@ -128,7 +128,6 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 
 | Export Name | Description |
 |-------------|-------------|
-| `production_parameters` | Production capacity and utilization |
 | `energy_flow` | Energy flows by carrier (future year) |
 | `energy_flow_present` | Energy flows by carrier (present year) |
 | `molecule_flow` | Molecule/hydrogen flows |
@@ -139,9 +138,8 @@ Annual exports provide aggregated yearly data in various formats for analysis an
 | `district_heating_capacities` | Installed/peak capacity per participant in the heat merit order |
 | `hydrogen_capacities` | Installed/peak capacity for hydrogen participants |
 | `network_gas_capacities` | Installed/peak capacity for network gas participants |
-
-!!! note "Capacity tables and engine version"
-    The four capacity exports are only available on modern engines (`pro`). On the stable `2025-01` tag they do not exist; `get_annual_export()` returns `None` in that case.
+| `direct_emissions_present` | Direct emissions per node (present year) |
+| `direct_emissions_future` | Direct emissions per node (future year) |
 
 ### Basic Access
 
@@ -164,7 +162,7 @@ Retrieve several exports in one call:
 # Get multiple exports
 exports = scenario.get_annual_exports([
     "energy_flow",
-    "production_parameters",
+    "electricity_capacities",
     "costs_parameters"
 ])
 
@@ -190,7 +188,7 @@ exports = scenario.annual_exports
 
 # List all available export types
 print(exports.names)
-# ['production_parameters', 'energy_flow', 'energy_flow_present', ...]
+# ['energy_flow', 'energy_flow_present', 'molecule_flow', ...]
 
 # Get cached export (returns None if not yet fetched)
 cached = exports.get("energy_flow")
@@ -228,7 +226,7 @@ merit_again = scenario.get_hourly_curve("merit_order")  # Returns cached
 Hourly curves are automatically cached to disk for performance:
 
 ```python
-# Curves are saved to: ~/.pyetm/tmp/<session_id>/<curve_name>.csv
+# Curves are saved to: <temp folder>/pyetm/<scenario id>/<curve_name>.csv
 # (or custom path via PYETM_TMP_CACHE_PATH environment variable)
 
 # Cache persists across Python sessions
@@ -264,10 +262,10 @@ print(f"Removed {removed} custom curve files")
 hourly, custom = scenario.clear_all_curve_caches()
 print(f"Removed {hourly} hourly + {custom} custom curve files")
 
-# Clear entire session cache (most comprehensive)
+# Clear every cached file for the scenario (most comprehensive)
 scenario.clear_session_cache()
 ```
 
-All cache methods work identically on both `Scenario` and `Session` objects. Cache files are stored in `~/.pyetm/tmp/<session_id>/` (or custom path via `PYETM_TMP_CACHE_PATH` environment variable).
+Cache files are stored in your system's temporary folder, under `pyetm/<scenario id>/`. Set `TEMP_FOLDER` to use another folder.
 
 **Note:** Clearing caches removes files from disk but does not re-fetch data automatically. Access the curves again after clearing to trigger a fresh API fetch.

@@ -1,15 +1,16 @@
-# Sessions and Authentication
+# Authentication and Management
 
-Learn about authentication, sessions, and managing saved scenarios.
+Learn about authentication, clients, and managing your saved scenarios.
 
 ## Authentication
 
 ### API Tokens
 
-To save scenarios or access private scenarios, you need an API token:
+Reading a public scenario needs no token. To create, change or list scenarios, or to read
+private ones, you need a personal token:
 
-1. Visit [ETM API Authentication](https://docs.energytransitionmodel.com/api/authentication)
-2. Generate your personal token
+1. Visit [your tokens page](https://my.energytransitionmodel.com/identity/tokens)
+2. Generate a personal token
 3. Configure pyetm with your token
 
 ### Configuration
@@ -18,52 +19,17 @@ Set up authentication using a `.env` file:
 
 ```env
 ETM_API_TOKEN=etm_your.token.here
-ENVIRONMENT=pro
 ```
 
-Or programmatically:
-
-```python
-from pyetm import Client
-from pyetm.config import AppConfig
-
-config = AppConfig(etm_api_token="etm_your.token.here")
-client = Client(config=config)
-```
+See
+[Configuration](../getting-started/configuration.md) for every setting.
 
 ## Working with Clients
 
-### Creating a Client
-
-```python
-from pyetm import Client
-
-# From environment variables / .env file
-client = Client.from_env()
-
-# With explicit configuration
-from pyetm.config import AppConfig
-config = AppConfig(etm_api_token="etm_your.token.here")
-client = Client(config=config)
-```
-
-### Using Clients with Scenarios
-
-```python
-# Create authenticated scenario
-scenario = Scenario.new(
-    area_code="nl",
-    end_year=2050,
-    client=client,
-)
-
-# Load private scenario
-scenario = Scenario.from_scenario_id(123456, client=client)
-```
+By default pyetm builds one client from your environment variables or `.env` file. Pass your
+own `BaseClient` to use another token.
 
 ### Using Multiple Clients
-
-You can create multiple client instances to interact with different environments or use different tokens:
 
 ```python
 from pyetm import BaseClient, Scenario
@@ -73,7 +39,7 @@ prod_client = BaseClient()  # Uses env vars
 
 # Beta environment client
 beta_client = BaseClient(
-    base_url="https://beta.engine.energytransitionmodel.com/api/v3",
+    base_url="https://beta.my.energytransitionmodel.com/api/v4",
     token="etm_beta_..."
 )
 
@@ -82,56 +48,24 @@ prod_scenario = Scenario.new(title="Prod Test", area_code="nl2023", end_year=205
 beta_scenario = Scenario.new(title="Beta Test", area_code="nl2023", end_year=2050, client=beta_client)
 ```
 
+A scenario keeps the client it was created or loaded with, and uses it for every later call.
+
 ## Managing Your Scenarios
 
-PyETM provides convenient methods to list and manage all your scenarios and saved scenarios.
+### Listing Your Saved Scenarios
 
-## Listing ETEngine Sessions
-
-Use `Sessions.load_all()` to fetch all ETEngine sessions (temporary scenarios) belonging to the authenticated user:
-
-```python
-from pyetm import Sessions
-
-# Fetch all your ETEngine sessions - automatically fetches all pages
-sessions = Sessions.load_all()
-
-# Iterate through sessions
-for session in sessions:
-    print(f"Session {session.id}: {session.title} ({session.area_code}, {session.end_year})")
-```
-
-### Pagination Control
-
-By default, `load_all()` fetches all pages automatically. To fetch a specific page:
-
-```python
-# Fetch only page 1
-sessions = Sessions.load_all(page=1)
-
-# Fetch only page 2 with custom page size
-sessions = Sessions.load_all(page=2, per_page=50)
-
-# Control batch size when fetching all pages
-sessions = Sessions.load_all(per_page=100)  # Fetches all pages, 100 at a time
-```
-
-## Listing MyETM Saved Scenarios
-
-Use `Scenarios.load_all()` to fetch all your saved scenarios from MyETM:
+Use `Scenarios.load_all()` to fetch every saved scenario you can access. It follows
+every page for you:
 
 ```python
 from pyetm import Scenarios
 
-# Fetch all your saved scenarios
 scenarios = Scenarios.load_all()
 
-# Iterate through saved scenarios
 for scenario in scenarios:
-    print(f"Saved Scenario {scenario.id}: {scenario.title}")
-    print(f"  - Based on session: {scenario.session.id}")
-    print(f"  - Area: {scenario.session.area_code}")
-    print(f"  - Private: {scenario.private}")
+    print(f"Scenario {scenario.id}: {scenario.title}")
+    print(f"  - Area: {scenario.area_code}, end year: {scenario.end_year}")
+    print(f"  - Version: {scenario.version}, private: {scenario.private}")
 ```
 
 ## Bulk Operations
@@ -153,24 +87,37 @@ scenarios.to_excel("my_scenarios.xlsx")
 Filter scenarios after loading them:
 
 ```python
-from pyetm import Sessions
+from pyetm import Scenarios
 
-# Load all sessions
-sessions = Sessions.load_all()
+scenarios = Scenarios.load_all()
 
 # Filter by area
-nl_sessions = [s for s in sessions if s.area_code == "nl2023"]
+nl_scenarios = [s for s in scenarios if s.area_code == "nl2023"]
 
 # Filter by end year
-sessions_2050 = [s for s in sessions if s.end_year >= 2050]
+scenarios_2050 = [s for s in scenarios if s.end_year >= 2050]
 
-# Find specific session
-my_session = next((s for s in sessions if "experiment" in (s.title or "")), None)
+# Find a specific scenario
+mine = next((s for s in scenarios if "experiment" in (s.title or "")), None)
+```
+
+## Discarding and Deleting
+
+```python
+from pyetm import Scenario
+
+scenario = Scenario.load(123456)
+
+# Hidden from listings, recoverable for 60 days
+scenario.discard()
+
+# Permanent, cannot be undone
+scenario.delete()
 ```
 
 ## Managing Users
 
-Control who can access your scenarios by managing user permissions. Both Sessions and Saved Scenarios support user management with role-based access control.
+Control who can access your scenarios by managing their users.
 
 ### User Roles
 
@@ -183,6 +130,7 @@ Three roles determine what users can do with a scenario:
 | `scenario_viewer` | Read-only | Can view but not modify the scenario |
 
 !!! note
+    Roles can be given with or without their `scenario_` prefix, so `"viewer"` works too.
     Use `"remove"` as a special role value to revoke a user's access entirely.
 
 ### Listing Users
@@ -202,16 +150,8 @@ for user in users:
     print(f"{user['user_email']}: {user['role']}")
 ```
 
-Access is managed on the saved Scenario only. A Session's `list_users()`, `update_users()` and `apply_pending_users()` raise a `ScenarioError`. Save the Session first, then manage its users on the Scenario it returns:
-
-```python
-from pyetm import Session
-
-session = Session.new(area_code="nl2023", end_year=2050)
-scenario = session.save(title="My scenario")
-
-users = scenario.list_users()
-```
+Each user comes back as a dict with `user_email`, a short `role` such as `"owner"`, and
+`pending`, which is true for an invitation not yet accepted.
 
 ### Adding or Updating User Access
 
@@ -265,7 +205,7 @@ scenario.update_users("user1@example.com", "scenario_viewer", skip_upload=True)
 scenario.update_users("user2@example.com", "scenario_collaborator", skip_upload=True)
 scenario.update_users("user3@example.com", "remove", skip_upload=True)
 
-# Apply all changes in one API call
+# Apply all queued changes
 scenario.apply_pending_users()
 ```
 
@@ -274,7 +214,8 @@ scenario.apply_pending_users()
 
 ## Managing Collections
 
-Collections (also called transition paths) allow you to group multiple scenarios together, optionally with interpolation for multi-year projections.
+A Collection groups saved scenarios on one Version, to view them together in the Collections
+app.
 
 ### Loading Collections
 
@@ -285,8 +226,9 @@ from pyetm import Collection
 collection = Collection.load(123)
 print(f"Collection: {collection.title}")
 print(f"Scenarios: {collection.saved_scenario_ids}")
+print(f"View it at: {collection.collections_app_url}")
 
-# Load all user collections
+# Load all your collections
 collections = Collection.load_all()
 for collection in collections:
     print(f"{collection.id}: {collection.title}")
@@ -297,35 +239,28 @@ for collection in collections:
 ```python
 from pyetm import Collection
 
-# Create a simple collection
 collection = Collection.create(
     title="My Collection",
     saved_scenario_ids=[1, 2, 3],
 )
-
-# Create an interpolated collection
-collection = Collection.create(
-    title="2030-2050 Pathway",
-    saved_scenario_ids=[1],  # Base scenario
-    area_code="nl",
-    end_year=2050,
-    interpolation=True,
-)
 ```
 
 !!! info "Collection Validation"
-    - Collections can include up to 6 scenarios (combined `scenario_ids` and `saved_scenario_ids`)
-    - All scenarios in a collection must use the same ETM version
+    - A collection needs at least one saved scenario.
+    - Its `version` defaults to `ETM_VERSION`. Every scenario in it must be on that Version.
 
 ### Updating Collections
 
 ```python
-# Update collection attributes
 collection.update(
     title="Updated Title",
-    saved_scenario_ids=[1, 2, 3, 4],  # Add more scenarios
+    saved_scenario_ids=[1, 2, 3, 4],
 )
+```
 
-# Soft-delete a collection (mark as discarded)
-collection.update(discarded=True)
+### Deleting Collections
+
+```python
+# Permanent. The saved scenarios in it are not deleted.
+collection.delete()
 ```

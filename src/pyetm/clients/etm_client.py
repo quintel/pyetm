@@ -1,18 +1,53 @@
-"""Async HTTP session management for ETM API."""
+"""The HTTP transport to MyETM."""
 
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import ssl
 import threading
+import weakref
+from importlib.metadata import version
 from pathlib import Path
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, Coroutine, TypeVar, cast
 
 import aiohttp
 from pydantic import BaseModel
 
 from pyetm.config.settings import get_settings
+
+USER_AGENT = f"pyetm/{version('pyetm')}"
+T = TypeVar("T")
+TOKEN_HELP = "Get your token at https://my.energytransitionmodel.com/identity/tokens"
+
+_shared_loop: asyncio.AbstractEventLoop | None = None
+_shared_loop_lock = threading.Lock()
+_clients: weakref.WeakSet[ETMClient] = weakref.WeakSet()
+
+
+def shared_loop() -> asyncio.AbstractEventLoop:
+    """The background event loop every client runs its requests on, started on first use."""
+    global _shared_loop
+    with _shared_loop_lock:
+        if _shared_loop is None:
+            _shared_loop = asyncio.new_event_loop()
+            threading.Thread(target=_shared_loop.run_forever, name="pyetm-event-loop", daemon=True).start()
+        return _shared_loop
+
+
+def _forget_parent_loop() -> None:
+    """In a forked child: the parent's loop has no thread here, so drop it and every client's connections."""
+    global _shared_loop, _shared_loop_lock
+    _shared_loop = None
+    _shared_loop_lock = threading.Lock()
+    for client in list(_clients):
+        client._session = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_forget_parent_loop)
 
 
 class ETMResponse(BaseModel):
@@ -35,8 +70,6 @@ class ETMResponse(BaseModel):
         if self._json_data is not None:
             return self._json_data
 
-        import json
-
         return cast(dict[str, Any], json.loads(self.text))
 
     # TODO: why encode again? I understand that curves are creating IO streams
@@ -49,71 +82,62 @@ class ETMResponse(BaseModel):
         """Get response content as bytes."""
         return self._content or self.text.encode("utf-8")
 
-    def _format_error_message(self) -> str:
-        """Format error message from API response in a readable way."""
-        import json
+    def error_message(self) -> str:
+        """The status with every message the body carries, in MyETM's v4 grammar or ETEngine's own."""
+        messages = _error_messages(self._body())
+        if not messages and self.text.strip():
+            messages = [self.text.strip()]
+        return ": ".join([str(self.status_code), ", ".join(messages)]) if messages else str(self.status_code)
 
+    def _body(self) -> Any:
         try:
-            # Try to parse as JSON
-            data = json.loads(self.text)
-
-            # Handle {"errors": {...}} format
-            if isinstance(data, dict) and "errors" in data:
-                errors = data["errors"]
-
-                # Handle {"errors": {"field": ["message1", "message2"]}}
-                if isinstance(errors, dict):
-                    messages = []
-                    for field, field_errors in errors.items():
-                        if isinstance(field_errors, list):
-                            for error in field_errors:
-                                messages.append(f"{field}: {error}")
-                        else:
-                            messages.append(f"{field}: {field_errors}")
-
-                    if messages:
-                        return f"{self.status_code}: {', '.join(messages)}"
-
-                # Handle {"errors": ["message1", "message2"]}
-                elif isinstance(errors, list):
-                    return f"{self.status_code}: {', '.join(str(e) for e in errors)}"
-
-            # Handle {"error": "message"} format
-            if isinstance(data, dict) and "error" in data:
-                return f"{self.status_code}: {data['error']}"
-
-        except (json.JSONDecodeError, KeyError, TypeError):
-            pass
-
-        # Fall back to raw text (strip to avoid unnecessary whitespace)
-        text = self.text.strip()
-        return f"{self.status_code}: {text}" if text else f"{self.status_code}"
+            return self.json()
+        except (json.JSONDecodeError, TypeError):
+            return None
 
     def raise_for_status(self, token: str | None = None) -> None:
-        """Raise appropriate exception for HTTP errors."""
+        """Raise PermissionError for 401 and 403, ValueError for other 4xx, ConnectionError for 5xx."""
         if self.status_code == 401:
-            if not token:
-                raise PermissionError(
-                    "Authentication required: This operation requires an ETM_API_TOKEN. "
-                    "Set the ETM_API_TOKEN environment variable or pass a client with a token. "
-                    "Get your token at https://energytransitionmodel.com/api_access"
-                )
-            else:
-                raise PermissionError(
-                    "Invalid ETM_API_TOKEN. Please check your token is correct and has not expired. "
-                    "Get a new token at https://energytransitionmodel.com/api_access"
-                )
-
+            raise PermissionError(self._unauthenticated_message(token))
+        if self.status_code == 403:
+            raise PermissionError(self.error_message())
         if 400 <= self.status_code < 500:
-            raise ValueError(self._format_error_message())
-        if 500 <= self.status_code < 600:
-            raise ConnectionError(self._format_error_message())
+            raise ValueError(self.error_message())
+        if self.status_code >= 500:
+            raise ConnectionError(self.error_message())
+
+    def _unauthenticated_message(self, token: str | None) -> str:
+        if token:
+            return f"{self.error_message()}. Your ETM_API_TOKEN was refused: check it is correct and has not expired. {TOKEN_HELP}"
+        return f"{self.error_message()}. This needs an ETM_API_TOKEN, and none is set. {TOKEN_HELP}"
+
+
+def _error_messages(body: Any) -> list[str]:
+    """Flatten a body's errors: v4 objects, ETEngine's {field: [messages]}, a list, or one string."""
+    if not isinstance(body, dict):
+        return []
+    errors = body.get("errors", body.get("error"))
+    if isinstance(errors, dict):
+        return [f"{field}: {message}" for field, messages in errors.items() for message in _as_list(messages)]
+    return [_v4_error(error) if isinstance(error, dict) else str(error) for error in _as_list(errors)]
+
+
+def _v4_error(error: dict[str, Any]) -> str:
+    message = ": ".join(str(part) for part in (error.get("code"), error.get("detail")) if part)
+    pointer = (error.get("source") or {}).get("pointer")
+    return f"{message} (at {pointer})" if pointer else message
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
 
 
 # TODO: Extract utils and organise private methods
 # aiohttp usage looks legit - researching possibility to yield from pool [not likely]
-class ETMSession:
-    """Modern async session for ETM API interactions."""
+class ETMClient:
+    """The HTTP transport to MyETM, sync and async. Each client has its own connections on one shared loop."""
 
     def __init__(
         self,
@@ -125,7 +149,7 @@ class ETMSession:
     ):
         self.base_url = str(base_url or get_settings().base_url).rstrip("/")
         self.token = token or get_settings().etm_api_token
-        self.headers = {"Accept": "application/json"}
+        self.headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
         if self.token:
             self.headers["Authorization"] = f"Bearer {self.token}"
 
@@ -136,36 +160,14 @@ class ETMSession:
         self.ssl_cert_path = ssl_cert_path or settings.ssl_cert_path
 
         self._session: aiohttp.ClientSession | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._loop_thread: threading.Thread | None = None
-        self._loop_started = threading.Event()
+        _clients.add(self)
 
-        self._start_loop_thread()
+    def run(self, coro: Coroutine[Any, Any, T]) -> T:
+        """Run a coroutine on the shared loop and wait for its result."""
+        return asyncio.run_coroutine_threadsafe(coro, shared_loop()).result()
 
-    def _start_loop_thread(self) -> None:
-        """Start background thread with event loop."""
-
-        def run_loop() -> None:
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-            self._loop_started.set()
-            self._loop.run_forever()
-
-        self._loop_thread = threading.Thread(target=run_loop, daemon=True)
-        self._loop_thread.start()
-        if not self._loop_started.wait(timeout=5.0):
-            raise RuntimeError("Event loop thread failed to start within 5 seconds")
-
-    def _ensure_session(self) -> None:
-        """Ensure aiohttp session exists."""
-        if self._session is None:
-            if self._loop is None:
-                raise RuntimeError("Event loop not initialized")
-            future = asyncio.run_coroutine_threadsafe(self._create_session(), self._loop)
-            future.result()
-
-    async def _create_session(self) -> None:
-        """Create aiohttp session with SSL configuration."""
+    def _new_session(self) -> aiohttp.ClientSession:
+        """An aiohttp session with this client's headers and SSL configuration, made on the shared loop."""
         connector_kwargs: dict[str, Any] = {
             "limit": 10,
             "limit_per_host": 2,
@@ -186,7 +188,7 @@ class ETMSession:
         connector = aiohttp.TCPConnector(**connector_kwargs)
         timeout = aiohttp.ClientTimeout(total=120, connect=120)
 
-        self._session = aiohttp.ClientSession(
+        return aiohttp.ClientSession(
             headers=self.headers,
             connector=connector,
             timeout=timeout,
@@ -195,13 +197,7 @@ class ETMSession:
 
     def request(self, method: str, url: str, **kwargs: Any) -> ETMResponse:
         """Make HTTP request (sync)."""
-        self._ensure_session()
-        if self._loop is None:
-            raise RuntimeError("Event loop not initialized")
-        future = asyncio.run_coroutine_threadsafe(
-            self.async_request(method, url, **kwargs), self._loop
-        )
-        return future.result()
+        return self.run(self.async_request(method, url, **kwargs))
 
     def __getattr__(self, name: str) -> Any:
         """Method generation for HTTP verbs."""
@@ -226,7 +222,7 @@ class ETMSession:
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
 
         if self._session is None:
-            raise RuntimeError("Session not initialized")
+            self._session = self._new_session()
 
         async with self._session.request(method, full_url, **request_kwargs) as response:
             etm_response = ETMResponse(
@@ -287,24 +283,12 @@ class ETMSession:
         return request_kwargs
 
     def close(self) -> None:
-        """Close session and clean up resources."""
-        if self._session and self._loop:
-            future = asyncio.run_coroutine_threadsafe(self._session.close(), self._loop)
-            future.result()
+        """Close this client's connections. The shared loop keeps serving other clients."""
+        if self._session is not None:
+            self.run(self._session.close())
             self._session = None
 
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-
-        if self._loop_thread:
-            self._loop_thread.join(timeout=5)
-            self._loop_thread = None
-
-        if self._loop and not self._loop.is_closed():
-            self._loop.close()
-            self._loop = None
-
-    def __enter__(self) -> ETMSession:
+    def __enter__(self) -> ETMClient:
         """Enter the runtime context, returning this session."""
         return self
 

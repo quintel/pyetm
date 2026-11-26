@@ -8,28 +8,28 @@ Before starting, ensure you have:
 
 - **Python 3.12+** installed on your system
 - **pyetm package** installed (see [Installation](installation.md))
-- **An ETM API token** (optional - see below for what requires authentication)
+- **An ETM API token** to create scenarios (see below for what needs one)
 - A dedicated folder for your pyetm project (you'll create this in the next step)
 
 ## Getting an API Token
 
-An API token is **optional** depending on what you want to do:
+Every scenario pyetm works with is a saved scenario. Whether you need a token depends on what
+you want to do:
 
 **Without a token, you can:**
-- Create new public sessions
-- Load and modify public sessions
-- Query public scenario data
-- Export results from public sessions
+- Load public scenarios
+- Query their results
+- Export their data
 
 **With a token, you can additionally:**
-- Access your saved scenarios in MyETM
-- List all scenarios you've created
+- Create, copy and change scenarios
+- List all scenarios you can access
 - Work with private scenarios
 - Manage scenario sharing and permissions
 
 To get a token:
 
-1. Visit [the ETM API authentication docs](https://docs.energytransitionmodel.com/api/authentication)
+1. Visit [your tokens page](https://my.energytransitionmodel.com/identity/tokens)
 2. Follow the instructions to generate your personal token
 3. Keep your token secure - treat it like a password!
 
@@ -63,9 +63,9 @@ This command will:
 
 - Ask which environment to use (production, beta, or local - [learn more](https://docs.energytransitionmodel.com/api/intro#environments))
 - Create a `.env` configuration file in your project folder
-- Create an `excel/` folder with a template Excel file (`input.xlsx`)
+- Create an `excel/` folder with a workbook (`input.xlsx`) holding one example scenario to edit
 
-After initialization, you can optionally add your API token to the `.env` file if you need access to saved scenarios or private scenarios (see [Adding Your API Token](#adding-your-api-token) below).
+After initialization, add your API token to the `.env` file if you want to create or change scenarios, or read private ones (see [Adding Your API Token](#adding-your-api-token) below).
 
 **Available options:**
 
@@ -79,9 +79,9 @@ After initialization, you can optionally add your API token to the `.env` file i
 pyetm init --environment pro
 ```
 
-### Adding Your API Token (Optional)
+### Adding Your API Token
 
-After running `pyetm init`, you'll find a `.env` file in your project folder. If you need to access saved scenarios or private scenarios, open this file in any text editor and add your token:
+After running `pyetm init`, you'll find a `.env` file in your project folder. If you want to create or change scenarios, or read private ones, open this file in any text editor and add your token:
 
 1. Locate the `.env` file in your project folder (same location where you ran `pyetm init`)
 2. Open `.env` in your text editor
@@ -94,7 +94,7 @@ Your `.env` should look like this:
 
 ```env
 ETM_API_TOKEN=etm_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
-ENVIRONMENT=pro
+ETM_ENVIRONMENT=pro
 LOG_LEVEL=INFO
 ```
 
@@ -182,7 +182,7 @@ scenario = Scenario.new(
 )
 
 print(f"Created scenario {scenario.id}")
-print(f"URL: {scenario.session.url}")
+print(f"Open it on MyETM: {scenario.url}")
 ```
 
 ### Modifying Inputs
@@ -218,7 +218,7 @@ results
 Export your scenario's hourly electricity curves (a dictionary). Access the keys and grab just the `electricity_profiles.csv`:
 
 ```python
-# Export hourly curves to CSV via the session
+# Fetch hourly curves for a carrier
 curves = scenario.get_hourly_curves(['electricity'])
 curves.keys()
 electricity_profiles = curves['electricity_profiles']

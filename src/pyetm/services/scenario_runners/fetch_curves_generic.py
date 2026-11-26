@@ -2,23 +2,18 @@
 
 import io
 from typing import Any, Dict, Literal, List, Optional
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 from pyetm.config import curve_registry as registry
 
 
-def _session_id(scenario: Any) -> Any:
-    from pyetm.models.scenario import Scenario
-    return scenario.session.id if isinstance(scenario, Scenario) else scenario.id
+def _output_path(scenario: Any, name: str) -> str:
+    return scenario_path(scenario, f"curves/{registry.accept_alias(name)}.csv")
 
 
-def _output_path(session_id: Any, name: str) -> str:
-    return registry.build_path(session_id, name)
-
-
-def _custom_path(session_id: Any, name: str) -> str:
-    return f"/scenarios/{session_id}/custom_curves/{name}.csv"
+def _custom_path(scenario: Any, name: str) -> str:
+    return scenario_path(scenario, f"custom_curves/{name}.csv")
 
 
 def _request(path: str) -> Dict[str, Any]:
@@ -50,11 +45,10 @@ class GenericCurveDownloadRunner(BaseRunner[Any]):
             ServiceResult[io.StringIO]: Success case contains StringIO with CSV data;
                 failure case contains error messages.
         """
-        session_id = _session_id(scenario)
         path = (
-            _custom_path(session_id, curve_name)
+            _custom_path(scenario, curve_name)
             if curve_type == "custom"
-            else _output_path(session_id, curve_name)
+            else _output_path(scenario, curve_name)
         )
 
         try:
@@ -84,18 +78,18 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
 
     @staticmethod
     def _build_requests(
-        session_id: Any, curve_names: List[str], curve_type: Literal["custom", "output"]
+        scenario: Any, curve_names: List[str], curve_type: Literal["custom", "output"]
     ) -> List[Dict[str, Any]]:
         """Build (canonical_name, request) per curve. Results are keyed by canonical name so
         cache files and curve keys stay independent of the on-the-wire (old) name."""
         requests: List[Dict[str, Any]] = []
         for name in curve_names:
             if curve_type == "custom":
-                requests.append({"name": name, **_request(_custom_path(session_id, name))})
+                requests.append({"name": name, **_request(_custom_path(scenario, name))})
             else:
                 canonical = registry.accept_alias(name)
                 requests.append(
-                    {"name": canonical, **_request(_output_path(session_id, canonical))}
+                    {"name": canonical, **_request(_output_path(scenario, canonical))}
                 )
         return requests
 
@@ -114,8 +108,7 @@ class GenericCurveBulkRunner(BaseRunner[Dict[str, io.StringIO]]):
             else GenericCurveBulkRunner.DEFAULT_BATCH_SIZE_CUSTOM
         )
 
-        session_id = _session_id(scenario)
-        all_requests = GenericCurveBulkRunner._build_requests(session_id, curve_names, curve_type)
+        all_requests = GenericCurveBulkRunner._build_requests(scenario, curve_names, curve_type)
 
         curves_data: Dict[str, io.StringIO] = {}
         errors: List[str] = []

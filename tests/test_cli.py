@@ -37,7 +37,7 @@ class TestCliInit:
             # Check content
             env_content = Path(".env").read_text()
             assert "# ETM_API_TOKEN=" in env_content  # Should be commented out
-            assert "ENVIRONMENT=pro" in env_content
+            assert "\nETM_ENVIRONMENT=pro\n" in env_content
             assert "# PYETM_ERROR_MODE=default" in env_content
 
     def test_init_copies_template_file(self, runner, temp_dir):
@@ -72,7 +72,7 @@ class TestCliInit:
             assert result.exit_code == 0
             env_content = Path(".env").read_text()
             assert "# ETM_API_TOKEN=" in env_content  # Should be commented out
-            assert "ENVIRONMENT=beta" in env_content
+            assert "\nETM_ENVIRONMENT=beta\n" in env_content
             assert "# PYETM_ERROR_MODE=default" in env_content
 
     def test_init_prompts_overwrite(self, runner, temp_dir):

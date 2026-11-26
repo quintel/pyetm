@@ -10,7 +10,7 @@ from typing import Any
 from pyetm.config.settings import get_settings
 from pyetm.services.service_result import ServiceResult
 
-from .session import ETMSession
+from .etm_client import ETMClient
 
 MAX_CONCURRENT = 2
 
@@ -32,12 +32,8 @@ class BaseClient:
                 base URL from application settings.
         """
         settings = get_settings()
-        # Convert HttpUrl to string if needed
-        base_url_str = base_url or (
-            str(settings.base_url) if settings.base_url else None
-        )
-        self.session = ETMSession(
-            base_url=base_url_str,
+        self.session = ETMClient(
+            base_url=base_url or settings.base_url,
             token=token or settings.etm_api_token,
             ssl_verify=settings.ssl_verify,
             trust_env=settings.trust_env,
@@ -99,7 +95,7 @@ class AsyncBatchRunner:
     # Can't we yield what is done somehow?
     @staticmethod
     async def batch_requests(
-        session: ETMSession, requests: list[dict[str, Any]], max_concurrent: int = 10
+        session: ETMClient, requests: list[dict[str, Any]], max_concurrent: int = 10
     ) -> list[ServiceResult[Any]]:
         """Execute multiple requests concurrently using asyncio.
 
@@ -128,30 +124,14 @@ class AsyncBatchRunner:
                     response = await session.async_request(
                         req["method"], req["url"], **req.get("kwargs", {})
                     )
-
-                    # Success - wrap response data in ServiceResult
-                    if response.ok:
-                        data: Any
-                        try:
-                            data = response.json()
-                        except Exception:
-                            # For non-JSON responses (like CSV), return the response object
-                            data = response
-
-                        return ServiceResult.ok(data=data)
-                    else:
-                        return ServiceResult.fail(
-                            errors=[f"HTTP {response.status_code}: {response.text}"]
-                        )
-
-                except PermissionError as e:
-                    return ServiceResult.fail(errors=[f"Authentication error: {e!s}"])
-                except ValueError as e:
-                    return ServiceResult.fail(errors=[f"Client error: {e!s}"])
-                except ConnectionError as e:
-                    return ServiceResult.fail(errors=[f"Server error: {e!s}"])
                 except Exception as e:
-                    return ServiceResult.fail(errors=[f"Unexpected error: {e!s}"])
+                    return ServiceResult.fail(errors=[str(e)])
+
+                # A non-JSON body, such as a CSV curve, comes back as the response itself
+                try:
+                    return ServiceResult.ok(data=response.json())
+                except ValueError:
+                    return ServiceResult.ok(data=response)
 
         # Execute all requests concurrently
         # TODO: yes, but they are still in a list, which is a predetermined structure
@@ -161,16 +141,15 @@ class AsyncBatchRunner:
 
     @staticmethod
     def batch_requests_sync(
-        session: ETMSession, requests: list[dict[str, Any]], max_concurrent: int = 10
+        session: ETMClient, requests: list[dict[str, Any]], max_concurrent: int = 10
     ) -> list[ServiceResult[dict[str, Any] | None]]:
         """Synchronous wrapper for batch_requests method.
 
         This method provides a synchronous interface to the async batch_requests
-        functionality by running it in the session's event loop using
-        asyncio.run_coroutine_threadsafe.
+        functionality by running it on the shared event loop.
 
         Args:
-            session (ETMSession): Active ETM session instance for making requests.
+            session (ETMClient): Active ETM session instance for making requests.
             requests (List[dict]): List of request specifications with the same
                 format as batch_requests method.
 
@@ -182,23 +161,4 @@ class AsyncBatchRunner:
             This method blocks until all requests are completed and should only
             be used when async/await syntax is not available in the calling context.
         """
-        coro = AsyncBatchRunner.batch_requests(session, requests, max_concurrent)
-        if session._loop is None:
-            raise RuntimeError("Event loop not initialized in session")
-        future = asyncio.run_coroutine_threadsafe(coro, session._loop)
-        return future.result()
-
-
-# TODO: why is he just here?
-# Helper function for runners that need batch operations
-def make_batch_requests(
-    client: BaseClient, requests: list[dict[str, Any]]
-) -> list[ServiceResult[dict[str, Any] | None]]:
-    """Convenience function for making batch requests using a BaseClient instance.
-
-    This helper function extracts the session from a BaseClient and delegates
-    to AsyncBatchRunner.batch_requests_sync for execution.
-    """
-    return AsyncBatchRunner.batch_requests_sync(
-        client.session, requests, MAX_CONCURRENT
-    )
+        return session.run(AsyncBatchRunner.batch_requests(session, requests, max_concurrent))

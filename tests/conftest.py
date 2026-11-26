@@ -3,7 +3,6 @@ Runs during test collection. You can also supply fixtures here that should be lo
 before each test
 """
 
-from pydantic import HttpUrl
 import os, sys, pytest
 from pathlib import Path
 
@@ -13,35 +12,8 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-os.environ["BASE_URL"] = "https://example.com/api"
+os.environ["ETM_ENVIRONMENT"] = "pro"
 os.environ["ETM_API_TOKEN"] = "etm_real.looking.token"
-
-
-# Fixture to give back that same base URL for building expected mock URLs
-@pytest.fixture
-def api_url():
-    return HttpUrl(os.getenv("BASE_URL"))
-
-
-# Mount the requests-mock adapter onto BaseClient.session so that
-# requests_mock.get(...) actually intercepts client.session.get(...)
-@pytest.fixture(autouse=True)
-def _mount_requests_mock(request, requests_mock):
-    """
-    requests_mock._adapter is the HTTPAdapter instance used
-    by the pytest-requests-mock plugin.
-
-    Only mounts if the test uses the 'client' fixture to avoid
-    unnecessary BaseClient creation and threading overhead.
-    """
-    if "client" not in request.fixturenames:
-        return
-
-    client = request.getfixturevalue("client")
-    adapter = getattr(requests_mock, "_adapter", None)
-    if adapter and hasattr(client, "session") and hasattr(client.session, "session"):
-        client.session.session.mount("http://", adapter)
-        client.session.session.mount("https://", adapter)
 
 
 # Clear LRU caches after each test to prevent test pollution
@@ -70,12 +42,11 @@ def client():
     client.close()
 
 
-# Lazy‐import Scenario
 @pytest.fixture
 def scenario():
-    from pyetm.models import Session
+    from pyetm.models import Scenario
 
-    return Session(id=999)
+    return Scenario(id=999)
 
 
 # --- Config Fixtures for Testing Optional Token and Custom Environments --- #
@@ -89,17 +60,17 @@ def clean_settings_env(monkeypatch, tmp_path):
     # Clear caches to ensure each test gets a fresh config
     reload_configuration()
 
-    # Clear all PYETM environment variables (with PYETM_ prefix)
     etm_vars = [
-        "PYETM_ETM_API_TOKEN",
-        "PYETM_BASE_URL",
-        "PYETM_LOG_LEVEL",
-        "PYETM_ENVIRONMENT",
-        "PYETM_CSV_SEPARATOR",
-        "PYETM_DECIMAL_SEPARATOR",
-        "PYETM_SSL_VERIFY",
-        "PYETM_TRUST_ENV",
-        "PYETM_SSL_CERT_PATH",
+        "ETM_API_TOKEN",
+        "BASE_URL",
+        "LOG_LEVEL",
+        "ETM_ENVIRONMENT",
+        "ENVIRONMENT",
+        "CSV_SEPARATOR",
+        "DECIMAL_SEPARATOR",
+        "SSL_VERIFY",
+        "TRUST_ENV",
+        "SSL_CERT_PATH",
         "PYETM_ERROR_MODE",
     ]
     for var in etm_vars:
@@ -123,24 +94,10 @@ def unauthenticated_config(monkeypatch):
     get_settings.cache_clear()
 
     monkeypatch.delenv("ETM_API_TOKEN", raising=False)
-    monkeypatch.setenv("ENVIRONMENT", "pro")
+    monkeypatch.setenv("ETM_ENVIRONMENT", "pro")
 
     # Explicitly set etm_api_token to None to override .env file
     return AppConfig(etm_api_token=None)
-
-
-@pytest.fixture
-def custom_env_config(monkeypatch):
-    """Fixture for testing custom environment configuration (e.g., tyndp2024)"""
-    from pyetm.config.settings import AppConfig, get_settings
-
-    # Clear cache to ensure fresh config with test settings
-    get_settings.cache_clear()
-
-    monkeypatch.setenv("ETM_API_TOKEN", "etm_custom_token_for_tyndp")
-    monkeypatch.setenv("ENVIRONMENT", "tyndp2024")
-
-    return AppConfig()
 
 
 # --- Service Result Fixtures --- #

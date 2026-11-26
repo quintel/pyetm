@@ -1,73 +1,37 @@
-"""Service for creating saved scenarios."""
+"""Runner for creating a saved scenario in MyETM."""
 
 from typing import Any
 
 from pyetm.clients.base_client import BaseClient
-from pyetm.config.api_compat import saved_scenario_payload
 from pyetm.services.scenario_runners.base_runner import BaseRunner
-
 from ..service_result import ServiceResult
 
 
 class CreateSavedScenarioRunner(BaseRunner[dict[str, Any]]):
-    """Runner for creating a SavedScenario in MyETM from a SessionID scenario.
+    """
+    Creates a saved scenario, whose Session MyETM creates: fresh from an area_code and end_year,
+    or from a source saved scenario, interpolated when the end_year differs from the source's.
 
-    POST /api/v3/saved_scenarios
+    POST /api/v4/saved_scenarios
     """
 
-    REQUIRED_KEYS = ["scenario_id", "title"]
-    OPTIONAL_KEYS = ["private"]
+    REQUIRED_KEYS = ["title", "version"]
+    OPTIONAL_KEYS = ["area_code", "end_year", "source", "private", "description"]
 
     @staticmethod
-    def run(
-        client: BaseClient, saved_scenario_data: dict[str, Any], **kwargs: Any
-    ) -> ServiceResult[dict[str, Any]]:
-        """Create a new SavedScenario in MyETM.
-
-        Args:
-            client: The HTTP client to use
-            saved_scenario_data: Dictionary with scenario_id, title, private
-            **kwargs: Additional arguments passed to the request
-
-        Example usage:
-            result = CreateSavedScenarioRunner.run(
-                client=client,
-                saved_scenario_data={
-                    "scenario_id": 123,
-                    "title": "My Saved Scenario",
-                    "private": False
-                }
-            )
-        """
+    def run(client: BaseClient, saved_scenario_data: dict[str, Any], **kwargs: Any) -> ServiceResult[dict[str, Any]]:
         errors = CreateSavedScenarioRunner._validate_required_fields(
             saved_scenario_data, CreateSavedScenarioRunner.REQUIRED_KEYS
         )
-
         if errors:
             return ServiceResult.fail(errors)
 
-        all_allowed = (
-            CreateSavedScenarioRunner.REQUIRED_KEYS + CreateSavedScenarioRunner.OPTIONAL_KEYS
-        )
         filtered_data, warnings = CreateSavedScenarioRunner._filter_allowed_fields(
             saved_scenario_data,
-            all_allowed,
+            CreateSavedScenarioRunner.REQUIRED_KEYS + CreateSavedScenarioRunner.OPTIONAL_KEYS,
             "create saved scenario",
         )
-
-        payload = saved_scenario_payload(filtered_data, client.session.base_url)
-
-        result = CreateSavedScenarioRunner._make_request(
-            client=client,
-            method="post",
-            path="/saved_scenarios",
-            payload=payload,
-            **kwargs,
+        result = CreateSavedScenarioRunner._make_myetm_request(
+            client, "post", "/saved_scenarios", payload={"saved_scenario": filtered_data}, **kwargs
         )
-
-        if result.success and warnings:
-            combined_errors = list(result.errors) + warnings
-            assert result.data is not None, "Success result must have data"
-            return ServiceResult.ok(data=result.data, errors=combined_errors)
-
-        return result
+        return result.with_warnings(warnings)

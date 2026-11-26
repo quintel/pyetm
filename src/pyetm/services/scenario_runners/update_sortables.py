@@ -1,7 +1,7 @@
 """Service for updating a 'sortable'"""
 
 from typing import Optional, Any, Dict, List
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -10,8 +10,8 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for updating a single user sortable on a scenario.
 
-    PUT /api/v3/scenarios/{scenario_id}/user_sortables/{sortable_type}
-    PUT /api/v3/scenarios/{scenario_id}/user_sortables/{sortable_type}?subtype={subtype}
+    PUT /api/v4/saved_scenarios/{id}/user_sortables/{sortable_type}
+    PUT /api/v4/saved_scenarios/{id}/user_sortables/{sortable_type}?subtype={subtype}
     """
 
     @staticmethod
@@ -30,7 +30,7 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
         Returns:
             Request dict ready for AsyncBatchRunner
         """
-        path = f"/scenarios/{scenario.id}/user_sortables/{sortable_type}"
+        path = scenario_path(scenario, f"user_sortables/{sortable_type}")
         if subtype:
             path += f"?subtype={subtype}"
 
@@ -61,7 +61,7 @@ class UpdateSortablesRunner(BaseRunner[Dict[str, Any]]):
             subtype: Optional subtype for heat_network (e.g., "lt", "mt", "ht")
             **kwargs: Additional arguments passed to the request
         """
-        path = f"/scenarios/{scenario.id}/user_sortables/{sortable_type}"
+        path = scenario_path(scenario, f"user_sortables/{sortable_type}")
         if subtype:
             path += f"?subtype={subtype}"
 

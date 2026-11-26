@@ -14,7 +14,7 @@ def test_update_sortables_success(dummy_client, fake_response, dummy_scenario):
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/1/user_sortables/demand", {"json": {"order": order}})]
+    assert client.calls == [("/saved_scenarios/1/user_sortables/demand", {"json": {"order": order}})]
 
 
 def test_update_sortables_with_subtype(dummy_client, fake_response, dummy_scenario):
@@ -32,7 +32,7 @@ def test_update_sortables_with_subtype(dummy_client, fake_response, dummy_scenar
     assert result.errors == []
     assert client.calls == [
         (
-            "/scenarios/2/user_sortables/heat_network?subtype=lt",
+            "/saved_scenarios/2/user_sortables/heat_network?subtype=lt",
             {"json": {"order": order}},
         )
     ]
@@ -53,7 +53,7 @@ def test_update_sortables_heat_network_mt_subtype(dummy_client, fake_response, d
     assert result.errors == []
     assert client.calls == [
         (
-            "/scenarios/3/user_sortables/heat_network?subtype=mt",
+            "/saved_scenarios/3/user_sortables/heat_network?subtype=mt",
             {"json": {"order": order}},
         )
     ]
@@ -74,7 +74,7 @@ def test_update_sortables_heat_network_ht_subtype(dummy_client, fake_response, d
     assert result.errors == []
     assert client.calls == [
         (
-            "/scenarios/4/user_sortables/heat_network?subtype=ht",
+            "/saved_scenarios/4/user_sortables/heat_network?subtype=ht",
             {"json": {"order": order}},
         )
     ]
@@ -93,7 +93,7 @@ def test_update_sortables_empty_order(dummy_client, fake_response, dummy_scenari
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/5/user_sortables/demand", {"json": {"order": []}})]
+    assert client.calls == [("/saved_scenarios/5/user_sortables/demand", {"json": {"order": []}})]
 
 
 def test_update_sortables_single_item(dummy_client, fake_response, dummy_scenario):
@@ -109,7 +109,7 @@ def test_update_sortables_single_item(dummy_client, fake_response, dummy_scenari
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/6/user_sortables/supply", {"json": {"order": order}})]
+    assert client.calls == [("/saved_scenarios/6/user_sortables/supply", {"json": {"order": order}})]
 
 
 def test_update_sortables_numeric_order_items(dummy_client, fake_response, dummy_scenario):
@@ -125,7 +125,7 @@ def test_update_sortables_numeric_order_items(dummy_client, fake_response, dummy
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/7/user_sortables/demand", {"json": {"order": order}})]
+    assert client.calls == [("/saved_scenarios/7/user_sortables/demand", {"json": {"order": order}})]
 
 
 def test_update_sortables_mixed_type_order_items(dummy_client, fake_response, dummy_scenario):
@@ -141,7 +141,7 @@ def test_update_sortables_mixed_type_order_items(dummy_client, fake_response, du
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/8/user_sortables/demand", {"json": {"order": order}})]
+    assert client.calls == [("/saved_scenarios/8/user_sortables/demand", {"json": {"order": order}})]
 
 
 def test_update_sortables_with_kwargs(dummy_client, fake_response, dummy_scenario):
@@ -159,7 +159,7 @@ def test_update_sortables_with_kwargs(dummy_client, fake_response, dummy_scenari
     assert result.errors == []
     # Verify the basic structure - kwargs handling might vary
     assert len(client.calls) == 1
-    assert client.calls[0][0] == "/scenarios/9/user_sortables/demand"
+    assert client.calls[0][0] == "/saved_scenarios/9/user_sortables/demand"
     assert client.calls[0][1]["json"] == {"order": order}
 
 
@@ -174,7 +174,7 @@ def test_update_sortables_large_scenario_id(dummy_client, fake_response, dummy_s
     result = UpdateSortablesRunner.run(client, scenario, "demand", order)
 
     assert result.success is True
-    assert client.calls[0][0] == "/scenarios/999999/user_sortables/demand"
+    assert client.calls[0][0] == "/saved_scenarios/999999/user_sortables/demand"
 
 
 def test_update_sortables_http_failure_422(dummy_client, fake_response, dummy_scenario):
@@ -311,7 +311,7 @@ def test_update_sortables_payload_structure(dummy_client, fake_response, dummy_s
 
     # Verify the exact payload structure
     expected_call = (
-        "/scenarios/18/user_sortables/demand",
+        "/saved_scenarios/18/user_sortables/demand",
         {"json": {"order": ["a", "b", "c", "d"]}},
     )
     assert client.calls == [expected_call]
@@ -327,7 +327,7 @@ def test_update_sortables_url_construction_no_subtype(dummy_client, fake_respons
 
     UpdateSortablesRunner.run(client, scenario, "supply", order)
 
-    assert client.calls[0][0] == "/scenarios/19/user_sortables/supply"
+    assert client.calls[0][0] == "/saved_scenarios/19/user_sortables/supply"
 
 
 def test_update_sortables_url_construction_with_subtype(
@@ -342,7 +342,7 @@ def test_update_sortables_url_construction_with_subtype(
 
     UpdateSortablesRunner.run(client, scenario, "heat_network", order, subtype="mt")
 
-    assert client.calls[0][0] == "/scenarios/20/user_sortables/heat_network?subtype=mt"
+    assert client.calls[0][0] == "/saved_scenarios/20/user_sortables/heat_network?subtype=mt"
 
 
 def test_update_sortables_different_sortable_types(dummy_client, fake_response, dummy_scenario):
@@ -361,7 +361,7 @@ def test_update_sortables_different_sortable_types(dummy_client, fake_response, 
         result = UpdateSortablesRunner.run(client, scenario_obj, sortable_type, order)
 
         assert result.success is True
-        expected_url = f"/scenarios/{21 + i}/user_sortables/{sortable_type}"
+        expected_url = f"/saved_scenarios/{21 + i}/user_sortables/{sortable_type}"
         assert client.calls[i][0] == expected_url
 
 
@@ -378,7 +378,7 @@ def test_update_sortables_subtype_none_explicitly(dummy_client, fake_response, d
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/22/user_sortables/demand", {"json": {"order": order}})]
+    assert client.calls == [("/saved_scenarios/22/user_sortables/demand", {"json": {"order": order}})]
 
 
 def test_update_sortables_complex_order_data(dummy_client, fake_response, dummy_scenario):
@@ -398,7 +398,7 @@ def test_update_sortables_complex_order_data(dummy_client, fake_response, dummy_
     assert result.success is True
     assert result.data == body
     assert result.errors == []
-    assert client.calls == [("/scenarios/23/user_sortables/demand", {"json": {"order": order}})]
+    assert client.calls == [("/saved_scenarios/23/user_sortables/demand", {"json": {"order": order}})]
 
 
 def test_build_request(dummy_scenario):
@@ -409,7 +409,7 @@ def test_build_request(dummy_scenario):
     request = UpdateSortablesRunner.build_request(scenario, "demand", order)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/100/user_sortables/demand"
+    assert request["path"] == "/saved_scenarios/100/user_sortables/demand"
     assert request["payload"] == {"order": order}
     assert request["kwargs"] == {}
 
@@ -422,7 +422,7 @@ def test_build_request_with_subtype(dummy_scenario):
     request = UpdateSortablesRunner.build_request(scenario, "heat_network", order, subtype="lt")
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/200/user_sortables/heat_network?subtype=lt"
+    assert request["path"] == "/saved_scenarios/200/user_sortables/heat_network?subtype=lt"
     assert request["payload"] == {"order": order}
     assert request["kwargs"] == {}
 
@@ -435,7 +435,7 @@ def test_build_request_with_subtype_none(dummy_scenario):
     request = UpdateSortablesRunner.build_request(scenario, "demand", order, subtype=None)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/300/user_sortables/demand"
+    assert request["path"] == "/saved_scenarios/300/user_sortables/demand"
     assert request["payload"] == {"order": order}
 
 
@@ -447,7 +447,7 @@ def test_build_request_empty_order(dummy_scenario):
     request = UpdateSortablesRunner.build_request(scenario, "supply", order)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/400/user_sortables/supply"
+    assert request["path"] == "/saved_scenarios/400/user_sortables/supply"
     assert request["payload"] == {"order": []}
 
 
@@ -459,7 +459,7 @@ def test_build_request_numeric_order(dummy_scenario):
     request = UpdateSortablesRunner.build_request(scenario, "demand", order)
 
     assert request["method"] == "put"
-    assert request["path"] == "/scenarios/500/user_sortables/demand"
+    assert request["path"] == "/saved_scenarios/500/user_sortables/demand"
     assert request["payload"] == {"order": [1, 2, 3, 4]}
 
 
@@ -472,7 +472,7 @@ def test_build_request_different_sortable_types(dummy_scenario):
 
     for sortable_type in sortable_types:
         request = UpdateSortablesRunner.build_request(scenario, sortable_type, order)
-        assert request["path"] == f"/scenarios/600/user_sortables/{sortable_type}"
+        assert request["path"] == f"/saved_scenarios/600/user_sortables/{sortable_type}"
         assert request["payload"] == {"order": order}
 
 
@@ -487,5 +487,5 @@ def test_build_request_heat_network_subtypes(dummy_scenario):
         request = UpdateSortablesRunner.build_request(
             scenario, "heat_network", order, subtype=subtype
         )
-        assert request["path"] == f"/scenarios/700/user_sortables/heat_network?subtype={subtype}"
+        assert request["path"] == f"/saved_scenarios/700/user_sortables/heat_network?subtype={subtype}"
         assert request["payload"] == {"order": order}

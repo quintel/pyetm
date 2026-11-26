@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.base_runner import BaseRunner, scenario_path
 from ..service_result import ServiceResult
 from pyetm.clients.base_client import BaseClient
 
@@ -11,7 +11,7 @@ class FetchCouplingsRunner(BaseRunner[Dict[str, Any]]):
     """
     Runner for reading the coupling information of a scenario.
 
-    GET /api/v3/scenarios/{scenario_id}
+    GET /api/v4/saved_scenarios/{id}/
     """
 
     COUPLING_KEYS = [
@@ -22,7 +22,7 @@ class FetchCouplingsRunner(BaseRunner[Dict[str, Any]]):
     @staticmethod
     def run(client: BaseClient, scenario: Any, **kwargs: Any) -> ServiceResult[Dict[str, Any]]:
         result = FetchCouplingsRunner._make_request(
-            client=client, method="get", path=f"/scenarios/{scenario.id}"
+            client=client, method="get", path=scenario_path(scenario)
         )
 
         if not result.success:

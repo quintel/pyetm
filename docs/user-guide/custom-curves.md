@@ -92,7 +92,7 @@ df = pd.DataFrame({
     "weather/wind_offshore_baseline": np.random.random(8760)
 })
 
-new_curves = CustomCurves._from_dataframe(df, scenario_id=scenario.session.id)
+new_curves = CustomCurves._from_dataframe(df, scenario_id=scenario.id)
 
 # scenario.update_custom_curves() validates internally: invalid curves are
 # excluded from the upload and a warning is shown for each, while valid
@@ -159,7 +159,7 @@ scenario.remove_custom_curves({"weather/solar_pv_on_roof_households"})
 
   - Uploading curves via `update_custom_curves()`
   - Reloading scenarios with `Scenario.load()`
-  - Session updates or API changes
+  - Saving a Snapshot, or API changes
 - Cache persists indefinitely until:
 
   - Manual deletion via `curve.remove()`
@@ -171,10 +171,6 @@ scenario.remove_custom_curves({"weather/solar_pv_on_roof_households"})
 - File exists and is readable
 - Contains exactly 8760 numeric values
 - Returns `WarningCollector` dict mapping curve keys to errors
-
-**Session vs Scenario:**
-- Can work with either `Session` or `SavedScenario` objects
-- Internally normalizes to `Session` to get ETEngine session ID
 
 **Warning behavior:**
 - Warnings auto-clear on each `update()` call to show only current issues

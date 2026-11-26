@@ -1,7 +1,8 @@
 import pytest
 from pathlib import Path
 import pyetm.config.settings as settings_module
-from pydantic import HttpUrl, ValidationError
+from pydantic import ValidationError
+from pyetm.clients import BaseClient
 
 AppConfig = settings_module.AppConfig
 get_settings = settings_module.get_settings
@@ -19,6 +20,7 @@ def clean_settings_env(monkeypatch, tmp_path):
         "ETM_API_TOKEN",
         "BASE_URL",
         "LOG_LEVEL",
+        "ETM_ENVIRONMENT",
         "ENVIRONMENT",
         "CSV_SEPARATOR",
         "DECIMAL_SEPARATOR",
@@ -55,9 +57,7 @@ def test_config_loads_env_file_values(clean_settings_env):
     env_file = clean_settings_env
     env_data = {
         "ETM_API_TOKEN": "etm_valid.looking.token",
-        "BASE_URL": "https://custom.local/api",
         "LOG_LEVEL": "DEBUG",
-        "ENVIRONMENT": "beta",
         "CSV_SEPARATOR": ";",
         "DECIMAL_SEPARATOR": ",",
     }
@@ -66,9 +66,7 @@ def test_config_loads_env_file_values(clean_settings_env):
     config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.base_url == HttpUrl("https://custom.local/api")
     assert config.log_level == "DEBUG"
-    assert config.environment == "beta"
     assert config.csv_separator == ";"
     assert config.decimal_separator == ","
 
@@ -90,12 +88,12 @@ def test_env_vars_override_env_file(clean_settings_env, monkeypatch):
 # Test base_url inference from environment
 def test_base_url_inference_from_environment(clean_settings_env):
     env_file = clean_settings_env
-    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ENVIRONMENT": "beta"})
+    write_env_file(env_file, {"ETM_API_TOKEN": "etm_valid.looking.token", "ETM_ENVIRONMENT": "beta"})
 
     config = AppConfig()
 
     assert config.environment == "beta"
-    assert config.base_url == HttpUrl("https://beta.engine.energytransitionmodel.com/api/v3")
+    assert config.base_url == "https://beta.my.energytransitionmodel.com/api/v4"
 
 
 # Test no .env file, only environment variables
@@ -106,7 +104,7 @@ def test_no_env_file_uses_env_vars_and_defaults(clean_settings_env, monkeypatch)
     config = AppConfig()
 
     assert config.etm_api_token == "etm_valid.looking.token"
-    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
+    assert config.base_url == "https://my.energytransitionmodel.com/api/v4"
     assert config.log_level == "INFO"
     assert config.environment == "pro"
 
@@ -155,55 +153,118 @@ def test_default_values(clean_settings_env):
     assert config.log_level == "INFO"
     assert config.csv_separator == ","
     assert config.decimal_separator == "."
-    assert config.base_url == HttpUrl("https://engine.energytransitionmodel.com/api/v3")
+    assert config.base_url == "https://my.energytransitionmodel.com/api/v4"
+    assert config.etm_version == "latest"
 
 
 # Test environment inference for different values
 @pytest.mark.parametrize(
     "env,expected_url",
     [
-        ("pro", "https://engine.energytransitionmodel.com/api/v3"),
-        ("beta", "https://beta.engine.energytransitionmodel.com/api/v3"),
-        ("local", "http://localhost:3000/api/v3"),
-        ("2025-01", "https://2025-01.engine.energytransitionmodel.com/api/v3"),
-        ("", "https://engine.energytransitionmodel.com/api/v3"),  # default
-        # Custom environments now resolve to subdomain
-        ("tyndp2024", "https://tyndp2024.engine.energytransitionmodel.com/api/v3"),
-        ("tyndp2026", "https://tyndp2026.engine.energytransitionmodel.com/api/v3"),
-        (
-            "custom-env",
-            "https://custom-env.engine.energytransitionmodel.com/api/v3",
-        ),
+        ("pro", "https://my.energytransitionmodel.com/api/v4"),
+        ("beta", "https://beta.my.energytransitionmodel.com/api/v4"),
+        ("local", "https://myetm.local.energytransitionmodel.com/api/v4"),
+        ("", "https://my.energytransitionmodel.com/api/v4"),  # default
+        ("prod", "https://my.energytransitionmodel.com/api/v4"),
+        ("production", "https://my.energytransitionmodel.com/api/v4"),
+        ("staging", "https://beta.my.energytransitionmodel.com/api/v4"),
+        ("dev", "https://myetm.local.energytransitionmodel.com/api/v4"),
     ],
 )
 def test_environment_inference(clean_settings_env, env, expected_url):
     env_file = clean_settings_env
     env_data = {}
     if env:  # Don't add environment key if it's empty string
-        env_data["ENVIRONMENT"] = env
+        env_data["ETM_ENVIRONMENT"] = env
 
     write_env_file(env_file, env_data)
 
     config = AppConfig()
-    assert config.base_url == HttpUrl(expected_url)
+    assert config.base_url == expected_url
 
 
-# Test explicit base_url overrides environment inference
-def test_explicit_base_url_overrides_environment(clean_settings_env):
-    env_file = clean_settings_env
-    write_env_file(
-        env_file,
-        {
-            "ETM_API_TOKEN": "etm_valid.looking.token",
-            "ENVIRONMENT": "beta",
-            "BASE_URL": "https://custom.override.com/api/v3",
-        },
-    )
+@pytest.mark.parametrize("env", ["2025-01", "2027"])
+def test_a_version_environment_raises_naming_etm_version(clean_settings_env, env):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": env})
 
+    with pytest.raises(ValueError, match=f"names a Version.*ETM_ENVIRONMENT=pro.*ETM_VERSION={env}"):
+        get_settings().base_url
+
+
+def test_an_explicit_base_url_skips_a_version_environment(clean_settings_env):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "2025-01"})
+
+    client = BaseClient(base_url="https://etm.example.com/api/v4")
+
+    assert client.session.base_url == "https://etm.example.com/api/v4"
+
+
+def test_an_unknown_environment_warns_and_falls_back_to_pro(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        url = get_settings().base_url
+
+    assert url == "https://my.energytransitionmodel.com/api/v4"
+    assert "Unknown ETM_ENVIRONMENT=tyndp2024, so pyetm talks to https://my.energytransitionmodel.com" in caplog.text
+
+
+def test_an_unusable_environment_warns_once(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
     config = AppConfig()
 
-    assert config.environment == "beta"
-    assert config.base_url == HttpUrl("https://custom.override.com/api/v3")
+    with caplog.at_level("WARNING", logger="pyetm"):
+        config.base_url
+        config.base_url
+
+    assert caplog.text.count("Unknown ETM_ENVIRONMENT") == 1
+
+
+def test_an_explicit_base_url_skips_the_environment(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "tyndp2024"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        client = BaseClient(base_url="https://etm.example.com/api/v4")
+
+    assert client.session.base_url == "https://etm.example.com/api/v4"
+    assert "ETM_ENVIRONMENT" not in caplog.text
+
+
+def test_etm_version_can_be_set(clean_settings_env):
+    write_env_file(clean_settings_env, {"ETM_VERSION": "2025-01"})
+
+    assert AppConfig().etm_version == "2025-01"
+
+
+def test_bare_environment_is_still_read(clean_settings_env):
+    write_env_file(clean_settings_env, {"ENVIRONMENT": "beta"})
+
+    assert AppConfig().base_url == "https://beta.my.energytransitionmodel.com/api/v4"
+
+
+def test_etm_environment_wins_over_bare_environment(clean_settings_env):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "beta", "ENVIRONMENT": "production-cluster"})
+
+    assert AppConfig().base_url == "https://beta.my.energytransitionmodel.com/api/v4"
+
+
+def test_a_leftover_base_url_is_ignored_with_a_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"BASE_URL": "https://beta.engine.energytransitionmodel.com/api/v3"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        url = AppConfig().base_url
+
+    assert url == "https://my.energytransitionmodel.com/api/v4"
+    assert "BASE_URL is ignored since pyetm 2.1, so pyetm talks to https://my.energytransitionmodel.com/api/v4" in caplog.text
+
+
+def test_no_base_url_gives_no_warning(clean_settings_env, caplog):
+    write_env_file(clean_settings_env, {"ETM_ENVIRONMENT": "beta"})
+
+    with caplog.at_level("WARNING", logger="pyetm"):
+        AppConfig().base_url
+
+    assert "BASE_URL" not in caplog.text
 
 
 # VALID TOKENS

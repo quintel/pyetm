@@ -8,12 +8,12 @@ This reference documents all public classes, methods, and functions in the pyetm
 
 ## Core Modules
 - **[BaseClient](clients/base_client.md)** - Base HTTP client with request/response handling
-- **[Session](clients/session.md)** - Session management for authenticated requests
+- **[ETMClient](clients/etm_client.md)** - The HTTP transport, with the User-Agent and error messages
 
 ### [Models](models/scenario.md)
 Domain models representing ETM entities.
 
-- **[Scenario](models/scenario.md)** - Main scenario model
+- **[Scenario](models/scenario.md)** - A saved scenario, and everything you can do with it
 - **[Inputs](models/inputs.md)** - Input management
 - **[Custom Curves](models/custom_curves.md)** - Custom curve uploads
 - **[GQueries](models/gqueries.md)** - Query results

@@ -30,7 +30,7 @@ def test_update_metadata_runner_direct_fields_only(dummy_client, fake_response, 
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
         assert result == mock_result
 
@@ -61,7 +61,7 @@ def test_update_metadata_runner_nested_metadata_only(dummy_client, fake_response
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -89,7 +89,7 @@ def test_update_metadata_runner_mixed_fields(dummy_client, fake_response, dummy_
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -120,7 +120,7 @@ def test_update_metadata_runner_unsettable_keys_generate_warnings():
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -152,7 +152,7 @@ def test_update_metadata_runner_direct_metadata_field_priority():
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -173,7 +173,7 @@ def test_update_metadata_runner_scenario_without_existing_metadata():
 
         expected_payload = {"scenario": {"end_year": 2050, "metadata": {"custom_field": "value"}}}
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -194,7 +194,7 @@ def test_update_metadata_runner_scenario_with_non_dict_metadata():
 
         expected_payload = {"scenario": {"metadata": {"custom_field": "value"}}}
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -217,7 +217,7 @@ def test_update_metadata_runner_scenario_without_metadata_attribute():
 
         expected_payload = {"scenario": {"metadata": {"custom_field": "value"}}}
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -239,7 +239,7 @@ def test_update_metadata_runner_empty_metadata():
         # Should still send existing metadata
         expected_payload = {"scenario": {"metadata": {"existing": "value"}}}
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -274,7 +274,7 @@ def test_update_metadata_runner_all_meta_keys():
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -327,7 +327,7 @@ def test_update_metadata_runner_non_dict_direct_metadata_field():
             "scenario": {"metadata": {"existing": "value", "custom_field": "value"}}
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )
 
 
@@ -363,5 +363,5 @@ def test_update_metadata_runner_preserves_existing_metadata_when_merging():
             }
         }
         mock_request.assert_called_once_with(
-            client=client, method="put", path="/scenarios/123", payload=expected_payload
+            client=client, method="put", path="/saved_scenarios/123/", payload=expected_payload
         )

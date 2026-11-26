@@ -23,8 +23,7 @@ The `MAIN` sheet contains scenario metadata with the following fields:
 |-------|------|-------------|---------|
 | `short_name` | String | Short identifier for the scenario | `BASE` |
 | `scenario_id` | Integer | Saved scenario ID (if loading existing) | `123456` |
-| `session` | Boolean | If true, indicates you are working with sessions, for example scenario_id now refers to a session_id (defaults to false) | `TRUE` |
-| `copy_from` | Integer | ID of scenario to copy from | `111111` |
+| `copy_from` | Integer | Saved scenario ID to copy into a new, independent scenario | `111111` |
 | `title` | String | Scenario name | `My Scenario` |
 | `area_code` | String | Dataset area code (also indicates start year) | `nl2023` |
 | `end_year` | Integer | Future year for the scenario | `2050` |
@@ -32,6 +31,18 @@ The `MAIN` sheet contains scenario metadata with the following fields:
 | `private` | Boolean | Whether scenario is private | `true`, `false` |
 | `custom_curves` | String | Name of custom curves sheet | `CUSTOM_CURVES` |
 | `sortables` | String | Name of sortables sheet | `SORTABLES` |
+
+Each row becomes one saved scenario, in this order of preference:
+
+1. With a `scenario_id`, the saved scenario is loaded. A row whose scenario cannot be loaded is
+   skipped with an error, rather than replaced by a new scenario.
+2. With a `copy_from`, that saved scenario is copied into a new one with no preset link back to
+   it. The row's `title` and `private` apply to the copy.
+3. Otherwise a new scenario is created from `area_code` and `end_year`. Its title defaults to
+   "Scenario <area_code> <end_year>".
+
+`keep_compatible` and `source` are set on copied and created scenarios. Creating or copying
+needs an `ETM_API_TOKEN`.
 
 ### EXPORT_CONFIG Sheet Structure
 
@@ -41,6 +52,7 @@ The `MAIN` sheet contains scenario metadata with the following fields:
 | `include_sortables` (or `sortables`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export technology ordering | `true` |
 | `include_custom_curves` (or `custom_curves`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export custom price/demand curves | `true` |
 | `include_gqueries` (or `gquery_results`, `gqueries`) | `true`, `false`, `yes`, `no`, `1`, `0` | Export query results | `true` |
+| `include_gquery_present` (or `gqueries_present`) | `true`, `false`, `yes`, `no`, `1`, `0` | Add each query's start year value beside its future value | `true` |
 | `hourly_curves` | `true`, `false`, OR comma-separated carriers | Controls hourly curve exports (see below) | `electricity, heat` |
 | `annual_exports` | `true`, `false`, OR comma-separated types | Annual export types to include (see below) | `energy_flow, sankey` |
 | `include_input_defaults` (or `defaults`) | `true`, `false` | Include default input values (not just user-set) | `false` |
@@ -86,7 +98,7 @@ The `hourly_curves` field has three modes:
 - `methane` - Maps to ETM: `network_gas_profiles`
 
 **Available curve names** (can be specified individually):
-`electricity_profiles`, `electricity_capacities`, `electricity_price`, `district_heating_profiles`, `district_heating_capacities`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `hydrogen_capacities`, `network_gas_profiles`, `network_gas_capacities`, `residual_load`, `hydrogen_integral_cost`
+`electricity_profiles`, `electricity_price`, `district_heating_profiles`, `agriculture_heat`, `household_heat`, `buildings_heat`, `hydrogen_profiles`, `network_gas_profiles`, `residual_load`, `hydrogen_integral_cost`
 
 !!! note "Deprecated curve names"
     The old curve names (`merit_order`, `heat_network`, `hydrogen`, `network_gas`) are deprecated but still supported with warnings. Please update to use the new names.
@@ -104,7 +116,7 @@ The `annual_exports` field has three modes:
    |----------------|
    | true           |
    ```
-   Exports all 7 available types (see below)
+   Exports all available types (see below)
 
 2. **No annual exports** (set to `false`):
    ```
@@ -122,13 +134,14 @@ The `annual_exports` field has three modes:
 
 **Available export types**:
 
-- `production_parameters` - Production parameters for technologies
 - `energy_flow` - Energy flow data between nodes
 - `energy_flow_present` - Present-year energy flow data
 - `molecule_flow` - Molecule flow data
 - `sankey` - Sankey diagram data
 - `storage_parameters` - Storage parameters for technologies
 - `costs_parameters` - Cost parameters for technologies
+- `electricity_capacities`, `district_heating_capacities`, `hydrogen_capacities`, `network_gas_capacities` - Installed and peak capacity per participant
+- `direct_emissions_present`, `direct_emissions_future` - Direct emissions per node
 
 !!! note "Validation"
     Invalid export type names will be filtered out with a warning. Only valid entries will be exported.
@@ -184,7 +197,6 @@ admin@example.com      | owner       | owner       | owner       |
 **Notes**:
 
 - Empty cells mean the user has no access to that scenario
-- Only saved Scenarios have users. A Session that is not saved to MyETM exports no users, and importing users onto one logs a warning and skips it
 - See `Scenario.update_users()` for programmatic equivalent
 
 ### GQUERIES Sheet
@@ -316,7 +328,7 @@ scenarios = Scenarios.from_excel(
 - `"user_values"` - Slider input values
 - `"custom_curves"` - Custom price/demand curves
 - `"sortables"` - Technology ordering
-- `"users"` - User access permissions (Scenario only, not Session)
+- `"users"` - User access permissions
 
 
 #### Import with ScenarioPacker
@@ -359,6 +371,7 @@ config = ExportConfig(
     include_sortables=True,        # Include technology ordering
     include_custom_curves=False,   # Skip custom curves
     include_gqueries=True,         # Include query results
+    include_gquery_present=True,   # With their start year values
     include_users=True,            # Include user permissions
     include_input_defaults=False,  # Don't include default values
     include_input_min_max=True,    # Include min/max bounds
@@ -381,11 +394,12 @@ current_config = scenario.get_export_config()
 | `include_sortables` | `bool` | Export technology ordering |
 | `include_custom_curves` | `bool` | Export custom curves |
 | `include_gqueries` | `bool` | Export query results |
+| `include_gquery_present` | `bool` | Add each query's start year value beside its future value |
 | `include_users` | `bool` | Export user permissions |
 | `include_input_defaults` | `bool` | Include default input values (not just user-set) |
 | `include_input_min_max` | `bool` | Include min/max bounds for inputs |
 | `hourly_curves` | `List[str]` | Hourly curves for carriers: `"electricity"`, `"heat"`, `"hydrogen"`, `"methane"` |
-| `include_annual_exports` | `List[str]` | Annual exports: `"energy_flow"`, `"sankey"`, `"production_parameters"`, etc. |
+| `include_annual_exports` | `List[str]` | Annual exports: `"energy_flow"`, `"sankey"`, `"electricity_capacities"`, etc. |
 
 ## To Excel
 

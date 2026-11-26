@@ -1,42 +1,22 @@
 """Base runner class for scenario operations."""
 
-from typing import Any, Dict, List, Optional, TypeVar, Generic, Protocol
-from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, TypeVar, Generic, cast
+from abc import ABC
 from ..service_result import ServiceResult
-from pyetm.clients.base_client import BaseClient, make_batch_requests
+from pyetm.clients.base_client import AsyncBatchRunner, BaseClient, MAX_CONCURRENT
 
 T = TypeVar("T")
 
+PAGE_LIMIT = 100
 
-class ScenarioRunnerProtocol(Protocol[T]):
+
+def scenario_path(scenario: Any, suffix: str = "") -> str:
     """
-    Protocol for scenario runner implementations.
-
-    Allows flexible method signatures while maintaining type safety.
-    Each runner can define its own specific parameters beyond the client.
+    The path of a call on a Scenario's Session. MyETM relays everything under this base path to
+    the Scenario's current Session, so no call names a Session itself. Without a suffix the path
+    keeps its trailing slash: that addresses the Session, while no slash addresses the Scenario.
     """
-
-    @staticmethod
-    def run(client: BaseClient, /, *args: Any, **kwargs: Any) -> ServiceResult[T]:
-        """
-        Execute the scenario operation.
-
-        Args:
-            client: The HTTP client for API requests
-            *args: Operation-specific positional arguments
-            **kwargs: Operation-specific keyword arguments
-
-        Returns:
-            ServiceResult with operation-specific data type
-        """
-        ...
-
-
-class ScenarioIdentifier(Protocol):
-    """Protocol for objects with a scenario or saved_scenario ID."""
-
-    @property
-    def id(self) -> int: ...
+    return f"/saved_scenarios/{scenario.id}/{suffix}"
 
 
 class BaseRunner(ABC, Generic[T]):
@@ -55,104 +35,56 @@ class BaseRunner(ABC, Generic[T]):
         **kwargs: Any,
     ) -> ServiceResult[Any]:
         """
-        Make an HTTP request and handle common error patterns.
-
-        Args:
-            client: The HTTP client to use
-            method: HTTP method (get, post, put, patch, delete)
-            path: API endpoint path
-            payload: Data to send in request body (for write operations)
-            **kwargs: Additional arguments passed to the request
-
-        Returns:
-            ServiceResult.ok(data) on success (2xx responses)
-            ServiceResult.fail(errors) on any error
+        Make an HTTP request. A JSON body comes back parsed, anything else as the response itself.
+        Every failure, including an HTTP error, becomes a failed ServiceResult with its message.
         """
         try:
-            # Prepare request arguments
-            request_kwargs = dict(kwargs)
-
-            # Handle payload based on HTTP method
-            if payload is not None and "files" not in kwargs:
-                if method.upper() in ["POST", "PUT", "PATCH", "DELETE"]:
-                    request_kwargs["json"] = payload
-                else:
-                    # For GET, treat payload as query parameters
-                    request_kwargs["params"] = payload
-
-            # Make the request
-            resp = getattr(client.session, method.lower())(path, **request_kwargs)
-
-            if resp.ok:
-                # For JSON responses, parse automatically
-                try:
-                    return ServiceResult.ok(data=resp.json())
-                except ValueError:
-                    # Not JSON, return raw response
-                    return ServiceResult.ok(data=resp)
-
-            # Check for partial success pattern (422 with both success and errors)
-            if resp.status_code == 422:
-
-                def _flatten_errors(error_data: Any, errors: List[str]) -> None:
-                    if isinstance(error_data, dict):
-                        for k, v in error_data.items():
-                            if isinstance(v, list):
-                                for msg in v:
-                                    if msg and str(msg).strip():
-                                        errors.append(f"{k}: {msg}")
-                            elif v and str(v).strip():
-                                errors.append(f"{k}: {v}")
-                    elif isinstance(error_data, list):
-                        for msg in error_data:
-                            if msg and str(msg).strip():
-                                errors.append(str(msg))
-                    elif error_data:
-                        errors.append(str(error_data))
-
-                try:
-                    response_data = resp.json()
-                    if isinstance(response_data, dict):
-                        # Check if response has errors key (common for validation failures)
-                        if "errors" in response_data:
-                            errors: List[str] = []
-
-                            # Handle partial success pattern (has both success and errors)
-                            if "success" in response_data:
-                                successes = response_data.get("success", [])
-                                if successes:
-                                    errors.append(
-                                        f"Partial success: {len(successes)} operation(s) succeeded"
-                                    )
-                                    errors.append(f"Successful operations: {successes}")
-
-                            # Extract error messages
-                            error_data = response_data.get("errors", {})
-                            _flatten_errors(error_data, errors)
-
-                            if not errors:
-                                errors.append(
-                                    "Operation failed with unknown error (server returned empty error messages)"
-                                )
-                            return ServiceResult.fail(errors)
-                except Exception:
-                    pass
-
-            # HTTP-level failure is breaking
-            return ServiceResult.fail([f"{resp.status_code}: {resp.text}"])
-
-        except (PermissionError, ValueError, ConnectionError) as e:
-            # These are HTTP errors from our _handle_errors method
-            error_msg = str(e)
-            if "404" in error_msg:
-                return ServiceResult.fail([f"Resource not found: {error_msg}"])
-            # Make authentication errors more explicit and actionable
-            if isinstance(e, PermissionError):
-                return ServiceResult.fail([error_msg])
-            return ServiceResult.fail([error_msg])
+            resp = getattr(client.session, method.lower())(
+                path, **cls._request_kwargs(method, payload, kwargs)
+            )
         except Exception as e:
-            # Any other unexpected exception is treated as breaking
             return ServiceResult.fail([str(e)])
+
+        try:
+            return ServiceResult.ok(data=resp.json())
+        except ValueError:
+            return ServiceResult.ok(data=resp)
+
+    @staticmethod
+    def _request_kwargs(
+        method: str, payload: Optional[Dict[str, Any]], kwargs: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """A payload is the JSON body of a write, or the query of a read."""
+        request_kwargs = dict(kwargs)
+        if payload is not None and "files" not in kwargs:
+            body_key = "json" if method.upper() in ("POST", "PUT", "PATCH", "DELETE") else "params"
+            request_kwargs[body_key] = payload
+        return request_kwargs
+
+    @classmethod
+    def _make_myetm_request(
+        cls, client: BaseClient, method: str, path: str, **kwargs: Any
+    ) -> ServiceResult[Any]:
+        """A request to one of MyETM's own resources, unwrapped from its {data, meta} envelope."""
+        result = cls._make_request(client, method, path, **kwargs)
+        if result.success and isinstance(result.data, dict) and "data" in result.data:
+            return ServiceResult.ok(data=result.data["data"], errors=result.errors)
+        return result
+
+    @classmethod
+    def _fetch_all_pages(cls, client: BaseClient, path: str) -> ServiceResult[List[Any]]:
+        """Every item of a paginated MyETM index, following its pagination meta."""
+        items: List[Any] = []
+        page = 1
+        while True:
+            result = cls._make_request(client, "get", path, payload={"page": page, "limit": PAGE_LIMIT})
+            if not result.success:
+                return result
+            body = cast(Dict[str, Any], result.data)
+            items.extend(body["data"])
+            if page >= body["meta"]["pagination"]["pages"]:
+                return ServiceResult.ok(data=items)
+            page += 1
 
     @classmethod
     def _make_batch_requests(
@@ -163,21 +95,10 @@ class BaseRunner(ABC, Generic[T]):
         """
         formatted_requests = []
         for req in requests:
-            formatted = {"method": req["method"], "url": req["path"], "kwargs": {}}
+            kwargs = cls._request_kwargs(req["method"], req.get("payload"), req.get("kwargs") or {})
+            formatted_requests.append({"method": req["method"], "url": req["path"], "kwargs": kwargs})
 
-            if req.get("payload") and "files" not in req.get("kwargs", {}):
-                if req["method"].upper() in ["POST", "PUT", "PATCH"]:
-                    formatted["kwargs"]["json"] = req["payload"]
-                else:
-                    formatted["kwargs"]["params"] = req["payload"]
-
-            # Merge any additional kwargs
-            if req.get("kwargs"):
-                formatted["kwargs"].update(req["kwargs"])
-
-            formatted_requests.append(formatted)
-
-        return make_batch_requests(client, formatted_requests)
+        return AsyncBatchRunner.batch_requests_sync(client.session, formatted_requests, MAX_CONCURRENT)
 
     @classmethod
     def _validate_required_fields(
@@ -240,6 +161,3 @@ class BaseRunner(ABC, Generic[T]):
                     result[key] = None
 
         return result, warnings
-
-    # Note: Concrete implementations should follow ScenarioRunnerProtocol
-    # Each runner defines its own run() signature based on operation requirements

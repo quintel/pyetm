@@ -6,10 +6,26 @@ import logging
 import re
 import tempfile
 from typing import Optional, ClassVar, List, Annotated, Any, Literal
-from pydantic import Field, ValidationError, HttpUrl, field_validator, model_validator
+from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("pyetm")
+
+# The Version this release creates Scenarios on. A maintenance branch pins its stable tag here.
+ETM_VERSION = "latest"
+
+MYETM_URLS = {
+    "pro": "https://my.energytransitionmodel.com/api/v4",
+    "beta": "https://beta.my.energytransitionmodel.com/api/v4",
+    "local": "https://myetm.local.energytransitionmodel.com/api/v4",
+}
+ENVIRONMENT_ALIASES = {
+    "prod": "pro",
+    "production": "pro",
+    "staging": "beta",
+    "dev": "local",
+    "development": "local",
+}
 
 
 class AppConfig(BaseSettings):
@@ -27,16 +43,17 @@ class AppConfig(BaseSettings):
             ),
         ),
     ]
-    base_url: Optional[HttpUrl] = Field(
-        None,
-        description="Base URL for the ETM API (will be inferred from environment if not provided)",
-    )
     environment: Optional[str] = Field(
         "pro",
-        description=(
-            "ETM environment to target. One of: 'pro' (default), 'beta', 'local', or a stable tag 'YYYY-MM'. "
-            "When set and base_url is not provided, base_url will be inferred."
-        ),
+        description="Which ETM to talk to: 'pro' (default), 'beta' or 'local'",
+        # TEMPORARY(2.2): also read a bare ENVIRONMENT
+        validation_alias=AliasChoices("ETM_ENVIRONMENT", "ENVIRONMENT"),
+    )
+    # TEMPORARY(2.2): read only to warn that it is ignored
+    ignored_base_url: Optional[str] = Field(None, validation_alias="BASE_URL", exclude=True)
+    etm_version: str = Field(
+        ETM_VERSION,
+        description="The Version new Scenarios are created on",
     )
     log_level: Optional[str] = Field(
         "INFO",
@@ -131,12 +148,19 @@ class AppConfig(BaseSettings):
 
         return v
 
-    def model_post_init(self, __context: Any) -> None:
-        """Post-initialization to handle base_url inference and token warnings."""
-        if not self.base_url:
-            self.base_url = HttpUrl(_infer_base_url_from_env(self.environment or "production"))
+    @functools.cached_property
+    def base_url(self) -> str:
+        """The ETM API URL that ETM_ENVIRONMENT picks, warning once about settings it cannot use."""
+        url = _myetm_url_for(self.environment)
+        if self.ignored_base_url:
+            logger.warning(
+                "BASE_URL is ignored since pyetm 2.1, so pyetm talks to %s. Remove BASE_URL, and set "
+                "ETM_ENVIRONMENT to pro, beta or local, or pass BaseClient(base_url=...).",
+                url,
+            )
+        return url
 
-        # Warn if no token is provided
+    def model_post_init(self, __context: Any) -> None:
         if not self.etm_api_token:
             logger.warning(
                 "No ETM_API_TOKEN provided. You will only be able to access public scenarios without authentication."
@@ -199,33 +223,25 @@ def reload_configuration() -> None:
     get_error_policy.cache_clear()
 
 
-def _infer_base_url_from_env(environment: str) -> str:
-    """
-    Infers the ETM API base URL from an environment string.
+def _myetm_url_for(environment: Optional[str]) -> str:
+    """The ETM API URL for an ETM_ENVIRONMENT. A Version raises; an unknown label warns and falls back to pro."""
+    env = (environment or "pro").strip().lower()
+    env = ENVIRONMENT_ALIASES.get(env, env)
+    if env in MYETM_URLS:
+        return MYETM_URLS[env]
 
-    Supported values (case-insensitive):
-      - 'pro'/'prod' (default): https://engine.energytransitionmodel.com/api/v3
-      - 'beta'/'staging':       https://beta.engine.energytransitionmodel.com/api/v3
-      - 'local'/'dev'/'development': http://localhost:3000/api/v3
-      - stable tags 'YYYY-MM':  https://{YYYY-MM}.engine.energytransitionmodel.com/api/v3
-      - custom environments:    https://{environment}.engine.energytransitionmodel.com/api/v3
-        (e.g., 'tyndp2024' -> https://tyndp2024.engine.energytransitionmodel.com/api/v3)
+    if re.fullmatch(r"\d{4}(-\d{2})?", env):
+        raise ValueError(
+            f"ETM_ENVIRONMENT={environment} names a Version, not an ETM. Set ETM_ENVIRONMENT=pro, and "
+            f"ETM_VERSION={environment} to create scenarios on that Version. For 2025-01, whose curve and "
+            f"export names differ, install pyetm 2.0.x."
+        )
 
-    Falls back to the 'pro' URL if the input is empty.
-    """
-    env = (environment or "").strip().lower()
-
-    if env in ("", "pro", "prod"):  # default
-        return "https://engine.energytransitionmodel.com/api/v3"
-    if env in ("beta", "staging"):
-        return "https://beta.engine.energytransitionmodel.com/api/v3"
-    if env in ("local", "dev", "development"):
-        return "http://localhost:3000/api/v3"
-
-    # Stable tagged environments e.g., '2025-01'
-    if re.fullmatch(r"\d{4}-\d{2}", env):
-        return f"https://{env}.engine.energytransitionmodel.com/api/v3"
-
-    # Custom environments (e.g., tyndp2024, tyndp2026, etc.)
-    # Use the environment string as a subdomain
-    return f"https://{env}.engine.energytransitionmodel.com/api/v3"
+    fallback = MYETM_URLS["pro"]
+    logger.warning(
+        "Unknown ETM_ENVIRONMENT=%s, so pyetm talks to %s instead. Set it to pro, beta or local, "
+        "or pass BaseClient(base_url=...) for another address.",
+        environment,
+        fallback,
+    )
+    return fallback

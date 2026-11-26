@@ -105,7 +105,7 @@ def cli() -> None:
 @click.option(
     "--environment",
     default=None,
-    help="ETM environment to target (e.g., 'pro', 'beta', 'local', 'tyndp2024', '2025-01'). Defaults to 'pro'.",
+    help="Which ETM to talk to: 'pro', 'beta' or 'local'. Defaults to 'pro'.",
 )
 @click.option(
     "--force",
@@ -122,7 +122,7 @@ def init(environment: str | None, force: bool) -> None:
 
     # Prompt for environment if not provided
     if not environment:
-        click.echo("Common environments: pro, beta, local, tyndp2024, 2025-01")
+        click.echo("Environments: pro, beta, local")
         environment = click.prompt(
             "Environment",
             default="pro",
@@ -144,9 +144,6 @@ def init(environment: str | None, force: bool) -> None:
 
         # Replace placeholders
         env_content = env_template.replace("{{ENVIRONMENT}}", environment)
-
-        # Handle optional BASE_URL line
-        env_content = env_content.replace("{{BASE_URL_LINE}}", "# BASE_URL=")
 
         # Write .env file
         env_path = target_dir / ".env"
@@ -176,9 +173,9 @@ def init(environment: str | None, force: bool) -> None:
     click.echo("\nNext steps:")
     click.echo("  1. Edit .env and set your environment variables:")
     click.echo(
-        "     • ETM_API_TOKEN (see https://docs.energytransitionmodel.com/api/authentication)"
+        "     • ETM_API_TOKEN (get one at https://my.energytransitionmodel.com/identity/tokens)"
     )
-    click.echo("     • ENVIRONMENT or BASE_URL (if using stable or other ETM instance)")
+    click.echo("     • ETM_ENVIRONMENT (pro, beta or local)")
     click.echo("")
     click.echo("  2. Edit excel/input.xlsx with your scenario data")
     click.echo("        (Don't forget to save your changes!)")
@@ -244,7 +241,7 @@ def run(
       pyetm run input.xlsx --no-update
 
     The input Excel file should contain sheets for scenario configuration:
-    - MAIN: Scenario identifiers and session information
+    - MAIN: Scenario identifiers and how to load, copy or create each one
     - EXPORT_CONFIG: Configuration for what data to export
     - Other optional sheets: SLIDER_SETTINGS, CUSTOM_CURVES, SORTABLES, USERS, etc.
 

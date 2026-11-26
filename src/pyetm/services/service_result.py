@@ -33,6 +33,12 @@ class ServiceResult(BaseModel, Generic[T]):
         err_copy: list[str] = list(errors)
         return cls(success=False, data=None, errors=err_copy)
 
+    def with_warnings(self, warnings: list[str]) -> ServiceResult[T]:
+        """This result with warnings added, kept only on success."""
+        if not self.success or not warnings:
+            return self
+        return ServiceResult.ok(data=cast(T, self.data), errors=self.errors + warnings)
+
     def __repr__(self) -> str:
         # represent presence of data with an ellipsis, absence with None
         data_repr = "…" if self.data is not None else "None"

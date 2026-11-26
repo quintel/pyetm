@@ -4,14 +4,8 @@ import logging
 from typing import ClassVar, Dict, Any, Optional
 import pandas as pd
 from pyetm.models.packables.packable import Packable
-from pyetm.models.scenario import Scenario
 
 logger = logging.getLogger(__name__)
-
-UNSAVED_SESSION_WARNING = (
-    "Session '%s' is not saved to MyETM, so its users cannot be %s. "
-    "Access is managed on the saved Scenario."
-)
 
 
 class UsersPack(Packable):
@@ -43,9 +37,6 @@ class UsersPack(Packable):
 
     def _roles_for(self, scenario: Any) -> Dict[str, str]:
         """Map each member's email to their short role, e.g. 'owner'."""
-        if not isinstance(scenario, Scenario):
-            logger.warning(UNSAVED_SESSION_WARNING, scenario.identifier(), "exported")
-            return {}
         try:
             users = scenario.list_users()
         except Exception as e:
@@ -80,9 +71,6 @@ class UsersPack(Packable):
                 # Resolve scenario with automatic warning
                 scenario = self._resolve_scenario_with_warning(column_name, "USERS sheet")
                 if scenario is None:
-                    continue
-                if not isinstance(scenario, Scenario):
-                    logger.warning(UNSAVED_SESSION_WARNING, scenario.identifier(), "imported")
                     continue
 
                 # Process each user/role pair for this scenario

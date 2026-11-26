@@ -1,8 +1,11 @@
 """Tests for the curve registry (static name map, no engine dialect)."""
 
+from typing import get_args
+
 import pytest
 
 from pyetm.config import curve_registry as registry
+from pyetm.types import HourlyCurveType
 
 
 class TestAcceptAlias:
@@ -34,22 +37,23 @@ class TestBuildPath:
     @pytest.mark.parametrize(
         "name,expected",
         [
-            # renamed curves are requested under their universal old name
-            ("electricity_profiles", "/scenarios/42/curves/merit_order.csv"),
-            ("district_heating_profiles", "/scenarios/42/curves/heat_network.csv"),
-            ("hydrogen_profiles", "/scenarios/42/curves/hydrogen.csv"),
-            ("network_gas_profiles", "/scenarios/42/curves/network_gas.csv"),
-            # old names accepted directly resolve to the same wire path
-            ("merit_order", "/scenarios/42/curves/merit_order.csv"),
-            ("heat_network", "/scenarios/42/curves/heat_network.csv"),
-            # unchanged curves keep their name
-            ("residual_load", "/scenarios/42/curves/residual_load.csv"),
+            ("electricity_profiles", "/saved_scenarios/42/curves/electricity_profiles.csv"),
+            ("district_heating_profiles", "/saved_scenarios/42/curves/district_heating_profiles.csv"),
+            ("hydrogen_profiles", "/saved_scenarios/42/curves/hydrogen_profiles.csv"),
+            ("network_gas_profiles", "/saved_scenarios/42/curves/network_gas_profiles.csv"),
+            # deprecated old names are requested under their canonical name
+            ("merit_order", "/saved_scenarios/42/curves/electricity_profiles.csv"),
+            ("heat_network", "/saved_scenarios/42/curves/district_heating_profiles.csv"),
+            ("residual_load", "/saved_scenarios/42/curves/residual_load.csv"),
             # unknown identifiers pass through unchanged
-            ("custom_thing", "/scenarios/42/curves/custom_thing.csv"),
+            ("custom_thing", "/saved_scenarios/42/curves/custom_thing.csv"),
         ],
     )
     def test_curves_endpoint(self, name, expected):
-        assert registry.build_path(42, name) == expected
+        from types import SimpleNamespace
+        from pyetm.services.scenario_runners.fetch_curves_generic import _output_path
+
+        assert _output_path(SimpleNamespace(id=42), name) == expected
 
 class TestMetadata:
     def test_canonical_names_complete(self):
@@ -69,3 +73,8 @@ class TestMetadata:
             "hydrogen": "hydrogen_profiles",
             "methane": "network_gas_profiles",
         }
+
+
+class TestTypeSync:
+    def test_hourly_curve_type_matches_registry(self):
+        assert set(get_args(HourlyCurveType)) == set(registry.canonical_names())

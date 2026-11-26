@@ -41,7 +41,6 @@ def temp_curve_files():
 def test_update_custom_curves_success_single_curve(temp_curve_files):
     """Test successful upload of a single custom curve"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -68,7 +67,7 @@ def test_update_custom_curves_success_single_curve(temp_curve_files):
     assert len(request_list) == 1
     req = request_list[0]
     assert req["method"] == "put"
-    assert f"/scenarios/{mock_scenario.id}/custom_curves/test_curve" in req["path"]
+    assert f"/saved_scenarios/{mock_scenario.id}/custom_curves/test_curve" in req["path"]
     assert req["kwargs"]["headers"]["Content-Type"] is None
     assert "files" in req["kwargs"]
 
@@ -76,7 +75,6 @@ def test_update_custom_curves_success_single_curve(temp_curve_files):
 def test_update_custom_curves_success_multiple_curves(temp_curve_files):
     """Test successful upload of multiple custom curves"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 54321
@@ -112,7 +110,6 @@ def test_update_custom_curves_success_multiple_curves(temp_curve_files):
 def test_update_custom_curves_curve_without_file():
     """Test upload of curve without file (uses contents() method)"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 99999
@@ -142,7 +139,6 @@ def test_update_custom_curves_curve_without_file():
 def test_update_custom_curves_http_error():
     """Test handling of HTTP errors during upload"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -169,7 +165,6 @@ def test_update_custom_curves_http_error():
 def test_update_custom_curves_network_exception():
     """Test handling of network errors (simulated as failure result)"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -196,7 +191,6 @@ def test_update_custom_curves_network_exception():
 def test_update_custom_curves_mixed_success_failure(temp_curve_files):
     """Test upload with mix of successful and failed curves"""
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     mock_scenario = Mock()
     mock_scenario.id = 12345
@@ -229,7 +223,6 @@ def test_update_custom_curves_empty_curves_list():
     """Test upload with empty curves list"""
     # Mock client
     mock_client = Mock()
-    mock_client.session.base_url = "https://engine.example.com/api/v3"
 
     # Mock scenario
     mock_scenario = Mock()
@@ -267,7 +260,7 @@ def test_build_requests_with_series():
 
     assert len(requests) == 1
     assert requests[0]["method"] == "put"
-    assert requests[0]["path"] == "/scenarios/100/custom_curves/solar_pv"
+    assert requests[0]["path"] == "/saved_scenarios/100/custom_curves/solar_pv"
     assert requests[0]["payload"] is None
     assert "files" in requests[0]["kwargs"]
     assert requests[0]["kwargs"]["headers"]["Content-Type"] is None
@@ -290,7 +283,7 @@ def test_build_requests_with_dataframe():
 
     assert len(requests) == 1
     assert requests[0]["method"] == "put"
-    assert requests[0]["path"] == "/scenarios/200/custom_curves/wind_offshore"
+    assert requests[0]["path"] == "/saved_scenarios/200/custom_curves/wind_offshore"
     assert "files" in requests[0]["kwargs"]
 
 
@@ -306,7 +299,7 @@ def test_build_requests_with_list():
 
     assert len(requests) == 1
     assert requests[0]["method"] == "put"
-    assert requests[0]["path"] == "/scenarios/300/custom_curves/electricity_demand"
+    assert requests[0]["path"] == "/saved_scenarios/300/custom_curves/electricity_demand"
     assert "files" in requests[0]["kwargs"]
     # Content should be newline-separated values
     file_content = requests[0]["kwargs"]["files"]["file"][1]
@@ -325,7 +318,7 @@ def test_build_requests_with_file_path(temp_curve_files):
 
     assert len(requests) == 1
     assert requests[0]["method"] == "put"
-    assert requests[0]["path"] == "/scenarios/400/custom_curves/heat_demand"
+    assert requests[0]["path"] == "/saved_scenarios/400/custom_curves/heat_demand"
     assert "files" in requests[0]["kwargs"]
     # Content should be read from file
     file_content = requests[0]["kwargs"]["files"]["file"][1]
@@ -345,7 +338,7 @@ def test_build_requests_with_string_content():
     requests = UpdateCustomCurvesRunner.build_requests(mock_scenario, custom_curves)
 
     assert len(requests) == 1
-    assert requests[0]["path"] == "/scenarios/500/custom_curves/custom_profile"
+    assert requests[0]["path"] == "/saved_scenarios/500/custom_curves/custom_profile"
     # String content should be used directly when file doesn't exist
     assert string_data in requests[0]["kwargs"]["files"]["file"][1]
 
@@ -365,9 +358,9 @@ def test_build_requests_multiple_curves(temp_curve_files):
 
     assert len(requests) == 3
     paths = [req["path"] for req in requests]
-    assert "/scenarios/600/custom_curves/solar_pv" in paths
-    assert "/scenarios/600/custom_curves/wind_offshore" in paths
-    assert "/scenarios/600/custom_curves/heat_demand" in paths
+    assert "/saved_scenarios/600/custom_curves/solar_pv" in paths
+    assert "/saved_scenarios/600/custom_curves/wind_offshore" in paths
+    assert "/saved_scenarios/600/custom_curves/heat_demand" in paths
     # All should have correct structure
     for req in requests:
         assert req["method"] == "put"

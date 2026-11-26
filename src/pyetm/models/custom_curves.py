@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, Any
 from pyetm.models.warnings import WarningCollector
-from pyetm.clients import BaseClient, get_client
+from pyetm.clients import BaseClient
 from pyetm.models.base import Base
 from pydantic import PrivateAttr
 from pyetm.services.scenario_runners.fetch_custom_curves import (
@@ -30,27 +30,6 @@ class CustomCurve(Base):
     type: str
     file_path: Optional[Path] = None
 
-    @staticmethod
-    def _normalize_to_session(scenario: Any) -> Any:
-        """
-        Normalize scenario parameter to Session object to extract ETEngine session ID.
-
-        Args:
-            scenario: Either a Session object or a Scenario (SavedScenario) object
-
-        Returns:
-            Session object with the ETEngine session ID
-        """
-        # Import at function level to avoid circular imports
-        from pyetm.models.scenario import Scenario
-
-        # If it's a SavedScenario, extract the underlying Session
-        if isinstance(scenario, Scenario):
-            return scenario.session
-
-        # Otherwise assume it's already a Session
-        return scenario
-
     def available(self) -> bool:
         return bool(self.file_path)
 
@@ -58,11 +37,9 @@ class CustomCurve(Base):
     # extract them!
     def retrieve(self, client: Any, scenario: Any) -> Optional[pd.Series[Any]]:
         """Process curve from client, save to file, set file_path"""
-        # Normalize to Session to get ETEngine session ID
-        session = self._normalize_to_session(scenario)
 
         file_path = (
-            get_settings().path_to_tmp(str(session.id)) / f"{self.key.replace('/', '-')}.csv"
+            get_settings().path_to_tmp(str(scenario.id)) / f"{self.key.replace('/', '-')}.csv"
         )
 
         # TODO: Examine the caching situation in the future if time permits: could be particularly
@@ -71,7 +48,7 @@ class CustomCurve(Base):
         #     self.file_path = file_path
         #     return self.contents()
         try:
-            result = DownloadCustomCurveRunner.run(client, session, self.key)
+            result = DownloadCustomCurveRunner.run(client, scenario, self.key)
 
             if result.success and result.data is not None:
                 try:
@@ -249,7 +226,7 @@ class CustomCurves(Base):
 
         if not curve.available():
             # Try to retrieve it
-            result = curve.retrieve(get_client(), scenario)
+            result = curve.retrieve(scenario.client, scenario)
             self._merge_submodel_warnings(curve, key_attr="key")
             return result
         else:
@@ -295,7 +272,7 @@ class CustomCurves(Base):
             try:
                 if not curve.available() and getattr(self, "_scenario", None) is not None:
                     try:
-                        curve.retrieve(get_client(), self._scenario)
+                        curve.retrieve(self._scenario.client, self._scenario)
                     except Exception:
                         pass
                 curve_df = curve._to_dataframe(**kwargs)

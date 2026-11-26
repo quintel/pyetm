@@ -1,72 +1,36 @@
-"""Service for updating an existing saved scenario."""
+"""Runner for updating a saved scenario in MyETM."""
 
 from typing import Any
 
 from pyetm.clients.base_client import BaseClient
-from pyetm.config.api_compat import saved_scenario_payload
 from pyetm.services.scenario_runners.base_runner import BaseRunner
-
 from ..service_result import ServiceResult
 
 
 class UpdateSavedScenarioRunner(BaseRunner[dict[str, Any]]):
-    """Runner for updating a SavedScenario in MyETM.
+    """
+    Updates a saved scenario's MyETM record.
 
-    PUT /api/v3/saved_scenarios/:id
+    PUT /api/v4/saved_scenarios/{id}
     """
 
-    ALLOWED_KEYS = ["title", "scenario_id", "private", "discarded"]
+    ALLOWED_KEYS = ["title", "description", "private"]
 
     @staticmethod
     def run(
-        client: BaseClient,
-        saved_scenario_id: int,
-        update_data: dict[str, Any],
-        **kwargs: Any,
+        client: BaseClient, saved_scenario_id: int, update_data: dict[str, Any], **kwargs: Any
     ) -> ServiceResult[dict[str, Any]]:
-        """Update an existing SavedScenario in MyETM.
-
-        Args:
-            client: The HTTP client to use
-            saved_scenario_id: ID of the SavedScenario to update
-            update_data: Dictionary with fields to update (title, private, discarded, scenario_id)
-            **kwargs: Additional arguments passed to the request
-
-        Example usage:
-            result = UpdateSavedScenarioRunner.run(
-                client=client,
-                saved_scenario_id=123,
-                update_data={
-                    "title": "Updated Title",
-                    "private": False
-                }
-            )
-        """
-        if not update_data:
-            return ServiceResult.fail(["No fields provided for update"])
-
         filtered_data, warnings = UpdateSavedScenarioRunner._filter_allowed_fields(
-            update_data,
-            UpdateSavedScenarioRunner.ALLOWED_KEYS,
-            "update saved scenario",
+            update_data, UpdateSavedScenarioRunner.ALLOWED_KEYS, "update saved scenario"
         )
-
         if not filtered_data:
             return ServiceResult.fail(["No valid fields provided for update"] + warnings)
 
-        payload = saved_scenario_payload(filtered_data, client.session.base_url)
-
-        result = UpdateSavedScenarioRunner._make_request(
-            client=client,
-            method="put",
-            path=f"/saved_scenarios/{saved_scenario_id}",
-            payload=payload,
+        result = UpdateSavedScenarioRunner._make_myetm_request(
+            client,
+            "put",
+            f"/saved_scenarios/{saved_scenario_id}",
+            payload={"saved_scenario": filtered_data},
             **kwargs,
         )
-
-        if result.success and warnings:
-            combined_errors = list(result.errors) + warnings
-            assert result.data is not None, "Success result must have data"
-            return ServiceResult.ok(data=result.data, errors=combined_errors)
-
-        return result
+        return result.with_warnings(warnings)

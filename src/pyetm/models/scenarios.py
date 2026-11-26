@@ -6,41 +6,36 @@ import logging
 from collections.abc import Iterable, Iterator, Sequence
 from os import PathLike
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    TypedDict,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import pandas as pd
 from pydantic import Field, PrivateAttr
 
 from pyetm.clients import BaseClient, get_client
-from pyetm.clients.base_client import MAX_CONCURRENT, AsyncBatchRunner
 from pyetm.models.base import Base
-from pyetm.models.session import Session
+from pyetm.services.scenario_runners.base_runner import BaseRunner
 from pyetm.types import AnnualExportType, CarrierType
 
-from .scenario import SavedScenarioError, Scenario
+from .scenario import Scenario, ScenarioError, apply_data
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pyetm.models.scenario_packer import ScenarioPacker
 
+DATA_PARAMS = ("user_values", "custom_curves", "sortables")
+
 
 class ScenarioCreationParams(TypedDict, total=False):
-    """Type definition for create_many parameter dicts.
-
-    Note: template_id must be a Session ID (ETEngine), not a SavedScenario ID (MyETM).
+    """
+    Parameters for one scenario in Scenarios.create_many(): a title, and either an area_code and
+    end_year, or a source saved scenario ID to copy.
     """
 
     title: str | None
-    scenario_id: int | None
-    template_id: int | None
     area_code: str | None
     end_year: int | None
+    source: int | None
     private: bool | None
     user_values: dict[str, Any] | None
     custom_curves: dict[str, Any] | None
@@ -48,177 +43,83 @@ class ScenarioCreationParams(TypedDict, total=False):
 
 
 class Scenarios(Base):
-    """A collection of SavedScenario and/or Session objects.
+    """A collection of Scenarios, for bulk operations and exports."""
 
-    Can hold both Scenario and Session objects to support
-    mixed collections loaded from Excel or other sources.
-
-    Warnings from bulk operations are collected in the inherited _warning_collector.
-    """
-
-    items: list[Scenario | Session] = Field(default_factory=list)
+    items: list[Scenario] = Field(default_factory=list)
     _packer: ScenarioPacker | None = PrivateAttr(default=None)
 
-    def __iter__(self) -> Iterator[Scenario | Session]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[Scenario]:  # type: ignore[override]
         return iter(self.items)
 
     def __len__(self) -> int:
         return len(self.items)
 
-    def __getitem__(self, index: int) -> Scenario | Session:
+    def __getitem__(self, index: int) -> Scenario:
         return self.items[index]
 
-    def add(self, *scenarios: Scenario | Session) -> None:
+    def add(self, *scenarios: Scenario) -> None:
         self.items.extend(scenarios)
 
-    def extend(self, scenarios: Iterable[Scenario | Session]) -> None:
+    def extend(self, scenarios: Iterable[Scenario]) -> None:
         self.items.extend(list(scenarios))
 
     @property
-    def sessions(self) -> list[Session]:
-        """Get the underlying ETEngine Session objects from all items."""
-        return [item.session if isinstance(item, Scenario) else item for item in self.items]
-
-    @property
     def combine(self) -> ScenarioPacker:
-        """Helps users with quick access to a packer. The combine keyword makes
-        sense when spelling out method calls to scenarios.
-
-        E.g. scenarios.combine.inputs.to_dataframe()
-        or   scenarios.combine.to_excel()
+        """
+        A packer over every scenario, e.g. scenarios.combine.inputs()
+        or scenarios.combine.to_excel().
         """
         from pyetm.models.scenario_packer import ScenarioPacker
 
-        if self._packer is not None:
-            return self._packer
-
-        self._packer = ScenarioPacker()
-        self._packer.add(*self.items)
-
+        if self._packer is None:
+            self._packer = ScenarioPacker()
+            self._packer.add(*self.items)
         return self._packer
 
-    def get_hourly_output_curves(
-        self,
-        carrier_type: CarrierType,
-    ) -> dict[str, dict[str, pd.DataFrame]]:
-        """Get hourly output curves for all scenarios by carrier type.
-
-        Args:
-            carrier_type: Carrier type alias (electricity, heat, hydrogen, methane)
-
-        Returns:
-            Dictionary mapping curve names to scenario data
-        """
-        # Pre-fetch curves for all scenarios using new API
-        self._ensure_hourly_curves_fetched(carrier_type)
-
-        # Now delegate to packer for organization
-        return self.combine.hourly_output_curves(carrier_type)
-
-    def _ensure_hourly_curves_fetched(self, carrier_type: str) -> None:
-        """Ensure all scenarios have fetched their hourly output curves.
-
-        Args:
-            carrier_type: The carrier type to fetch curves for
-        """
+    def get_hourly_output_curves(self, carrier_type: CarrierType) -> dict[str, dict[str, pd.DataFrame]]:
+        """Hourly output curves for every scenario by carrier (electricity, heat, hydrogen, methane)."""
         for item in self.items:
             try:
-                # Use new API: get_hourly_curves with list containing carrier alias
                 item.get_hourly_curves([carrier_type])
             except Exception as e:
-                # Log warning but continue with other scenarios
-                logger.warning(
-                    "Failed to fetch %s curves for scenario %s: %s",
-                    carrier_type,
-                    item.identifier(),
-                    e,
-                )
+                logger.warning("Failed to fetch %s curves for scenario %s: %s", carrier_type, item.identifier(), e)
+
+        return self.combine.hourly_output_curves(carrier_type=carrier_type)
 
     def get_annual_exports(
-        self,
-        exports: AnnualExportType | Sequence[AnnualExportType] | None = None,
+        self, exports: AnnualExportType | Sequence[AnnualExportType] | None = None
     ) -> dict[str, dict[str, pd.DataFrame]]:
-        """Get annual exports for all scenarios, organized by export type.
-
-        Returns:
-            Dict mapping export names to dicts of {scenario_title: DataFrame}
-        """
+        """Annual exports for every scenario, keyed by export name then scenario."""
         return self.combine.annual_exports(exports)
 
     @classmethod
-    def load_all(
-        cls,
-        client: BaseClient | None = None,
-    ) -> Scenarios:
-        """Load all saved scenarios belonging to the authenticated user.
+    def load_all(cls, client: BaseClient | None = None) -> Scenarios:
+        """Every saved scenario the caller can access."""
+        from pyetm.services.scenario_runners.fetch_user_saved_scenarios import FetchUserSavedScenariosRunner
 
-        Fetches all MyETM saved scenarios for the authenticated user in a single request.
-        Returns all saved scenarios the user has access to (owned or shared).
-
-        Args:
-            client: Optional BaseClient instance for API communication
-
-        Returns:
-            Scenarios collection containing all user's saved scenarios
-
-        Raises:
-            ValueError: If authentication fails or API request fails
-        """
-        from pyetm.services.scenario_runners.fetch_user_saved_scenarios import (
-            FetchUserSavedScenariosRunner,
-        )
-
-        if client is None:
-            client = get_client()
-
-        result = FetchUserSavedScenariosRunner.run(client=client)
-
+        client = client or get_client()
+        result = FetchUserSavedScenariosRunner.run(client)
         if not result.success:
-            raise ValueError(f"Failed to fetch user saved scenarios: {'; '.join(result.errors)}")
+            raise ScenarioError(f"Failed to fetch user saved scenarios: {'; '.join(result.errors)}")
 
-        if result.data is None:
-            raise ValueError("No data returned from API")
-
-        # Use model_validate to avoid N+1 API calls
-        saved_scenarios = [Scenario.model_validate(data) for data in result.data]
-        return cls(items=cast(list[Scenario | Session], saved_scenarios))
+        return cls(items=[Scenario._from_myetm(data, client) for data in result.data or []])
 
     @classmethod
-    def load_many(
-        cls, saved_scenario_ids: Iterable[int], client: BaseClient | None = None
-    ) -> Scenarios:
-        """Load multiple SavedScenario objects by their MyETM saved scenario IDs.
-
-        This is a bulk operation - individual failures are collected as warnings
-        to allow partial success. Use PYETM_ERROR_MODE=safe to raise on first error.
-
-        Args:
-            saved_scenario_ids: Iterable of MyETM saved scenario IDs to load
-            client: Optional BaseClient instance for API communication
-
-        Returns:
-            SavedScenarios collection containing the loaded SavedScenario objects.
-            Warnings from failures are collected in the warnings property.
-        """
+    def load_many(cls, saved_scenario_ids: Iterable[int], client: BaseClient | None = None) -> Scenarios:
+        """Load saved scenarios by ID. One that fails to load becomes a warning."""
         scenarios = cls(items=[])
         scenarios.set_bulk_context(True)
 
-        for ssid in saved_scenario_ids:
+        for saved_scenario_id in saved_scenario_ids:
             try:
-                scenario = Scenario.load(ssid, client=client)
+                scenario = Scenario.load(saved_scenario_id, client=client)
                 scenario.set_bulk_context(True)
                 scenarios.items.append(scenario)
-            except SavedScenarioError as e:
-                scenarios.add_warning(
-                    "load_many",
-                    f"Could not load saved scenario {ssid}: {e}",
-                    severity="error",
-                )
+            except ScenarioError as e:
+                scenarios.add_warning("load_many", str(e), severity="error")
 
-        # Show warnings if any
         if len(scenarios.warnings) > 0:
             scenarios.show_warnings()
-
         return scenarios
 
     @classmethod
@@ -229,180 +130,62 @@ class Scenarios(Base):
         end_year: int | None = None,
         client: BaseClient | None = None,
     ) -> Scenarios:
-        """Create multiple SavedScenario objects from parameter dicts.
-
-        If scenario_id is not provided in params, creates a new Session first.
-
-        This is a bulk operation - individual failures are collected as warnings
-        to allow partial success. Use PYETM_ERROR_MODE=safe to raise on first error.
-
-        Args:
-            scenario_params: Iterable of ScenarioCreationParams dicts, each containing:
-                - title: Title for the saved scenario (required)
-                - scenario_id: (Optional) ETEngine scenario ID to save. If not provided,
-                  a new Session will be created using area_code and end_year
-                - template_id: (Optional) Session ID to use as template. Inherits area_code
-                  and end_year from the template.
-                - area_code: (Optional if using defaults or template_id) Area code for new session
-                - end_year: (Optional if using defaults or template_id) End year for new session
-                - user_values: (Optional) Dict of user input values to apply after creation
-                - custom_curves: (Optional) Dict of custom curves to upload after creation
-                - sortables: (Optional) Dict of sortables to apply after creation
-            area_code: Default area_code for all scenarios (if not in params)
-            end_year: Default end_year for all scenarios (if not in params)
-            client: Optional BaseClient instance (shared across all creates)
-
-        Returns:
-            Scenarios: Collection of created scenarios. Warnings from individual
-                      failures are collected in the warnings property.
         """
-        if client is None:
-            client = get_client()
-
-        # Create the collection with bulk context enabled
-        scenarios_list: list[Scenario | Session] = []
-        scenarios = cls(items=scenarios_list)
+        Create many scenarios, then send their inputs, curves and sortables concurrently.
+        area_code and end_year are defaults for params that give neither them nor a source.
+        A scenario that cannot be created becomes a warning.
+        """
+        client = client or get_client()
+        scenarios = cls(items=[])
         scenarios.set_bulk_context(True)
 
-        # Separate data parameters from creation parameters
-        DATA_PARAMS = ["user_values", "custom_curves", "sortables"]
-        creation_params_list: list[dict[str, Any]] = []
-        data_to_apply: list[tuple[int, dict[str, Any]]] = []  # List of (scenario_index, data_dict)
+        created: list[tuple[Scenario, dict[str, Any]]] = []
+        for params in scenario_params:
+            scenario = scenarios._create_one(dict(params), area_code, end_year, client)
+            if scenario is not None:
+                created.append((scenario, {key: params.get(key) for key in DATA_PARAMS}))
 
-        for idx, params in enumerate(scenario_params):
-            # Make a copy to avoid modifying original
-            params_copy: dict[str, Any] = dict(params)
-
-            # Extract all data params declaratively
-            data = {key: params_copy.pop(key, None) for key in DATA_PARAMS}
-
-            creation_params_list.append(params_copy)
-
-            # Only add to data_to_apply if at least one data param is present
-            if any(data.values()):
-                data_to_apply.append((idx, data))
-
-        # Create scenarios sequentially
-        saved_scenarios = []
-        for params_item in creation_params_list:
-            params = params_item  # type: ignore[assignment]
-            title = params.get("title")
-
-            if title is None:
-                scenarios.add_warning(
-                    "create_many",
-                    f"Could not create saved scenario with {params}: Missing required 'title'",
-                    severity="warning",
-                )
-                continue
-
-            try:
-                # If scenario_id is provided, use existing session
-                if "scenario_id" in params:
-                    session_id = params.get("scenario_id")
-                    private = bool(params.get("private", False))
-                    saved_scenarios.append(
-                        Scenario.new(
-                            title=title,
-                            session_id=session_id,
-                            client=client,
-                            private=private,
-                        )
-                    )
-                else:
-                    # Create new session and save it
-                    area = params.get("area_code") or area_code
-                    year = params.get("end_year") or end_year
-
-                    # Check if template_id is provided (allows inheriting area_code/end_year)
-                    has_template = "template_id" in params
-
-                    if not has_template and (area is None or year is None):
-                        scenarios.add_warning(
-                            "create_many",
-                            f"Could not create saved scenario with {params}: "
-                            "Missing area_code or end_year. Provide them in each dict or as defaults.",
-                            severity="warning",
-                        )
-                        continue
-
-                    # Extract private flag and ensure it's a bool
-                    private = bool(params.get("private", False))
-
-                    # Extract additional session params (like template_id)
-                    extra_params = {
-                        k: v
-                        for k, v in params.items()
-                        if k not in ("title", "private", "area_code", "end_year")
-                    }
-
-                    # For template_id, we need to create session first, then wrap it
-                    if "template_id" in extra_params:
-                        session = Session.new(area, year, client=client, **extra_params)
-                        saved_scenarios.append(
-                            Scenario.new(
-                                title=title,
-                                session_id=session.id,
-                                client=client,
-                                private=private,
-                            )
-                        )
-                    else:
-                        # Use unified create for simple case
-                        saved_scenarios.append(
-                            Scenario.new(
-                                title=title,
-                                area_code=area,
-                                end_year=year,
-                                client=client,
-                                private=private,
-                            )
-                        )
-
-            except (SavedScenarioError, Exception) as e:
-                scenarios.add_warning(
-                    "create_many",
-                    f"Could not create saved scenario with {params}: {e}",
-                    severity="error",
-                )
-
-        # Set bulk context on all created scenarios and add to collection
-        for scenario in saved_scenarios:
+        for warning in apply_data([item for item in created if any(item[1].values())], client):
+            scenarios.add_warning("data_application", warning, severity="error")
+        for scenario, _ in created:
             scenario.set_bulk_context(True)
             scenarios.items.append(scenario)
-
-        # Apply data parameters concurrently after all scenarios are created
-        if data_to_apply and saved_scenarios:
-            failure_warnings = cls._apply_data_concurrently(saved_scenarios, data_to_apply, client)
-
-            # Add data application failures as warnings to the collection
-            for warning in failure_warnings:
-                scenarios.add_warning(
-                    "data_application",
-                    warning,
-                    severity="error",
-                )
-
-        # Merge warnings from individual scenarios into collection warnings
-        for scenario in saved_scenarios:
             scenarios._merge_submodel_warnings(scenario)
 
-        # Display summary if there were any warnings
-        if len(scenarios.warnings) > 0 or any(len(s.warnings) > 0 for s in saved_scenarios):
+        if len(scenarios.warnings) > 0:
             print("\n=== Batch Creation Summary ===")
             scenarios.show_warnings()
-
         return scenarios
 
-    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
-        """Export all scenarios to Excel.
+    def _create_one(
+        self, params: dict[str, Any], area_code: str | None, end_year: int | None, client: BaseClient
+    ) -> Scenario | None:
+        try:
+            return self._create_from_params(params, area_code, end_year, client)
+        except Exception as e:  # one failed scenario must not stop the rest of the batch
+            self.add_warning("create_many", f"Could not create saved scenario with {params}: {e}", severity="error")
+            return None
 
-        Note: This exports the underlying session data from each SavedScenario.
-        The scenario_id column will contain Scenario IDs (MyETM).
-        """
+    @staticmethod
+    def _create_from_params(
+        params: dict[str, Any], area_code: str | None, end_year: int | None, client: BaseClient
+    ) -> Scenario:
+        title, private = params.get("title"), params.get("private")
+        if not title:
+            raise ValueError("Missing required 'title'")
+        if params.get("source"):
+            source = Scenario.load(params["source"], client=client)
+            return source.copy_with_preset(title=title, private=private)
+
+        area, year = params.get("area_code") or area_code, params.get("end_year") or end_year
+        if area is None or year is None:
+            raise ValueError("Missing area_code or end_year. Provide them in each dict or as defaults.")
+        return Scenario.new(title=title, area_code=area, end_year=year, private=private, client=client)
+
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
+        """Export every scenario to one workbook."""
         if not self.items:
             raise ValueError("No scenarios to export")
-
         from pyetm.models.scenario_packer import ScenarioPacker
 
         packer = ScenarioPacker()
@@ -410,248 +193,37 @@ class Scenarios(Base):
         packer.to_excel(str(Path(path).expanduser().resolve()), **export_options)
 
     @classmethod
-    def from_excel(
-        cls, xlsx_path: PathLike[str] | str, update: bool | list[str] = False
-    ) -> Scenarios:
-        """Import all scenarios from Excel file.
-
-        Loads all scenarios from the Excel file, including both:
-        - SavedScenarios (where 'session' column is False or missing)
-        - Sessions (where 'session' column is True)
-
-        Returns:
-            Scenarios collection containing mixed Scenario and Session objects
+    def from_excel(cls, xlsx_path: PathLike[str] | str, update: bool | list[str] = False) -> Scenarios:
+        """
+        Load, copy or create every scenario a workbook's MAIN sheet describes, and apply its other
+        sheets. With update, the sheets named (or all of them, for True) are uploaded.
         """
         from pyetm.models.scenario_packer import ScenarioPacker
 
         resolved_path = Path(xlsx_path).expanduser().resolve()
-
         packer = ScenarioPacker.from_excel(str(resolved_path), update=update)
-        all_scenarios = list(packer._scenarios())
-
-        scenarios = cls(items=[])
-        if not all_scenarios:
-            scenarios.add_warning(
-                "from_excel",
-                f"No scenarios found in Excel file: {resolved_path}",
-                severity="warning",
-            )
-        else:
-            all_scenarios.sort(key=lambda s: s.id if hasattr(s, "id") else 0)
-            scenarios_list: list[Scenario | Session] = all_scenarios  # type: ignore[assignment]
-            scenarios.items = scenarios_list
+        scenarios = cls(items=sorted(packer._scenarios(), key=lambda s: s.id or 0))
+        if not scenarios.items:
+            scenarios.add_warning("from_excel", f"No scenarios found in Excel file: {resolved_path}", severity="warning")
 
         scenarios._packer = packer
-
         scenarios._merge_submodel_warnings(*scenarios.items, key_attr="id")
-
-        # Auto-display warnings if any
         if len(scenarios.warnings) > 0:
             scenarios.show_warnings()
-
         return scenarios
 
-    @staticmethod
-    def _get_session(item: Scenario | Session) -> Session:
-        """Safely extract Session from either a Scenario or Session object."""
-        return item.session if isinstance(item, Scenario) else item
-
-    @staticmethod
-    def _format_data_error(metadata: tuple[Any, ...], result: Any) -> str:
-        """Format error message based on request metadata and result.
-
-        Args:
-            metadata: Tuple of (req_type, scenario_idx, scenario_title[, curve_key])
-            result: ServiceResult with errors
-
-        Returns:
-            Formatted error message string
-        """
-        req_type = metadata[0]
-        scenario_title = metadata[2]
-        error_msg = ", ".join(result.errors) if result.errors else "Unknown error"
-
-        if req_type == "custom_curve" and len(metadata) > 3:
-            curve_key = metadata[3]
-            return (
-                f"Failed to upload curve '{curve_key}' for scenario '{scenario_title}': {error_msg}"
-            )
-        else:
-            return f"Failed to update {req_type} for scenario '{scenario_title}': {error_msg}"
-
-    @staticmethod
-    def _apply_data_concurrently(
-        scenarios: list[Scenario],
-        data_to_apply: list[tuple[Any, ...]],
-        client: BaseClient,
-    ) -> list[str]:
-        """Apply user_values/curves/sortables to scenarios concurrently using runners.
-
-        Args:
-            scenarios: List of scenarios
-            data_to_apply: List of (scenario_index, data_dict) tuples
-            client: BaseClient instance for making requests
-
-        Returns:
-            List of warning messages for failed data applications
-        """
-        from pyetm.services.scenario_runners.update_custom_curves import (
-            UpdateCustomCurvesRunner,
-        )
-        from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
-        from pyetm.services.scenario_runners.update_sortables import (
-            UpdateSortablesRunner,
-        )
-
-        requests = []
-        request_metadata: list[
-            Any
-        ] = []  # Track what each request is for - can be 3 or 4 element tuples
-        warnings = []  # Collect warning messages
-
-        for scenario_idx, data in data_to_apply:
-            if scenario_idx >= len(scenarios):
-                continue  # Skip if scenario creation failed
-
-            scenario = scenarios[scenario_idx]
-            session = Scenarios._get_session(scenario)
-
-            # Use UpdateInputsRunner to build user_values requests
-            if data.get("user_values"):
-                try:
-                    request = UpdateInputsRunner.build_request(session, data["user_values"])
-                    requests.append(request)
-                    request_metadata.append(("user_values", scenario_idx, scenario.title))
-                except Exception as e:
-                    warning_msg = (
-                        f"Failed to build user_values request for scenario '{scenario.title}': {e}"
-                    )
-                    warnings.append(warning_msg)
-
-            # Use UpdateCustomCurvesRunner to build curve requests
-            if data.get("custom_curves"):
-                try:
-                    curve_requests = UpdateCustomCurvesRunner.build_requests(
-                        session, data["custom_curves"]
-                    )
-                    requests.extend(curve_requests)
-                    for curve_key in data["custom_curves"].keys():
-                        request_metadata.append(
-                            (
-                                "custom_curve",
-                                scenario_idx,
-                                str(scenario.title),
-                                str(curve_key),
-                            )
-                        )
-                except Exception as e:
-                    warning_msg = (
-                        f"Failed to build curve requests for scenario '{scenario.title}': {e}"
-                    )
-                    warnings.append(warning_msg)
-
-            # Use UpdateSortablesRunner to build sortables requests
-            if data.get("sortables"):
-                for sortable_type, order in data["sortables"].items():
-                    try:
-                        request = UpdateSortablesRunner.build_request(session, sortable_type, order)
-                        requests.append(request)
-                        request_metadata.append(("sortables", scenario_idx, scenario.title))
-                    except Exception as e:
-                        warning_msg = f"Failed to build sortables request for scenario '{scenario.title}': {e}"
-                        warnings.append(warning_msg)
-
-        if requests:
-            formatted_requests = []
-            for req in requests:
-                formatted = {
-                    "method": req["method"],
-                    "url": req["path"],
-                    "kwargs": {**req.get("kwargs", {})},
-                }
-                # Move payload to kwargs.json if present
-                if req.get("payload"):
-                    formatted["kwargs"]["json"] = req["payload"]
-                formatted_requests.append(formatted)
-
-            results = AsyncBatchRunner.batch_requests_sync(
-                client.session, formatted_requests, MAX_CONCURRENT
-            )
-
-            # Collect errors from failed updates
-            for metadata, result in zip(request_metadata, results):
-                if not result.success:
-                    warning_msg = Scenarios._format_data_error(metadata, result)
-                    warnings.append(warning_msg)
-
-        return warnings
-
     @classmethod
-    def discard_many(
-        cls,
-        saved_scenario_ids: list[int],
-        client: BaseClient | None = None,
-    ) -> dict[str, Any]:
-        """Discard multiple saved scenarios in bulk (soft-delete).
+    def discard_many(cls, saved_scenario_ids: list[int], client: BaseClient | None = None) -> dict[str, Any]:
+        """Discard saved scenarios concurrently. Returns the IDs that succeeded and failed."""
+        from pyetm.services.scenario_runners.discard_saved_scenario import DiscardSavedScenarioRunner
 
-        The scenarios are marked as discarded and hidden from listings, but can be
-        recovered through the MyETM web interface within 60 days. After 60 days,
-        MyETM automatically removes discarded scenarios permanently.
+        client = client or get_client()
+        requests = [DiscardSavedScenarioRunner.build_request(saved_scenario_id=ssid) for ssid in saved_scenario_ids]
+        results = BaseRunner._make_batch_requests(client, requests) if requests else []
 
-        Args:
-            saved_scenario_ids: List of SavedScenario IDs to discard
-            client: Optional BaseClient instance
-
-        Returns:
-            Dict with 'successful' and 'failed' keys containing lists of IDs
-
-        Example:
-            result = Scenarios.discard_many([1, 2, 3])
-            print(f"Discarded: {result['successful']}")
-            print(f"Failed: {result['failed']}")
-        """
-        from pyetm.services.scenario_runners.discard_saved_scenario import (
-            DiscardSavedScenarioRunner,
-        )
-
-        if client is None:
-            client = get_client()
-
-        if not saved_scenario_ids:
-            return {"successful": [], "failed": []}
-
-        # Build discard requests for all scenarios
-        requests = []
-        for scenario_id in saved_scenario_ids:
-            request = DiscardSavedScenarioRunner.build_request(saved_scenario_id=scenario_id)
-            requests.append(request)
-
-        # Format requests for AsyncBatchRunner
-        formatted_requests = []
-        for req in requests:
-            formatted = {
-                "method": req["method"],
-                "url": req["path"],
-                "kwargs": {**req.get("kwargs", {})},
-            }
-            if req.get("payload"):
-                formatted["kwargs"]["json"] = req["payload"]
-            formatted_requests.append(formatted)
-
-        # Execute batch discard
-        results = AsyncBatchRunner.batch_requests_sync(
-            client.session, formatted_requests, MAX_CONCURRENT
-        )
-
-        # Collect successes and failures
-        successful = []
-        failed = []
-        for scenario_id, result in zip(saved_scenario_ids, results):
-            if result.success:
-                successful.append(scenario_id)
-            else:
-                failed.append(scenario_id)
-                error_msg = "; ".join(result.errors) if result.errors else "Unknown error"
-                logger.warning(f"Failed to discard saved scenario {scenario_id}: {error_msg}")
-
-        return {"successful": successful, "failed": failed}
+        outcome: dict[str, Any] = {"successful": [], "failed": []}
+        for ssid, result in zip(saved_scenario_ids, results):
+            outcome["successful" if result.success else "failed"].append(ssid)
+            if not result.success:
+                logger.warning("Failed to discard saved scenario %s: %s", ssid, "; ".join(result.errors))
+        return outcome

@@ -1,81 +1,114 @@
-"""Scenario model for ETM scenario management."""
+"""Scenario model: a saved scenario in the ETM, and everything you can do with it."""
 
 from __future__ import annotations
+
+import logging
+import shutil
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Union, TYPE_CHECKING, cast
-from pydantic import Field, PrivateAttr
-from pyetm.models.base import Base
+from os import PathLike
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Union, cast
+
+import pandas as pd
+from pydantic import ConfigDict, Field, PrivateAttr
+
 from pyetm.clients import BaseClient, get_client
-from pyetm.types import AnnualExportType
-from pyetm.services.scenario_runners.create_saved_scenario import (
-    CreateSavedScenarioRunner,
-)
-from pyetm.services.scenario_runners.update_saved_scenario import (
-    UpdateSavedScenarioRunner,
-)
-from pyetm.services.scenario_runners.fetch_saved_scenario import (
-    FetchSavedScenarioRunner,
-)
-from pyetm.services.scenario_runners.saved_scenario_users_index import (
-    SavedScenarioUsersIndexRunner,
-)
+from pyetm.config.settings import get_settings
+from pyetm.models.annual_exports import AnnualExports
+from pyetm.models.base import Base
+from pyetm.models.couplings import Couplings
+from pyetm.models.custom_curves import CustomCurves
+from pyetm.models.export_config import ExportConfig
+from pyetm.models.gqueries import Gqueries
+from pyetm.models.hourly_output_curves import HourlyOutputCurves
+from pyetm.models.inputs import Inputs
+from pyetm.models.sortables import Sortables
+from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.break_preset_link import BreakPresetLinkRunner
+from pyetm.services.scenario_runners.create_saved_scenario import CreateSavedScenarioRunner
+from pyetm.services.scenario_runners.delete_custom_curves import DeleteCustomCurvesRunner
+from pyetm.services.scenario_runners.destroy_saved_scenario import DestroySavedScenarioRunner
+from pyetm.services.scenario_runners.discard_saved_scenario import DiscardSavedScenarioRunner
+from pyetm.services.scenario_runners.fetch_couplings import FetchCouplingsRunner
+from pyetm.services.scenario_runners.fetch_custom_curves import FetchAllCustomCurveDataRunner
+from pyetm.services.scenario_runners.fetch_inputs import FetchInputsRunner
+from pyetm.services.scenario_runners.fetch_metadata import FetchMetadataRunner
+from pyetm.services.scenario_runners.fetch_saved_scenario import FetchSavedScenarioRunner
+from pyetm.services.scenario_runners.fetch_sortables import FetchSortablesRunner
+from pyetm.services.scenario_runners.save_snapshot import SaveSnapshotRunner
 from pyetm.services.scenario_runners.saved_scenario_users_create import (
     SavedScenarioUsersCreateRunner,
-)
-from pyetm.services.scenario_runners.saved_scenario_users_update import (
-    SavedScenarioUsersUpdateRunner,
 )
 from pyetm.services.scenario_runners.saved_scenario_users_destroy import (
     SavedScenarioUsersDestroyRunner,
 )
-from pyetm.services.scenario_runners.discard_saved_scenario import (
-    DiscardSavedScenarioRunner,
+from pyetm.services.scenario_runners.saved_scenario_users_index import (
+    SavedScenarioUsersIndexRunner,
 )
-from pyetm.services.scenario_runners.destroy_saved_scenario import (
-    DestroySavedScenarioRunner,
+from pyetm.services.scenario_runners.saved_scenario_users_update import (
+    SavedScenarioUsersUpdateRunner,
 )
-import pandas as pd
-from os import PathLike
-from typing import Generator
+from pyetm.services.scenario_runners.update_couplings import UpdateCouplingsRunner
+from pyetm.services.scenario_runners.update_custom_curves import UpdateCustomCurvesRunner
+from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
+from pyetm.services.scenario_runners.update_metadata import UpdateMetadataRunner
+from pyetm.services.scenario_runners.update_saved_scenario import UpdateSavedScenarioRunner
+from pyetm.services.scenario_runners.update_sortables import UpdateSortablesRunner
+from pyetm.types import AnnualExportType
+from pyetm.validators import validate_export_names
 
 if TYPE_CHECKING:
-    from pyetm.models.session import Session
-    from pyetm.models.inputs import Inputs
-    from pyetm.models.sortables import Sortables
-    from pyetm.models.custom_curves import CustomCurves
-    from pyetm.models.hourly_output_curves import HourlyOutputCurves
-    from pyetm.models.annual_exports import AnnualExports
-    from pyetm.models.couplings import Couplings
-    from pyetm.models.gqueries import Gqueries
-    from pyetm.models.export_config import ExportConfig
     from pyetm.models.export_data_collection import ExportDataCollection
 
+logger = logging.getLogger(__name__)
 
-class SavedScenarioError(Exception):
-    """Base saved scenario error"""
+ROLES = ("scenario_owner", "scenario_collaborator", "scenario_viewer")
+
+# The Versions already warned about, so loading many Scenarios from one warns once
+_versions_warned: Set[str] = set()
+
+
+class ScenarioError(Exception):
+    """A Scenario could not be created, loaded or changed."""
+
+
+# The 2.0 name, kept so existing `except SavedScenarioError` handlers still catch.
+SavedScenarioError = ScenarioError
 
 
 class Scenario(Base):
     """
-    Pydantic model for a MyETM SavedScenario.
+    A saved scenario in the ETM.
 
-    A SavedScenario wraps an ETEngine session scenario and persists it in MyETM.
-    The response includes both SavedScenario metadata and the full nested Scenario.
+    It has a title, privacy, users and a history of saved snapshots, and every input, curve,
+    query and export call works on its current state.
     """
 
-    id: int = Field(..., description="Unique saved scenario identifier in MyETM")
-    scenario_id: int = Field(..., description="Reference to ETEngine scenario")
-    title: str = Field(..., description="Title of the saved scenario")
-    private: Optional[bool] = False
+    model_config = ConfigDict(validate_assignment=True, populate_by_name=True)
+
+    id: Optional[int] = Field(None, description="The saved scenario's ID")
+    title: Optional[str] = None
+    description: Optional[str] = None
+    scenario_id: Optional[int] = Field(None, description="The current Session, for reference only")
     area_code: Optional[str] = None
     end_year: Optional[int] = None
+    version: Optional[str] = Field(None, description="The Version the scenario is on")
+    private: Optional[bool] = None
+    discarded_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    scenario: Optional[Dict[str, Any]] = None
+    short_name: Optional[str] = Field(None, description="A local label for workbooks and exports")
 
-    _scenario_session: Optional[Session] = PrivateAttr(None)
-    _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
     _client: Optional[BaseClient] = PrivateAttr(None)
+    _session: Optional[Dict[str, Any]] = PrivateAttr(None)
+    _pending_users: Dict[str, str] = PrivateAttr(default_factory=dict)
+    _inputs: Optional[Inputs] = PrivateAttr(None)
+    _sortables: Optional[Sortables] = PrivateAttr(None)
+    _custom_curves: Optional[CustomCurves] = PrivateAttr(None)
+    _hourly_output_curves: Optional[HourlyOutputCurves] = PrivateAttr(None)
+    _annual_exports: Optional[AnnualExports] = PrivateAttr(None)
+    _queries: Optional[Gqueries] = PrivateAttr(None)
+    _export_config: Optional[ExportConfig] = PrivateAttr(None)
+    _couplings: Optional[Couplings] = PrivateAttr(None)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Scenario):
@@ -85,98 +118,33 @@ class Scenario(Base):
     def __hash__(self) -> int:
         return hash((self.id, self.area_code, self.end_year))
 
+    # --- Creating and loading ----------------------------------------------------------------
+
     @classmethod
     def new(
         cls,
         title: str,
-        session_id: Optional[int] = None,
-        area_code: Optional[str] = None,
-        end_year: Optional[int] = None,
+        area_code: str,
+        end_year: int,
+        private: Optional[bool] = None,
+        description: Optional[str] = None,
         client: Optional[BaseClient] = None,
         user_values: Optional[Dict[str, Any]] = None,
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
-        private: bool = False,
-        **kwargs: Any,
     ) -> "Scenario":
         """
-        Create a SavedScenario in MyETM - either from an existing session or by creating a new one.
-
-        Provide EITHER session_id OR (area_code + end_year), not both.
-
-        Args:
-            title: Title for the saved scenario (required)
-            session_id: ID of existing Session to save (optional)
-            area_code: Region code for new session, e.g., "nl2023", "de" (optional)
-            end_year: End year for new session (optional)
-            client: Optional BaseClient instance
-            user_values: Optional dict of user input values to apply after creation
-            custom_curves: Optional dict of custom curves to upload after creation
-            sortables: Optional dict of sortables to apply after creation
-            private: Whether the scenario should be private (default: False)
-            **kwargs: Additional parameters (e.g., description)
-
-        Returns:
-            SavedScenario instance
-
-        Raises:
-            SavedScenarioError: If creation fails
-            ValueError: If parameter combination is invalid
+        Create a scenario from scratch on ETM_VERSION.
 
         Example:
-            >>> # Create new scenario (creates new session + saves it)
-            >>> scenario = Scenario.new(
-            ...     title="High Solar 2050",
-            ...     area_code="nl2023",
-            ...     end_year=2050
-            ... )
-
-            >>> # Save existing session
-            >>> scenario = Scenario.new(
-            ...     title="My Scenario",
-            ...     session_id=existing_session.id
-            ... )
+            >>> scenario = Scenario.new(title="High Solar 2050", area_code="nl2023", end_year=2050)
         """
-        # Validate authentication
-        from pyetm.config.settings import get_settings
-
-        if not get_settings().etm_api_token:
-            raise PermissionError(
-                "Creating SavedScenarios requires authentication. "
-                "Set ETM_API_TOKEN or create a Session instead. "
-                "Get your token at https://energytransitionmodel.com/api_access"
-            )
-
-        # Validation
-        if session_id is not None and (area_code is not None or end_year is not None):
-            raise ValueError(
-                "Provide either session_id OR (area_code + end_year), not both"
-            )
-        if session_id is None and (area_code is None or end_year is None):
-            raise ValueError(
-                "Must provide either session_id OR both area_code and end_year"
-            )
-
-        # Create new session if area_code and end_year are provided
-        if area_code is not None and end_year is not None:
-            from pyetm.models.session import Session
-
-            session = Session.new(area_code=area_code, end_year=end_year)
-            session_id = session.id
-
-        # Create SavedScenario using the session_id
-        params = {
-            "scenario_id": session_id,
-            "title": title,
-            "private": private,
-            **kwargs,
-        }
-        return cls._create_from_params(
-            params, client, user_values, custom_curves, sortables
-        )
+        params = {"title": title, "area_code": area_code, "end_year": end_year, "private": private}
+        params.update(description=description, version=get_settings().etm_version)
+        return cls._create(params, client, user_values, custom_curves, sortables)
 
     @classmethod
-    def _create_from_params(
+    def _create(
         cls,
         params: Dict[str, Any],
         client: Optional[BaseClient] = None,
@@ -184,620 +152,101 @@ class Scenario(Base):
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
     ) -> "Scenario":
-        """
-        Internal helper to create SavedScenario from params dict.
-
-        Args:
-            params: Dictionary with required keys (scenario_id, title) and optional keys
-            client: Optional BaseClient instance
-            user_values: Optional dict of user input values to apply after creation
-            custom_curves: Optional dict of custom curves to upload after creation
-            sortables: Optional dict of sortables to apply after creation
-
-        Returns:
-            SavedScenario instance
-        """
-        if client is None:
-            client = get_client()
-        result = CreateSavedScenarioRunner.run(client, params)
-
+        """Create through MyETM, then apply any inputs, curves and sortables to the new Session."""
+        client = client or get_client()
+        sent = {key: value for key, value in params.items() if value is not None}
+        result = CreateSavedScenarioRunner.run(client, sent)
         if not result.success:
-            raise SavedScenarioError(
-                f"Could not create saved scenario: {result.errors}"
-            )
+            raise ScenarioError(f"Could not create saved scenario: {result.errors}")
 
-        # Validate that we received data before attempting to create the model
-        if result.data is None:
-            error_msg = "Could not create saved scenario: API returned no data"
-            if result.errors:
-                error_msg += f". Errors: {result.errors}"
-            raise SavedScenarioError(error_msg)
-
-        saved_scenario = cls.model_validate(result.data)
-
-        # Store client for future operations
-        saved_scenario._client = client
-
-        for warning in result.errors:
-            saved_scenario.add_warning("base", warning)
-
-        for field, value in params.items():
-            if hasattr(saved_scenario, field) and (
-                result.data is None or field not in result.data
-            ):
-                setattr(saved_scenario, field, value)
-
-        # Apply data parameters if provided
-        if user_values or custom_curves or sortables:
-            cls._apply_data_to_scenario(
-                saved_scenario, user_values, custom_curves, sortables, client
-            )
-
-        return saved_scenario
-
-    @staticmethod
-    def _apply_submodel(
-        scenario: "Scenario",
-        data: Any,
-        runner_class: type[Any],
-        warning_key: str,
-        client: BaseClient,
-    ) -> None:
-        """Apply a single data type to scenario with error handling."""
-        try:
-            result = runner_class.run(client, scenario.session, data)
-
-            # Check if the API request failed and surface the errors
-            if hasattr(result, "success") and not result.success:
-                if hasattr(result, "errors") and result.errors:
-                    for error in result.errors:
-                        scenario.add_warning(warning_key, error)
-                else:
-                    scenario.add_warning(warning_key, f"Failed to apply {warning_key}")
-
-                # Auto-display data application warnings immediately
-                scenario_id_str = getattr(scenario, "id", "unknown")
-                scenario_title = getattr(scenario, "title", "Unknown")
-                scenario.auto_show_warnings(
-                    f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
-                )
-        except Exception as e:
-            scenario.add_warning(warning_key, f"Failed to apply {warning_key}: {e}")
-            # Auto-display exception warnings immediately
-            scenario_id_str = getattr(scenario, "id", "unknown")
-            scenario_title = getattr(scenario, "title", "Unknown")
-            scenario.auto_show_warnings(
-                f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
-            )
-
-    @staticmethod
-    def _apply_data_to_scenario(
-        scenario: "Scenario",
-        user_values: Optional[Dict[str, Any]],
-        custom_curves: Optional[Dict[str, Any]],
-        sortables: Optional[Dict[str, Any]],
-        client: BaseClient,
-    ) -> None:
-        """
-        Apply user_values, custom curves, and sortables to a scenario.
-
-        Args:
-            scenario: The scenario to apply data to
-            user_values: Optional dict of user input values
-            custom_curves: Optional dict of custom curves
-            sortables: Optional dict of sortables
-            client: BaseClient instance for API calls
-        """
-        from pyetm.services.scenario_runners.update_inputs import UpdateInputsRunner
-        from pyetm.services.scenario_runners.update_custom_curves import (
-            UpdateCustomCurvesRunner,
-        )
-        from pyetm.services.scenario_runners.update_sortables import (
-            UpdateSortablesRunner,
-        )
-
-        submodels = [
-            (user_values, UpdateInputsRunner, "user_values"),
-            (custom_curves, UpdateCustomCurvesRunner, "custom_curves"),
-            (sortables, UpdateSortablesRunner, "sortables"),
-        ]
-
-        for data, runner_class, warning_key in submodels:
-            if data:
-                Scenario._apply_submodel(
-                    scenario, data, runner_class, warning_key, client
-                )
-
-        # Invalidate both caches so next access fetches fresh data with updates
-        scenario._scenario_session = None
-        scenario.scenario = None
+        scenario = cls._from_myetm(cast(Dict[str, Any], result.data), client, result.errors)
+        scenario._apply_data(user_values, custom_curves, sortables)
+        return scenario
 
     @classmethod
-    def load(
-        cls, saved_scenario_id: int, client: Optional[BaseClient] = None
+    def _from_myetm(
+        cls, data: Dict[str, Any], client: BaseClient, warnings: Optional[List[str]] = None
     ) -> "Scenario":
-        """
-        Load an existing SavedScenario from MyETM by its ID.
+        scenario = cls.model_validate(data)
+        scenario._client = client
+        for warning in warnings or []:
+            scenario.add_warning("base", warning)
+        scenario._warn_on_other_version()
+        return scenario
 
-        Args:
-            saved_scenario_id: The ID of the saved scenario to load
-            client: Optional BaseClient instance
-
-        Returns:
-            SavedScenario instance
-
-        Raises:
-            SavedScenarioError: If loading fails
-        """
-        if client is None:
-            client = get_client()
-
-        # Create a simple object with id attribute for the runner
-        template = type("T", (), {"id": saved_scenario_id})()
-        result = FetchSavedScenarioRunner.run(client, template)
-
-        if not result.success:
-            for error in result.errors:
-                if "not found" in error.lower():
-                    raise SavedScenarioError(
-                        f"Scenario {saved_scenario_id} does not exist on this ETM environment"
-                    )
-            raise SavedScenarioError(
-                f"Could not load saved scenario {saved_scenario_id}: {result.errors}"
-            )
-
-        saved_scenario = cls.model_validate(result.data)
-
-        # Store client for future operations
-        saved_scenario._client = client
-
-        for warning in result.errors:
-            saved_scenario.add_warning("base", warning)
-
-        # Auto-display load warnings (use getattr for safety)
-        scenario_id_str = getattr(saved_scenario, "id", saved_scenario_id)
-        scenario_title = getattr(saved_scenario, "title", "Unknown")
-        saved_scenario.auto_show_warnings(
-            f"SavedScenario #{scenario_id_str} (title='{scenario_title}')"
+    def _warn_on_other_version(self) -> None:
+        """pyETM targets ETM_VERSION. Another Version may work, so it warns once and carries on."""
+        target = get_settings().etm_version
+        if not self.version or self.version == target or self.version in _versions_warned:
+            return
+        _versions_warned.add(self.version)
+        logger.warning(
+            "Scenario %s is on Version %s, but this pyETM release targets %s. "
+            "It may still work, but is not tested against it.",
+            self.id,
+            self.version,
+            target,
         )
 
-        return saved_scenario
-
-    @property
-    def session(self) -> "Session":
-        """
-        Get the current underlying ETEngine Scenario for this SavedScenario.
-
-        Returns:
-            Scenario: The current ETEngine scenario session (cached after first access)
-        """
-        from pyetm.models.session import Session
-
-        # Return cached if already loaded
-        if self._scenario_session is not None:
-            return self._scenario_session
-
-        # Build from nested data if available (e.g., from SavedScenario.load())
-        if self.scenario is not None:
-            self._scenario_session = Session.model_validate(self.scenario)
-            return self._scenario_session
-
-        # Fetch fresh from ETEngine API using stored client
-        self._scenario_session = Session.load(self.scenario_id, client=self._client)
-        return self._scenario_session
-
-    def update(self, client: Optional[BaseClient] = None, **kwargs: Any) -> None:
-        """
-        Update this SavedScenario.
-
-        Passing a new ``scenario_id`` saves a version: MyETM moves the current
-        session into the scenario's history and points the SavedScenario at the
-        new session. Passing an ID already in the history restores that version.
-
-        Args:
-            client: Optional BaseClient instance
-            **kwargs: Fields to update (title, private, discarded, scenario_id)
-
-        Raises:
-            SavedScenarioError: If the update fails
-
-        Example:
-            ```python
-            snapshot = scenario.session.copy_with_preset()
-            scenario.update(scenario_id=snapshot.id)
-            ```
-        """
-        if client is None:
-            client = get_client()
-        previous_scenario_id = self.scenario_id
-        result = UpdateSavedScenarioRunner.run(client, self.id, kwargs)
-
+    @classmethod
+    def load(cls, saved_scenario_id: int, client: Optional[BaseClient] = None) -> "Scenario":
+        """Load a saved scenario by its ID."""
+        client = client or get_client()
+        result = FetchSavedScenarioRunner.run(client, saved_scenario_id)
         if not result.success:
-            raise SavedScenarioError(
-                f"Could not update saved scenario: {result.errors}"
+            raise ScenarioError(f"Could not load saved scenario {saved_scenario_id}: {result.errors}")
+
+        scenario = cls._from_myetm(cast(Dict[str, Any], result.data), client, result.errors)
+        scenario.auto_show_warnings(f"Scenario #{scenario.id} (title='{scenario.title}')")
+        return scenario
+
+    @classmethod
+    def from_excel(cls, xlsx_path: PathLike[str] | str) -> "Scenario":
+        """Load a single scenario from Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        scenarios = list(ScenarioPacker.from_excel(xlsx_path)._scenarios())
+        if len(scenarios) != 1:
+            raise ScenarioError(
+                f"Expected one scenario, found {len(scenarios)}. "
+                "Use Scenarios.from_excel() for multi-scenario workbooks."
             )
-
-        for warning in result.errors:
-            self.add_warning("update", warning)
-
-        if result.data:
-            for field, value in result.data.items():
-                if field in Scenario.model_fields:
-                    setattr(self, field, value)
-
-        for field, value in kwargs.items():
-            if field in Scenario.model_fields and (not result.data or field not in result.data):
-                setattr(self, field, value)
-
-        if self.scenario_id != previous_scenario_id:
-            self._forget_session(result.data)
-
-    def _forget_session(self, response: Optional[Dict[str, Any]]) -> None:
-        """Drop the cached session so the next access loads the new scenario_id."""
-        self._scenario_session = None
-        if not response or "scenario" not in response:
-            self.scenario = None
-
-    def discard(self, client: Optional[BaseClient] = None) -> None:
-        """
-        Discard this SavedScenario from MyETM (soft-delete, recoverable).
-
-        The scenario is marked as discarded and hidden from listings, but can be
-        recovered through the MyETM web interface within 60 days. After 60 days,
-        MyETM automatically removes discarded scenarios permanently.
-
-        This is the safe, recoverable deletion method. Use delete() for permanent deletion.
-
-        Args:
-            client: Optional BaseClient instance
-
-        Raises:
-            SavedScenarioError: If discard fails
-
-        Example:
-            scenario = Scenario.load(123)
-            scenario.discard()  # Soft-delete, recoverable for 60 days
-        """
-        if client is None:
-            client = get_client()
-
-        result = DiscardSavedScenarioRunner.run(client, self.id)
-
-        if not result.success:
-            raise SavedScenarioError(
-                f"Could not discard saved scenario: {result.errors}"
-            )
-
-    def delete(self, client: Optional[BaseClient] = None) -> None:
-        """
-        Permanently delete this SavedScenario from MyETM.
-
-        WARNING: This is a PERMANENT deletion and CANNOT be undone. MyETM purges the
-        SavedScenario and unbinds its Session, which then expires on its own.
-        For recoverable deletion, use discard() instead.
-
-        Args:
-            client: Optional BaseClient instance
-
-        Raises:
-            SavedScenarioError: If deletion fails
-
-        Example:
-            scenario = Scenario.load(123)
-            scenario.delete()  # PERMANENT deletion - cannot be recovered
-        """
-        if client is None:
-            client = get_client()
-
-        result = DestroySavedScenarioRunner.run(client, saved_scenario_id=self.id)
-
-        if not result.success:
-            raise SavedScenarioError(
-                f"Could not permanently delete saved scenario: {result.errors}"
-            )
+        return scenarios[0]
 
     @property
-    def inputs(self) -> "Inputs":
-        """Get inputs from the underlying session."""
-        return self.session.inputs
+    def client(self) -> BaseClient:
+        """The client this scenario was loaded with, or the default one."""
+        return self._client or get_client()
 
-    @property
-    def sortables(self) -> "Sortables":
-        """Get sortables from the underlying session."""
-        return self.session.sortables
+    # --- Copying, interpolating and saving -----------------------------------------------------
 
-    @property
-    def custom_curves(self) -> "CustomCurves":
-        """Get custom curves from the underlying session."""
-        return self.session.custom_curves
-
-    @property
-    def hourly_output_curves(self) -> "HourlyOutputCurves":
-        """Get output curves from the underlying session."""
-        return self.session.hourly_output_curves
-
-    @property
-    def annual_exports(self) -> "AnnualExports":
-        """Get annual exports from the underlying session."""
-        return self.session.annual_exports
-
-    @property
-    def couplings(self) -> "Couplings":
-        """Get couplings from the underlying session."""
-        return self.session.couplings
-
-    @property
-    def version(self) -> str:
-        """Get ETM version from the underlying session."""
-        return self.session.version
-
-    @property
-    def start_year(self) -> Optional[int]:
-        """Get start year from the underlying session."""
-        return self.session.start_year
-
-    @property
-    def template_id(self) -> Optional[int]:
-        """Get template ID from the underlying session."""
-        return self.session.template_id
-
-    @property
-    def keep_compatible(self) -> Optional[bool]:
-        """Get keep_compatible flag from the underlying session."""
-        return self.session.keep_compatible
-
-    @property
-    def scaling(self) -> Optional[Any]:
-        """Get scaling from the underlying session."""
-        return self.session.scaling
-
-    @property
-    def url(self) -> Optional[str]:
-        """Get URL from the underlying session."""
-        return self.session.url
-
-    def user_values(self) -> Dict[str, Any]:
-        """Get user values from the underlying session."""
-        return self.session.user_values()
-
-    def update_user_values(
-        self, update_inputs: Dict[str, Any], skip_upload: bool = False
-    ) -> None:
-        """Update user values on the underlying session."""
-        self.session.update_user_values(update_inputs, skip_upload=skip_upload)
-
-    def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
-        """Remove user values on the underlying session."""
-        self.session.remove_user_values(input_keys)
-
-    def set_user_values_from_dataframe(self, dataframe: pd.DataFrame) -> None:
-        """Set user values from dataframe on the underlying session."""
-        self.session.set_user_values_from_dataframe(dataframe)
-
-    def update_sortables(self, update_sortables: Dict[str, List[Any]]) -> None:
-        """Update sortables on the underlying session."""
-        self.session.update_sortables(update_sortables)
-
-    def remove_sortables(self, sortable_names: Union[List[str], Set[str]]) -> None:
-        """Remove sortables on the underlying session."""
-        self.session.remove_sortables(sortable_names)
-
-    def set_sortables_from_dataframe(
-        self, dataframe: pd.DataFrame, skip_upload: bool = False
-    ) -> None:
-        """Set sortables from dataframe on the underlying session."""
-        self.session.set_sortables_from_dataframe(dataframe, skip_upload=skip_upload)
-
-    def update_custom_curves(
-        self, custom_curves: Any, skip_upload: bool = False
-    ) -> None:
-        """Update custom curves on the underlying session."""
-        self.session.update_custom_curves(custom_curves, skip_upload=skip_upload)
-
-    def remove_custom_curves(
-        self, curve_keys: Union[List[str], Set[str]]
-    ) -> None:
-        """Remove custom curves from the underlying session."""
-        self.session.remove_custom_curves(curve_keys)
-
-    def custom_curve_series(self, curve_name: str) -> Optional[pd.Series[Any]]:
-        """Get a custom curve series from the underlying session."""
-        return self.session.custom_curve_series(curve_name)
-
-    def custom_curves_series(self) -> Any:  # Returns generator
-        """Yield all custom curve series from the underlying session."""
-        return self.session.custom_curves_series()
-
-    def get_hourly_curve(self, identifier: str) -> Optional[pd.DataFrame]:
+    def copy_with_preset(
+        self, title: Optional[str] = None, private: Optional[bool] = None
+    ) -> "Scenario":
         """
-        Get a single hourly output curve by name or carrier type alias.
-
-        Carrier types ('electricity', 'heat', 'hydrogen', 'methane') are treated
-        as convenient aliases for their primary curves.
-
-        Args:
-            identifier: Curve name (e.g., 'merit_order') or carrier type alias
-
-        Returns:
-            DataFrame with hourly data, or None if not found
+        Copy this scenario into a new one whose preset is this scenario's current Session, so
+        its edits read against this one.
         """
-        return self.session.get_hourly_curve(identifier)
+        params = {"title": title or f"Copy of {self.title}", "source": self.id}
+        params.update(version=self.version, private=private)
+        return self._create(params, self._client)
 
-    def get_hourly_curves(
-        self, identifiers: list[str]
-    ) -> dict[str, pd.DataFrame]:
-        """
-        Get multiple hourly output curves by names or carrier type aliases.
-
-        Args:
-            identifiers: List of curve names and/or carrier type aliases
-
-        Returns:
-            Dictionary mapping curve names to DataFrames
-        """
-        return self.session.get_hourly_curves(identifiers)
-
-    def all_hourly_output_curves(self) -> Any:  # Returns generator
-        """Yield all output curves from the underlying session."""
-        return self.session.all_hourly_output_curves()
-
-    def clear_hourly_curves_cache(self) -> int:
-        """Clear all hourly output curves cache files and LRU cache.
-
-        Returns:
-            Number of files successfully removed
-        """
-        return self.session.clear_hourly_curves_cache()
-
-    def clear_custom_curves_cache(self) -> int:
-        """Clear all custom curves cache files.
-
-        Returns:
-            Number of files successfully removed
-        """
-        return self.session.clear_custom_curves_cache()
-
-    def clear_all_curve_caches(self) -> tuple[int, int]:
-        """Clear all curve caches (hourly output curves and custom curves).
-
-        Returns:
-            Tuple of (hourly_curves_removed, custom_curves_removed)
-        """
-        return self.session.clear_all_curve_caches()
-
-    def clear_session_cache(self) -> None:
-        """Clear entire session temp directory (all cached files).
-
-        This removes all cached files for this session and clears
-        all associated in-memory caches.
-        """
-        self.session.clear_session_cache()
-
-    def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
-        """Get a single annual export by name from the underlying session."""
-        return self.session.get_annual_export(export_name)
-
-    def get_annual_exports(
-        self, export_names: AnnualExportType | list[AnnualExportType]
-    ) -> dict[str, pd.DataFrame]:
-        """Get multiple annual exports from the underlying session."""
-        return self.session.get_annual_exports(export_names)
-
-    def update_couplings(
-        self, coupling_groups: List[str], action: str = "couple", force: bool = False
-    ) -> None:
-        """Update couplings on the underlying session."""
-        self.session.update_couplings(coupling_groups, action, force)
-
-    def add_queries(self, gquery_keys: Union[list[str], set[str]]) -> None:
-        """Add queries to the underlying session."""
-        self.session.add_queries(gquery_keys)
-
-    def execute_queries(self) -> None:
-        """Execute queries on the underlying session."""
-        self.session.execute_queries()
-
-    def results(self, columns: Any = None) -> pd.DataFrame:
-        """Get query results from the underlying session."""
-        return self.session.results(columns)
-
-    def queries_requested(self) -> bool:
-        """Check if queries have been requested on the underlying session."""
-        return self.session.queries_requested()
-
-    def set_export_config(self, config: "ExportConfig" | None) -> None:
-        """Set export config on the underlying session."""
-        self.session.set_export_config(config)
-
-    def get_export_config(self) -> "ExportConfig" | None:
-        """Get export config from the underlying session."""
-        return self.session.get_export_config()
-
-    def show_all_warnings(self) -> None:
-        """Show all warnings from the underlying session."""
-        self.session.show_all_warnings()
-
-    def identifier(self) -> Union[str, int]:
-        """Get identifier in priority order: saved title, short_name, session title, saved id, session id."""
-        if self.title:
-            return self.title
-        if self.session.short_name:
-            return self.session.short_name
-        if self.session.title:
-            return self.session.title
-        if self.id:
-            return self.id
-        return self.session.id
-
-    def set_short_name(self, short_name: str) -> None:
-        """Set short name on the underlying session."""
-        self.session.set_short_name(short_name)
-
-    def update_metadata(self, **kwargs: Any) -> Optional[Dict[str, Any]]:
-        """Update metadata on the underlying session."""
-        return self.session.update_metadata(**kwargs)
-
-    def copy_with_preset(self, **overrides: Any) -> "Scenario":
-        """
-        Create a copy of the underlying session with a linked preset and save it to MyETM.
-        """
-        # Separate SavedScenario parameters from Session copy parameters
-        title = overrides.pop("title", f"Copy of {self.title}")
-        private = overrides.pop("private", None)
-
-        # Copy the underlying session with preset link, passing session-related overrides
-        copied_session = self.session.copy_with_preset(**overrides)
-
-        # Save the copied session to MyETM as a new SavedScenario
-        save_params = {"title": title}
-        if private is not None:
-            save_params["private"] = private
-
-        return cast("Scenario", copied_session.save(**save_params))
-
-    def copy(
+    def copy(  # type: ignore[override]
         self,
+        title: Optional[str] = None,
+        private: Optional[bool] = None,
         user_values: Optional[Dict[str, Any]] = None,
         custom_curves: Optional[Dict[str, Any]] = None,
         sortables: Optional[Dict[str, Any]] = None,
-        **overrides: Any,
     ) -> "Scenario":
-        """
-        Create a copy with no template link to the original scenario and save it to MyETM.
+        """Copy this scenario into an independent one, with no preset link back to this one."""
+        copied = self.copy_with_preset(title=title, private=private)
+        result = BreakPresetLinkRunner.run(copied.client, copied)
+        if not result.success:
+            raise ScenarioError(f"Copied scenario {copied.id} but could not break its preset link: {result.errors}")
 
-        Args:
-            user_values: Optional dict of user input values to apply after copying
-            custom_curves: Optional dict of custom curves to upload after copying
-            sortables: Optional dict of sortables to apply after copying
-            **overrides: Additional parameters to override (title, private, etc.)
-
-        Returns:
-            Copied SavedScenario instance
-        """
-        # Separate SavedScenario parameters from Session copy parameters
-        title = overrides.pop("title", f"Copy of {self.title}")
-        private = overrides.pop("private", None)
-
-        # Copy the underlying session (no preset link), passing session-related overrides
-        copied_session = self.session.copy(**overrides)
-
-        # Save the copied session to MyETM as a new SavedScenario
-        save_params = {"title": title}
-        if private is not None:
-            save_params["private"] = private
-
-        copied_scenario = copied_session.save(**save_params)
-
-        # Apply data parameters if provided
-        if user_values or custom_curves or sortables:
-            from pyetm.clients import BaseClient, get_client
-
-            client = get_client()
-            Scenario._apply_data_to_scenario(
-                copied_scenario, user_values, custom_curves, sortables, client
-            )
-
-        return cast("Scenario", copied_scenario)
+        copied._apply_data(user_values, custom_curves, sortables)
+        return copied
 
     @classmethod
     def interpolate(
@@ -806,211 +255,626 @@ class Scenario(Base):
         *end_years: int,
         titles: Optional[List[str]] = None,
         client: Optional[BaseClient] = None,
-        **kwargs: Any,
     ) -> List["Scenario"]:
         """
-        Interpolate one or more saved scenarios to target years and save to MyETM.
-        """
-        end_years_list = list(end_years)
+        Create a scenario for each earlier end year, with inputs interpolated from this source.
 
-        if titles is not None and len(titles) != len(end_years_list):
-            raise ValueError(
-                f"Length of titles ({len(titles)}) must match length of "
-                f"end_years ({len(end_years_list)})"
+        Example:
+            >>> Scenario.interpolate(scenario_2050, 2030, 2040)
+        """
+        source = cls._single_source(scenarios)
+        if titles is not None and len(titles) != len(end_years):
+            raise ValueError(f"Length of titles ({len(titles)}) must match length of end_years ({len(end_years)})")
+
+        titles = titles or [f"{source.title} interpolated to {year}" for year in end_years]
+        return [
+            cls._create(
+                {"title": title, "source": source.id, "end_year": year, "version": source.version},
+                client or source._client,
             )
+            for title, year in zip(titles, end_years)
+        ]
 
-        # Get underlying sessions and perform interpolation
-        from pyetm.models.session import Session
-
-        scenario_list = scenarios if isinstance(scenarios, list) else [scenarios]
-        sessions = [sc.session for sc in scenario_list]
-        interpolated_sessions = Session.interpolate(sessions, *end_years, client=client)
-
-        # Save each interpolated session as a SavedScenario
-        saved_scenarios_list = []
-        for i, session in enumerate(interpolated_sessions):
-            # Generate title if not provided
-            if titles:
-                title = titles[i]
-            else:
-                title = f"Interpolated to {session.end_year}"
-
-            saved = session.save(client=client, title=title, **kwargs)
-            saved_scenarios_list.append(saved)
-
-        return saved_scenarios_list
-
-    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
-        """Export this saved scenario to Excel."""
-        self.session.to_excel(path, **export_options)
-
-    def collect_export_data(self, **export_options: Any) -> "ExportDataCollection":
-        """
-        Returns ExportDataCollection containing pandas DataFrames and dictionaries
-        that can be exported to any file format (Parquet, CSV, JSON, etc.).
-        """
-        return self.session.collect_export_data(**export_options)
-
-    def _to_dataframe(self, **kwargs: Any) -> "pd.DataFrame":
-        """
-        Return a single-column DataFrame describing this saved scenario.
-
-        Exports SavedScenario metadata merged with underlying session data.
-        The saved_scenario_id field contains the SavedScenario ID (MyETM ID).
-        The session_id field contains the underlying ETEngine session ID.
-        """
-        # Start with Scenario specific fields
-        info: Dict[str, Any] = {
-            "title": self.title,
-            "saved_scenario_id": self.id,
-            "session_id": self.scenario_id,
-            "private": self.private,
-        }
-
-        # Add session metadata
-        session = self.session
-        info.update(
-            {
-                "area_code": session.area_code,
-                "start_year": session.start_year,
-                "end_year": session.end_year,
-                "keep_compatible": session.keep_compatible,
-                "source": session.source,
-                "url": session.url,
-                "version": session.version,
-                "created_at": session.created_at,
-                "updated_at": session.updated_at,
-            }
+    @staticmethod
+    def _single_source(scenarios: Union["Scenario", List["Scenario"]]) -> "Scenario":
+        if not isinstance(scenarios, list):
+            return scenarios
+        if len(scenarios) == 1:
+            return scenarios[0]
+        raise ValueError(
+            "Interpolating between several scenarios is not supported. "
+            "Interpolate from one source scenario at a time."
         )
 
-        # Add short_name if available
-        if session.short_name:
-            info["short_name"] = session.short_name
-
-        # Flatten session metadata keys
-        if session.metadata and isinstance(session.metadata, dict):
-            for k, v in session.metadata.items():
-                if k not in info:
-                    info[k] = v
-
-        col_name = str(self.id)
-        return pd.DataFrame.from_dict(info, orient="index", columns=[col_name])
-
-    def list_users(self, client: Optional[BaseClient] = None) -> List[Dict[str, Any]]:
+    def save(self) -> None:
         """
-        Fetch all users with access to this saved scenario.
+        Save this scenario: its current Session becomes a Snapshot in its history, and a copy of it
+        becomes current. Changes made since the last save are kept either way.
         """
-        if client is None:
-            client = get_client()
-
-        result = SavedScenarioUsersIndexRunner.run(client, self.id)
-
+        result = SaveSnapshotRunner.run(self.client, cast(int, self.id))
         if not result.success:
-            raise SavedScenarioError(f"Could not fetch users: {result.errors}")
+            raise ScenarioError(f"Could not save scenario {self.id}: {result.errors}")
+        self._refresh(cast(Dict[str, Any], result.data))
 
-        if result.data is None:
-            return []
+    def _refresh(self, data: Dict[str, Any]) -> None:
+        for field, value in data.items():
+            if field in Scenario.model_fields:
+                setattr(self, field, value)
 
-        for user in result.data:
-            user["role"] = user["role"].replace("scenario_", "", 1)
+    # --- The MyETM record ---------------------------------------------------------------------
 
-        return result.data
-
-    def update_users(
-        self,
-        email: str,
-        role: str,
-        client: Optional[BaseClient] = None,
-        skip_upload: bool = False,
-    ) -> None:
+    def update(self, **kwargs: Any) -> None:
         """
-        Add, update, or remove a user's access to this saved scenario.
-        - skip_upload: If True, store data locally without uploading (can be applied later)
-        """
-        if client is None:
-            client = get_client()
+        Update this scenario's title, description or privacy.
 
+        Example:
+            >>> scenario.update(title="Renamed", private=True)
+        """
+        result = UpdateSavedScenarioRunner.run(self.client, cast(int, self.id), kwargs)
+        if not result.success:
+            raise ScenarioError(f"Could not update saved scenario: {result.errors}")
+
+        for warning in result.errors:
+            self.add_warning("update", warning)
+        self._refresh(cast(Dict[str, Any], result.data))
+
+    def discard(self) -> None:
+        """
+        Discard this scenario. The ETM hides it from listings and keeps it recoverable through its
+        web interface for 60 days, then deletes it. Use delete() to delete it at once.
+        """
+        result = DiscardSavedScenarioRunner.run(self.client, cast(int, self.id))
+        if not result.success:
+            raise ScenarioError(f"Could not discard saved scenario: {result.errors}")
+        self._refresh(cast(Dict[str, Any], result.data))
+
+    def delete(self) -> None:
+        """Permanently delete this scenario. This cannot be undone."""
+        result = DestroySavedScenarioRunner.run(self.client, cast(int, self.id))
+        if not result.success:
+            raise ScenarioError(f"Could not permanently delete saved scenario: {result.errors}")
+
+    # --- Users --------------------------------------------------------------------------------
+
+    def list_users(self) -> List[Dict[str, Any]]:
+        """Every user with access, as {"user_email", "role", "pending"} with a short role name."""
+        result = SavedScenarioUsersIndexRunner.run(self.client, cast(int, self.id))
+        if not result.success:
+            raise ScenarioError(f"Could not fetch users: {result.errors}")
+
+        return [
+            {
+                "user_email": user["email"],
+                "role": user["role"].replace("scenario_", "", 1),
+                "pending": user.get("pending", False),
+            }
+            for user in result.data or []
+        ]
+
+    def update_users(self, email: str, role: str, skip_upload: bool = False) -> None:
+        """
+        Add a user, change their role, or remove them with role "remove".
+
+        skip_upload keeps the change locally until apply_pending_users() is called.
+        """
         role = self._normalize_role(role)
-
         if skip_upload:
             self._pending_users[email] = role
             return
 
         if role == "remove":
-            self._remove_user(email, client)
-            return
-
-        if self._user_exists(email, client):
-            self._update_user_role(email, role, client)
+            self._change_users(SavedScenarioUsersDestroyRunner, {"email": email}, "remove")
+        elif any(user["user_email"] == email for user in self.list_users()):
+            self._change_users(SavedScenarioUsersUpdateRunner, {"email": email, "role": role}, "update")
         else:
-            self._add_user(email, role, client)
+            self._change_users(SavedScenarioUsersCreateRunner, {"email": email, "role": role}, "add")
 
-    def apply_pending_users(self, client: Optional[BaseClient] = None) -> int:
-        """
-        Apply all pending user updates that were loaded with skip_upload=True.
-        """
-        if not self._pending_users:
-            return 0
+    def _change_users(self, runner: Any, user: Dict[str, str], action: str) -> None:
+        result = runner.run(self.client, cast(int, self.id), [user])
+        if not result.success:
+            raise ScenarioError(f"Could not {action} user: {result.errors}")
 
-        if client is None:
-            client = get_client()
-
-        count = 0
+    def apply_pending_users(self) -> int:
+        """Apply the user changes kept with skip_upload=True. Returns how many were applied."""
+        applied = 0
         for email, role in list(self._pending_users.items()):
             try:
-                self.update_users(email, role, client=client, skip_upload=False)
-                count += 1
-            except Exception as e:
-                from pyetm.models.scenario import SavedScenarioError
-                import logging
+                self.update_users(email, role)
+                applied += 1
+            except ScenarioError as e:
+                logger.warning("Failed to apply pending user '%s' with role '%s': %s", email, role, e)
 
-                logging.getLogger(__name__).warning(
-                    "Failed to apply pending user '%s' with role '%s': %s",
-                    email,
-                    role,
-                    e,
-                )
-
-        # Clear pending users after applying
         self._pending_users.clear()
-        return count
+        return applied
 
-    def _normalize_role(self, role: str) -> str:
-        role_aliases = {
-            "scenario_owner": {"owner", "scenario_owner"},
-            "scenario_collaborator": {"collaborator", "scenario_collaborator"},
-            "scenario_viewer": {"viewer", "scenario_viewer"},
-            "remove": {"remove"},
+    @staticmethod
+    def _normalize_role(role: str) -> str:
+        """Accept a role with or without its scenario_ prefix, or "remove"."""
+        name = role.lower() if isinstance(role, str) else ""
+        if name == "remove":
+            return name
+        if f"scenario_{name}" in ROLES:
+            return f"scenario_{name}"
+        if name in ROLES:
+            return name
+        raise ValueError(f"Invalid role: {role}. Must be one of: {', '.join(ROLES)}, remove")
+
+    # --- The current Session's metadata -------------------------------------------------------
+
+    def _session_metadata(self) -> Dict[str, Any]:
+        """The current Session's own fields, fetched through MyETM on first use."""
+        if self._session is None:
+            result = FetchMetadataRunner.run(self.client, self)
+            if not result.success:
+                raise ScenarioError(f"Could not load scenario {self.id} from the engine: {result.errors}")
+            self._session = cast(Dict[str, Any], result.data)
+        return self._session
+
+    @property
+    def start_year(self) -> Optional[int]:
+        return self._session_metadata().get("start_year")
+
+    @property
+    def keep_compatible(self) -> Optional[bool]:
+        return self._session_metadata().get("keep_compatible")
+
+    @property
+    def template_id(self) -> Optional[int]:
+        """The Session this scenario's current Session was copied from, if any."""
+        session = self._session_metadata()
+        return session.get("template", session.get("preset_scenario_id"))
+
+    @property
+    def scaling(self) -> Optional[Any]:
+        return self._session_metadata().get("scaling")
+
+    @property
+    def source(self) -> Optional[str]:
+        return self._session_metadata().get("source")
+
+    @property
+    def url(self) -> Optional[str]:
+        """The scenario's page on MyETM."""
+        if self.id is None:
+            return None
+        myetm = self.client.session.base_url.removesuffix("/api/v4")
+        return f"{myetm}/saved_scenarios/{self.id}"
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        """The current Session's free-form metadata."""
+        session = self._session_metadata()
+        if not isinstance(session.get("metadata"), dict):
+            session["metadata"] = {}
+        return cast(Dict[str, Any], session["metadata"])
+
+    def update_metadata(self, **kwargs: Any) -> Optional[Dict[str, Any]]:
+        """Update the current Session's own fields, such as keep_compatible, source or metadata."""
+        result = UpdateMetadataRunner.run(self.client, self, kwargs)
+        if not result.success:
+            raise ScenarioError(f"Could not update metadata: {result.errors}")
+
+        for warning in result.errors:
+            self.add_warning("metadata", warning)
+        if isinstance(result.data, dict) and isinstance(result.data.get("scenario"), dict):
+            self._session = result.data["scenario"]
+        return result.data
+
+    def set_short_name(self, short_name: str) -> None:
+        """Set the label workbooks and exports use for this scenario."""
+        self.short_name = str(short_name)
+
+    def identifier(self) -> Union[str, int]:
+        """The scenario's title, else its short name, else its ID."""
+        return self.title or self.short_name or cast(int, self.id)
+
+    # --- Inputs ------------------------------------------------------------------------------
+
+    @property
+    def inputs(self) -> Inputs:
+        if self._inputs is None:
+            data = self._fetch(FetchInputsRunner, "inputs", defaults="original")
+            self._inputs = self._collect(Inputs.from_json(data))
+        return self._inputs
+
+    def _fetch(self, runner: Any, name: str, **kwargs: Any) -> Any:
+        """Run a fetch runner on this scenario, keeping its warnings under the given name."""
+        result = runner.run(self.client, self, **kwargs)
+        if not result.success:
+            raise ScenarioError(f"Could not retrieve {name}: {result.errors}")
+        if result.data is None:
+            raise ScenarioError(f"No data returned for {name}")
+        for warning in result.errors:
+            self.add_warning(name, warning)
+        return result.data
+
+    def _collect(self, collection: Any) -> Any:
+        self._merge_submodel_warnings(collection)
+        return collection
+
+    def user_values(self) -> Dict[str, Any]:
+        """The values set by the user for inputs."""
+        return {inp.key: inp.user for inp in self.inputs if inp.user is not None}
+
+    def set_user_values_from_dataframe(self, dataframe: pd.DataFrame) -> None:
+        """Make the inputs match the dataframe's user column, resetting blank ones."""
+        series = dataframe["user"]
+        if isinstance(series.index, pd.MultiIndex) and "unit" in (series.index.names or []):
+            series = series.droplevel("unit")
+        self.update_user_values({str(k): v for k, v in series.fillna("reset").to_dict().items()})
+
+    def update_user_values(self, update_inputs: Dict[str, Any], skip_upload: bool = False) -> None:
+        """
+        Set inputs. Invalid ones are left out of the upload, and the rest are still sent.
+        skip_upload changes only the local copy.
+        """
+        if not skip_upload:
+            invalid = self.inputs.is_valid_update(update_inputs)
+            valid = {key: value for key, value in update_inputs.items() if key not in invalid}
+            if valid:
+                self._send(UpdateInputsRunner, "update user values", valid)
+        self.inputs.update(update_inputs)
+
+    def _send(self, runner: Any, action: str, *args: Any, **kwargs: Any) -> Any:
+        result = runner.run(self.client, self, *args, **kwargs)
+        if not result.success:
+            raise ScenarioError(f"Could not {action}: {result.errors}")
+        return result
+
+    def remove_user_values(self, input_keys: Union[List[str], Set[str]]) -> None:
+        """Reset inputs to their defaults."""
+        reset_inputs = {key: "reset" for key in input_keys}
+        self._send(UpdateInputsRunner, "remove inputs", reset_inputs)
+        self.inputs.update(reset_inputs)
+
+    # --- Sortables ---------------------------------------------------------------------------
+
+    @property
+    def sortables(self) -> Sortables:
+        if self._sortables is None:
+            self._sortables = self._collect(Sortables.from_json(self._fetch(FetchSortablesRunner, "sortables")))
+        return self._sortables
+
+    def set_sortables_from_dataframe(self, dataframe: pd.DataFrame, skip_upload: bool = False) -> None:
+        """Set sortables from a dataframe with sortable names as columns and orders as rows."""
+        updates = Sortables._from_dataframe(dataframe).to_updates_dict()
+        if updates:
+            self.update_sortables(updates, skip_upload=skip_upload)
+
+    def update_sortables(self, update_sortables: Dict[str, List[Any]], skip_upload: bool = False) -> None:
+        """
+        Set the order of sortables, one call each. Invalid ones are left out of the upload.
+        skip_upload changes only the local copy.
+        """
+        if not skip_upload:
+            invalid = self.sortables.is_valid_update(update_sortables)
+            for name, order in update_sortables.items():
+                if name not in invalid:
+                    self._send_sortable(name, order)
+        self.sortables.update(update_sortables)
+
+    def _send_sortable(self, name: str, order: List[Any]) -> None:
+        if name.startswith("heat_network_"):
+            subtype = name.replace("heat_network_", "")
+            self._send(UpdateSortablesRunner, f"update sortable '{name}'", "heat_network", order, subtype=subtype)
+        else:
+            self._send(UpdateSortablesRunner, f"update sortable '{name}'", name, order)
+
+    def remove_sortables(self, sortable_names: Union[List[str], Set[str]]) -> None:
+        """Reset sortables to their default orders."""
+        for name in sortable_names:
+            self._send_sortable(name, [])
+        self.sortables.update({name: [] for name in sortable_names})
+
+    # --- Custom curves -----------------------------------------------------------------------
+
+    @property
+    def custom_curves(self) -> CustomCurves:
+        if self._custom_curves is None:
+            data = self._fetch(FetchAllCustomCurveDataRunner, "custom_curves")
+            curves = CustomCurves.from_json(cast(List[Dict[str, Any]], data))
+            curves._scenario = self
+            self._custom_curves = self._collect(curves)
+        return self._custom_curves
+
+    def custom_curve_series(self, curve_name: str) -> Optional[pd.Series[Any]]:
+        result = self.custom_curves.get_contents(self, curve_name)
+        return result if isinstance(result, pd.Series) else None
+
+    def custom_curves_series(self) -> Iterator[Optional[pd.Series[Any]]]:
+        """Yield every attached custom curve as a Series."""
+        for key in self.custom_curves.attached_keys():
+            yield self.custom_curve_series(key)
+
+    def update_custom_curves(self, custom_curves: Any, skip_upload: bool = False) -> None:
+        """
+        Upload custom curves. Invalid ones are left out with a warning, and the rest are still
+        sent. skip_upload changes only the local copy.
+        """
+        curves = custom_curves.curves
+        if not skip_upload:
+            curves = self._upload_valid_curves(custom_curves)
+
+        for new_curve in curves:
+            existing = self.custom_curves._find(new_curve.key)
+            if existing:
+                existing.file_path = new_curve.file_path
+            else:
+                self.custom_curves.curves.append(new_curve)
+        self.custom_curves._scenario = self
+
+    def _upload_valid_curves(self, custom_curves: Any) -> List[Any]:
+        invalid = custom_curves.validate_for_upload()
+        for key, collector in invalid.items():
+            self.add_warning("custom_curves", f"Excluded curve '{key}' from upload: {[w.message for w in collector]}")
+        if invalid:
+            self.auto_show_warnings()
+
+        valid = [curve for curve in custom_curves.curves if curve.key not in invalid]
+        if valid:
+            self._send(UpdateCustomCurvesRunner, "update custom curves", CustomCurves(curves=valid))
+        return valid
+
+    def remove_custom_curves(self, curve_keys: Union[List[str], Set[str]]) -> None:
+        """Detach custom curves, and clear their cached files."""
+        keys = list(curve_keys)
+        if not keys:
+            return
+
+        self._send(DeleteCustomCurvesRunner, "remove custom curves", keys)
+        for curve in [c for c in self.custom_curves.curves if c.key in keys]:
+            curve.remove()
+        self.custom_curves.curves = [c for c in self.custom_curves.curves if c.key not in keys]
+
+    # --- Hourly output curves ----------------------------------------------------------------
+
+    @property
+    def hourly_output_curves(self) -> HourlyOutputCurves:
+        if self._hourly_output_curves is None:
+            self._hourly_output_curves = HourlyOutputCurves.create_empty_collection()
+        return self._hourly_output_curves
+
+    def get_hourly_curve(self, identifier: str) -> Optional[pd.DataFrame]:
+        """
+        One hourly output curve, by name or by carrier ('electricity', 'heat', 'hydrogen',
+        'methane'), which stands for its primary curve.
+        """
+        return self.hourly_output_curves.get_curve(identifier, self)
+
+    def get_hourly_curves(self, identifiers: List[str]) -> Dict[str, pd.DataFrame]:
+        """Several hourly output curves, by names or carriers, keyed by curve name."""
+        return self.hourly_output_curves.get_curves(identifiers, self)
+
+    def all_hourly_output_curves(self) -> Iterator[Optional[pd.DataFrame]]:
+        """Yield every hourly output curve."""
+        for key in self.hourly_output_curves.attached_keys():
+            yield self.get_hourly_curve(key)
+
+    def clear_hourly_curves_cache(self) -> int:
+        """Clear the hourly output curves' cached files. Returns how many were removed."""
+        return self.hourly_output_curves.clear_cache()
+
+    def clear_custom_curves_cache(self) -> int:
+        """Clear the custom curves' cached files. Returns how many were removed."""
+        return self.custom_curves.clear_cache()
+
+    def clear_all_curve_caches(self) -> tuple[int, int]:
+        """Clear both curve caches. Returns (hourly curves removed, custom curves removed)."""
+        return (self.clear_hourly_curves_cache(), self.clear_custom_curves_cache())
+
+    def clear_session_cache(self) -> None:
+        """Clear every file cached for this scenario, and the in-memory curve caches."""
+        from pyetm.models.hourly_output_curves import _read_csv_cached_impl
+
+        folder = get_settings().path_to_tmp(str(self.id))
+        shutil.rmtree(folder, ignore_errors=True)
+        folder.mkdir(parents=True, exist_ok=True)
+
+        _read_csv_cached_impl.cache_clear()
+        self.hourly_output_curves.warnings.clear()
+        self.custom_curves.warnings.clear()
+
+    # --- Annual exports ----------------------------------------------------------------------
+
+    @property
+    def annual_exports(self) -> AnnualExports:
+        if self._annual_exports is None:
+            self._annual_exports = AnnualExports.create_empty_collection()
+        return self._annual_exports
+
+    def get_annual_export(self, export_name: str) -> Optional[pd.DataFrame]:
+        """One annual export by name."""
+        return self.annual_exports.retrieve(self.client, self, export_name)
+
+    def get_annual_exports(
+        self, export_names: AnnualExportType | List[AnnualExportType]
+    ) -> Dict[str, pd.DataFrame]:
+        """Several annual exports by name."""
+        names = validate_export_names(cast("str | list[str]", export_names))
+        return self.annual_exports.retrieve_multiple(self.client, self, names)
+
+    def set_export_config(self, config: ExportConfig | None) -> None:
+        self._export_config = config
+
+    def get_export_config(self) -> ExportConfig | None:
+        return self._export_config
+
+    # --- Queries -----------------------------------------------------------------------------
+
+    def add_queries(self, gquery_keys: Union[List[str], Set[str]]) -> None:
+        """Request gqueries, run by execute_queries() or results()."""
+        if self._queries is None:
+            self._queries = Gqueries.from_list(list(gquery_keys))
+        else:
+            self._queries.add(*gquery_keys)
+
+    def remove_queries(self, *query_keys: str) -> None:
+        if self._queries is not None:
+            self._queries.remove(*query_keys)
+
+    def clear_queries(self) -> None:
+        if self._queries is not None:
+            self._queries.clear()
+
+    def execute_queries(self) -> None:
+        """Run every requested gquery. Queries run explicitly, once all of them are requested."""
+        if self._queries is not None:
+            self._queries.execute(self.client, self)
+            self._merge_submodel_warnings(self._queries)
+
+    def results(self, columns: Optional[Any] = None) -> pd.DataFrame:
+        """The requested gqueries' results, running them first if none has run yet."""
+        if self._queries is None or not self.queries_requested():
+            return pd.DataFrame()
+
+        if all(value is None for value in self._queries.query_dict.values()):
+            self.execute_queries()
+        self._report_failed_queries()
+        return self._queries.to_dataframe(columns=columns or ["present", "future"])
+
+    def _report_failed_queries(self) -> None:
+        queries = cast(Gqueries, self._queries)
+        failed = [key for key, value in queries.query_dict.items() if value is None]
+        if failed:
+            print(f"WARNING: {len(failed)} query(ies) failed:")
+            for warning in queries.warnings.get_by_field("results"):
+                print(f"  - {warning.message}")
+
+    def queries_requested(self) -> bool:
+        return self._queries is not None and len(self._queries.query_keys()) > 0
+
+    # --- Couplings ---------------------------------------------------------------------------
+
+    @property
+    def couplings(self) -> Couplings:
+        """The scenario's coupling groups."""
+        if self._couplings is None:
+            self._couplings = self._collect(Couplings.from_json(self._fetch(FetchCouplingsRunner, "couplings")))
+        return self._couplings
+
+    def update_couplings(self, coupling_groups: List[str], action: str = "couple", force: bool = False) -> None:
+        """Couple or uncouple coupling groups."""
+        result = self._send(UpdateCouplingsRunner, "update couplings", coupling_groups, action, force)
+        if self._couplings is not None and result.data is not None:
+            self._couplings = Couplings.from_json(result.data)
+        for warning in result.errors:
+            self.add_warning("couplings", warning)
+
+    # --- Warnings and export -----------------------------------------------------------------
+
+    def show_all_warnings(self) -> None:
+        """Print every warning on the scenario and on each loaded part of it."""
+        print(f"=== Warnings for Scenario {self.id} ===")
+        if len(self.warnings) > 0:
+            print("\nScenario warnings:")
+            self.show_warnings()
+
+        for name, part in self._loaded_parts():
+            if len(part.warnings) > 0:
+                print(f"\n{name} warnings:")
+                part.show_warnings()
+
+    def _loaded_parts(self) -> List[tuple[str, Any]]:
+        parts = [
+            ("Inputs", self._inputs),
+            ("Sortables", self._sortables),
+            ("Custom Curves", self._custom_curves),
+            ("Hourly Output Curves", self._hourly_output_curves),
+            ("Annual Exports", self._annual_exports),
+            ("Queries", self._queries),
+            ("Couplings", self._couplings),
+        ]
+        return [(name, part) for name, part in parts if part is not None]
+
+    def to_excel(self, path: PathLike[str] | str, **export_options: Any) -> None:
+        """Export this scenario to Excel."""
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker()
+        packer.add(self)
+        packer.to_excel(str(path), **export_options)
+
+    def collect_export_data(self, **export_options: Any) -> "ExportDataCollection":
+        """
+        DataFrames and dictionaries for any file format (Parquet, CSV, JSON and so on).
+        """
+        from pyetm.models.scenario_packer import ScenarioPacker
+
+        packer = ScenarioPacker()
+        packer.add(self)
+        return packer.collect_export_data(**export_options)
+
+    def _to_dataframe(self, **kwargs: Any) -> pd.DataFrame:
+        """A single column describing this scenario, for the MAIN sheet."""
+        info: Dict[str, Any] = {
+            "title": self.title,
+            "saved_scenario_id": self.id,
+            "session_id": self.scenario_id,
+            "private": self.private,
+            "area_code": self.area_code,
+            "start_year": self.start_year,
+            "end_year": self.end_year,
+            "keep_compatible": self.keep_compatible,
+            "source": self.source,
+            "url": self.url,
+            "version": self.version,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
-        role_lower = role.lower() if isinstance(role, str) else None
-        normalized_role = next(
-            (k for k, v in role_aliases.items() if role_lower in v), None
-        )
-        if not normalized_role:
-            valid_roles = ", ".join(role_aliases.keys())
-            raise ValueError(f"Invalid role: {role}. Must be one of: {valid_roles}")
-        return normalized_role
+        if self.short_name:
+            info["short_name"] = self.short_name
+        for key, value in self.metadata.items():
+            info.setdefault(key, value)
 
-    def _user_exists(self, email: str, client: BaseClient) -> bool:
-        return any(u.get("user_email") == email for u in self.list_users(client))
+        return pd.DataFrame.from_dict(info, orient="index", columns=[str(self.id)])
 
-    def _remove_user(self, email: str, client: BaseClient) -> None:
-        result = SavedScenarioUsersDestroyRunner.run(
-            client, self.id, [{"user_email": email}]
-        )
-        if not result.success:
-            raise SavedScenarioError(f"Could not remove user: {result.errors}")
+    # --- Applying data after creation --------------------------------------------------------
 
-    def _update_user_role(self, email: str, role: str, client: BaseClient) -> None:
-        result = SavedScenarioUsersUpdateRunner.run(
-            client, self.id, [{"user_email": email, "role": role}]
-        )
-        if not result.success:
-            raise SavedScenarioError(f"Could not update user: {result.errors}")
+    def _apply_data(
+        self,
+        user_values: Optional[Dict[str, Any]],
+        custom_curves: Optional[Dict[str, Any]],
+        sortables: Optional[Dict[str, Any]],
+    ) -> None:
+        """Send inputs, curves and sortables to a new scenario. A failure becomes a warning."""
+        data = {"user_values": user_values, "custom_curves": custom_curves, "sortables": sortables}
+        warnings = apply_data([(self, data)], self.client)
+        for warning in warnings:
+            self.add_warning("base", warning)
+        if warnings:
+            self.auto_show_warnings(f"Scenario #{self.id} (title='{self.title}')")
 
-    def _add_user(self, email: str, role: str, client: BaseClient) -> None:
-        result = SavedScenarioUsersCreateRunner.run(
-            client, self.id, [{"user_email": email, "role": role}]
-        )
-        if not result.success:
-            raise SavedScenarioError(f"Could not add user: {result.errors}")
+
+def apply_data(items: List[tuple[Scenario, Dict[str, Any]]], client: BaseClient) -> List[str]:
+    """
+    Send each scenario's user_values, custom_curves ({key: values}) and sortables ({type: order})
+    concurrently. Returns one warning per request that failed.
+    """
+    requests: List[Dict[str, Any]] = []
+    labels: List[str] = []
+    for scenario, data in items:
+        for request, label in _data_requests(scenario, data):
+            requests.append(request)
+            labels.append(label)
+
+    results = BaseRunner._make_batch_requests(client, requests) if requests else []
+    return [
+        f"{label}: {', '.join(result.errors) or 'Unknown error'}"
+        for label, result in zip(labels, results)
+        if not result.success
+    ]
+
+
+def _data_requests(scenario: Scenario, data: Dict[str, Any]) -> Iterator[tuple[Dict[str, Any], str]]:
+    title = scenario.title
+    if data.get("user_values"):
+        request = UpdateInputsRunner.build_request(scenario, data["user_values"])
+        yield request, f"Failed to update user_values for scenario '{title}'"
+
+    curves = data.get("custom_curves") or {}
+    for key, request in zip(curves, UpdateCustomCurvesRunner.build_requests(scenario, curves)):
+        yield request, f"Failed to upload curve '{key}' for scenario '{title}'"
+
+    for sortable_type, order in (data.get("sortables") or {}).items():
+        request = UpdateSortablesRunner.build_request(scenario, sortable_type, order)
+        yield request, f"Failed to update sortables for scenario '{title}'"

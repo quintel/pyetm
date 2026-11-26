@@ -24,21 +24,21 @@ Learn how to create, load, copy, and manage ETM scenarios programmatically.
 **Topics covered:**
 
 - Creating new scenarios
-    - Session vs Scenario
 - Loading existing scenarios
 - Properties and metadata
-- Copying scenarios (with and without preset links)
-- Collection classes (Scenarios, Sessions)
-- Bulk operations
+- Saving a Snapshot
+- Copying and interpolating scenarios
+- Working with several scenarios and bulk operations
 
 ### [Management](management.md)
 Advanced features for power users and automation workflows.
 
 **Topics covered:**
 
-- Sessions and authentication
-- Manage metadata of scenarios
+- Authentication and clients
+- List, discard and delete your scenarios
 - Manage scenario users
+- Manage collections
 
 
 ### [Inputs](inputs.md)

@@ -1,67 +1,40 @@
-"""Service for saved scenario users create operations."""
+"""Runner for adding a saved scenario's users in MyETM."""
 
 from typing import Any, Dict, List
-from pyetm.services.scenario_runners.base_runner import BaseRunner
-from ..service_result import ServiceResult
+
 from pyetm.clients.base_client import BaseClient
+from pyetm.services.scenario_runners.base_runner import BaseRunner
+from pyetm.services.scenario_runners.saved_scenario_users_index import batch_outcome
+from ..service_result import ServiceResult
 
 
 class SavedScenarioUsersCreateRunner(BaseRunner[List[Dict[str, Any]]]):
     """
-    Runner for adding users to a SavedScenario.
+    Adds users, each given as {"email": ..., "role": ...}. Fails naming every refused user.
 
-    POST /api/v3/saved_scenarios/:saved_scenario_id/users
-
-    Note:
-        When a user is added to a saved scenario, they are also automatically added to:
-        - The current scenario (via scenario_id)
-        - All historical scenarios (via scenario_id_history)
+    POST /api/v4/saved_scenarios/{id}/users
     """
 
-    REQUIRED_KEYS = ["user_email", "role"]
+    REQUIRED_KEYS = ['email', 'role']
 
     @staticmethod
     def run(
-        client: BaseClient,
-        saved_scenario_id: int,
-        users: List[Dict[str, Any]],
-        **kwargs: Any,
+        client: BaseClient, saved_scenario_id: int, users: List[Dict[str, Any]], **kwargs: Any
     ) -> ServiceResult[List[Dict[str, Any]]]:
-        """
-        Add users to a saved scenario with specified roles.
+        errors = [
+            f"User {i}: {error}"
+            for i, user in enumerate(users)
+            for error in SavedScenarioUsersCreateRunner._validate_required_fields(user, SavedScenarioUsersCreateRunner.REQUIRED_KEYS)
+        ]
+        if not users or errors:
+            return ServiceResult.fail(errors or ["No users provided"])
 
-        Args:
-            client: The HTTP client to use
-            saved_scenario_id: ID of the SavedScenario
-            users: List of user objects to add, each containing:
-                - user_email: Email address (required)
-                - role: User role - scenario_owner, scenario_collaborator, or scenario_viewer (required)
-                - user_id: ID of existing user (optional, will be auto-coupled if email matches)
-            **kwargs: Additional arguments passed to the request
-
-        Returns:
-            ServiceResult containing list of created user objects
-        """
-        if not users:
-            return ServiceResult.fail(["No users provided"])
-
-        errors = []
-        for i, user in enumerate(users):
-            missing = SavedScenarioUsersCreateRunner._validate_required_fields(
-                user, SavedScenarioUsersCreateRunner.REQUIRED_KEYS
+        return batch_outcome(
+            SavedScenarioUsersCreateRunner._make_request(
+                client,
+                "post",
+                f"/saved_scenarios/{saved_scenario_id}/users",
+                payload={"saved_scenario_users": users},
+                **kwargs,
             )
-            if missing:
-                errors.extend([f"User {i}: {err}" for err in missing])
-
-        if errors:
-            return ServiceResult.fail(errors)
-
-        payload = {"saved_scenario_users": users}
-
-        return SavedScenarioUsersCreateRunner._make_request(
-            client=client,
-            method="post",
-            path=f"/saved_scenarios/{saved_scenario_id}/users",
-            payload=payload,
-            **kwargs,
         )

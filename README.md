@@ -138,66 +138,26 @@ pyetm run excel/input.xlsx --no-update
 
 The `pyetm init` command creates a `.env` file with your settings. You can also configure manually:
 
-### Environment Variables
+### Configuration
 
-Create a `.env` file in your project directory:
+Create a `.env` file in your project directory, or run `pyetm init`:
 
 ```bash
 # Your ETM API token (optional for public scenarios)
 ETM_API_TOKEN=etm_your_token_here
-
-# Environment (default: pro)
-# Options: pro, beta, local, or stable tags like 2025-01
-ENVIRONMENT=pro
-
-# Error handling (default: default)
-# Options: safe, default, dangerous
-PYETM_ERROR_MODE=default
-
-# CSV export settings (optional)
-CSV_SEPARATOR=,
-DECIMAL_SEPARATOR=.
 ```
 
-**Note on API Token:**
-- **Without a token**: You can create and work with public scenarios (read and write operations)
-- **With a token**: Required to access your saved scenarios, list your scenarios, and work with private scenarios
-- Get your token [here](https://docs.energytransitionmodel.com/api/authentication)
+- **Without a token** you can read public scenarios.
+- **With a token** you can also create, change and list your scenarios, and read private ones.
+- Get your token on your [tokens page](https://my.energytransitionmodel.com/identity/tokens).
 
-**Environment Options:**
-- `pro` (default): Production environment
-- `beta`: Staging environment
-- `local`: Local development environment
-- `YYYY-MM`: Stable tagged environment (e.g., `2025-01`)
+pyetm 2.1 is tested on the `latest` Version of the ETM. For `2025-01`, use
+pyetm 2.0.x. See the
+[compatibility table](https://quintel.github.io/pyetm/getting-started/compatibility/).
+`ETM_ENVIRONMENT=beta` switches to the beta ETM, and the
+[configuration page](https://quintel.github.io/pyetm/getting-started/configuration/) lists the
+other settings.
 
-**Error Handling Modes:**
-- `default` (recommended): Errors raise in single operations, warnings collected in bulk operations
-- `safe`: All warnings raise exceptions (use in CI/production for maximum safety)
-- `dangerous`: No warnings raise (use only for exploratory data analysis)
-
-### Advanced Configuration
-
-You can override the base URL directly if needed:
-```bash
-BASE_URL=https://engine.energytransitionmodel.com/api/v3
-```
-
-#### SSL/TLS Configuration
-
-For corporate environments or custom certificate setups:
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `SSL_VERIFY` | `true` | Verify SSL certificates. Set to `false` only for testing with self-signed certificates. **Never disable in production!** |
-| `TRUST_ENV` | `false` | Enable system proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) |
-| `SSL_CERT_PATH` | (empty) | Path to custom CA certificate bundle for corporate environments |
-
-**Example for corporate CA:**
-```bash
-SSL_CERT_PATH=/path/to/corporate-ca-bundle.pem
-TRUST_ENV=true
-HTTP_PROXY=http://proxy.company.com:8080
-```
 For examples and tutorials, visit our [documentation](https://quintel.github.io/pyetm/user-guide/).
 
 ---
